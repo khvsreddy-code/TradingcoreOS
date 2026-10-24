@@ -18,7 +18,8 @@ import {
   verifyModelArtifactIntegrity,
   type ResearchArtifact,
 } from '../../services/coreSpirit/modelArtifacts.js';
-import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { validateModelPromotion } from '../../services/coreSpirit/modelPromotionValidation.js';
 import { extractCoreSpiritSurfaceMetadata } from '../../services/coreSpirit/languageConcepts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
@@ -705,65 +706,36 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
     }
     const currentRelease = await repository.ensureModelReleaseControl(hash);
     const provenance = artifact.provenance;
-    const validation = provenance.validationResults;
-    const safety = provenance.researchSafety;
-    const parseBoundary = (value: string): number => {
-      const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-      return Date.parse(value) + (dateOnly ? 86_399_999 : 0);
-    };
-    const trainingEnd = parseBoundary(provenance.trainingRange.to);
-    const validationStart = Date.parse(provenance.validationRange.from);
-    const validationEnd = parseBoundary(provenance.validationRange.to);
+    const researchArtifactId = String(provenance.trainingParameters.researchArtifactId ?? '');
+    const datasetSnapshotId = String(provenance.trainingParameters.datasetSnapshotId ?? '');
+    const research = researchArtifactId ? await repository.getResearchArtifact(researchArtifactId) : null;
+    const snapshot = datasetSnapshotId ? await repository.getDatasetSnapshot(datasetSnapshotId) : null;
+    const validated = await validateModelPromotion({
+      artifact,
+      research,
+      researchArtifactId,
+      snapshot,
+      currentVersions: {
+        compiler: CORE_SPIRIT_COMPILER_VERSION,
+        ir: String(CORE_SPIRIT_IR_VERSION),
+        runtime: CORE_SPIRIT_RUNTIME_VERSION,
+      },
+    });
     const approvalChecks: Record<string, unknown> = {
-      productionEligible: false,
-      artifactIntegrityVerified: true,
-      hasChronologicalHoldout: validation.protocol === 'chronological-holdout-v1' &&
-        validation.sampleCount >= MIN_RESEARCH_VALIDATION_ROWS && validation.trainingSampleCount >= 12,
-      nonDegenerateValidation: validation.distinctPredictedStates >= 2,
-      temporalRangesDisjoint: Number.isFinite(trainingEnd) && Number.isFinite(validationStart) &&
-        Number.isFinite(validationEnd) && trainingEnd < validationStart && validationStart <= validationEnd,
-      forwardOnly: validation.forwardOnly === true,
-      noTimestampOverlap: validation.noTimestampOverlap === true,
-      featureSchemaMatched: validation.featureSchemaMatched === true,
-      labelLeakageCheckPassed: validation.labelLeakageCheckPassed === true,
-      featureAvailabilityCheckPassed: validation.featureAvailabilityCheckPassed === true,
-      datasetHashVerified: validation.datasetHashVerified === true,
-      // Hashing proves the snapshot did not change; production promotion additionally
-      // requires a server/provider attestation for the exact dataset source.
-      datasetSourceVerified: provenance.datasetSourceVerified === true &&
-        provenance.datasetSource !== 'user_supplied' &&
-        typeof provenance.datasetSourceAttestationHash === 'string' &&
-        /^[a-f0-9]{64}$/.test(provenance.datasetSourceAttestationHash),
-      sourceCausalityPassed: validation.sourceCausalityPassed === true,
-      lookaheadCheckPassed: validation.lookaheadCheckPassed === true,
-      staticSafetyEligible: safety.approvalEligible === true &&
-        safety.causality === 'causal' && safety.lookahead === 'false' &&
-        safety.realtimeSafe === true && safety.backtestLiveEquivalent === true &&
-        safety.blockers.length === 0,
+      ...validated.checks,
+      productionEligible: validated.productionEligible,
     };
-    const checkNames = [
-      'hasChronologicalHoldout','nonDegenerateValidation','temporalRangesDisjoint','forwardOnly','noTimestampOverlap',
-      'featureSchemaMatched','labelLeakageCheckPassed','featureAvailabilityCheckPassed',
-      'datasetHashVerified','datasetSourceVerified','sourceCausalityPassed','lookaheadCheckPassed','staticSafetyEligible',
-    ];
-    const productionEligible = checkNames.every(key => approvalChecks[key] === true);
-    approvalChecks.productionEligible = productionEligible;
+    const productionEligible = validated.productionEligible;
     const validationReport: Record<string, unknown> = {
-      artifactHash: artifact.hash,
-      runtimeVersion: provenance.runtimeVersion,
-      datasetSource: provenance.datasetSource,
-      datasetSourceVerified: provenance.datasetSourceVerified,
-      datasetSourceAttestationHash: provenance.datasetSourceAttestationHash,
-      trainingRange: provenance.trainingRange,
-      validationRange: provenance.validationRange,
-      validationResults: validation,
-      researchSafety: safety,
+      ...validated.report,
+      evaluatedAt: new Date().toISOString(),
+      actorUserId: req.tradingCoreUserId!,
     };
 
     if (action === 'approve' && !productionEligible) {
       res.status(422).json({
         success: false,
-        error: 'Model is not eligible for production inference. Resolve the failed validation or causality checks, retrain a versioned artifact, and review again.',
+        error: 'Model is not eligible for production inference. Immutable rows, split boundaries, holdout predictions, feature schema, source provenance, compiler/runtime compatibility and causal safety were independently revalidated; inspect approvalChecks.',
         releaseStatus: currentRelease.status,
         approvalChecks,
         validationReport,
