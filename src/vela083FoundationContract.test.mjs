@@ -47,6 +47,7 @@ assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 64\)/, 'persi
 assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
 assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.8.5 pane API');
 assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
+assert.match(paneCell, /const normalization = Math\.max\(1, maxWeight \/ 100\)/, 'oversized API weights are normalized by a common factor so pane proportions survive persistence');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'native indicators can opt into full-history gating');
