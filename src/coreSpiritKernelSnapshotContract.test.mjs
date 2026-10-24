@@ -70,6 +70,16 @@ const compatibleIdentity = {
 const copy = (target, source) => { target.cursor = source.cursor; };
 assert.equal(snapshotStore.restoreAt(restoredTarget,'test:ema','ir-v1',['close'],4,copy,compatibleIdentity),true);
 assert.equal(restoredTarget.cursor,42);
+assert.equal(
+  snapshotStore.restoreAt({cursor:0},'test:ema','ir-v1',['close'],4,copy),
+  false,
+  'restoration without an explicit kernel/configuration/data identity must fail closed',
+);
+assert.equal(
+  snapshotStore.restore({cursor:0},'test:ema','ir-v1',['close'],4,copy),
+  false,
+  'latest-snapshot restoration must also require an explicit compatibility identity',
+);
 for (const mismatch of [
   { parametersSignature:'period=5' },
   { kernelVersion:3 },
