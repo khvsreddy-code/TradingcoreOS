@@ -103,9 +103,17 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
       !Number.isInteger(minimumValidationRows) || minimumValidationRows < 12) {
     throw new Error('Chronological validation requires at least 12 training and 12 validation rows.');
   }
-  const maxRows = Math.max(1, Math.min(CORESPIRIT_MAX_DATASET_ROWS, Math.floor(options.maxRows ?? DEFAULT_RESEARCH_MAX_ROWS)));
-  const purgeBars = Math.max(0, Math.floor(options.purgeBars ?? 0));
-  const embargoBars = Math.max(0, Math.floor(options.embargoBars ?? 0));
+  const requestedMaxRows = options.maxRows ?? DEFAULT_RESEARCH_MAX_ROWS;
+  if (!Number.isSafeInteger(requestedMaxRows) || requestedMaxRows < 1) {
+    throw new Error('Research maxRows must be a positive safe integer.');
+  }
+  const maxRows = Math.min(CORESPIRIT_MAX_DATASET_ROWS, requestedMaxRows);
+  const purgeBars = options.purgeBars ?? 0;
+  const embargoBars = options.embargoBars ?? 0;
+  if (!Number.isSafeInteger(purgeBars) || purgeBars < 0 || purgeBars > 500 ||
+      !Number.isSafeInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+    throw new Error('Purge and embargo must each be integer counts between 0 and 500.');
+  }
   // For the single chronological holdout, purge and embargo form one explicit
   // no-train/no-validation boundary gap. They are separately recorded because
   // purge is label-horizon driven while embargo is an additional safety margin.
