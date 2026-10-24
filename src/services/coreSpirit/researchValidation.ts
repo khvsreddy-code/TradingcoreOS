@@ -121,8 +121,8 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
   if (!Array.isArray(rows) || rows.length > maxRows) {
     throw new Error('Research datasets are limited to ' + maxRows + ' rows for this training backend.');
   }
-  if (purgeBars > 500 || embargoBars > 500 || boundaryGap >= rows.length) {
-    throw new Error('Purge and embargo must each be between 0 and 500 bars and sum to less than the dataset.');
+  if (boundaryGap >= rows.length) {
+    throw new Error('Purge and embargo gaps must sum to less than the dataset size.');
   }
   const evaluableRows = rows.length - boundaryGap;
   const validationCount = Math.floor(evaluableRows * validationFraction);
