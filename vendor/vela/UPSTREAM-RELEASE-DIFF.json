@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "tools/vela-overlay-manifest.mjs",
+  "upstream": {
+    "repository": "https://github.com/LuxAlgo/Vela",
+    "base": {
+      "version": "0.8.4",
+      "commit": "850fa1f431e2065e9b0074c4b0555a48a2999eaf"
+    },
+    "release": {
+      "version": "0.8.5",
+      "tag": "v0.8.5",
+      "commit": "596cbbdeba15406cfb72465afd07f8c60c6b1852"
+    }
+  },
+  "comparison": "Git blob SHA-1 from exact upstream release trees, restricted to src/",
+  "counts": {
+    "modified": 23,
+    "added": 1,
+    "removed": 0,
+    "total": 24,
+    "baseFiles": 390,
+    "releaseFiles": 391
+  },
+  "files": [
+    {
+      "path": "src/chart-types/registry.ts",
+      "status": "modified",
+      "baseBlob": "f3565374d85f414b28bbfe5d36c76c4b05ec60bf",
+      "releaseBlob": "275eb69fcca2de0d73ac1a8e864a569a7468047a"
+    },
+    {
+      "path": "src/core/PanesControl.ts",
+      "status": "modified",
+      "baseBlob": "fb024fc06009324063bc4487696ca3069c3cf802",
+      "releaseBlob": "aa2a8c0b0c3505fac1aebb54a9b972cc78360d24"
+    },
+    {
+      "path": "src/core/engine/EngineOrchestrator.ts",
+      "status": "modified",
+      "baseBlob": "64321c28346e2002bd0efcb0fbb28a853f57d652",
+      "releaseBlob": "c2d9eaad88792d9af319925a094d4189828f9b8f"
+    },
+    {
+      "path": "src/core/engine/IndicatorRegistry.ts",
+      "status": "modified",
+      "baseBlob": "e1eccb870e05874d1a706d4049061fcfd2a3aeda",
+      "releaseBlob": "6c63e3ca90554e45526caf4f84fcec3619639489"
+    },
+    {
+      "path": "src/core/model/scene.ts",
+      "status": "modified",
+      "baseBlob": "1eb059e09fd6589924f21ca9d4d8fe3d49564062",
+      "releaseBlob": "1263ad17a2bf2276585799199170fda5a6ff42e2"
+    },
+    {
+      "path": "src/core/model/series.ts",
+      "status": "modified",
+      "baseBlob": "002096060eb3e24e028420332476488adbbb899a",
+      "releaseBlob": "89e2ee62b43ded7b2c7644ee360e4ea5d77f9e16"
+    },
+    {
+      "path": "src/core/native-indicators/NativeIndicator.ts",
+      "status": "modified",
+      "baseBlob": "346defb0eb5546dc9c92da083f23bfce0cba16b2",
+      "releaseBlob": "861c1a01c64c270374fadcf1d578228516fa9218"
+    },
+    {
+      "path": "src/core/native-indicators/classics/averages.ts",
+      "status": "modified",
+      "baseBlob": "4adf5b5deda904950fd2b68a4693f3dd5c46eb44",
+      "releaseBlob": "71df82a5e5db61012c83fdaafe21e8b344dae931"
+    },
+    {
+      "path": "src/core/native-indicators/classics/define.ts",
+      "status": "modified",
+      "baseBlob": "d6a18b764f92e5df5b408e5cf757b333d113f5ce",
+      "releaseBlob": "83e07153e234130899d9eb2ce8f906f25d1bca1c"
+    },
+    {
+      "path": "src/core/options.ts",
+      "status": "modified",
+      "baseBlob": "99619e5723e1700e5cba9e0ca1a8a4d1d06bfe96",
+      "releaseBlob": "3051deb3d7612005eedf9bb00085b5232d44aabc"
+    },
+    {
+      "path": "src/core/ports/IChartRenderer.ts",
+      "status": "modified",
+      "baseBlob": "961988ac5d02bee66ff863c7a90eb8a6c01f7ad5",
+      "releaseBlob": "1561a9bd32daf39d6491740d93cbcc81643a87bd"
+    },
+    {
+      "path": "src/renderers/native/NativeRenderer.ts",
+      "status": "modified",
+      "baseBlob": "3a79dbd00bc5afc86ac841d1c3e0ce0e2d6d4863",
+      "releaseBlob": "0a1d31719d49cab09baaffc251e573917df283f4"
+    },
+    {
+      "path": "src/renderers/native/backend/Canvas2dBackend.ts",
+      "status": "modified",
+      "baseBlob": "11c12c2c4549e16062ada32b6d9740792c8474d7",
+      "releaseBlob": "8da59db5185f1dd5aea5b66c359270e1444374af"
+    },
+    {
+      "path": "src/renderers/native/backend/WebGL2Backend.ts",
+      "status": "modified",
+      "baseBlob": "c8c436a2073376218a8255850b25cfb5ebf8040a",
+      "releaseBlob": "6e9003f36104212c609981079f2073e817cf2491"
+    },
+    {
+      "path": "src/renderers/native/core/InputController.ts",
+      "status": "modified",
+      "baseBlob": "7e5936d828f177faf6d68293f9ddb618aea70fd8",
+      "releaseBlob": "df0c6b56620fb1d94e138e71ab9597448add29a2"
+    },
+    {
+      "path": "src/renderers/native/core/SceneGraph.ts",
+      "status": "modified",
+      "baseBlob": "695f42dbb2d8c544aed0b57680af57f83b4faf9b",
+      "releaseBlob": "f17e51db1a75e97ed07c81c2b2f47baad6711536"
+    },
+    {
+      "path": "src/renderers/native/core/autoscale.ts",
+      "status": "modified",
+      "baseBlob": "b1b1c557704af5eb46312571cd94264e9b249644",
+      "releaseBlob": "20819ab962aadcf4f09c143a3e7eae2b199c3f92"
+    },
+    {
+      "path": "src/renderers/native/core/overlayStack.ts",
+      "status": "added",
+      "releaseBlob": "82adbefbf53f9b8498c761fc6998a2f6fb4dc4a3"
+    },
+    {
+      "path": "src/renderers/shared/InputsUI.ts",
+      "status": "modified",
+      "baseBlob": "3a07ee8b617e63a42c2b777657fc28fe190ded0b",
+      "releaseBlob": "d7cb4a3054ada3f81b07801e1f0b3a0f2f6cdcee"
+    },
+    {
+      "path": "src/state/document.ts",
+      "status": "modified",
+      "baseBlob": "71eb0e2084276393ff46be2997eeb0fa84b9b092",
+      "releaseBlob": "5834fdd3008fc7059217e0967350736149b2b698"
+    },
+    {
+      "path": "src/widget/context-menu.ts",
+      "status": "modified",
+      "baseBlob": "13b8c0756b9d650a23a8164ca3ca8eb34ac595fe",
+      "releaseBlob": "4433f12c8c4f9c8be6b87a8846766ea62832311e"
+    },
+    {
+      "path": "src/widget/contributions.ts",
+      "status": "modified",
+      "baseBlob": "3116f733f691d8074cdc362a30093215dee2ccf6",
+      "releaseBlob": "ee60ebc77c25423aea7a15b69faa9cae94d4cb1c"
+    },
+    {
+      "path": "src/widget/object-tree-model.ts",
+      "status": "modified",
+      "baseBlob": "3acdb97f8a4c2220f406e2ac6b8051bcebc76fb4",
+      "releaseBlob": "cef9168a8b5c0e8d112f592c9bfaa8f17d7b324c"
+    },
+    {
+      "path": "src/widget/object-tree.ts",
+      "status": "modified",
+      "baseBlob": "0d8981dc099d00d00375597538b76eb38bef0647",
+      "releaseBlob": "881aa41a06237bc0edefffb57979d1af5cfbadc5"
+    }
+  ]
+}
