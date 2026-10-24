@@ -14,6 +14,7 @@ export type SimulationIntent = Readonly<{
 }>;
 export type SimulationAction =
   | Readonly<{kind:'submit'; signalTimeMs:number; sequence:number; intent:SimulationIntent; reason?:string}>
+  | Readonly<{kind:'reject'; signalTimeMs:number; sequence:number; orderId:string; signalId:string; symbol:string; side?:SimulationSide; reason:string}>
   | Readonly<{kind:'modify'; signalTimeMs:number; sequence:number; orderId:string;
       updates:Partial<Pick<SimulationIntent,'quantity'|'type'|'limitPrice'|'stopPrice'|'stopLossPrice'|'takeProfitPrice'|'timeInForceBars'>>}>
   | Readonly<{kind:'cancel'; signalTimeMs:number; sequence:number; orderId:string; reason?:string}>;
@@ -378,6 +379,15 @@ export function runStrategySimulation(input:{
     while(actionCursor<actions.length&&actions[actionCursor]!.signalTimeMs<=frame.time){
       const action=actions[actionCursor++]!;
       const barIndex=frame.index;
+      if(action.kind==='reject'){
+        record({eventType:'signal',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
+          reason:'Strategy signal captured; host risk engine did not authorize an order.',
+          originalSignal:Object.freeze({id:action.signalId,timestampMs:action.signalTimeMs,reason:action.reason}),
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
+          reason:action.reason,timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        continue;
+      }
       if(action.kind==='submit'){
         const original=Object.freeze({...action.intent}) as SimulationIntent;
         record({
