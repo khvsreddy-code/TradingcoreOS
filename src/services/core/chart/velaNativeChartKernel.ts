@@ -460,7 +460,23 @@ export class VelaNativeChartKernel {
       void loadDrawingFamiliesForTypes(initial.map((drawing) => drawing.type)).then(() => this.drawings.fromJSON({version:1,drawings:initial}));
     }
     this.renderer.onClick((event: ClickEvent) => {
-      for (const cb of this.onClickHandlers) cb({ point: event.time == null ? undefined : { x: this.timeToCoordinate(event.time) ?? 0, y: event.price == null ? 0 : this.priceToCoordinate(event.price) ?? 0 }, time: event.time ?? undefined, seriesData: new Map() });
+      const paneId = event.paneId ?? this.pricePaneId;
+      const point = event.time == null
+        ? undefined
+        : {
+            x: this.timeToCoordinate(event.time) ?? 0,
+            y: event.price == null ? 0 : this.priceToCoordinate(event.price, paneId) ?? 0,
+          };
+      for (const cb of this.onClickHandlers) {
+        cb({
+          point,
+          time: event.time ?? undefined,
+          price: event.price ?? undefined,
+          paneId: event.paneId ?? null,
+          paneKind: event.paneKind ?? null,
+          seriesData: new Map(),
+        });
+      }
     });
   }
 
@@ -544,8 +560,8 @@ export class VelaNativeChartKernel {
   unsubscribeVisibleTimeRangeChange(cb: (range: { from: number; to: number } | null) => void): void { const unsub = this.timeRangeSubscriptions.get(cb); if (unsub) { unsub(); this.timeRangeSubscriptions.delete(cb); } }
   timeToCoordinate(time: number): number | null { const fn = (this.renderer as any).timeToCoordinate; return typeof fn === 'function' ? Number(fn.call(this.renderer, msFromTime(time))) : null; }
   coordinateToTime(x: number): number | null { const fn = (this.renderer as any).coordinateToTime; const v = typeof fn === 'function' ? fn.call(this.renderer, x) : null; return v == null ? null : Number(v) / 1000; }
-  priceToCoordinate(price: number): number | null { const fn = (this.renderer as any).priceToCoordinate; return typeof fn === 'function' ? Number(fn.call(this.renderer, price)) : null; }
-  coordinateToPrice(y: number): number | null { const fn = (this.renderer as any).coordinateToPrice; const v = typeof fn === 'function' ? fn.call(this.renderer, y) : null; return v == null ? null : Number(v); }
+  priceToCoordinate(price: number, paneId: string = this.pricePaneId): number | null { const fn = (this.renderer as any).priceToCoordinate; return typeof fn === 'function' ? Number(fn.call(this.renderer, price, paneId)) : null; }
+  coordinateToPrice(y: number, paneId: string = this.pricePaneId): number | null { const fn = (this.renderer as any).coordinateToPrice; const v = typeof fn === 'function' ? fn.call(this.renderer, y, paneId) : null; return v == null ? null : Number(v); }
   setVisibleRangeFromRenderer(range: VisibleRange): void { this.renderer.setVisibleRange(range); }
 
   subscribeCrosshair(cb: (e: CrosshairEvent) => void): Unsubscribe { return this.renderer.onCrosshairMove(cb); }
