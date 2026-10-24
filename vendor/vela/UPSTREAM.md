@@ -18,3 +18,26 @@ Upstream 0.8.5 behavior retained here includes programmatic pane height weights,
 `src/renderers/native/chrome/SettingsDialog.ts` retains the TCO desktop presentation layer: horizontal tabs, the Appearance Preview panel, and TCO host-setting hooks. Engine-owned controls still edit the live Vela `ChartConfig`; preview data remains sample-only.
 
 Integration adapters are maintained in `src/TcoVelaDataProvider.ts` and `src/services/core/chart/`. Their shared data plane remains the source of history readiness; Vela's per-load `historyComplete()` lifecycle gates native indicators that opt into `waitsForHistory`.
+
+## Reproducible source comparison and patch ownership
+
+Two exact source reports are checked in:
+`vendor/vela/UPSTREAM-RELEASE-DIFF.json` records the upstream 0.8.4-to-0.8.5
+source-file delta, while `vendor/vela/UPSTREAM-DIFF.json` compares the current TCO
+vendor source against pinned upstream 0.8.5. Their Git blob hashes distinguish unchanged
+files, modified upstream files, TCO-only source files, and upstream files not present
+locally. `vendor/vela/patches.json` assigns each local modification group a purpose and
+tests; the generator fails when a changed or local-only source file has no patch owner.
+
+Recreate and verify the snapshot with an upstream checkout pinned to the exact commit:
+
+```sh
+node tools/vela-overlay-manifest.mjs --upstream-dir /path/to/Vela --write
+node tools/vela-overlay-manifest.mjs --upstream-dir /path/to/Vela --check
+```
+
+Pane height weights are an additive field in the existing version-1 state document.
+They are validated as finite positive values with bounded pane count and size. Existing
+version-1 layouts without this field continue to restore with the renderer's normal weights.
+The workspace saves pane changes through its existing debounced state pipeline; the chart
+cell applies restored weights once per pane so a later manual resize is not overwritten.

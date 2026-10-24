@@ -259,7 +259,7 @@ export class ChartCell {
     private readonly offMarket: () => void;
     /** The cell's durable market state — the seed vocabulary plus the venue mirror the
      *  persisted document carries (`provider` = the symbol's parsed prefix). */
-    private state: CellSeed & Pick<CellState, 'provider' | 'viewport' | 'priceScales'>;
+    private state: CellSeed & Pick<CellState, 'provider' | 'viewport' | 'priceScales' | 'paneHeightWeights'>;
     private manifest: readonly ResolvedIndicator[] = [];
     /** A restored ledger's manifest entry NAMES, waiting for the manifest to resolve
      *  (a pool/persisted cell can be built before the shared manifest has loaded). */
@@ -289,6 +289,10 @@ export class ChartCell {
     private indicatorTitlesOn = true;
     /** Plot values beside this cell's legend titles shown. */
     private indicatorValuesOn = true;
+    /** Pane ids whose saved weights have already been restored; never fight user resizing. */
+    private readonly restoredPaneWeights = new Set<string>();
+    /** Keep not-yet-mounted saved panes until chart loading and manifest restoration settle. */
+    private paneRestoreSettled = false;
     private destroyed = false;
 
     constructor(
@@ -310,6 +314,7 @@ export class ChartCell {
             session: normalizeSession(seed.session),
             viewport: seed.viewport,
             priceScales: seed.priceScales,
+            paneHeightWeights: seed.paneHeightWeights,
         };
         const doc = gridHost.ownerDocument;
         this.host = doc.createElement('div');
@@ -403,6 +408,13 @@ export class ChartCell {
             if (scales) this.state.priceScales = scales;
             this.deps.onStateDirty();
         });
+        // Vela 0.8.5 emits pane:changed for separator drags and pane lifecycle changes.
+        // Restore only once per pane identity, then snapshot live weights for workspace save.
+        this.inner.on('pane:changed', () => {
+            this.restorePaneHeightWeights();
+            this.state.paneHeightWeights = this.readPaneHeightWeights();
+            this.deps.onStateDirty();
+        });
         // Pool restore: cosmetics + drawings round-trip (both validate untrusted input).
         if (seed.rendererConfig != null) this.inner.renderer.applyConfig(seed.rendererConfig);
         if (seed.drawings != null) this.inner.drawings.fromJSON(seed.drawings);
@@ -418,6 +430,7 @@ export class ChartCell {
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
         }
         this.restoreWorkspaceScaleState();
+        this.restorePaneHeightWeights();
         this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
         // Third-party state rides in verbatim; the workspace triggers the handlers'
         // `restore` AFTER wiring the cell (restorePersistedExt) — a restore that adds
@@ -427,7 +440,13 @@ export class ChartCell {
         // registry is the whole truth and the dehydrated ledger stops reporting intent.
         this.inner.on('load:end', () => {
             this.restoreWorkspaceScaleState();
+            this.restorePaneHeightWeights();
+            // Some host manifests resolve after first paint. Preserve unmatched saved pane
+            // ids until the indicator ledger is settled; otherwise discard panes actually gone.
+            this.paneRestoreSettled = this.deps.manifestSettled();
+            this.state.paneHeightWeights = this.readPaneHeightWeights();
             this.volumeMayBePending = false;
+            this.deps.onStateDirty();
         });
         // A symbol nothing serves parks the load forever — say so instead of showing a
         // blank cell. Once per symbol: the core re-reports on every index settle.
@@ -439,6 +458,7 @@ export class ChartCell {
         });
         // The loading affordance and the watermark never share the canvas.
         this.inner.on('load:start', ({ symbol }) => {
+            this.paneRestoreSettled = false;
             this.watermark?.setLoading(true);
             // Probe the new symbol's metadata HERE rather than waiting for `market:changed`
             // (which fires only once the new bars are painted): the session toggle and the
@@ -1125,12 +1145,18 @@ export class ChartCell {
             }
             this.pendingManifestNames = null;
             this.restoreWorkspaceScaleState();
+            this.restorePaneHeightWeights();
+            this.paneRestoreSettled = this.deps.manifestSettled();
+            this.state.paneHeightWeights = this.readPaneHeightWeights();
             return;
         }
         if (seedEnabled) {
             for (const entry of list) if (entry.enabled) this.addManifestInstance(entry, { record: false });
         }
         this.restoreWorkspaceScaleState();
+        this.restorePaneHeightWeights();
+        this.paneRestoreSettled = this.deps.manifestSettled();
+        this.state.paneHeightWeights = this.readPaneHeightWeights();
     }
 
     /** Reapply saved axis framing after the price/study panes exist. Unknown panes are
@@ -1488,6 +1514,69 @@ export class ChartCell {
     }
 
     // ── lifecycle ──
+    /** Snapshot valid, currently-mounted pane weights. Pending saved pane ids survive
+     *  the initial progressive load until the chart/indicator manifest has settled. */
+    private readPaneHeightWeights(): Record<string, number> {
+        const weights: Record<string, number> = Object.create(null) as Record<string, number>;
+        const panes = this.inner?.panes.list() ?? [];
+        let maxWeight = 0;
+        for (const pane of panes) {
+            const weight = pane.heightWeight;
+            if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) maxWeight = Math.max(maxWeight, weight);
+        }
+        const pending = !this.paneRestoreSettled ? this.state.paneHeightWeights : undefined;
+        // A saved pane may still be waiting for its indicator to mount. Include it in the
+        // common scale factor so normalization preserves ratios between live and pending panes.
+        if (pending) {
+            const livePaneIds = new Set(panes.map((pane) => pane.id));
+            for (const [paneId, weight] of Object.entries(pending)) {
+                if (!livePaneIds.has(paneId) && Number.isFinite(weight) && weight > 0 && weight <= 100) {
+                    maxWeight = Math.max(maxWeight, weight);
+                }
+            }
+        }
+        // Pane height weights are relative ratios, not pixels. If a caller used a weight
+        // above our persistence ceiling, scale every live/pending pane by the same factor so
+        // proportions survive reload without extreme values destabilizing layout.
+        const normalization = Math.max(1, maxWeight / 100);
+        for (const pane of panes) {
+            const weight = pane.heightWeight;
+            if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) {
+                weights[pane.id] = Math.min(100, weight / normalization);
+            }
+        }
+        if (pending) {
+            for (const [paneId, weight] of Object.entries(pending)) {
+                if (!(paneId in weights) && Number.isFinite(weight) && weight > 0 && weight <= 100) {
+                    weights[paneId] = Math.min(100, weight / normalization);
+                }
+            }
+        }
+        return weights;
+    }
+
+    /** Restore each pane once. Mark before calling Vela because setHeightWeight emits pane:changed synchronously. */
+    private restorePaneHeightWeights(): void {
+        const chart = this.inner;
+        const saved = this.state.paneHeightWeights;
+        if (!chart || !saved) return;
+        const panes = chart.panes.list();
+        const livePaneIds = new Set(panes.map((pane) => pane.id));
+        // A removed indicator pane may later be recreated with the same stable id.
+        // Forget only identities that disappeared, so their saved weights can be applied
+        // again without overriding weights on still-mounted panes during ordinary changes.
+        for (const restoredId of this.restoredPaneWeights) {
+            if (!livePaneIds.has(restoredId)) this.restoredPaneWeights.delete(restoredId);
+        }
+        for (const pane of panes) {
+            const weight = saved[pane.id];
+            if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0 || weight > 100) continue;
+            if (this.restoredPaneWeights.has(pane.id)) continue;
+            this.restoredPaneWeights.add(pane.id);
+            if (pane.heightWeight !== weight) chart.panes.setHeightWeight(pane.id, weight);
+        }
+    }
+
     /**
      * Apply a restored cell state IN PLACE — the chart instance survives (the market
      * switches via `setMarket`) while cosmetics, renderer config, drawings, and the
@@ -1498,6 +1587,9 @@ export class ChartCell {
      */
     rehydrate(cs: CellState): void {
         if (!this.inner || this.destroyed) return;
+        this.state.paneHeightWeights = cs.paneHeightWeights;
+        this.restoredPaneWeights.clear();
+        this.paneRestoreSettled = false;
         if (cs.priceStyle && cs.priceStyle !== this.priceStyle) this.setPriceStyle(cs.priceStyle);
         if (cs.watermark !== undefined && cs.watermark !== this.watermarkOn) this.setWatermarkVisible(cs.watermark);
         if (cs.replayWatermark !== undefined && cs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(cs.replayWatermark);
@@ -1509,6 +1601,7 @@ export class ChartCell {
         if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
         this.state.priceScales = cs.priceScales;
         this.restoreWorkspaceScaleState();
+        this.restorePaneHeightWeights();
         // Third-party state converges to the document too: the restored bag REPLACES
         // the baseline (absent in the document = the document carries none), then the
         // registered handlers re-apply. After the ledger — a handler re-adding external
@@ -1538,6 +1631,9 @@ export class ChartCell {
                 this.inner.setVisibleRange(cs.viewport);
             }
             this.restoreWorkspaceScaleState();
+            this.restorePaneHeightWeights();
+            this.paneRestoreSettled = this.deps.manifestSettled();
+            this.state.paneHeightWeights = this.readPaneHeightWeights();
         };
         if (Object.keys(next).length > 0) {
             void this.inner.setMarket(next).then(restoreViewport).catch(() => undefined);
@@ -1565,6 +1661,7 @@ export class ChartCell {
             rendererConfig: this.inner?.renderer.getConfig() ?? undefined,
             viewport: this.inner?.getVisibleRange() ?? this.state.viewport,
             priceScales: this.inner?.renderer.getWorkspaceScaleState?.() ?? this.state.priceScales,
+            paneHeightWeights: this.readPaneHeightWeights(),
             drawings: this.inner ? this.inner.drawings.toJSON() : undefined,
             // Natives from the chart's SYNC registry read — an async catalog mirror here
             // lost unload-time saves, and the old empty-set fallbacks resurrected removed

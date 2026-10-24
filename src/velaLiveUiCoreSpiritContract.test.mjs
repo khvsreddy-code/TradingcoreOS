@@ -15,6 +15,10 @@ const chartRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const nativeIndicator = read('../vendor/vela/src/core/native-indicators/NativeIndicator.ts');
 const velaProvenance = read('../vendor/vela/UPSTREAM.md');
 const velaReleaseNotes = read('../vendor/vela/CHANGELOG.md');
+const contextMenu = read('../vendor/vela/src/widget/context-menu.ts');
+const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const rendererImpl = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
+const nativeExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 
 assert.match(velaProvenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'live chart integration must be pinned to the 0.8.5 source baseline');
 assert.match(velaReleaseNotes, /^## \[0\.8\.5\]/m, '0.8.5 integration contract must be backed by the vendored upstream release notes');
@@ -34,6 +38,18 @@ assert.match(nativeRenderer, /function slotsBefore\(/, 'sparse/future plot times
 assert.match(chartRenderer, /paneId\?: string \| null/, 'Vela click/crosshair contracts identify their pane');
 assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'TCO maps clicked values on the actual pane scale');
 assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'TCO preserves click pane-kind metadata');
+assert.match(chartKernel, /paneId: event\.paneId \?\? null/, 'TCO click callbacks preserve the actual pane identity');
+assert.match(contextMenu, /this\.crosshair = \{ price: e\.price, time: e\.time, paneKind: e\.paneKind \?\? null, paneId: e\.paneId \?\? null \}/, 'context-menu crosshair state retains native pane identity');
+assert.match(contextMenu, /pointer: \{ value: this\.pointer, enumerable: true \}/, 'context-menu contributions receive the pointer captured when the menu opened');
+assert.match(chrome, /pointerPane = \{ paneId: event\.paneId \?\? null, paneKind: event\.paneKind \?\? null \}/, 'the TCO data window displays the pane reported by crosshair events');
+assert.match(chrome, /Study pane/, 'the TCO data window distinguishes indicator panes from the price pane');
+assert.match(rendererPorts, /paneKind\?: 'price' \| 'study'/, 'data-window groups carry their owning pane kind');
+assert.match(rendererPorts, /paneId\?: string/, 'data-window groups carry their owning pane id');
+assert.match(rendererImpl, /groups\.push\(\{ name: model\.title, paneId, paneKind, rows \}\)/, 'native data-window groups expose pane identity');
+assert.match(chrome, /readout\.groups\.filter\(\(group\) => group\.paneId === selectedPane\)/, 'the host data window filters rows to the pane under the crosshair');
+assert.match(chrome, /Only show OHLCV while inspecting the price pane/, 'indicator pane values are not presented as market prices');
+assert.doesNotMatch(nativeExtensions, /from ['\"]\.\/velaChartFacade['\"]/, 'new native extension code must not depend on the legacy facade');
+assert.doesNotMatch(nativeExtensions, /waitsForHistory\s*:\s*true\s*[,}]/, 'the bounded TCO regime ribbon remains incremental');
 assert.match(provider, /historyReady: snapshot\.historyReady/, 'the TCO data plane keeps its history-readiness signal');
 
 assert.match(historyPolicy, /'5m': 500/, '5-minute history should start with a bounded 500-bar request');

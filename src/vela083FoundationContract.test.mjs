@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const exists = (path) => fs.existsSync(new URL(path, import.meta.url));
@@ -21,13 +22,37 @@ const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 const persistedDocument = read('../vendor/vela/src/state/document.ts');
 const inputController = read('../vendor/vela/src/renderers/native/core/InputController.ts');
+const paneCell = read('../vendor/vela/src/workspace/ChartCell.ts');
+const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
+const releaseDiff = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
+const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
 assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
 assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include the 0.8.5 release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
+const noticeBytes = Buffer.from(notice, 'utf8');
+const noticeBlobSha = createHash('sha1').update(Buffer.from('blob ' + noticeBytes.length + '\0', 'utf8')).update(noticeBytes).digest('hex');
+assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.8.5');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
+assert.equal(overlayDiff.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'machine-generated diff must use the pinned source commit');
+assert.equal(releaseDiff.upstream.base.commit, '850fa1f431e2065e9b0074c4b0555a48a2999eaf', 'release diff must compare from the exact 0.8.4 source base');
+assert.equal(releaseDiff.upstream.release.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'release diff must terminate at the exact 0.8.5 source commit');
+assert.equal(releaseDiff.counts.total, releaseDiff.files.length, 'release diff summary must match changed source entries');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/PanesControl.ts'), 'release diff must include the pane API change');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/native-indicators/classics/averages.ts'), 'release diff must include the breaking regression-study migration');
+assert.equal(overlayDiff.counts.modified, overlayDiff.modified.length, 'diff summary must agree with the per-file modifications');
+assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff summary must agree with TCO-only source files');
+assert.ok(overlayDiff.modified.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every modified upstream source file must have a patch owner');
+assert.ok(overlayDiff.localOnly.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every TCO-only source file must have a patch owner');
+assert.match(persistedDocument, /paneHeightWeights\?: Record<string, number>/, 'pane weights are part of the versioned per-cell state');
+assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 64\)/, 'persisted pane count is bounded');
+assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
+assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.8.5 pane API');
+assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
+assert.match(paneCell, /const normalization = Math\.max\(1, maxWeight \/ 100\)/, 'oversized API weights are normalized by a common factor so pane proportions survive persistence');
+assert.match(paneCell, /if \(pending\) \{[\s\S]*maxWeight = Math\.max\(maxWeight, weight\)/, 'pending panes participate in the same normalization factor during progressive restore');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'native indicators can opt into full-history gating');

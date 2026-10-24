@@ -1,14 +1,15 @@
 import {
   registerNativeIndicator,
-  registerRendererLayer,
   type NativeIndicator,
   type NativeIndicatorContext,
   type NativeIndicatorDescriptor,
-  type InputSchema,
-  type InputValue,
+} from '../../../../vendor/vela/src/core/native-indicators';
+import type { InputSchema, InputValue } from '../../../../vendor/vela/src/core/model/inputs';
+import {
+  registerRendererLayer,
   type RendererLayerDefinition,
   type RendererLayerArgs,
-} from './velaChartFacade';
+} from '../../../../vendor/vela/src/renderers/native/layers';
 
 type RegimeLayerData = {
   state: -1 | 0 | 1;
@@ -66,6 +67,12 @@ const regimeLayer: RendererLayerDefinition = {
 
 registerRendererLayer(regimeLayer);
 
+/**
+ * This indicator reads a bounded trailing window (at most 500 bars) and reacts to each
+ * incremental bar update. It intentionally does not set waitsForHistory: true; gating it
+ * until the provider finishes older-history paging would add latency without improving
+ * correctness for this bounded calculation.
+ */
 class TcoRegimeRibbonIndicator implements NativeIndicator {
   private ctx: NativeIndicatorContext | null = null;
   private inputs: Record<string, InputValue> = {};

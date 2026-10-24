@@ -176,9 +176,12 @@ export interface DataWindowOHLC {
     up: boolean;
 }
 
-/** One indicator's readout: its title plus a row per plot. */
+/** One indicator's readout: its title plus a row per plot, tagged with its owning pane. */
 export interface DataWindowGroup {
     name: string;
+    /** Native pane id; lets host data windows inspect only the pane under the crosshair. */
+    paneId?: string;
+    paneKind?: 'price' | 'study';
     rows: DataWindowRow[];
 }
 

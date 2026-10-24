@@ -1,0 +1,59 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const renderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
+const engine = read('../vendor/vela/src/core/engine/EngineOrchestrator.ts');
+const scenePatch = read('../vendor/vela/src/core/model/patch.ts');
+const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
+const priceStyle = read('../vendor/vela/src/core/price-styles/heikin-ashi.ts');
+const dataProvider = read('./TcoVelaDataProvider.ts');
+const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
+const outputLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
+const sceneDiff = read('./services/core/chart/coreSpiritSceneDiff.ts');
+const adapter = read('./services/core/chart/tcoVelaSemanticAdapter.ts');
+const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const extension = read('./services/core/chart/tcoVelaNativeExtensions.ts');
+const provenance = read('../vendor/vela/UPSTREAM.md');
+const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
+const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
+const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
+
+assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'conformance must target the pinned Vela source commit');
+assert.equal(sourceSnapshot.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'the machine-generated source diff must use the same upstream pin');
+assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
+assert.equal(releaseSnapshot.upstream.base.version, '0.8.4', 'upstream release delta starts at 0.8.4');
+assert.equal(releaseSnapshot.upstream.release.version, '0.8.5', 'upstream release delta ends at 0.8.5');
+assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
+
+assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
+assert.match(renderer, /setBarsColumns\(/, 'full bar replacement must enter the native renderer through the columnar API');
+assert.match(renderer, /updateBarColumns\(/, 'incremental candle updates must use the incremental columnar API');
+assert.match(renderer, /setPriceStyle\(/, 'chart-style transitions must pass through the native style lifecycle');
+assert.match(priceStyle, /heikinAshi/, 'the Heikin Ashi transformation remains available for style-transition conformance');
+assert.match(engine, /setMarket\(/, 'market switches must have an explicit engine lifecycle boundary');
+assert.match(engine, /resetHistoryTracking|historyComplete\(\)/, 'history readiness must reset per market load');
+assert.match(engine, /waitsForHistory/, 'only opt-in native indicators are gated by history completion');
+
+assert.match(sceneGraph, /this\.retained\.upsert\(|this\.retained\.remove\(/, 'the native retained scene graph records insertions and removals');
+assert.match(scenePatch, /replace|insert|update|remove/, 'the scene patch vocabulary must encode full and incremental mutations');
+assert.match(sceneDiff, /markers/, 'CoreSpirit scene diffs must retain marker updates');
+assert.match(sceneDiff, /priceLines/, 'CoreSpirit scene diffs must retain price-line updates');
+assert.match(sceneDiff, /backgrounds/, 'CoreSpirit scene diffs must retain background updates');
+assert.match(outputLayer, /drawings/, 'CoreSpirit output layer must preserve drawing lifecycles');
+assert.match(chartKernel, /createPriceLine/, 'native kernel must expose price-line updates');
+assert.match(chartKernel, /createSeriesMarkers|markers/, 'native kernel must expose marker updates');
+assert.match(chartKernel, /subscribeCrosshair/, 'native kernel must relay crosshair data from Vela');
+assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'click mapping must use the pane receiving the event');
+assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'pane identity must survive the chart-kernel boundary');
+assert.match(rendererPorts, /paneId\?: string/, 'data-window groups carry native pane ids across the typed renderer port');
+assert.match(renderer, /groups\.push\(\{ name: model\.title, paneId, paneKind, rows \}\)/, 'native data-window rows retain pane identity and kind');
+assert.match(adapter, /buildCoreSpiritVelaIndicatorModel/, 'CoreSpirit output conversion must stay behind its typed adapter');
+
+assert.match(dataProvider, /getBarsProgressive/, 'TCO initial history must remain progressively loaded');
+assert.match(dataProvider, /async loadRange\(/, 'older-history paging remains routed through the canonical provider');
+assert.match(dataProvider, /historyReady: snapshot\.historyReady/, 'history readiness comes from the TCO data plane');
+assert.doesNotMatch(extension, /waitsForHistory\s*:\s*true\s*[,}]/, 'bounded TCO regime ribbon stays incremental instead of waiting for all history');
+assert.match(extension, /anchor = Math\.max\(0, last - length\)/, 'the TCO regime ribbon uses a bounded trailing window');
+
+console.log('VELA_085_CONFORMANCE_CONTRACT_OK');
