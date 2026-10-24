@@ -9,6 +9,7 @@ const batchWorker = read('./server/jobs/coreSpiritBatchModelTraining.ts');
 const trainingWorker = read('./server/jobs/coreSpiritModelTraining.ts');
 const routes = read('./server/routes/coreSpirit-models.routes.ts');
 const artifacts = read('./services/coreSpirit/modelArtifacts.ts');
+const quantMath = read('./services/coreSpirit/quantMath.ts');
 const migration = read('../supabase/migrations/20261024120000_corespirit_batch_dataset_chunks.sql');
 const lifecycleMigration = read('../supabase/migrations/20261024133000_corespirit_dataset_batch_session_guards.sql');
 const reuseMigration = read('../supabase/migrations/20261024140000_allow_dataset_manifest_reuse.sql');
@@ -43,6 +44,11 @@ assert.match(snapshotRepository, /storageMode === 'chunked-v1'/,
 
 assert.match(batchWorker, /process\.memoryUsage\(\)\.rss/);
 assert.match(batchWorker, /maxExecutionMs/);
+assert.match(batchWorker, /checkExecutionBudget\('model fitting'\)/);
+assert.match(quantMath, /checkBudget\?: \(\) => void/);
+assert.match(quantMath, /this\.checkBudget\?\.\(\)/);
+assert.match(quantMath, /Math\.min\(4_096, Math\.floor\(options\.maxObservations/);
+assert.match(quantMath, /snapshot\.maxObservations > 1024/, 'sealed model inference state remains capped independently of wider research fitting');
 assert.match(batchWorker, /for await \(const item of iterateVerifiedRows/);
 assert.match(batchWorker, /Dataset chunk content hash or time bounds/);
 assert.match(batchWorker, /validationStart = trainingCount \+ boundaryGap/);
