@@ -12,6 +12,7 @@ const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
 const outputLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const sceneDiff = read('./services/core/chart/coreSpiritSceneDiff.ts');
 const adapter = read('./services/core/chart/tcoVelaSemanticAdapter.ts');
+const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const extension = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 const provenance = read('../vendor/vela/UPSTREAM.md');
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
@@ -45,6 +46,8 @@ assert.match(chartKernel, /createSeriesMarkers|markers/, 'native kernel must exp
 assert.match(chartKernel, /subscribeCrosshair/, 'native kernel must relay crosshair data from Vela');
 assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'click mapping must use the pane receiving the event');
 assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'pane identity must survive the chart-kernel boundary');
+assert.match(rendererPorts, /paneId\?: string/, 'data-window groups carry native pane ids across the typed renderer port');
+assert.match(renderer, /groups\.push\(\{ name: model\.title, paneId, paneKind, rows \}\)/, 'native data-window rows retain pane identity and kind');
 assert.match(adapter, /buildCoreSpiritVelaIndicatorModel/, 'CoreSpirit output conversion must stay behind its typed adapter');
 
 assert.match(dataProvider, /getBarsProgressive/, 'TCO initial history must remain progressively loaded');
