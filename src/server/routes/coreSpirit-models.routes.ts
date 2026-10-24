@@ -448,6 +448,9 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
     if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
       return fail(res, 422, 'No batch training backend is registered for this model family.');
     }
+    if (!Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12) {
+      return fail(res, 422, 'Batch HMM state count must be an integer from 2 to 12.');
+    }
     if (graph.featureNames.length !== snapshot.featureNames.length ||
         graph.featureNames.some((name, index) => name !== snapshot.featureNames[index])) {
       return fail(res, 422, 'Dataset feature schema does not match the compiled research artifact.');
