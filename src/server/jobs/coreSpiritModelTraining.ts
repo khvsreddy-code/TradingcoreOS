@@ -113,6 +113,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     throw new Error('Queued dataset version does not match the immutable snapshot');
   }
   if (snapshot.storageMode === 'chunked-v1') {
+    if (!snapshot.batchSessionId || !snapshot.datasetManifest) {
+      throw new Error('Chunked dataset snapshot is missing its sealed session or manifest.');
+    }
     return runChunkedCoreSpiritModelTraining(ownerUserId, rawPayload, snapshot, repository);
   }
   const payload = parsePayload({
