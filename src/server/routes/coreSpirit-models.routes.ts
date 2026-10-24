@@ -23,13 +23,15 @@ import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../se
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
+import { CoreSpiritDatasetBatchRepository } from '../storage/CoreSpiritDatasetBatchRepository.js';
+import { getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
 
 const MAX_SOURCE_BYTES = 64 * 1024;
-const MAX_ROWS = 5_000;
+const MAX_ROWS = getCoreSpiritResearchLimits('interactive').maxRows;
 const MAX_FEATURES = 16;
 
 function fail(res: Response, status: number, message: string): void {
@@ -280,6 +282,214 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     });
   } catch (error) {
     fail(res, 503, error instanceof Error ? error.message : 'Unable to persist research artifact.');
+  }
+});
+
+
+/**
+ * Large research inputs use a three-step immutable upload. The chart-facing
+ * request path still accepts at most MAX_ROWS rows; batch chunks are written to
+ * separate bounded records and only become trainable after manifest finalization.
+ */
+coreSpiritModelRoutes.post('/dataset-batches', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const researchArtifactId = String(req.body?.researchArtifactId ?? '').trim();
+    if (!researchArtifactId) return fail(res, 400, 'researchArtifactId is required.');
+    const featureNames = parseFeatureNames(req.body?.featureNames);
+    assertNoKnownLabelLeakage(featureNames);
+    const trainingRange = parseRange(req.body?.trainingRange);
+    const rowCount = req.body?.rowCount;
+    const chunkSize = req.body?.chunkSize;
+    const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!, researchArtifactId);
+    const research = await repository.getResearchArtifact(researchArtifactId);
+    if (!research) return fail(res, 404, 'Research artifact not found.');
+    const graph = featureGraphOf(research);
+    if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
+      return fail(res, 422, 'No batch training backend is registered for this model family.');
+    }
+    if (graph.featureNames.length !== featureNames.length ||
+        graph.featureNames.some((name, index) => name !== featureNames[index])) {
+      return fail(res, 422, 'Batch feature names must exactly match the compiled research artifact schema.');
+    }
+    const batchRepository = new CoreSpiritDatasetBatchRepository(req.tradingCoreUserId!);
+    const session = await batchRepository.createSession({
+      researchArtifactId, featureNames, trainingRange,
+      rowCount: Number(rowCount),
+      ...(chunkSize === undefined ? {} : { chunkSize: Number(chunkSize) }),
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        uploadSessionId: session.id,
+        status: session.status,
+        expectedRowCount: session.expectedRowCount,
+        chunkSize: session.chunkSize,
+        expectedChunkCount: session.expectedChunkCount,
+        featureSchemaHash: await coreSpiritSha256({ version: '1', orderedNames: session.featureNames, types: session.featureNames.map(() => 'number') }),
+        trainingRange: session.trainingRange,
+      },
+    });
+  } catch (error) {
+    fail(res, 400, error instanceof Error ? error.message : 'Unable to initialize batch dataset upload.');
+  }
+});
+
+coreSpiritModelRoutes.put('/dataset-batches/:sessionId/chunks/:chunkIndex', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const chunkIndex = Number(req.params.chunkIndex);
+    if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0) return fail(res, 400, 'chunkIndex must be a non-negative integer.');
+    const repository = new CoreSpiritDatasetBatchRepository(req.tradingCoreUserId!);
+    const result = await repository.appendChunk(String(req.params.sessionId), chunkIndex, req.body?.rows);
+    res.status(result.idempotent ? 200 : 201).json({ success: true, data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to store dataset chunk.';
+    fail(res, /not found/i.test(message) ? 404 : 400, message);
+  }
+});
+
+coreSpiritModelRoutes.get('/dataset-batches/:sessionId', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const repository = new CoreSpiritDatasetBatchRepository(req.tradingCoreUserId!);
+    const session = await repository.getSession(String(req.params.sessionId));
+    if (!session) return fail(res, 404, 'Dataset batch session not found.');
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: {
+        uploadSessionId: session.id,
+        status: session.status,
+        expectedRowCount: session.expectedRowCount,
+        chunkSize: session.chunkSize,
+        expectedChunkCount: session.expectedChunkCount,
+        datasetVersion: session.datasetHash,
+        datasetSnapshotId: session.datasetSnapshotId,
+        manifest: session.datasetManifest,
+      },
+    });
+  } catch (error) {
+    fail(res, 503, error instanceof Error ? error.message : 'Unable to inspect batch dataset upload.');
+  }
+});
+
+coreSpiritModelRoutes.post('/dataset-batches/:sessionId/finalize', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const repository = new CoreSpiritDatasetBatchRepository(req.tradingCoreUserId!);
+    const result = await repository.finalize(String(req.params.sessionId));
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to finalize immutable dataset manifest.';
+    fail(res, /not found/i.test(message) ? 404 : 422, message);
+  }
+});
+
+coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: AuthenticatedRequest, res: Response) => {
+  const researchArtifactId = String(req.body?.researchArtifactId ?? '').trim();
+  const datasetSnapshotId = String(req.body?.datasetSnapshotId ?? '').trim();
+  if (!researchArtifactId || !datasetSnapshotId) {
+    return fail(res, 400, 'researchArtifactId and datasetSnapshotId are required.');
+  }
+  const validationFraction = req.body?.validationFraction ?? DEFAULT_RESEARCH_VALIDATION_FRACTION;
+  if (typeof validationFraction !== 'number' || !Number.isFinite(validationFraction) ||
+      validationFraction < 0.1 || validationFraction > 0.4) {
+    return fail(res, 400, 'validationFraction must be a number between 0.10 and 0.40.');
+  }
+  const randomSeed = req.body?.randomSeed ?? 42;
+  if (!Number.isSafeInteger(randomSeed) || randomSeed < 0) return fail(res, 400, 'randomSeed must be a non-negative safe integer.');
+  const rawParameters = req.body?.trainingParameters;
+  if (rawParameters !== undefined && (!rawParameters || typeof rawParameters !== 'object' || Array.isArray(rawParameters))) {
+    return fail(res, 400, 'trainingParameters must be an object.');
+  }
+  const trainingParameters: Record<string, string | number | boolean | null> = {
+    ...((rawParameters ?? {}) as Record<string, string | number | boolean | null>),
+    validationFraction,
+  };
+  for (const [key, value] of Object.entries(trainingParameters)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) ||
+        !(value === null || typeof value === 'string' || typeof value === 'boolean' ||
+          typeof value === 'number' && Number.isFinite(value))) {
+      return fail(res, 400, 'Training parameters must be simple finite JSON scalar values.');
+    }
+  }
+  const fitIterations = trainingParameters.fitIterations;
+  if (fitIterations !== undefined &&
+      (typeof fitIterations !== 'number' || !Number.isInteger(fitIterations) || fitIterations < 1 || fitIterations > 6)) {
+    return fail(res, 400, 'fitIterations must be an integer from 1 to 6.');
+  }
+  const fitEvery = trainingParameters.fitEvery;
+  if (fitEvery !== undefined &&
+      (typeof fitEvery !== 'number' || !Number.isInteger(fitEvery) || fitEvery < 1 || fitEvery > 64)) {
+    return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
+  }
+  const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
+  const purgeBars = Number(rawPurge);
+  if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
+    return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
+  }
+
+  const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!, researchArtifactId);
+  try {
+    const snapshot = await repository.getDatasetSnapshot(datasetSnapshotId);
+    if (!snapshot) return fail(res, 404, 'Immutable dataset snapshot not found for this owner.');
+    if (snapshot.storageMode !== 'chunked-v1' || !snapshot.datasetManifest) {
+      return fail(res, 422, 'This endpoint requires a finalized chunked dataset manifest.');
+    }
+    const manifest = snapshot.datasetManifest;
+    if (manifest.researchArtifactId !== researchArtifactId || manifest.datasetVersion !== snapshot.datasetVersion) {
+      return fail(res, 409, 'Dataset manifest identity does not match the requested research artifact.');
+    }
+    const rowCount = Number(manifest.rowCount);
+    const limits = getCoreSpiritResearchLimits('batch');
+    if (!Number.isSafeInteger(rowCount) || rowCount < 24 || rowCount > limits.maxRows) {
+      return fail(res, 422, 'Dataset row count exceeds the currently configured batch workload class.');
+    }
+    const research = await repository.getResearchArtifact(researchArtifactId);
+    if (!research) return fail(res, 404, 'Research artifact not found.');
+    const graph = featureGraphOf(research);
+    if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
+      return fail(res, 422, 'No batch training backend is registered for this model family.');
+    }
+    if (graph.featureNames.length !== snapshot.featureNames.length ||
+        graph.featureNames.some((name, index) => name !== snapshot.featureNames[index])) {
+      return fail(res, 422, 'Dataset feature schema does not match the compiled research artifact.');
+    }
+    const safety = (research.featureGraph as Record<string, unknown>).researchSafety as ResearchSafetySummary | undefined;
+    if (!safety || safety.version !== 1 || safety.blockers.length > 0) {
+      return fail(res, 422, 'Research source does not satisfy the causal/lookahead safety gate.');
+    }
+    const evaluableRows = rowCount - purgeBars;
+    const validationCount = Math.floor(evaluableRows * validationFraction);
+    const trainingCount = evaluableRows - validationCount;
+    if (purgeBars >= rowCount || validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
+        trainingCount < Math.max(12, graph.states * 4)) {
+      return fail(res, 422, 'Purged chronological holdout requires at least 12 validation rows and max(12, states × 4) earlier training rows.');
+    }
+    const trainingRunId = await repository.createTrainingRun({
+      researchArtifactId, datasetSnapshotId, datasetVersion: snapshot.datasetVersion,
+      datasetRowCount: rowCount, featureNames: snapshot.featureNames,
+      trainingRange: snapshot.trainingRange, trainingParameters, randomSeed: Number(randomSeed),
+    });
+    try {
+      const queued = await enqueueBackgroundJob(req.tradingCoreUserId!, 'corespirit_model_training', {
+        trainingRunId, researchArtifactId, datasetSnapshotId,
+        datasetVersion: snapshot.datasetVersion, trainingParameters, randomSeed: Number(randomSeed),
+      });
+      res.status(202).json({
+        success: true,
+        data: {
+          trainingRunId, jobId: queued.job.id, status: 'queued',
+          datasetVersion: snapshot.datasetVersion, rowCount, researchArtifactId,
+          datasetSnapshotId, validationProtocol: purgeBars > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
+        },
+      });
+    } catch (error) {
+      await repository.updateTrainingRun(trainingRunId, {
+        status: 'failed', progress: 100,
+        error: error instanceof Error ? error.message : 'Unable to enqueue training job',
+      });
+      throw error;
+    }
+  } catch (error) {
+    fail(res, 503, error instanceof Error ? error.message : 'Unable to queue batch CoreSpirit training.');
   }
 });
 
