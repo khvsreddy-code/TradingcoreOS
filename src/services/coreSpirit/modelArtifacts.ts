@@ -371,7 +371,7 @@ function assertModelContract(contract: CoreSpiritModelContract): void {
     const from = Date.parse(snapshot.from);
     const to = Date.parse(snapshot.to);
     if (!/^[a-f0-9]{64}$/.test(snapshot.hash) || snapshot.version !== snapshot.hash ||
-        !Number.isSafeInteger(snapshot.rows) || snapshot.rows < 12 || snapshot.rows > 5000 ||
+        !Number.isSafeInteger(snapshot.rows) || snapshot.rows < 12 || snapshot.rows > 1_000_000 ||
         !['user_supplied', 'broker_history', 'trusted_feature_pipeline'].includes(snapshot.source) ||
         snapshot.immutable !== true || !Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
       throw new Error('Model dataset snapshot must be immutable, content-addressed, bounded, and time-ranged.');
