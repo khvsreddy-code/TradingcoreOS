@@ -365,7 +365,7 @@ export function runStrategySimulation(input:{
 
   for(const frame of frames){
     const liquidity=new Map<string,number>();
-    for(const [symbol,bar] of frame.bars){marks.set(symbol,Number(bar.close));liquidity.set(symbol,lotFloor(Number(bar.volume)*config.maxParticipationRate,config.lotSize));}
+    for(const [symbol,bar] of frame.bars){marks.set(symbol,Number(bar.open));liquidity.set(symbol,lotFloor(Number(bar.volume)*config.maxParticipationRate,config.lotSize));}
     processActions(frame,false);
     processBrackets(frame,liquidity,false);
     const activeOrders=[...orders.values()].filter(o=>active(o.status)&&o.signalTimeMs<frame.time&&frame.bars.has(o.intent.symbol))
@@ -446,6 +446,7 @@ export function runStrategySimulation(input:{
     }
     processBrackets(frame,liquidity,true);pruneBrackets();
     processActions(frame,true);
+    for(const [symbol,bar] of frame.bars) marks.set(symbol,Number(bar.close));
     const eq=equity(),ex=gross();maxGross=Math.max(maxGross,ex);
     equityCurve.push({timestampMs:frame.time,cash:rounded(cash),equity:rounded(eq),grossExposure:rounded(ex)});
     record({eventType:'mark',timestampMs:frame.time,barIndex:frame.index,phase:'intrabar',
