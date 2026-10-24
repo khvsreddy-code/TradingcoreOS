@@ -24,6 +24,7 @@ const contracts = [
   ['series-registry', ['src/services/coreSpirit/seriesRegistryContract.test.mjs', true]],
   ['series-backend-dispatcher', ['src/services/coreSpirit/seriesBackendDispatcherContract.test.mjs', true]],
   ['dirty-graph', ['src/services/coreSpirit/dirtyGraphContract.test.mjs', true]],
+  ['corespirit-kernel-snapshot-identity', ['src/services/coreSpirit/kernelStateSnapshotsContract.test.mjs', true]],
   ['corespirit-historical-correction-replay', ['src/services/coreSpirit/historicalCorrectionReplay.test.ts', true]],
   ['corespirit-mutation-conformance', ['src/services/coreSpirit/mutationConformance.test.ts', true]],
   ['corespirit-canonical-pipeline', ['src/services/coreSpirit/canonicalCompilerPipelineContract.test.mjs', true]],
