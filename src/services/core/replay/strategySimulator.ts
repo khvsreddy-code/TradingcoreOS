@@ -295,9 +295,78 @@ export function runStrategySimulation(input:{
     }
   };
 
+  const processActions = (frame:Frame, inclusive:boolean):void => {
+    while(actionCursor<actions.length&&(inclusive ? actions[actionCursor]!.signalTimeMs<=frame.time : actions[actionCursor]!.signalTimeMs<frame.time)){
+      const action=actions[actionCursor++]!;
+      const barIndex=frame.index;
+      if(action.kind==='reject'){
+        record({eventType:'signal',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
+          reason:'Strategy signal captured; host risk engine did not authorize an order.',
+          originalSignal:Object.freeze({id:action.signalId,timestampMs:action.signalTimeMs,reason:action.reason}),
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
+          reason:action.reason,timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        continue;
+      }
+      if(action.kind==='submit'){
+        const original=Object.freeze({...action.intent}) as SimulationIntent;
+        record({
+          eventType:'signal',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+          originalIntent:original,currentIntent:original,
+          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
+          reason:action.reason??'Strategy signal captured for deterministic simulation.',
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',
+        });
+        if(orders.has(original.orderId)){
+          record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+            originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        const state:WorkingOrder={original,intent:original,signalTimeMs:action.signalTimeMs,sequence:action.sequence,status:'pending',
+          filled:0,remaining:Number(original.quantity)||0,eligibleBars:0,stopTriggered:false,fixedFeeCharged:false};
+        orders.set(original.orderId,state);
+        const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
+        if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
+          side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
+        else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+          originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,
+          reason:action.reason??'Simulation-only order intent accepted; no live order was submitted.',
+          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+      }else{
+        const state=orders.get(action.orderId);
+        if(!state||!active(state.status)){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:state?.intent.signalId,symbol:state?.intent.symbol,side:state?.intent.side,
+            originalIntent:state?.original,currentIntent:state?.intent,reason:'Order is not working; cancel/modify had no effect.',
+            timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        if(action.kind==='cancel'){
+          state.status='cancelled';record({eventType:'order_cancelled',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,
+            side:state.intent.side,originalIntent:state.original,currentIntent:state.intent,remainingQuantity:state.remaining,
+            reason:action.reason??'Cancelled before the next eligible symbol bar.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        }else{
+          const next=Object.freeze({...state.intent,...action.updates}) as SimulationIntent,invalid=validateIntent(next,config);
+          if(invalid||next.quantity<state.filled){
+            record({eventType:'order_rejected',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
+              originalIntent:state.original,currentIntent:state.intent,reason:invalid??'Modified quantity is less than already-filled quantity.',
+              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+          }else{
+            const old=state.intent;state.intent=next;state.remaining=lotFloor(next.quantity-state.filled,config.lotSize);
+            if(old.type!==next.type||old.stopPrice!==next.stopPrice)state.stopTriggered=false;
+            record({eventType:'order_modified',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
+              originalIntent:state.original,currentIntent:state.intent,requestedQuantity:next.quantity,remainingQuantity:state.remaining,
+              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',reason:'Modified order becomes effective before later fills.'});
+          }
+        }
+      }
+    }
+
+  };
+
   for(const frame of frames){
     const liquidity=new Map<string,number>();
     for(const [symbol,bar] of frame.bars){marks.set(symbol,Number(bar.close));liquidity.set(symbol,lotFloor(Number(bar.volume)*config.maxParticipationRate,config.lotSize));}
+    processActions(frame,false);
     processBrackets(frame,liquidity,false);
     const activeOrders=[...orders.values()].filter(o=>active(o.status)&&o.signalTimeMs<frame.time&&frame.bars.has(o.intent.symbol))
       .sort((a,b)=>a.signalTimeMs-b.signalTimeMs||a.sequence-b.sequence||a.intent.orderId.localeCompare(b.intent.orderId));
@@ -376,71 +445,7 @@ export function runStrategySimulation(input:{
       }
     }
     processBrackets(frame,liquidity,true);pruneBrackets();
-    while(actionCursor<actions.length&&actions[actionCursor]!.signalTimeMs<=frame.time){
-      const action=actions[actionCursor++]!;
-      const barIndex=frame.index;
-      if(action.kind==='reject'){
-        record({eventType:'signal',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
-          reason:'Strategy signal captured; host risk engine did not authorize an order.',
-          originalSignal:Object.freeze({id:action.signalId,timestampMs:action.signalTimeMs,reason:action.reason}),
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-        record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
-          reason:action.reason,timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-        continue;
-      }
-      if(action.kind==='submit'){
-        const original=Object.freeze({...action.intent}) as SimulationIntent;
-        record({
-          eventType:'signal',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-          originalIntent:original,currentIntent:original,
-          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
-          reason:action.reason??'Strategy signal captured for deterministic simulation.',
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',
-        });
-        if(orders.has(original.orderId)){
-          record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-            originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
-        }
-        const state:WorkingOrder={original,intent:original,signalTimeMs:action.signalTimeMs,sequence:action.sequence,status:'pending',
-          filled:0,remaining:Number(original.quantity)||0,eligibleBars:0,stopTriggered:false,fixedFeeCharged:false};
-        orders.set(original.orderId,state);
-        const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
-        if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
-          side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
-        else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-          originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,
-          reason:action.reason??'Simulation-only order intent accepted; no live order was submitted.',
-          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-      }else{
-        const state=orders.get(action.orderId);
-        if(!state||!active(state.status)){
-          record({eventType:'order_rejected',orderId:action.orderId,signalId:state?.intent.signalId,symbol:state?.intent.symbol,side:state?.intent.side,
-            originalIntent:state?.original,currentIntent:state?.intent,reason:'Order is not working; cancel/modify had no effect.',
-            timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
-        }
-        if(action.kind==='cancel'){
-          state.status='cancelled';record({eventType:'order_cancelled',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,
-            side:state.intent.side,originalIntent:state.original,currentIntent:state.intent,remainingQuantity:state.remaining,
-            reason:action.reason??'Cancelled before the next eligible symbol bar.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-        }else{
-          const next=Object.freeze({...state.intent,...action.updates}) as SimulationIntent,invalid=validateIntent(next,config);
-          if(invalid||next.quantity<state.filled){
-            record({eventType:'order_rejected',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
-              originalIntent:state.original,currentIntent:state.intent,reason:invalid??'Modified quantity is less than already-filled quantity.',
-              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-          }else{
-            const old=state.intent;state.intent=next;state.remaining=lotFloor(next.quantity-state.filled,config.lotSize);
-            if(old.type!==next.type||old.stopPrice!==next.stopPrice)state.stopTriggered=false;
-            record({eventType:'order_modified',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
-              originalIntent:state.original,currentIntent:state.intent,requestedQuantity:next.quantity,remainingQuantity:state.remaining,
-              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',reason:'Modified order becomes effective before later fills.'});
-          }
-        }
-      }
-    }
-
+    processActions(frame,true);
     const eq=equity(),ex=gross();maxGross=Math.max(maxGross,ex);
     equityCurve.push({timestampMs:frame.time,cash:rounded(cash),equity:rounded(eq),grossExposure:rounded(ex)});
     record({eventType:'mark',timestampMs:frame.time,barIndex:frame.index,phase:'intrabar',
