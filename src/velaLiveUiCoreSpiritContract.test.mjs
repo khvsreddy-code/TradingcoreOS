@@ -10,6 +10,9 @@ const engineLoader = read('./services/coreSpirit/coreSpiritVelaEngineLoader.ts')
 const provider = read('./TcoVelaDataProvider.ts');
 const semanticAdapter = read('./services/core/chart/tcoVelaSemanticAdapter.ts');
 const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
+const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
+const chartRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const nativeIndicator = read('../vendor/vela/src/core/native-indicators/NativeIndicator.ts');
 
 assert.match(terminal, /background:'#141518'/, 'live chart should use Vela charcoal canvas');
 assert.match(terminal, /upColor:'#089981'/, 'live chart should use Vela bullish candle color');
@@ -20,6 +23,13 @@ assert.ok(topbar, 'TCO should explicitly define a compact topbar');
 assert.doesNotMatch(topbar[1], /tco\.chart-settings|tco\.journal|tco\.positions/, 'avoid duplicate settings and secondary topbar buttons');
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'native Vela chart settings must remain enabled');
 assert.match(nativeRenderer, /this\.openSettingsDialog\(\)/, 'native Vela gear must open its settings dialog');
+assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'upstream native-indicator history gating stays available');
+assert.match(nativeRenderer, /setPaneHeightWeight\(/, 'native chart applies programmatic pane sizing');
+assert.match(nativeRenderer, /function slotsBefore\(/, 'sparse/future plot times are reconciled with empty slots');
+assert.match(chartRenderer, /paneId\?: string \| null/, 'Vela click/crosshair contracts identify their pane');
+assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'TCO maps clicked values on the actual pane scale');
+assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'TCO preserves click pane-kind metadata');
+assert.match(provider, /historyReady: snapshot\.historyReady/, 'the TCO data plane keeps its history-readiness signal');
 
 assert.match(historyPolicy, /'5m': 500/, '5-minute history should start with a bounded 500-bar request');
 assert.match(historyPolicy, /'5m': 1000/, 'older history should page in bounded 1000-bar chunks');
