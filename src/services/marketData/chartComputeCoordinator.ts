@@ -23,6 +23,7 @@ import {
 import { isIncrementalIndicatorSupported } from './incrementalIndicatorEngine';
 import { buildIndicatorComputationSignature } from '../coreSpirit/indicatorSettingsSchema';
 import { selectIndicatorComputeBounds } from './chartComputeWindow';
+import { invalidationModeForCandleChange, type CandleDatasetChange } from './chartCandleEvents';
 
 export type IndicatorWorkerResult = { id: string; kind: string; data: any[]; incremental?: boolean; incrementalMode?: 'update'|'reset'; updateCost?: string };
 type AnalyticsRequest = { requestId: number; market: CanonicalMarketDataPacket; spot: number };
@@ -40,18 +41,26 @@ type IndicatorRequest = {
   primeIncremental?: boolean;
 };
 
+type WorkerRunOptions = {
+  priority?: number; signal?: AbortSignal; generationKey?: string; generation?: number;
+  /** Preserve sequential incremental deltas when a new candle arrives. */
+  cancelOlder?: boolean;
+};
 type Pending<T> = {
-  requestId: number;
-  payload: Omit<T, 'requestId'>;
-  resolve: (value: any) => void;
-  reject: (reason: unknown) => void;
-  transferables?: Transferable[];
+  requestId: number; payload: Omit<T, 'requestId'>;
+  resolve: (value: any) => void; reject: (reason: unknown) => void;
+  transferables?: Transferable[]; priority: number; enqueuedAt: number;
+  generationKey?: string; generation?: number; signal?: AbortSignal; abortHandler?: () => void;
+  timeout?: ReturnType<typeof setTimeout>; settled: boolean;
 };
 
 const MAX_ANALYTICS_WORKERS = 2;
 const MAX_INDICATOR_WORKERS = 2;
 const MAX_CACHE_ENTRIES = 48;
 const WORKER_TIMEOUT_MS = 15_000;
+
+function abortError(message: string): Error { const error = new Error(message); error.name = 'AbortError'; return error; }
+function isAbortError(error: unknown): boolean { return !!error && typeof error === 'object' && 'name' in error && (error as {name?:unknown}).name === 'AbortError'; }
 
 function stableConfigSignature(config: IndicatorConfig): string {
   return buildIndicatorComputationSignature(config as unknown as Record<string, unknown>);
@@ -115,13 +124,56 @@ class SharedWorkerQueue<Payload extends object, Result> {
   private queue: Array<Pending<Payload> & { affinityKey?: string }> = [];
   private sequence = 0;
   private readonly affinity = new Map<string, Worker>();
+  private readonly latestGenerations = new Map<string, number>();
+  private readonly maxQueued = 96;
+  private disposed = false;
 
   constructor(private readonly workerUrl: URL, private readonly maxWorkers: number) {}
 
-  private ensureWorker(): Worker {
-    const existing = this.workers.find(worker => worker && !this.busy.has(worker));
-    if (existing) return existing;
-    if (this.workers.length >= this.maxWorkers) return this.workers.find(Boolean)!;
+  private settle(item: Pending<Payload>, error?: unknown, value?: Result): void {
+    if (item.settled) return;
+    item.settled = true;
+    if (item.timeout) clearTimeout(item.timeout);
+    item.timeout = undefined;
+    if (item.signal && item.abortHandler) item.signal.removeEventListener('abort', item.abortHandler);
+    item.abortHandler = undefined;
+    if (error !== undefined) item.reject(error);
+    else item.resolve(value as Result);
+  }
+
+  private effectivePriority(item: Pending<Payload>): number {
+    const ageBoost = Math.floor(Math.max(0, Date.now() - item.enqueuedAt) / 10_000);
+    return Math.max(item.priority <= 0 ? 0 : 1, item.priority - ageBoost);
+  }
+
+  private sortQueue(): void {
+    this.queue.sort((a, b) => this.effectivePriority(a) - this.effectivePriority(b) || a.enqueuedAt - b.enqueuedAt);
+  }
+
+  /** Advance a dataset revision fence. Append deltas stay queued to preserve recursive indicator state;
+   * a correction/reset terminates older work and requires a full reseed. */
+  advanceGeneration(generationKey: string, generation: number, cancelOlder: boolean): void {
+    if (this.disposed || !generationKey || !Number.isSafeInteger(generation) || generation < 0) return;
+    const current = this.latestGenerations.get(generationKey);
+    if (current != null && generation < current) return;
+    this.latestGenerations.set(generationKey, generation);
+    if (!cancelOlder) return;
+    for (let i = this.queue.length - 1; i >= 0; i -= 1) {
+      const item = this.queue[i]!;
+      if (item.generationKey !== generationKey || (item.generation ?? -1) >= generation) continue;
+      this.queue.splice(i, 1);
+      this.settle(item, abortError('Queued chart computation superseded by a newer dataset revision.'));
+    }
+    for (const [worker, requestId] of this.busy) {
+      const item = this.pending.get(requestId);
+      if (item?.generationKey === generationKey && (item.generation ?? -1) < generation) {
+        this.onWorkerFailure(worker, abortError('Chart computation cancelled by a correction or dataset reset.'));
+      }
+    }
+    this.dispatch();
+  }
+
+  private createWorker(): Worker {
     const worker = new Worker(this.workerUrl, { type: 'module' });
     this.workers.push(worker);
     worker.onmessage = event => this.onMessage(worker, event.data);
@@ -131,83 +183,113 @@ class SharedWorkerQueue<Payload extends object, Result> {
 
   private onMessage(worker: Worker, message: any): void {
     const requestId = Number(message?.requestId);
-    if (!requestId) return;
-    const pending = this.pending.get(requestId);
-    if (!pending) return;
+    if (!requestId || this.busy.get(worker) !== requestId) return;
+    const item = this.pending.get(requestId);
+    if (!item) return;
     this.pending.delete(requestId);
     this.busy.delete(worker);
-    if (message?.error) pending.reject(new Error(String(message.error)));
-    else pending.resolve(message as Result);
+    if (item.generationKey && item.generation != null && this.latestGenerations.get(item.generationKey) !== item.generation) {
+      this.settle(item, abortError('Stale chart worker result rejected by the dataset revision fence.'));
+    } else if (message?.error) {
+      this.settle(item, new Error(String(message.error)));
+    } else {
+      this.settle(item, undefined, message as Result);
+    }
     this.dispatch();
   }
 
   private onWorkerFailure(worker: Worker, error: Error): void {
     const requestId = this.busy.get(worker);
     if (requestId) {
-      const pending = this.pending.get(requestId);
-      if (pending) {
-        this.pending.delete(requestId);
-        pending.reject(error);
-      }
+      const item = this.pending.get(requestId);
+      if (item) { this.pending.delete(requestId); this.settle(item, error); }
     }
     this.busy.delete(worker);
     try { worker.terminate(); } catch {}
     const index = this.workers.indexOf(worker);
     if (index >= 0) this.workers.splice(index, 1);
     for (const [key, value] of this.affinity) if (value === worker) this.affinity.delete(key);
-    this.dispatch();
+    if (!this.disposed) this.dispatch();
+  }
+
+  private cancel(item: Pending<Payload>, error: Error): void {
+    if (item.settled) return;
+    const queuedIndex = this.queue.indexOf(item as Pending<Payload> & { affinityKey?: string });
+    if (queuedIndex >= 0) {
+      this.queue.splice(queuedIndex, 1); this.settle(item, error); this.dispatch(); return;
+    }
+    for (const [worker, requestId] of this.busy) if (requestId === item.requestId) { this.onWorkerFailure(worker, error); return; }
+    this.settle(item, error);
   }
 
   private dispatch(): void {
+    if (this.disposed) return;
+    this.sortQueue();
     while (this.queue.length) {
-      const pending = this.queue[0];
-      const affinityWorker = pending.affinityKey ? this.affinity.get(pending.affinityKey) : undefined;
+      const item = this.queue[0]!;
+      const affinityWorker = item.affinityKey ? this.affinity.get(item.affinityKey) : undefined;
       const preferredIdle = affinityWorker && !this.busy.has(affinityWorker) ? affinityWorker : undefined;
-      const idle = preferredIdle
-        || this.workers.find(worker => worker && !this.busy.has(worker))
-        || (this.workers.length < this.maxWorkers ? this.ensureWorker() : undefined);
+      const idle = preferredIdle || this.workers.find(worker => worker && !this.busy.has(worker))
+        || (this.workers.length < this.maxWorkers ? this.createWorker() : undefined);
       if (!idle) return;
       this.queue.shift();
-      if (pending.affinityKey && !affinityWorker) this.affinity.set(pending.affinityKey, idle);
-      this.busy.set(idle, pending.requestId);
-      this.pending.set(pending.requestId, pending);
-      const timeout = setTimeout(() => {
-        if (!this.pending.has(pending.requestId)) return;
-        this.onWorkerFailure(idle, new Error('Shared chart worker timed out'));
+      if (item.affinityKey && !affinityWorker) this.affinity.set(item.affinityKey, idle);
+      this.busy.set(idle, item.requestId); this.pending.set(item.requestId, item);
+      item.timeout = setTimeout(() => {
+        if (this.pending.has(item.requestId)) this.onWorkerFailure(idle, new Error('Shared chart worker timed out; it will restart on demand.'));
       }, WORKER_TIMEOUT_MS);
       Promise.resolve().then(() => {
-        if (!this.pending.has(pending.requestId)) { clearTimeout(timeout); return; }
-        try {
-          (idle as any).postMessage({ requestId: pending.requestId, ...(pending.payload as any) }, pending.transferables || []);
-        } catch (error) {
-          clearTimeout(timeout);
-          this.onWorkerFailure(idle, error instanceof Error ? error : new Error(String(error)));
-        }
+        if (!this.pending.has(item.requestId)) return;
+        try { (idle as any).postMessage({ requestId: item.requestId, ...(item.payload as any) }, item.transferables || []); }
+        catch (error) { this.onWorkerFailure(idle, error instanceof Error ? error : new Error(String(error))); }
       });
-      const originalResolve = pending.resolve;
-      const originalReject = pending.reject;
-      pending.resolve = value => { clearTimeout(timeout); originalResolve(value); };
-      pending.reject = error => { clearTimeout(timeout); originalReject(error); };
     }
   }
 
-  run(payload: Omit<Payload, 'requestId'>, affinityKey?: string, transferables?: Transferable[]): Promise<Result> {
-    return new Promise((resolve, reject) => {
-      const requestId = ++this.sequence;
-      this.queue.push({ requestId, payload, resolve, reject, affinityKey, transferables });
-      this.dispatch();
+  run(payload: Omit<Payload, 'requestId'>, affinityKey?: string, transferables?: Transferable[], options: WorkerRunOptions = {}): Promise<Result> {
+    if (this.disposed) return Promise.reject(new Error('Shared chart worker queue disposed'));
+    if (options.signal?.aborted) return Promise.reject(abortError('Chart computation cancelled before admission.'));
+    if (options.generationKey && options.generation != null) {
+      const current = this.latestGenerations.get(options.generationKey);
+      if (current != null && options.generation < current) return Promise.reject(abortError('Chart computation belongs to an obsolete revision.'));
+      if (current == null || options.generation > current) this.advanceGeneration(options.generationKey, options.generation, options.cancelOlder === true);
+    }
+    const requestId = ++this.sequence;
+    return new Promise<Result>((resolve, reject) => {
+      const item: Pending<Payload> & { affinityKey?: string } = {
+        requestId, payload, resolve, reject, affinityKey, transferables,
+        priority: Number.isFinite(options.priority) ? Number(options.priority) : 1,
+        enqueuedAt: Date.now(), generationKey: options.generationKey, generation: options.generation,
+        signal: options.signal, settled: false,
+      };
+      if (this.queue.length >= this.maxQueued) {
+        let worstIndex = -1;
+        for (let i = 0; i < this.queue.length; i += 1) {
+          const candidate = this.queue[i]!, worst = worstIndex >= 0 ? this.queue[worstIndex]! : undefined;
+          if (!worst || candidate.priority > worst.priority || (candidate.priority === worst.priority && candidate.enqueuedAt < worst.enqueuedAt)) worstIndex = i;
+        }
+        const worst = worstIndex >= 0 ? this.queue[worstIndex]! : undefined;
+        if (!worst || worst.priority <= item.priority) { this.settle(item, new Error('Shared chart worker queue is saturated; request was not admitted.')); return; }
+        this.queue.splice(worstIndex, 1); this.settle(worst, abortError('Background chart computation pre-empted by visible work.'));
+      }
+      if (options.signal) {
+        item.abortHandler = () => this.cancel(item, abortError('Chart computation cancelled.'));
+        options.signal.addEventListener('abort', item.abortHandler, { once: true });
+      }
+      if (options.signal?.aborted) { this.settle(item, abortError('Chart computation cancelled.')); return; }
+      this.queue.push(item); this.sortQueue(); this.dispatch();
     });
   }
 
   terminate(): void {
-    this.queue = [];
+    if (this.disposed) return;
+    this.disposed = true;
+    const error = new Error('Shared chart worker queue terminated');
+    for (const item of this.queue.splice(0)) this.settle(item, error);
+    for (const item of this.pending.values()) this.settle(item, error);
     this.pending.clear();
-    for (const worker of this.workers) {
-      try { worker?.terminate(); } catch {}
-    }
-    this.workers.length = 0;
-    this.busy.clear();
-    this.affinity.clear();
+    for (const worker of this.workers) { try { worker?.terminate(); } catch {} }
+    this.workers.length = 0; this.busy.clear(); this.affinity.clear(); this.latestGenerations.clear();
   }
 }
 
@@ -225,6 +307,53 @@ export class ChartComputeCoordinator {
   private analyticsInflight = new Map<string, Promise<ChartAnalytics>>();
   private indicatorInflight = new Map<string, Promise<IndicatorWorkerResult[]>>();
   private incrementalPrimed = new Set<string>();
+  private readonly latestCandleChanges = new Map<string, CandleDatasetChange>();
+  private readonly incrementalOwners = new Map<string, string>();
+  private clearEpoch = 0;
+
+  private generationScope(datasetKey: string, generation?: number): string {
+    const active = generation ?? this.latestCandleChanges.get(datasetKey)?.datasetGeneration ?? 0;
+    return `${datasetKey}::generation:${active}::clear:${this.clearEpoch}`;
+  }
+
+  private assertCurrentRevision(datasetKey: string, scopeKey: string, revision: number): void {
+    if (!scopeKey.endsWith(`::clear:${this.clearEpoch}`)) throw abortError('Chart computation was invalidated by coordinator reset.');
+    const change = this.latestCandleChanges.get(datasetKey);
+    if (!change) return;
+    if (scopeKey !== this.generationScope(datasetKey, change.datasetGeneration) || revision < change.revision) {
+      throw abortError('Chart computation belongs to a stale candle dataset revision.');
+    }
+  }
+
+  applyCandleChange(change: CandleDatasetChange): boolean {
+    const previous = this.latestCandleChanges.get(change.datasetKey);
+    if (previous && (change.datasetGeneration < previous.datasetGeneration ||
+      (change.datasetGeneration === previous.datasetGeneration && change.revision <= previous.revision))) return false;
+    const mode = invalidationModeForCandleChange(change);
+    const generationChanged = previous != null && previous.datasetGeneration !== change.datasetGeneration;
+    if (previous && generationChanged) {
+      const oldScope = this.generationScope(change.datasetKey, previous.datasetGeneration);
+      this.analyticsQueue.advanceGeneration(oldScope, Number.MAX_SAFE_INTEGER, true);
+      this.indicatorQueue.advanceGeneration(oldScope, Number.MAX_SAFE_INTEGER, true);
+    } else if (!previous && change.datasetGeneration !== 0) {
+      const initialScope = this.generationScope(change.datasetKey, 0);
+      this.analyticsQueue.advanceGeneration(initialScope, Number.MAX_SAFE_INTEGER, true);
+      this.indicatorQueue.advanceGeneration(initialScope, Number.MAX_SAFE_INTEGER, true);
+    }
+    const scope = this.generationScope(change.datasetKey, change.datasetGeneration);
+    this.analyticsQueue.advanceGeneration(scope, change.revision, true);
+    this.indicatorQueue.advanceGeneration(scope, change.revision, mode === 'full-replay' || generationChanged);
+    for (const key of this.analyticsCache.keys()) if (key.startsWith(`${change.datasetKey}|`)) this.analyticsCache.delete(key);
+    for (const key of this.indicatorCache.keys()) if (key.startsWith(`${change.datasetKey}|`)) this.indicatorCache.delete(key);
+    if (mode === 'full-replay' || generationChanged) {
+      for (const [incrementalKey, owner] of this.incrementalOwners) {
+        if (owner !== change.datasetKey) continue;
+        for (const primedKey of this.incrementalPrimed) if (primedKey.startsWith(`${incrementalKey}|`)) this.incrementalPrimed.delete(primedKey);
+      }
+    }
+    this.latestCandleChanges.set(change.datasetKey, change);
+    return true;
+  }
 
   private remember<T>(cache: Map<string, T>, key: string, value: T): T {
     cache.delete(key);
@@ -238,6 +367,8 @@ export class ChartComputeCoordinator {
   }
 
   runAnalytics(datasetKey: string, revision: number, market: CanonicalMarketView, spot: number, compatibilityCandles: HistoricalCandle[] = []): Promise<ChartAnalytics> {
+    const scopeKey = this.generationScope(datasetKey);
+    try { this.assertCurrentRevision(datasetKey, scopeKey, revision); } catch (error) { return Promise.reject(error); }
     const key = `${datasetKey}|${revision}|${market.length}|${tailKey(market)}|${Number(spot).toPrecision(12)}`;
     const cached = this.analyticsCache.get(key);
     if (cached) return Promise.resolve(cached);
@@ -245,12 +376,11 @@ export class ChartComputeCoordinator {
     if (inflight) return inflight;
     const packet = createCanonicalMarketDataPacket(market);
     const promise = this.analyticsQueue.run(
-      { market: packet, spot },
-      undefined,
-      packetTransferables(packet),
+      { market: packet, spot }, undefined, packetTransferables(packet),
+      { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: true },
     )
-      .then(result => this.remember(this.analyticsCache, key, result.analytics))
-      .catch(() => this.remember(this.analyticsCache, key, buildChartAnalytics(compatibilityCandles, spot)))
+      .then(result => { this.assertCurrentRevision(datasetKey, scopeKey, revision); return this.remember(this.analyticsCache, key, result.analytics); })
+      .catch(error => { if (isAbortError(error)) throw error; this.assertCurrentRevision(datasetKey, scopeKey, revision); return this.remember(this.analyticsCache, key, buildChartAnalytics(compatibilityCandles, spot)); })
       .finally(() => this.analyticsInflight.delete(key));
     this.analyticsInflight.set(key, promise);
     return promise;
@@ -269,6 +399,9 @@ export class ChartComputeCoordinator {
     const normalized = normalizeIndicatorConfigs(active);
     const incrementalConfigs = active.filter(config => isIncrementalIndicatorSupported(config.kind));
     const incrementalKey = options.incrementalKey || datasetKey;
+    const scopeKey = this.generationScope(datasetKey);
+    try { this.assertCurrentRevision(datasetKey, scopeKey, revision); } catch (error) { return Promise.reject(error); }
+    this.incrementalOwners.set(incrementalKey, datasetKey);
 
     if (options.mode === 'incremental') {
       if (!incrementalConfigs.length || !market.length) return Promise.resolve([]);
@@ -291,16 +424,17 @@ export class ChartComputeCoordinator {
         ...(primed ? { bar: packet } : { market: packet }),
       };
       const transfer = packetTransferables(packet);
-      return this.indicatorQueue.run(payload, incrementalKey, transfer)
+      return this.indicatorQueue.run(payload, incrementalKey, transfer, { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false })
         .then(result => {
+          this.assertCurrentRevision(datasetKey, scopeKey, revision);
           if (result.resetRequired) {
             this.incrementalPrimed.delete(primeKey);
             const reseed = createCanonicalMarketDataPacket(market);
             return this.indicatorQueue.run(
-              { ...payloadBase, market: reseed, seedOnMiss: true },
-              incrementalKey,
-              packetTransferables(reseed),
+              { ...payloadBase, market: reseed, seedOnMiss: true }, incrementalKey, packetTransferables(reseed),
+              { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false },
             ).then(seedResult => {
+              this.assertCurrentRevision(datasetKey, scopeKey, revision);
               this.incrementalPrimed.add(primeKey);
               return remapIndicatorResults(seedResult.results, normalized.ids, active);
             });
@@ -308,7 +442,9 @@ export class ChartComputeCoordinator {
           this.incrementalPrimed.add(primeKey);
           return remapIndicatorResults(result.results, normalized.ids, active);
         })
-        .catch(() => {
+        .catch(error => {
+          if (isAbortError(error)) throw error;
+          this.assertCurrentRevision(datasetKey, scopeKey, revision);
           this.incrementalPrimed.delete(primeKey);
           return runIndicatorFallback(compatibilityCandles, normalized.configs);
         });
@@ -336,15 +472,17 @@ export class ChartComputeCoordinator {
       primeIncremental: incrementalConfigs.length > 0,
     };
     const promise = this.indicatorQueue.run(
-      payload,
-      incrementalConfigs.length > 0 ? incrementalKey : datasetKey,
-      packetTransferables(packet),
+      payload, incrementalConfigs.length > 0 ? incrementalKey : datasetKey, packetTransferables(packet),
+      { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: true },
     )
       .then(result => {
+        this.assertCurrentRevision(datasetKey, scopeKey, revision);
         if (incrementalConfigs.length > 0) this.incrementalPrimed.add(`${incrementalKey}|${normalized.signature}`);
         return this.remember(this.indicatorCache, key, result.results);
       })
-      .catch(() => {
+      .catch(error => {
+        if (isAbortError(error)) throw error;
+        this.assertCurrentRevision(datasetKey, scopeKey, revision);
         const fallback = runIndicatorFallback(compatibilityCandles, normalized.configs);
         this.incrementalPrimed.delete(`${incrementalKey}|${normalized.signature}`);
         return this.remember(this.indicatorCache, key, fallback);
@@ -355,6 +493,8 @@ export class ChartComputeCoordinator {
   }
 
   clear(): void {
+    this.clearEpoch += 1;
+    this.latestCandleChanges.clear(); this.incrementalOwners.clear();
     this.analyticsCache.clear();
     this.indicatorCache.clear();
     this.analyticsInflight.clear();

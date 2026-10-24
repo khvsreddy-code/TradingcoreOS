@@ -11,6 +11,7 @@ import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, 
 import { marketDataGraph } from '../core/data/marketDataGraph';
 import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
 import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutationKind } from './chartCandleEvents';
+import { chartComputeCoordinator } from './chartComputeCoordinator';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -257,6 +258,7 @@ export class ChartDataPlane {
       Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - startedAt));
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     chartPerformanceTelemetry.recordCacheMemory(this.key, historyStore.estimatedBytesFor(this.brokerId, this.instrumentKey, interval));
+    chartComputeCoordinator.applyCandleChange(change);
     return change;
   }
 

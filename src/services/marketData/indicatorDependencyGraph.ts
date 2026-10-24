@@ -20,6 +20,7 @@ import {
   ichimoku,
 } from './indicatorEngine';
 import { ema, sma, rma, trueRanges, wma } from './coreIndicatorKernel';
+import { invalidationModeForCandleChange, type CandleDatasetChange } from './chartCandleEvents';
 
 type NumericSeries = Array<number | null>;
 type GraphCache = Map<string, unknown>;
@@ -319,7 +320,8 @@ function supertrendNode(cache: GraphCache, period: number, multiplier: number, c
 
 function markRequested(stats: IndicatorGraphStats) { stats.requestedNodes += 1; }
 
-export function evaluateIndicatorDependencyGraph(candles: HistoricalCandle[], configs: IndicatorConfig[], cache: GraphCache = new Map()): IndicatorGraphEvaluation {
+export function evaluateIndicatorDependencyGraph(candles: HistoricalCandle[], configs: IndicatorConfig[], cache: GraphCache = new Map(), change?: CandleDatasetChange): IndicatorGraphEvaluation {
+  if (change) invalidateIndicatorDependencyCache(cache, configs, change);
   const stats: IndicatorGraphStats = { requestedNodes: 0, computedNodes: 0, reusedNodes: 0, cacheHits: 0 };
   const results: Array<{ id: string; kind: IndicatorKind; data: any[] }> = [];
   const active = configs.filter(config => config.enabled && GRAPH_SUPPORTED_INDICATORS.has(config.kind));
@@ -426,6 +428,31 @@ export function buildIndicatorDependencyGraph(configs: IndicatorConfig[]): Indic
   }
   if (order.length !== nodes.size) throw new Error('Indicator dependency graph contains a cycle');
   return { nodes: [...nodes], edges: edgeList, order };
+}
+
+/** Invalidate cached full-series nodes reachable from candle-source roots. */
+export function invalidateIndicatorDependencyCache(
+  cache: GraphCache, configs: IndicatorConfig[], change: CandleDatasetChange,
+): { mode: 'incremental' | 'full-replay'; invalidatedKeys: string[] } {
+  const mode = invalidationModeForCandleChange(change);
+  if (mode === 'full-replay') {
+    const invalidatedKeys = [...cache.keys()]; cache.clear();
+    return { mode, invalidatedKeys };
+  }
+  const plan = buildIndicatorDependencyGraph(configs);
+  const adjacency = new Map<string, string[]>();
+  for (const edge of plan.edges) { const children = adjacency.get(edge.from) ?? []; children.push(edge.to); adjacency.set(edge.from, children); }
+  const queue = plan.nodes.filter(node => node.startsWith('source:') || node === 'true-range' || node === 'candle:high-low' || node === 'price:high-low');
+  const affected = new Set<string>();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const node = queue[cursor]!;
+    if (affected.has(node)) continue;
+    affected.add(node);
+    for (const child of adjacency.get(node) ?? []) queue.push(child);
+  }
+  const invalidatedKeys: string[] = [];
+  for (const key of cache.keys()) if (affected.has(key)) { cache.delete(key); invalidatedKeys.push(key); }
+  return { mode, invalidatedKeys };
 }
 
 export function createIndicatorDependencyCache(): GraphCache { return new Map(); }
