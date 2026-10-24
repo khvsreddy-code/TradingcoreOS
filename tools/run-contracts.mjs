@@ -72,6 +72,7 @@ const contracts = [
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
   ['corespirit-replay-execution-parity', ['src/services/coreSpirit/replayContract.test.ts', true]],
   ['corespirit-research-temporal-validation', ['src/services/coreSpirit/researchValidation.test.ts', true]],
+  ['corespirit-bounded-chunked-research', ['src/coreSpiritBatchResearchContract.test.mjs', false]],
   ['corespirit-model-provenance-and-release', ['src/coreSpiritResearchModelLifecycleContract.test.mjs', false]],
   ['artifact-hygiene', ['src/generatedArtifactHygieneContract.test.mjs', false]],
   ['routes', ['src/routeContract.test.mjs', false]],
