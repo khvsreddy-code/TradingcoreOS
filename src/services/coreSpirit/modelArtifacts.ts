@@ -249,7 +249,7 @@ function validateProvenance(provenance: ModelProvenance): void {
     throw new Error('Validation range must be strictly after the training range; overlapping time-series samples are not allowed');
   }
   const validation = provenance.validationResults;
-  if (!validation || validation.protocol !== 'chronological-holdout-v1' ||
+  if (!validation || !['chronological-holdout-v1', 'purged-chronological-v1'].includes(validation.protocol) ||
       !Number.isSafeInteger(validation.trainingSampleCount) || validation.trainingSampleCount < 12 ||
       !Number.isSafeInteger(validation.sampleCount) || validation.sampleCount < 12 ||
       !Number.isSafeInteger(validation.distinctPredictedStates) || validation.distinctPredictedStates < 1 ||
