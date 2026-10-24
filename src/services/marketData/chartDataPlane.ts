@@ -467,7 +467,6 @@ export class ChartDataPlane {
     if (transition.bucketChanged || this.canonicalPlane.length === 0) this.canonicalPlane.market.append(canonicalPoint);
     else this.canonicalPlane.market.updateLast(canonicalPoint);
 
-    const previousRevision = this.state.revision;
     const wasColumnar = Boolean(this.state.columns);
     this.rememberLatestTick(tick, tradeTimeMs);
     const fullCompatibility = this.updateCompatibilityTail(bar, transition.bucketChanged, previousRevision);

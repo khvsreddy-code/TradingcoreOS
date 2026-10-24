@@ -183,7 +183,7 @@ export class CoreSpiritWorkerPool {
     source:string|undefined,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions;signal?:AbortSignal},
   ):Promise<CoreSpiritWorkerRunResult> {
     const contextKey=options?.contextKey || sourceId;
     const signal=options?.signal;
@@ -271,7 +271,11 @@ export class CoreSpiritWorkerPool {
   }
   private cancelJob(job:WorkerJob,error:Error):void {
     if(job.settled)return;const index=this.queue.indexOf(job);
-    if(index>=0){this.queue.splice(index,1);this.settleJob(job,error);this.dispatch();return;}
+    if(index>=0){
+      this.queue.splice(index,1);this.settleJob(job,error);
+      if(!this.queue.some(item=>item.contextKey===job.contextKey)&&!this.contextSlots.has(job.contextKey))this.contextGenerations.delete(job.contextKey);
+      this.dispatch();return;
+    }
     const slot=this.contextSlots.get(job.contextKey);
     if(slot?.job===job){this.retireSlot(slot,error);return;}this.settleJob(job,error);
   }
