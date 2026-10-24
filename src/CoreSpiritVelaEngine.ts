@@ -17,6 +17,7 @@ import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.t
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
 import { LatestValueAsyncScheduler } from './services/coreSpirit/latestValueAsyncScheduler.ts';
+import { createCandleDatasetChange, invalidationModeForCandleChange, type CandleMutationKind } from './services/marketData/chartCandleEvents.ts';
 
 type PreparedToken = {
   sourceId: string;
@@ -323,8 +324,11 @@ export class CoreSpiritVelaEngine {
     const mainContextKey=`vela:${token.sourceId}:${req.market.symbol}:${req.market.timeframe}:main`;
     const rangeContextKey=`${mainContextKey}:range`;
     const workerDatasetVersions=new Map<string,number>();
-    // Global canonical-data revision across main/history/viewport worker contexts.
+    const workerAbortControllers=new Map<string,AbortController>();
+    const abortWorkerComputations=():void=>{for(const controller of workerAbortControllers.values())controller.abort();workerAbortControllers.clear();};
+    // Global canonical-data revision across main/history/viewport worker contexts; follow the canonical dirty graph.
     let canonicalDatasetRevision = 0;
+    let canonicalDatasetLength = 0;
     let lastCommittedDatasetRevision = -1;
     let canonicalDatasetFingerprint = '';
     let canonicalTailFingerprint = '';
@@ -395,6 +399,8 @@ export class CoreSpiritVelaEngine {
       visibleRange?:VelaTimeRange,
       suppressExternalEffectsForRun=false,
     )=>{
+      const previousController=workerAbortControllers.get(contextKey);previousController?.abort();
+      const controller=new AbortController();workerAbortControllers.set(contextKey,controller);
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
       workerDatasetVersions.set(contextKey,datasetVersion);
       const sourceDatasetRevision = canonicalDatasetRevision;
@@ -419,7 +425,9 @@ export class CoreSpiritVelaEngine {
         readOnly,
         suppressExternalEffectsForRun: suppressExternalEffectsForRun || secondaryDegraded,
         runtimeOptions,
+        signal:controller.signal,
       }).then(result => {
+        if(stopped||controller.signal.aborted||workerAbortControllers.get(contextKey)!==controller){const error=new Error('CoreSpirit output rejected because its execution generation is obsolete.');error.name='AbortError';throw error;}
         // One adapter owns the CoreSpirit(epoch-seconds) → Vela(epoch-milliseconds)
         // boundary. Validate plot timestamps against the exact input timeline before
         // the retained scene is mutated; a stale/misaligned point must never be rendered.
@@ -428,7 +436,7 @@ export class CoreSpiritVelaEngine {
           handlers.onWarning?.({ message: warning, method: 'output-alignment', bar: Math.max(0, currentBars.length - 1) });
         }
         return { ...result, outputs: adapted.outputs, datasetVersion, sourceDatasetRevision };
-      });
+      }).finally(()=>{if(workerAbortControllers.get(contextKey)===controller)workerAbortControllers.delete(contextKey);});
     };
 
     const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
@@ -754,6 +762,7 @@ export class CoreSpiritVelaEngine {
       },
       stop() {
         stopped = true;
+        abortWorkerComputations();
         liveTailScheduler.dispose();
         secondaryRequestVersion += 1;
         secondaryAbortController?.abort();
@@ -787,6 +796,7 @@ export class CoreSpiritVelaEngine {
           return;
         }
 
+        abortWorkerComputations();
         const updateGeneration=++updateVersion;
         const executionGeneration=++mainRunGeneration;
         liveTailScheduler.clear();
@@ -895,6 +905,8 @@ export class CoreSpiritVelaEngine {
         const dirtyRangeTouchesHistoryBeforeTail=reason!=='complete'&&dirtyIntersectsLoadedHistory&&
           dirtyFromMs<latestBarTime;
         const historicalCorrection=reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail;
+        const previousCanonicalRevision=canonicalDatasetRevision;
+        const previousDatasetLength=canonicalDatasetLength;
         if(historicalCorrection||reason==='complete'){
           const snapshotFingerprint=fullDatasetFingerprint(currentBars);
           if(historicalCorrection||snapshotFingerprint!==canonicalDatasetFingerprint)canonicalDatasetRevision+=1;
@@ -905,9 +917,33 @@ export class CoreSpiritVelaEngine {
           if(nextTailFingerprint!==canonicalTailFingerprint)canonicalDatasetRevision+=1;
           canonicalTailFingerprint=nextTailFingerprint;
         }
+        const revisionChanged=canonicalDatasetRevision>previousCanonicalRevision;
+        let candleChange:ReturnType<typeof createCandleDatasetChange>|undefined;
+        let invalidationMode:'incremental'|'full-replay'|undefined;
+        if(revisionChanged){
+          const mutationKind:CandleMutationKind = reason==='backfill' ? 'backfill'
+            : historicalCorrection || currentBars.length<previousDatasetLength ? 'correction'
+            : reason==='complete' ? 'reset'
+            : currentBars.length>previousDatasetLength ? 'append' : 'replace';
+          candleChange=createCandleDatasetChange({
+            datasetKey:`${req.market.symbol}|${req.market.timeframe}`,
+            datasetGeneration:1,
+            previousRevision:previousCanonicalRevision,
+            revision:canonicalDatasetRevision,
+            kind:mutationKind,
+            from:mutationKind==='append'||mutationKind==='replace'?Math.max(0,currentBars.length-1):0,
+            to:currentBars.length,
+            candleCount:currentBars.length,
+            timestampMs:currentBars.length?barTimeMillis(currentBars.at(-1)?.timestamp):undefined,
+          });
+          invalidationMode=invalidationModeForCandleChange(candleChange);
+        }
+        canonicalDatasetLength=currentBars.length;
+        const fullReplayRequired=historicalCorrection||(invalidationMode==='full-replay'&&reason!=='complete');
         lastViewportComputationKey=undefined;
 
-        if(historicalCorrection){
+        if(fullReplayRequired){
+          abortWorkerComputations();
           liveTailScheduler.clear();
           const wasHistoryInitialized=historyInitialized;
           // Prepend and explicit non-tail dirty ranges both invalidate recursive state.

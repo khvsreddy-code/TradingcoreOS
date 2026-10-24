@@ -23,6 +23,8 @@ export type CoreSpiritWorkerRunOptions = {
   suppressExternalEffectsForRun?:boolean;
   /** Serializable Vela session configuration; changes reset the persistent runtime. */
   runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
+  /** Abort when the chart/script generation this request belongs to becomes obsolete. */
+  signal?:AbortSignal;
 };
 
 /**
@@ -54,6 +56,7 @@ export async function runCoreSpiritArtifactInWorker(
   sourceId:string,
   options:CoreSpiritWorkerRunOptions={},
 ):Promise<WorkerResult>{
+  if(options.signal?.aborted){const error=new Error('CoreSpirit run cancelled before dispatch.');error.name='AbortError';throw error;}
   if(!artifact?.abi?.artifactHash || !artifact.ir) throw new Error('CoreSpirit Run requires a validated executable artifact.');
   const graphSnapshot=artifactGraphSnapshot(artifact,sourceId,options);
   return coreSpiritWorkerPool.runArtifact(artifact,undefined,bars,sourceId,{
@@ -67,6 +70,7 @@ export async function runCoreSpiritArtifactInWorker(
     readOnly:options.readOnly,
     suppressExternalEffectsForRun:options.suppressExternalEffectsForRun,
     runtimeOptions:options.runtimeOptions,
+    signal:options.signal,
   });
 }
 
@@ -79,7 +83,8 @@ export async function runCoreSpiritInWorker(
 ):Promise<WorkerResult>{
   const artifact=await loadOrCompileCoreSpiritArtifact(source,sourceId,{
     backend:'worker-vm',
-    compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,compileOptions),
+    compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,{...compileOptions,signal:options.signal}),
   });
+  if(options.signal?.aborted){const error=new Error('CoreSpirit run cancelled after artifact resolution.');error.name='AbortError';throw error;}
   return runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options);
 }
