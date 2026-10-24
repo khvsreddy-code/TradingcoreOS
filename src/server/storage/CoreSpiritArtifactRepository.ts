@@ -134,16 +134,27 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     sourceVerified: boolean;
     sourceAttestationHash: string | null;
     rows: Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>;
+    storageMode: 'inline-v1' | 'chunked-v1';
+    batchSessionId: string | null;
+    datasetManifest: Record<string, unknown> | null;
   } | null> {
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
-      .select('id,dataset_hash,feature_names,training_range,rows,row_count,source_provenance,source_verified,source_attestation_hash')
+      .select('id,dataset_hash,feature_names,training_range,rows,row_count,source_provenance,source_verified,source_attestation_hash,storage_mode,batch_session_id,dataset_manifest')
       .eq('id', id)
       .eq('owner_user_id', this.ownerUserId)
       .maybeSingle();
     if (error) throw new Error('Unable to load immutable CoreSpirit dataset snapshot: ' + error.message);
     if (!data) return null;
-    if (!Array.isArray(data.rows) || data.rows.length !== Number(data.row_count)) {
-      throw new Error('Stored CoreSpirit dataset snapshot failed its row-count integrity check');
+    const storageMode = data.storage_mode === 'chunked-v1' ? 'chunked-v1' : 'inline-v1';
+    const batchSessionId = typeof data.batch_session_id === 'string' ? data.batch_session_id : null;
+    const datasetManifest = data.dataset_manifest && typeof data.dataset_manifest === 'object' && !Array.isArray(data.dataset_manifest)
+      ? data.dataset_manifest as Record<string, unknown> : null;
+    if (!Array.isArray(data.rows) ||
+        (storageMode === 'inline-v1' && data.rows.length !== Number(data.row_count)) ||
+        (storageMode === 'chunked-v1' && (data.rows.length !== 0 || !batchSessionId ||
+          !datasetManifest || Number(datasetManifest.rowCount) !== Number(data.row_count) ||
+          datasetManifest.datasetVersion !== data.dataset_hash))) {
+      throw new Error('Stored CoreSpirit dataset snapshot failed its manifest/row-count integrity check');
     }
     return {
       id: String(data.id),
@@ -153,8 +164,12 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       sourceProvenance: String(data.source_provenance ?? 'user_supplied') as 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline',
       sourceVerified: data.source_verified === true,
       sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
-      // The public snapshot contract is mutable for callers; clone immutable validation rows
-      // (especially their readonly values arrays) instead of casting away readonly safety.
+      storageMode,
+      batchSessionId,
+      datasetManifest,
+      // Chunked snapshots keep only a manifest pointer in this row. The worker must
+      // iterate the independently content-addressed chunks instead of materializing
+      // the full dataset in this method.
       rows: (data.rows as ResearchFeatureRow[]).map((row) => ({ ...row, values: [...row.values] })),
     };
   }
