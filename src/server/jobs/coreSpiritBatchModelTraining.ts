@@ -99,14 +99,30 @@ function makeBudget() {
   const limits = getCoreSpiritResearchLimits('batch');
   const startedAt = Date.now();
   const deadline = startedAt + limits.maxExecutionMs;
-  function assertWithinBudget(stage: string): void {
-    if (Date.now() > deadline) throw new Error('CoreSpirit batch training exceeded the ' + limits.maxExecutionMs + ' ms execution budget during ' + stage + '.');
+  let lastMemoryCheck = startedAt;
+  function checkMemoryBudget(stage: string): void {
     const rss = typeof process.memoryUsage === 'function' ? process.memoryUsage().rss : 0;
     if (rss > limits.maxMemoryBytes) {
       throw new Error('CoreSpirit batch training exceeded the ' + limits.maxMemoryBytes + ' byte worker RSS budget during ' + stage + '.');
     }
   }
-  return { limits, startedAt, deadline, assertWithinBudget };
+  function assertWithinBudget(stage: string): void {
+    const now = Date.now();
+    if (now > deadline) throw new Error('CoreSpirit batch training exceeded the ' + limits.maxExecutionMs + ' ms execution budget during ' + stage + '.');
+    lastMemoryCheck = now;
+    checkMemoryBudget(stage);
+  }
+  function checkExecutionBudget(stage: string): void {
+    const now = Date.now();
+    if (now > deadline) throw new Error('CoreSpirit batch training exceeded the ' + limits.maxExecutionMs + ' ms execution budget during ' + stage + '.');
+    // Check RSS at least once per second inside CPU-bound EM passes, while keeping
+    // the frequent inner-loop deadline checks cheap and deterministic.
+    if (now - lastMemoryCheck >= 1_000) {
+      lastMemoryCheck = now;
+      checkMemoryBudget(stage);
+    }
+  }
+  return { limits, startedAt, deadline, assertWithinBudget, checkExecutionBudget };
 }
 
 async function* iterateVerifiedRows(
@@ -316,6 +332,7 @@ export async function runChunkedCoreSpiritModelTraining(
 
     const hmm = new CoreSpiritGaussianHMM({
       states, covariance, maxObservations: trainingWindowRows, fitEvery, fitIterations,
+      checkBudget: () => budget.checkExecutionBudget('model fitting'),
     });
     const decoded = new Set<number>();
     rowIndex = 0;
