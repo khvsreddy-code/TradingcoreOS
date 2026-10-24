@@ -1613,7 +1613,7 @@
     {
       "path": "src/state/document.ts",
       "upstreamBlob": "5834fdd3008fc7059217e0967350736149b2b698",
-      "localBlob": "8dccfed786686dec117815b131638ba5466033a1",
+      "localBlob": "8e4d04d1a1ddaf9854cb0dc1bf11fbd9a07c3536",
       "patchId": "pane-layout-persistence"
     },
     {
@@ -1697,7 +1697,7 @@
     {
       "path": "src/workspace/ChartCell.ts",
       "upstreamBlob": "1656ed878502465b0cbe6a43d5e816d37e1cdc16",
-      "localBlob": "850ef87d81366f1fdc3efb9918bb57c72ef8ed64",
+      "localBlob": "cedbdc90d0f07936f86063afa682edba0c48c957",
       "patchId": "pane-layout-persistence"
     },
     {
