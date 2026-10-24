@@ -133,4 +133,27 @@ assert.equal(groupIntrabars([{ timestamp:holidayStart, endTimestamp:holidayStart
   lowerTimeframeMs:60_000, calendar,
 })[0]?.complete, true, 'a calendar-confirmed closed session has no expected intrabars and is not falsely incomplete');
 
+// Timeframe aliases must share one canonical identity. Otherwise a provider
+// returning "5" and another returning "5m" can create duplicate data streams
+// and make the selected value depend on arrival order.
+const aliasSnapshots = [
+  {symbol:'ALPHA', timeframe:'5', timestamp:10_000, closeTimestamp:10_300, value:50,
+    source:'provider-a', state:'confirmed', confirmationPhase:'confirmed', revision:1},
+  {symbol:' alpha ', timeframe:'5m', timestamp:10_000, closeTimestamp:10_300, value:55,
+    source:'provider-b', state:'confirmed', confirmationPhase:'confirmed', revision:2},
+];
+const aliasSync = synchronizeMarketSnapshots(aliasSnapshots, {
+  asOfTimestamp:10_500, alignment:'last-confirmed', executionMode:'historical',
+});
+assert.equal(aliasSync.size, 1, 'equivalent timeframe spellings must collapse to one canonical symbol/timeframe identity');
+assert.equal(aliasSync.get('ALPHA::5m')?.value, 55,
+  'the highest revision wins regardless of timeframe alias or input order');
+assert.deepEqual(
+  [...synchronizeMarketSnapshots([...aliasSnapshots].reverse(), {
+    asOfTimestamp:10_500, alignment:'last-confirmed', executionMode:'historical',
+  }).entries()].map(([key, snapshot])=>[key,snapshot.value]),
+  [...aliasSync.entries()].map(([key, snapshot])=>[key,snapshot.value]),
+  'canonical identity selection must be independent of provider arrival order',
+);
+
 console.log('CORESPIRIT_TIMEFRAME_TEMPORAL_ALIGNMENT_CONTRACT_OK');
