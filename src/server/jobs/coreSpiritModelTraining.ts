@@ -2,7 +2,7 @@ import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../..
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
-import { getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
+import { createCoreSpiritResearchBudget, getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { runChunkedCoreSpiritModelTraining } from './coreSpiritBatchModelTraining.js';
 import {
   assertNoKnownLabelLeakage,
@@ -119,6 +119,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     }
     return runChunkedCoreSpiritModelTraining(ownerUserId, rawPayload, snapshot, repository);
   }
+  const budget = createCoreSpiritResearchBudget('interactive');
   const payload = parsePayload({
     ...rawPayload,
     rows: snapshot.rows,
@@ -128,6 +129,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     datasetSourceVerified: snapshot.sourceVerified,
     datasetSourceAttestationHash: snapshot.sourceAttestationHash,
   });
+  budget.assertWithinBudget('dataset validation');
   await repository.updateTrainingRun(payload.trainingRunId, { status: 'running', progress: 5 });
 
   try {
@@ -157,6 +159,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       trainingRange: payload.trainingRange,
     });
     if (expectedDatasetVersion !== payload.datasetVersion) throw new Error('Dataset snapshot hash mismatch; refusing to train on changed data');
+    budget.assertWithinBudget('dataset integrity validation');
 
     const states = Number(featureGraph.states ?? 3);
     const rawPurgeBars = payload.trainingParameters.purgeBars ?? payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.horizon ?? 1;
@@ -205,9 +208,11 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       maxObservations: trainingWindowRows,
       fitEvery,
       fitIterations,
+      checkBudget: () => budget.checkExecutionBudget('model fitting'),
     });
     const decoded = new Set<number>();
     for (let index = 0; index < trainingRows.length; index += 1) {
+      if ((index & 63) === 0) budget.assertWithinBudget('model fitting');
       const row = trainingRows[index]!;
       const state = hmm.observe(row.values, row.timestamp, payload.featureNames);
       if (state !== null) decoded.add(state);
@@ -219,6 +224,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       }
     }
 
+    budget.assertWithinBudget('model fitting');
+    hmm.fitFinal();
+    budget.assertWithinBudget('final model fit');
     const hmmState: CoreSpiritGaussianHMMState = hmm.exportTrainedState();
     const finalPosterior = hmm.posterior();
     const confidence = hmm.probabilityLatest() ?? 0;
@@ -230,11 +238,14 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     validationModel.setInferenceBoundaryExclusive(trainingEndTimestamp);
     const validationStates = new Set<number>();
     const validationConfidences: number[] = [];
-    for (const row of validationRows) {
+    for (let validationIndex = 0; validationIndex < validationRows.length; validationIndex += 1) {
+      if ((validationIndex & 63) === 0) budget.assertWithinBudget('chronological validation');
+      const row = validationRows[validationIndex]!;
       const prediction = validationModel.predict(row.values, payload.featureNames, row.timestamp);
       validationStates.add(prediction.state);
       validationConfidences.push(prediction.confidence);
     }
+    budget.assertWithinBudget('chronological validation');
     if (validationConfidences.length !== validationRows.length ||
         !validationConfidences.every(value => Number.isFinite(value) && value >= 0 && value <= 1)) {
       throw new Error('Chronological holdout validation emitted invalid predictions.');
