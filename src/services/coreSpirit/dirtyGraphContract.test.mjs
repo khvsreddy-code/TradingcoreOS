@@ -63,11 +63,27 @@ assert.deepEqual(correction.ranges.get('i:signal'), { from: 500, to: 520 }, 'dow
 assert.equal(correction.correction?.requiresStateRestore, true);
 assert.equal(correction.correction?.replayFrom, 0, 'without a safe checkpoint, stateful correction replays from zero');
 assert.equal(correction.correction?.reason, 'full-replay-no-safe-checkpoint');
-const checkpointCorrection = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, 450);
+const compatibleCheckpoint = {
+  nextBarIndex:450,
+  modelVersion:'core-v1',
+  kernelType:'ema',
+  kernelVersion:1,
+  parametersSignature:'ema:period=14',
+  dataRevision:'dataset-revision-before-correction',
+  inputDependencies:['close'],
+  compatibleWithCurrentExecution:true,
+};
+const checkpointCorrection = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, compatibleCheckpoint);
 assert.equal(checkpointCorrection.correction?.replayFrom, 450);
 assert.equal(checkpointCorrection.correction?.checkpointNextBarIndex, 450);
 assert.equal(checkpointCorrection.correction?.reason, 'checkpoint-replay');
-const unsafeCheckpoint = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, 510);
+const indexOnlyCheckpoint = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, 450);
+assert.equal(indexOnlyCheckpoint.correction?.replayFrom, 0,
+  'a bar index alone cannot establish that recursive state matches the active kernel and corrected dataset');
+assert.equal(indexOnlyCheckpoint.correction?.reason, 'full-replay-no-safe-checkpoint');
+const unsafeCheckpoint = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, {
+  ...compatibleCheckpoint, nextBarIndex:510,
+});
 assert.equal(unsafeCheckpoint.correction?.replayFrom, 0, 'a checkpoint after changed data is never safe');
 const statelessOnly = [node('input:open', 20, ['open'], [], ['simple:condition']), node('simple:condition', 21, ['t20'], ['input:open'], [], { stateful:false, lookback:0 })];
 const statelessReactive = { ...reactive, sourceDependents:{close:[],open:['input:open'],volume:[]}, dependencies:{'input:open':[],'simple:condition':['input:open']}, dependents:{'input:open':['simple:condition'],'simple:condition':[]}, alwaysRecompute:[] };
