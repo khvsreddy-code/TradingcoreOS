@@ -26,6 +26,37 @@ export type CoreSpiritModelReleaseControl = Readonly<{
   updatedAt: string;
 }>;
 
+type StoredResearchRow = {
+  timestamp: number;
+  availableAt: number;
+  confirmed: boolean;
+  phase: ResearchFeatureRow['phase'];
+  values: number[];
+};
+
+type StoredDatasetSnapshotFields = {
+  id: string;
+  datasetVersion: string;
+  featureNames: string[];
+  trainingRange: { from: string; to: string };
+  sourceProvenance: 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
+  sourceVerified: boolean;
+  sourceAttestationHash: string | null;
+  rows: StoredResearchRow[];
+};
+
+export type CoreSpiritDatasetSnapshot =
+  | (StoredDatasetSnapshotFields & {
+      storageMode: 'inline-v1';
+      batchSessionId: null;
+      datasetManifest: null;
+    })
+  | (StoredDatasetSnapshotFields & {
+      storageMode: 'chunked-v1';
+      batchSessionId: string;
+      datasetManifest: Record<string, unknown>;
+    });
+
 export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown> {
   private readonly db = createServerClient();
 
@@ -125,19 +156,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     return { id: String(existing.data.id), datasetVersion: String(existing.data.dataset_hash), rowCount: Number(existing.data.row_count) };
   }
 
-  async getDatasetSnapshot(id: string): Promise<{
-    id: string;
-    datasetVersion: string;
-    featureNames: string[];
-    trainingRange: { from: string; to: string };
-    sourceProvenance: 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
-    sourceVerified: boolean;
-    sourceAttestationHash: string | null;
-    rows: Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>;
-    storageMode: 'inline-v1' | 'chunked-v1';
-    batchSessionId: string | null;
-    datasetManifest: Record<string, unknown> | null;
-  } | null> {
+  async getDatasetSnapshot(id: string): Promise<CoreSpiritDatasetSnapshot | null> {
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
       .select('id,dataset_hash,feature_names,training_range,rows,row_count,source_provenance,source_verified,source_attestation_hash,storage_mode,batch_session_id,dataset_manifest')
       .eq('id', id)
@@ -149,14 +168,16 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     const batchSessionId = typeof data.batch_session_id === 'string' ? data.batch_session_id : null;
     const datasetManifest = data.dataset_manifest && typeof data.dataset_manifest === 'object' && !Array.isArray(data.dataset_manifest)
       ? data.dataset_manifest as Record<string, unknown> : null;
+    const rowCount = Number(data.row_count);
     if (!Array.isArray(data.rows) ||
-        (storageMode === 'inline-v1' && data.rows.length !== Number(data.row_count)) ||
+        !Number.isSafeInteger(rowCount) || rowCount < 1 || rowCount > CORESPIRIT_MAX_DATASET_ROWS ||
+        (storageMode === 'inline-v1' && (batchSessionId !== null || datasetManifest !== null || data.rows.length !== rowCount)) ||
         (storageMode === 'chunked-v1' && (data.rows.length !== 0 || !batchSessionId ||
-          !datasetManifest || Number(datasetManifest.rowCount) !== Number(data.row_count) ||
+          !datasetManifest || Number(datasetManifest.rowCount) !== rowCount ||
           datasetManifest.datasetVersion !== data.dataset_hash))) {
       throw new Error('Stored CoreSpirit dataset snapshot failed its manifest/row-count integrity check');
     }
-    return {
+    const common: StoredDatasetSnapshotFields = {
       id: String(data.id),
       datasetVersion: String(data.dataset_hash),
       featureNames: data.feature_names as string[],
@@ -164,14 +185,15 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       sourceProvenance: String(data.source_provenance ?? 'user_supplied') as 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline',
       sourceVerified: data.source_verified === true,
       sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
-      storageMode,
-      batchSessionId,
-      datasetManifest,
-      // Chunked snapshots keep only a manifest pointer in this row. The worker must
-      // iterate the independently content-addressed chunks instead of materializing
-      // the full dataset in this method.
+      // Chunked snapshots keep only a manifest pointer in this row. The worker streams
+      // separately hashed chunks instead of materializing the dataset in this object.
       rows: (data.rows as ResearchFeatureRow[]).map((row) => ({ ...row, values: [...row.values] })),
     };
+    if (storageMode === 'chunked-v1') {
+      if (!batchSessionId || !datasetManifest) throw new Error('Chunked dataset snapshot is missing its session or manifest.');
+      return { ...common, storageMode, batchSessionId, datasetManifest };
+    }
+    return { ...common, storageMode: 'inline-v1', batchSessionId: null, datasetManifest: null };
   }
 
   async createTrainingRun(input: {
