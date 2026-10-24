@@ -13,7 +13,7 @@ export type ResearchDateRange = Readonly<{ from: string; to: string }>;
 export const DEFAULT_RESEARCH_VALIDATION_FRACTION = 0.2;
 export const MIN_RESEARCH_VALIDATION_ROWS = 12;
 export const DEFAULT_RESEARCH_MAX_ROWS = 1024;
-export const CORESPIRIT_MAX_DATASET_ROWS = 5000;
+export const CORESPIRIT_MAX_DATASET_ROWS = 1_000_000;
 
 export type ChronologicalResearchSplit<T extends ResearchFeatureRow> = Readonly<{
   trainingRows: readonly T[];
