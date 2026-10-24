@@ -5,6 +5,7 @@
  * any broker. Hosts provide historical/current series snapshots through the
  * contextual data resolver.
  */
+import { normalizeCoreSpiritTimeframe } from '../core/data/marketDataGraph';
 import type {
   CoreSpiritDataResolutionContext,
   CoreSpiritDataSnapshot,
@@ -204,7 +205,7 @@ export function synchronizeMarketSnapshots(
         candidate.timestamp == null || !Number.isFinite(Number(candidate.timestamp))) continue;
     const identity = [
       candidate.symbol.trim().toUpperCase(),
-      candidate.timeframe.trim().toLowerCase(),
+      normalizeCoreSpiritTimeframe(candidate.timeframe).toLowerCase(),
       Number(candidate.timestamp),
     ].join('::');
     const existing = latestRevisionByCandle.get(identity);
@@ -224,7 +225,7 @@ export function synchronizeMarketSnapshots(
   for (const candidate of latestRevisionByCandle.values()) {
     const valid = validateSynchronizedSnapshot(candidate, context);
     if (!valid) continue;
-    const identity = `${valid.symbol.trim().toUpperCase()}::${valid.timeframe.trim().toLowerCase()}`;
+    const identity = `${valid.symbol.trim().toUpperCase()}::${normalizeCoreSpiritTimeframe(valid.timeframe).toLowerCase()}`;
     const existing = bySymbol.get(identity);
     const time = Number(valid.timestamp ?? -Infinity);
     const oldTime = Number(existing?.timestamp ?? -Infinity);
