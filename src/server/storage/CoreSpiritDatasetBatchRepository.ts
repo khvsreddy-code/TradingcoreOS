@@ -374,7 +374,8 @@ export class CoreSpiritDatasetBatchRepository {
     if (!session || session.status !== 'sealed') throw new Error('Immutable dataset batch is not sealed.');
     const descriptors = session.datasetManifest?.chunks;
     if (!descriptors || descriptors.length !== session.expectedChunkCount) throw new Error('Dataset batch manifest is incomplete.');
-    const pageSize = 10;
+    // Four max-sized chunks put a firm ceiling on parsed row-object memory per DB page.
+    const pageSize = 4;
     for (let offset = 0; offset < session.expectedChunkCount; offset += pageSize) {
       const { data, error } = await this.db.from('corespirit_dataset_batch_chunks')
         .select('chunk_index,row_count,first_timestamp,last_timestamp,chunk_hash,rows')
