@@ -121,6 +121,9 @@ assert(!invalidHMMConfig.ir, 'invalid HMM state counts must fail during compilat
 assert(invalidHMMConfig.diagnostics.some(item => item.code === 'TYPE_HMM_STATES'),
   'invalid HMM state count should have a dedicated diagnostic');
 
+const boundedResearchHmm = new CoreSpiritGaussianHMM({ states: 3, maxObservations: 2_048, fitEvery: 512, fitIterations: 1 });
+assert(boundedResearchHmm.maxObservations === 2_048,
+  'isolated research training should support a configurable window larger than the legacy 1,024-observation cap');
 const hmm = new CoreSpiritGaussianHMM({ states: 3, emission: 'gaussian', covariance: 'full', fitEvery: 4, fitIterations: 2 });
 let state: number | null = null;
 for (let i = 0; i < 72; i += 1) {
