@@ -824,7 +824,9 @@ export class CoreSpiritRuntime {
             componentDeterministic:instruction.componentDeterministic ?? null,
           };
           case 'index': return { op:instruction.op, seriesName:instruction.seriesName ?? null, target:describe(instruction.target,index), index:describe(instruction.index,index) };
-          default: return { op:instruction.op };
+          // Every destination-producing IR instruction is handled above. Keep
+          // an explicit stable fallback without dereferencing the exhausted union.
+          default: return { op:'unhandled-destination-instruction', register };
         }
       }
       if ((instruction.op === 'setLocal' || instruction.op === 'setState') && instruction.name === register) {
@@ -934,6 +936,7 @@ export class CoreSpiritRuntime {
       ...this.kernelSnapshotConfiguration(family,key),
       dataRevision:this.externalKernelDataRevision(),
       nextBarIndex,
+      inputDependencies:this.kernelIdentity(family,key).inputDependencies,
     };
   }
 
