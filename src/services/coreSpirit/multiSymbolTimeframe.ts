@@ -78,7 +78,7 @@ export function createTimeframeReference(
 }
 
 type SnapshotValidationContext = Pick<CoreSpiritDataResolutionContext, 'asOfTimestamp' | 'alignment' | 'maxStalenessMs'> &
-  Partial<Pick<CoreSpiritDataResolutionContext, 'executionMode' | 'baseTimeframe'>>;
+  Partial<Pick<CoreSpiritDataResolutionContext, 'executionMode' | 'baseSymbol' | 'baseTimeframe'>>;
 
 function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
   // Conflicting metadata fails closed. A "confirmed" phase cannot override a
