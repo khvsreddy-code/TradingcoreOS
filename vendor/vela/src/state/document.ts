@@ -86,6 +86,8 @@ export interface CellState {
     timeframe?: string;
     /** Visible time window, in the renderer's time coordinates, so pan/zoom restores across sessions. */
     viewport?: { from: number; to: number };
+    /** Per-pane relative vertical size, keyed by Vela pane id. Missing entries keep renderer defaults. */
+    paneHeightWeights?: Record<string, number>;
     /** Per-pane vertical scale framing (manual bounds + autoscale and axis mode). */
     priceScales?: WorkspacePaneScaleState[];
     priceStyle?: string;
@@ -300,6 +302,19 @@ function sanitizeCell(raw: unknown): CellState | null {
         const from = Number(range.from);
         const to = Number(range.to);
         if (Number.isFinite(from) && Number.isFinite(to) && to > from) out.viewport = { from, to };
+    }
+    if (c.paneHeightWeights != null && typeof c.paneHeightWeights === 'object' && !Array.isArray(c.paneHeightWeights)) {
+        const source = c.paneHeightWeights as Record<string, unknown>;
+        const paneHeightWeights: Record<string, number> = Object.create(null) as Record<string, number>;
+        for (const paneId of Object.keys(source).slice(0, 32)) {
+            const weight = source[paneId];
+            // A persisted document is untrusted: cap count and magnitude, reject prototype
+            // keys, and accept only finite positive numeric weights used by the renderer.
+            if (!paneId || paneId.length > 180 || paneId === '__proto__' || paneId === 'constructor' || paneId === 'prototype') continue;
+            if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0 || weight > 100) continue;
+            paneHeightWeights[paneId] = weight;
+        }
+        if (Object.keys(paneHeightWeights).length > 0) out.paneHeightWeights = paneHeightWeights;
     }
     if (Array.isArray(c.priceScales)) {
         const priceScales: WorkspacePaneScaleState[] = [];
