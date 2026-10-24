@@ -399,6 +399,7 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
   if (rawParameters !== undefined && (!rawParameters || typeof rawParameters !== 'object' || Array.isArray(rawParameters))) {
     return fail(res, 400, 'trainingParameters must be an object.');
   }
+  const batchLimits = getCoreSpiritResearchLimits('batch');
   const trainingParameters: Record<string, string | number | boolean | null> = {
     ...((rawParameters ?? {}) as Record<string, string | number | boolean | null>),
     validationFraction,
@@ -417,13 +418,22 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
   }
   const fitEvery = trainingParameters.fitEvery;
   if (fitEvery !== undefined &&
-      (typeof fitEvery !== 'number' || !Number.isInteger(fitEvery) || fitEvery < 1 || fitEvery > 64)) {
-    return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
+      (typeof fitEvery !== 'number' || !Number.isInteger(fitEvery) || fitEvery < 1 || fitEvery > batchLimits.maxTrainingFitEvery)) {
+    return fail(res, 400, 'fitEvery must be an integer from 1 to ' + batchLimits.maxTrainingFitEvery + ' for batch training.');
+  }
+  const trainingWindowRows = trainingParameters.trainingWindowRows;
+  if (trainingWindowRows !== undefined &&
+      (typeof trainingWindowRows !== 'number' || !Number.isInteger(trainingWindowRows) || trainingWindowRows < 48 || trainingWindowRows > batchLimits.maxTrainingWindowRows)) {
+    return fail(res, 400, 'trainingWindowRows must be an integer from 48 to ' + batchLimits.maxTrainingWindowRows + ' for batch training.');
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
   const purgeBars = rawPurge;
+  const embargoBars = Number(trainingParameters.embargoBars ?? 0);
   if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
+  }
+  if (!Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+    return fail(res, 400, 'embargoBars must be an integer from 0 to 500.');
   }
 
   const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!, researchArtifactId);
@@ -438,7 +448,7 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
       return fail(res, 409, 'Dataset manifest identity does not match the requested research artifact.');
     }
     const rowCount = Number(manifest.rowCount);
-    const limits = getCoreSpiritResearchLimits('batch');
+    const limits = batchLimits;
     if (!Number.isSafeInteger(rowCount) || rowCount < 24 || rowCount > limits.maxRows) {
       return fail(res, 422, 'Dataset row count exceeds the currently configured batch workload class.');
     }
@@ -459,10 +469,11 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
     if (!safety || safety.version !== 1 || safety.blockers.length > 0) {
       return fail(res, 422, 'Research source does not satisfy the causal/lookahead safety gate.');
     }
-    const evaluableRows = rowCount - purgeBars;
+    const boundaryGap = purgeBars + embargoBars;
+    const evaluableRows = rowCount - boundaryGap;
     const validationCount = Math.floor(evaluableRows * validationFraction);
     const trainingCount = evaluableRows - validationCount;
-    if (purgeBars >= rowCount || validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
+    if (boundaryGap >= rowCount || validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
         trainingCount < Math.max(12, graph.states * 4)) {
       return fail(res, 422, 'Purged chronological holdout requires at least 12 validation rows and max(12, states × 4) earlier training rows.');
     }
@@ -481,7 +492,7 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
         data: {
           trainingRunId, jobId: queued.job.id, status: 'queued',
           datasetVersion: snapshot.datasetVersion, rowCount, researchArtifactId,
-          datasetSnapshotId, validationProtocol: purgeBars > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
+          datasetSnapshotId, validationProtocol: boundaryGap > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
         },
       });
     } catch (error) {
@@ -533,11 +544,18 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
        fitIterations < 1 || fitIterations > 6)) {
     return fail(res, 400, 'fitIterations must be an integer from 1 to 6.');
   }
+  const interactiveLimits = getCoreSpiritResearchLimits('interactive');
   const fitEvery = trainingParameters['fitEvery'];
   if (fitEvery !== undefined &&
       (typeof fitEvery !== 'number' || !Number.isInteger(fitEvery) ||
-       fitEvery < 1 || fitEvery > 64)) {
-    return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
+       fitEvery < 1 || fitEvery > interactiveLimits.maxTrainingFitEvery)) {
+    return fail(res, 400, 'fitEvery must be an integer from 1 to ' + interactiveLimits.maxTrainingFitEvery + ' for interactive training.');
+  }
+  const trainingWindowRows = trainingParameters['trainingWindowRows'];
+  if (trainingWindowRows !== undefined &&
+      (typeof trainingWindowRows !== 'number' || !Number.isInteger(trainingWindowRows) ||
+       trainingWindowRows < 48 || trainingWindowRows > interactiveLimits.maxTrainingWindowRows)) {
+    return fail(res, 400, 'trainingWindowRows must be an integer from 48 to ' + interactiveLimits.maxTrainingWindowRows + ' for interactive training.');
   }
   for (const [key, value] of Object.entries(trainingParameters)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) ||
@@ -559,9 +577,20 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
       return fail(res, 422, 'No training backend is registered for this model family.');
     }
-    const validationCount = Math.floor(rows.length * validationFraction);
-    const trainingCount = rows.length - validationCount;
-    if (!Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12 ||
+    const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
+    const purgeBars = Number(rawPurge);
+    const embargoBars = Number(trainingParameters.embargoBars ?? 0);
+    if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
+      return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
+    }
+    if (!Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+      return fail(res, 400, 'embargoBars must be an integer from 0 to 500.');
+    }
+    const boundaryGap = purgeBars + embargoBars;
+    const evaluableRows = rows.length - boundaryGap;
+    const validationCount = Math.floor(evaluableRows * validationFraction);
+    const trainingCount = evaluableRows - validationCount;
+    if (boundaryGap >= rows.length || !Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12 ||
         validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
         trainingCount < Math.max(12, graph.states * 4)) {
       return fail(res, 422, 'Chronological holdout requires at least 12 validation rows and max(12, states × 4) earlier training rows at this validationFraction.');
