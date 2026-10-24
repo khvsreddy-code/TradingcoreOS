@@ -192,6 +192,7 @@ export async function runChunkedCoreSpiritModelTraining(
     const manifest = parseManifest(snapshot.datasetManifest, snapshot);
     if (manifest.researchArtifactId !== researchArtifactId) throw new Error('Dataset manifest is bound to a different research artifact.');
     const manifestHash = await coreSpiritDatasetManifestHash({
+      researchArtifactId: manifest.researchArtifactId,
       rowCount: manifest.rowCount,
       featureSchema: manifest.featureSchema,
       trainingRange: manifest.trainingRange,
@@ -285,7 +286,7 @@ export async function runChunkedCoreSpiritModelTraining(
     if (!Number.isInteger(fitEvery) || fitEvery < 1 || fitEvery > 64) throw new Error('fitEvery must be between 1 and 64.');
 
     const hmm = new CoreSpiritGaussianHMM({
-      states, covariance, maxObservations: trainingCount, fitEvery, fitIterations,
+      states, covariance, maxObservations: Math.min(trainingCount, 1_024), fitEvery, fitIterations,
     });
     const decoded = new Set<number>();
     rowIndex = 0;
@@ -395,7 +396,9 @@ export async function runChunkedCoreSpiritModelTraining(
         covariance,
         fitIterations,
         fitEvery,
-        maxObservations: trainingCount,
+        maxObservations: hmm.maxObservations,
+        trainingRowsProcessed: trainingCount,
+        fitWindowPolicy: 'sliding-recent-window-v1',
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
         datasetStorageFormat: 'json-chunks-v1',
