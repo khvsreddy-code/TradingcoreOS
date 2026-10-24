@@ -216,6 +216,33 @@ export class CoreSpiritDatasetBatchRepository {
         rowCount: session.expectedRowCount, manifest: session.datasetManifest };
     }
     if (session.status === 'uploading') {
+      // Preflight before closing ingestion: incomplete/out-of-order uploads remain
+      // resumable, rather than getting stranded in the sealing state.
+      const { data: preflight, error: preflightError } = await this.db.from('corespirit_dataset_batch_chunks')
+        .select('chunk_index,row_count,first_timestamp,last_timestamp')
+        .eq('session_id', sessionId).eq('owner_user_id', this.ownerUserId)
+        .order('chunk_index', { ascending: true });
+      if (preflightError) throw new Error('Unable to verify uploaded chunks: ' + preflightError.message);
+      if (!Array.isArray(preflight) || preflight.length !== session.expectedChunkCount) {
+        throw new Error('Dataset batch is incomplete: upload every declared chunk before finalization.');
+      }
+      let expectedRows = 0;
+      let previousTimestamp = Number.NEGATIVE_INFINITY;
+      for (let index = 0; index < preflight.length; index += 1) {
+        const chunk = preflight[index] as Record<string, unknown>;
+        const expectedCount = index === session.expectedChunkCount - 1
+          ? session.expectedRowCount - index * session.chunkSize : session.chunkSize;
+        const firstTimestamp = Number(chunk.first_timestamp);
+        const lastTimestamp = Number(chunk.last_timestamp);
+        if (Number(chunk.chunk_index) !== index || Number(chunk.row_count) !== expectedCount ||
+            !Number.isFinite(firstTimestamp) || !Number.isFinite(lastTimestamp) ||
+            firstTimestamp <= previousTimestamp || lastTimestamp < firstTimestamp) {
+          throw new Error('Dataset chunks must be complete and globally chronological before finalization.');
+        }
+        previousTimestamp = lastTimestamp;
+        expectedRows += Number(chunk.row_count);
+      }
+      if (expectedRows !== session.expectedRowCount) throw new Error('Uploaded row count does not match the declared manifest.');
       const { error } = await this.db.from('corespirit_dataset_batch_sessions').update({
         status: 'sealing', updated_at: new Date().toISOString(),
       }).eq('id', sessionId).eq('owner_user_id', this.ownerUserId).eq('status', 'uploading');
@@ -264,7 +291,7 @@ export class CoreSpiritDatasetBatchRepository {
     const manifest: CoreSpiritDatasetManifest = Object.freeze({
       formatVersion: 1,
       datasetRevision: 1,
-      researchArtifactId: (await this.getSession(sessionId)) ? String((await this.getResearchArtifactId(sessionId))) : '',
+      researchArtifactId: await this.getResearchArtifactId(sessionId),
       datasetVersion,
       rowCount: session.expectedRowCount,
       featureSchema,
