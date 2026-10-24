@@ -16,6 +16,8 @@ const nativeIndicator = read('../vendor/vela/src/core/native-indicators/NativeIn
 const velaProvenance = read('../vendor/vela/UPSTREAM.md');
 const velaReleaseNotes = read('../vendor/vela/CHANGELOG.md');
 const contextMenu = read('../vendor/vela/src/widget/context-menu.ts');
+const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const rendererImpl = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const nativeExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 
 assert.match(velaProvenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'live chart integration must be pinned to the 0.8.5 source baseline');
@@ -40,6 +42,11 @@ assert.match(chartKernel, /paneId: event\.paneId \?\? null/, 'TCO click callback
 assert.match(contextMenu, /pointer\.paneId|paneId:.*pointer/, 'native context-menu actions receive the pane under the pointer');
 assert.match(chrome, /pointerPane = \{ paneId: event\.paneId \?\? null, paneKind: event\.paneKind \?\? null \}/, 'the TCO data window displays the pane reported by crosshair events');
 assert.match(chrome, /Study pane/, 'the TCO data window distinguishes indicator panes from the price pane');
+assert.match(rendererPorts, /paneKind\?: 'price' \| 'study'/, 'data-window groups carry their owning pane kind');
+assert.match(rendererPorts, /paneId\?: string/, 'data-window groups carry their owning pane id');
+assert.match(rendererImpl, /groups\.push\(\{ name: model\.title, paneId, paneKind, rows \}\)/, 'native data-window groups expose pane identity');
+assert.match(chrome, /readout\.groups\.filter\(\(group\) => group\.paneId === selectedPane\)/, 'the host data window filters rows to the pane under the crosshair');
+assert.match(chrome, /Only show OHLCV while inspecting the price pane/, 'indicator pane values are not presented as market prices');
 assert.doesNotMatch(nativeExtensions, /from ['\"]\.\/velaChartFacade['\"]/, 'new native extension code must not depend on the legacy facade');
 assert.doesNotMatch(nativeExtensions, /waitsForHistory\s*:\s*true/, 'the bounded TCO regime ribbon remains incremental');
 assert.match(provider, /historyReady: snapshot\.historyReady/, 'the TCO data plane keeps its history-readiness signal');
