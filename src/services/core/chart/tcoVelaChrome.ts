@@ -2549,13 +2549,23 @@ const dataWindowPanel: SidePanelDescriptor = {
       }
       field('Date', readout.date);
       field('Time', readout.time);
-      field('Open', readout.ohlc.o, readout.ohlc.up ? '#4ade80' : '#fb7185');
-      field('High', readout.ohlc.h);
-      field('Low', readout.ohlc.l);
-      field('Close', readout.ohlc.c, readout.ohlc.up ? '#4ade80' : '#fb7185');
-      if (readout.ohlc.vol) field('Volume', readout.ohlc.vol);
+      const selectedPane = pointerPane.paneId;
+      const paneGroups = selectedPane
+        ? readout.groups.filter((group) => group.paneId === selectedPane)
+        : readout.groups;
+      // A study's horizontal coordinate is its own indicator value, not the market price.
+      // Only show OHLCV while inspecting the price pane or when no pane is selected.
+      if (!selectedPane || pointerPane.paneKind === 'price') {
+        field('Open', readout.ohlc.o, readout.ohlc.up ? '#4ade80' : '#fb7185');
+        field('High', readout.ohlc.h);
+        field('Low', readout.ohlc.l);
+        field('Close', readout.ohlc.c, readout.ohlc.up ? '#4ade80' : '#fb7185');
+        if (readout.ohlc.vol) field('Volume', readout.ohlc.vol);
+      } else if (paneGroups.length === 0) {
+        field('Pane value', 'No indicator values at this bar', '#64748b');
+      }
 
-      for (const group of readout.groups) {
+      for (const group of paneGroups) {
         const title = document.createElement('div');
         title.textContent = group.name;
         title.style.cssText = 'margin-top:7px;font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.10em;';
