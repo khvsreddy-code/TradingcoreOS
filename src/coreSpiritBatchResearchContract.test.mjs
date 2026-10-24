@@ -10,6 +10,8 @@ const trainingWorker = read('./server/jobs/coreSpiritModelTraining.ts');
 const routes = read('./server/routes/coreSpirit-models.routes.ts');
 const artifacts = read('./services/coreSpirit/modelArtifacts.ts');
 const migration = read('../supabase/migrations/20261024120000_corespirit_batch_dataset_chunks.sql');
+const lifecycleMigration = read('../supabase/migrations/20261024133000_corespirit_dataset_batch_session_guards.sql');
+const server = read('../server.ts');
 
 assert.match(limits, /CORESPIRIT_BATCH_MAX_DATASET_ROWS/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_MEMORY_BYTES/);
@@ -43,7 +45,13 @@ assert.match(trainingWorker, /runChunkedCoreSpiritModelTraining/);
 assert.match(artifacts, /\['chronological-holdout-v1', 'purged-chronological-v1'\]/);
 
 assert.match(migration, /row_count between 12 and 1000000/);
+assert.match(server, /api\/corespirit\/dataset-batches', express\.json\(\{ limit: '5mb' \}\)/,
+  'bounded batch uploads must pass a route-specific body parser before the global 512 KiB parser');
 assert.match(migration, /corespirit_dataset_batch_chunks_immutable/);
 assert.match(migration, /guard_corespirit_dataset_batch_chunk_insert/);
 assert.match(migration, /revoke all on public\.corespirit_dataset_batch_sessions, public\.corespirit_dataset_batch_chunks from anon, authenticated/);
+assert.match(lifecycleMigration, /guard_corespirit_dataset_batch_session_update/,
+  'session lifecycle transitions and immutable declarations must be enforced in the database');
+assert.match(lifecycleMigration, /drop index if exists public\.corespirit_dataset_batch_session_snapshot_unique/,
+  'identical immutable manifests may be reused across sessions without duplicate-content collisions');
 console.log('CORESPIRIT_BOUNDED_CHUNKED_RESEARCH_CONTRACT_OK');
