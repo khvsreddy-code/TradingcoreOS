@@ -18,7 +18,7 @@ const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts'
 const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack.ts');
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 
-assert.match(provenance, /0\.8\.4/, 'vendored Vela foundation must identify upstream version 0.8.5');
+assert.match(provenance, /0\.8\.5/, 'vendored Vela foundation must identify upstream version 0.8.5');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
@@ -56,4 +56,4 @@ for (const path of [
   '../vendor/vela/src/core/drawings/advancedRegistryPatterns.ts',
 ]) assert.equal(exists(path), true, path + ' is a required TCO performance/feature extension');
 
-console.log('VELA_084_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');
+console.log('VELA_085_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');
