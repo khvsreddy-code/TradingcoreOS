@@ -2,6 +2,10 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
+    "base": {
+      "version": "0.8.4",
+      "commit": "850fa1f431e2065e9b0074c4b0555a48a2999eaf"
+    },
     "tag": "v0.8.5",
     "commit": "596cbbdeba15406cfb72465afd07f8c60c6b1852"
   },
