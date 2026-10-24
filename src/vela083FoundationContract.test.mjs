@@ -5,6 +5,8 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const exists = (path) => fs.existsSync(new URL(path, import.meta.url));
 
 const provenance = read('../vendor/vela/UPSTREAM.md');
+const releaseNotes = read('../vendor/vela/CHANGELOG.md');
+const notice = read('../vendor/vela/NOTICE');
 const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const symbols = read('../vendor/vela/src/widget/symbol-picker.ts');
 const provider = read('./TcoVelaDataProvider.ts');
@@ -18,7 +20,11 @@ const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts'
 const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack.ts');
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 
-assert.match(provenance, /0\.8\.5/, 'vendored Vela foundation must identify upstream version 0.8.5');
+assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
+assert.match(provenance, /descends from 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
+assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include the 0.8.5 release notes');
+assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
+assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
