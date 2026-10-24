@@ -1518,10 +1518,20 @@ export class ChartCell {
      *  the initial progressive load until the chart/indicator manifest has settled. */
     private readPaneHeightWeights(): Record<string, number> {
         const weights: Record<string, number> = Object.create(null) as Record<string, number>;
-        for (const pane of this.inner?.panes.list() ?? []) {
+        const panes = this.inner?.panes.list() ?? [];
+        let maxWeight = 0;
+        for (const pane of panes) {
             const weight = pane.heightWeight;
-            if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0 && weight <= 100) {
-                weights[pane.id] = weight;
+            if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) maxWeight = Math.max(maxWeight, weight);
+        }
+        // Pane height weights are relative ratios, not pixels. If a caller used a weight
+        // above our persistence ceiling, scale every mounted pane by the same factor so the
+        // ratio survives reload without storing extreme values that can destabilize layout.
+        const normalization = Math.max(1, maxWeight / 100);
+        for (const pane of panes) {
+            const weight = pane.heightWeight;
+            if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) {
+                weights[pane.id] = Math.min(100, weight / normalization);
             }
         }
         if (!this.paneHistoryReady && this.state.paneHeightWeights) {
