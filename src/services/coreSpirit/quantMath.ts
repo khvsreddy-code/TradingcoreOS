@@ -318,9 +318,15 @@ export class CoreSpiritGaussianHMM {
     }
     this.states = options.states;
     this.covarianceMode = options.covariance ?? 'full';
-    this.maxObservations = Math.max(this.states * 4, Math.min(4_096, Math.floor(options.maxObservations ?? 512)));
-    this.fitEvery = Math.max(1, Math.min(65_536, Math.floor(options.fitEvery ?? 8)));
-    this.fitIterations = Math.max(1, Math.min(6, Math.floor(options.fitIterations ?? 3)));
+    const requestedMaxObservations = options.maxObservations ?? 512;
+    const requestedFitEvery = options.fitEvery ?? 8;
+    const requestedFitIterations = options.fitIterations ?? 3;
+    if (![requestedMaxObservations, requestedFitEvery, requestedFitIterations].every(Number.isFinite)) {
+      throw new Error('HMM window, fit cadence and iteration settings must be finite numbers.');
+    }
+    this.maxObservations = Math.max(this.states * 4, Math.min(4_096, Math.floor(requestedMaxObservations)));
+    this.fitEvery = Math.max(1, Math.min(65_536, Math.floor(requestedFitEvery)));
+    this.fitIterations = Math.max(1, Math.min(6, Math.floor(requestedFitIterations)));
     this.checkBudget = options.checkBudget;
     this.refreshPosteriorOnObserve = options.refreshPosteriorOnObserve ?? true;
   }
