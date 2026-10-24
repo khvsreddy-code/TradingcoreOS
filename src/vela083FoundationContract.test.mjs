@@ -20,6 +20,7 @@ const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts'
 const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack.ts');
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 const persistedDocument = read('../vendor/vela/src/state/document.ts');
+const inputController = read('../vendor/vela/src/renderers/native/core/InputController.ts');
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
 assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
@@ -33,6 +34,7 @@ assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'native indicators c
 assert.match(paneControl, /setHeightWeight\(paneId: string, weight: number\)/, 'pane height weights are part of the public Vela API');
 assert.match(chartRenderer, /paneId\?: string \| null/, 'click and crosshair events include an optional pane identity');
 assert.match(engine, /historyComplete\(\): Promise<void>/, 'full-history completion remains an explicit lifecycle boundary');
+assert.match(inputController, /this\.dragging && this\.region === 'data' && wasTouch/, 'native inertial fling must only run for touch releases, not mouse drags');
 assert.match(sceneGraph, /heightWeight: heightWeight \?\? \(kind === 'price' \? 3 : 1\)/, 'new panes receive deterministic default weights');
 assert.match(sceneGraph, /if \(heightWeight !== undefined\) existing\.heightWeight = heightWeight/, 'mounting an indicator without a weight preserves user resizing');
 assert.match(overlayStack, /export function/, 'the overlay stacking order logic is vendored');
