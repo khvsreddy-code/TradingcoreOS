@@ -13,12 +13,10 @@ TCO-specific code wholesale. The merge preserves TradingCoreOS's typed columnar 
 culling, lazy native-indicator catalog, advanced drawing registries, chart data-plane integration, and FYERS provider /
 CoreSpirit engine adapters. Upstream 0.8.5 features are retained for programmatic pane height weights, pane-aware pointer
 events, history-gated native indicators, sparse/future plot slots, overlay order control, and the LSMA/regression-slope
-replacement for the removed `linear-regression` built-in. TCO additions remain in place: typed columnar history and scene
-patching, lazy native-indicator catalog, advanced drawing registries, and the FYERS provider /
-CoreSpirit engine adapters. See `src/TcoVelaDataProvider.ts` and `src/services/core/chart/`.
+replacement for the removed `linear-regression` built-in. See `src/TcoVelaDataProvider.ts` and `src/services/core/chart/`.
 
 `src/renderers/native/chrome/SettingsDialog.ts` retains TCO's desktop presentation layer:
 horizontal tabs, the Appearance Preview panel, and TCO host-setting hooks. The engine-owned
 controls continue to edit the live Vela `ChartConfig`; the preview uses sample data only.
 
-`vendor/vela/CHANGELOG.md` records upstream changes, including the 0.8.4 release.
+`vendor/vela/CHANGELOG.md` records upstream changes, including the 0.8.5 release.
