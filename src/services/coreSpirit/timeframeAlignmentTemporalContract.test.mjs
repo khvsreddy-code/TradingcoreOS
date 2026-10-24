@@ -113,6 +113,21 @@ const synchronized = synchronizeMarketSnapshots([
 assert.equal(synchronized.size, 2, 'same symbol on different timeframes must have distinct canonical identities');
 assert.equal(synchronized.get('ALPHA::1m')?.value, 2);
 
+// The newest revision at a candle timestamp is authoritative even when it
+// invalidates that candle for historical use. Never resurrect the older
+// confirmed revision after filtering the newer developing revision.
+const synchronizedRevisionFence = synchronizeMarketSnapshots([
+  {symbol:'ALPHA',timeframe:'5m',timestamp:2000,value:20,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
+  {symbol:'ALPHA',timeframe:'5m',timestamp:3000,value:30,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
+  {symbol:'ALPHA',timeframe:'5m',timestamp:3000,value:33,source:'feed',state:'developing',confirmationPhase:'developing',revision:2,dataRevision:'alpha-5m-r2'},
+], {
+  asOfTimestamp:4000, alignment:'last-confirmed', executionMode:'historical',
+});
+assert.equal(synchronizedRevisionFence.get('ALPHA::5m')?.timestamp, 2000,
+  'a newer developing revision must fence off older confirmed revisions of the same candle');
+assert.equal(synchronizedRevisionFence.get('ALPHA::5m')?.value, 20,
+  'synchronization must fall back only to an earlier candle, never an earlier revision of the same candle');
+
 const parent = [{ timestamp:0, endTimestamp:300_000 }];
 const fullIntrabars = [0,60_000,120_000,180_000,240_000].map(timestamp => ({ timestamp }));
 assert.equal(groupIntrabars(parent, fullIntrabars, 300_000, { lowerTimeframeMs:60_000 })[0]?.complete, true,
