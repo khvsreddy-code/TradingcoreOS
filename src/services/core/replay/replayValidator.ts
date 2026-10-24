@@ -2,6 +2,20 @@ import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 
 export type ReplayValidationResult = { valid: boolean; errors: string[]; normalizedBars: HistoricalCandle[] };
 
+/** Parse ISO timestamps and epoch seconds/milliseconds into epoch milliseconds. */
+export function replayTimestampMs(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value > 1e12 ? value : value * 1000;
+  const text = String(value ?? '').trim();
+  if (!text) return Number.NaN;
+  const digitsOnly = text.split('').every(character => character >= '0' && character <= '9');
+  if (digitsOnly && text.length >= 9) {
+    const numeric = Number(text);
+    return Number.isFinite(numeric) ? (numeric > 1e12 ? numeric : numeric * 1000) : Number.NaN;
+  }
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 /** Rejects bad ordering and malformed OHLC instead of silently sorting source data. */
 export function validateReplayBars(bars: HistoricalCandle[]): ReplayValidationResult {
   const errors: string[] = [];
@@ -9,7 +23,7 @@ export function validateReplayBars(bars: HistoricalCandle[]): ReplayValidationRe
   let previousTimestamp = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < normalized.length; index += 1) {
     const bar = normalized[index]!;
-    const timestamp = Date.parse(String(bar.timestamp));
+    const timestamp = replayTimestampMs(bar.timestamp);
     const numbers = [Number(bar.open), Number(bar.high), Number(bar.low), Number(bar.close), Number(bar.volume)];
     const open = numbers[0]!;
     const high = numbers[1]!;

@@ -1,6 +1,6 @@
 import { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import { CoreEventBus, coreEventBus } from '../event/eventBus';
-import { validateReplayBars } from './replayValidator';
+import { replayTimestampMs, validateReplayBars } from './replayValidator';
 
 export type ReplayStatus = 'idle' | 'running' | 'paused' | 'stopped';
 export type ReplayOptions = {
@@ -38,7 +38,7 @@ export class ReplayEngine {
       const first = this.options.bars[0], last = this.options.bars[this.options.bars.length - 1];
       this.bus.emit('replay.started', {
         sessionId: this.options.sessionId, symbol: this.options.symbol, timeframe: this.options.timeframe,
-        startTime: Number(first.timestamp), endTime: Number(last.timestamp),
+        startTime: replayTimestampMs(first.timestamp), endTime: replayTimestampMs(last.timestamp),
       });
     }
     this.status = 'running';
@@ -88,7 +88,7 @@ export class ReplayEngine {
       bar: bar as unknown as Record<string, unknown>, source: 'replay',
     });
     this.bus.emit('replay.step', {
-      sessionId: this.options.sessionId, cursorTime: Number(bar.timestamp), index,
+      sessionId: this.options.sessionId, cursorTime: replayTimestampMs(bar.timestamp), index,
     });
     if (this.cursor >= this.options.bars.length) this.status = 'stopped';
     return true;
@@ -106,13 +106,15 @@ export class ReplayEngine {
     const current = this.options.bars[Math.max(0, before)];
     const next = this.options.bars[this.cursor];
     if (!next) { this.status = 'stopped'; return; }
-    const delta = Number(next.timestamp) > Number(current.timestamp)
-      ? Number(next.timestamp) - Number(current.timestamp) : 1000;
+    const nextTime = replayTimestampMs(next.timestamp);
+    const currentTime = replayTimestampMs(current.timestamp);
+    const delta = Number.isFinite(nextTime) && Number.isFinite(currentTime) && nextTime > currentTime
+      ? nextTime - currentTime : 1000;
     this.timer = setTimeout(() => this.scheduleNext(), Math.max(1, delta / (this.options?.speed ?? 1)));
   }
 
   private cursorTime(): number {
-    return Number(this.options?.bars[Math.max(0, this.cursor - 1)]?.timestamp ?? 0);
+    return replayTimestampMs(this.options?.bars[Math.max(0, this.cursor - 1)]?.timestamp ?? 0);
   }
 
   private clearTimer(): void {

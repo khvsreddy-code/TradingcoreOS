@@ -1,5 +1,5 @@
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
-import { validateReplayBars } from './replayValidator';
+import { replayTimestampMs, validateReplayBars } from './replayValidator';
 
 export type SimulationOrderType = 'market' | 'limit' | 'stop' | 'stop-limit';
 export type SimulationSide = 'buy' | 'sell';
@@ -115,7 +115,7 @@ function timelineOf(datasets:readonly SimulationDataset[]):Frame[]{
     if(!v.valid||!v.normalizedBars.length)throw new Error('Invalid replay dataset '+symbol+': '+v.errors.join('; '));
     if(d.timeframe.length>32)throw new Error('Timeframe name is too long.');
     for(const bar of v.normalizedBars){
-      const time=Date.parse(String(bar.timestamp));let m=times.get(time);
+      const time=replayTimestampMs(bar.timestamp);let m=times.get(time);
       if(!m){m=new Map();times.set(time,m);}
       if(m.has(symbol))throw new Error('Duplicate same-symbol timestamp.');
       m.set(symbol,bar);
