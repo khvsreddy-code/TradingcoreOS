@@ -202,6 +202,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     }
 
     await repository.updateTrainingRun(payload.trainingRunId, { status: 'running', progress: 15 });
+    const minimumFitRows = Math.max(12, states * 4);
     const hmm = new CoreSpiritGaussianHMM({
       states,
       covariance,
@@ -209,13 +210,18 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       fitEvery,
       fitIterations,
       checkBudget: () => budget.checkExecutionBudget('model fitting'),
+      refreshPosteriorOnObserve: false,
     });
     const decoded = new Set<number>();
     for (let index = 0; index < trainingRows.length; index += 1) {
       if ((index & 63) === 0) budget.assertWithinBudget('model fitting');
       const row = trainingRows[index]!;
+      if ((index & 63) === 0) budget.assertWithinBudget('model fitting');
       const state = hmm.observe(row.values, row.timestamp, payload.featureNames);
-      if (state !== null) decoded.add(state);
+      const observedCount = index + 1;
+      const isFitCheckpoint = observedCount === minimumFitRows ||
+        (observedCount > minimumFitRows && (observedCount - minimumFitRows) % fitEvery === 0);
+      if (state !== null && isFitCheckpoint) decoded.add(state);
       if (index % 64 === 0) {
         await repository.updateTrainingRun(payload.trainingRunId, {
           status: 'running',
@@ -227,6 +233,8 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     budget.assertWithinBudget('model fitting');
     hmm.fitFinal();
     budget.assertWithinBudget('final model fit');
+    const finalDecoded = hmm.decodeLatest();
+    if (finalDecoded !== null) decoded.add(finalDecoded);
     const hmmState: CoreSpiritGaussianHMMState = hmm.exportTrainedState();
     const finalPosterior = hmm.posterior();
     const confidence = hmm.probabilityLatest() ?? 0;
