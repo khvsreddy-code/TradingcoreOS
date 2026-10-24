@@ -1524,9 +1524,20 @@ export class ChartCell {
             const weight = pane.heightWeight;
             if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) maxWeight = Math.max(maxWeight, weight);
         }
+        const pending = !this.paneHistoryReady ? this.state.paneHeightWeights : undefined;
+        // A saved pane may still be waiting for its indicator to mount. Include it in the
+        // common scale factor so normalization preserves ratios between live and pending panes.
+        if (pending) {
+            const livePaneIds = new Set(panes.map((pane) => pane.id));
+            for (const [paneId, weight] of Object.entries(pending)) {
+                if (!livePaneIds.has(paneId) && Number.isFinite(weight) && weight > 0 && weight <= 100) {
+                    maxWeight = Math.max(maxWeight, weight);
+                }
+            }
+        }
         // Pane height weights are relative ratios, not pixels. If a caller used a weight
-        // above our persistence ceiling, scale every mounted pane by the same factor so the
-        // ratio survives reload without storing extreme values that can destabilize layout.
+        // above our persistence ceiling, scale every live/pending pane by the same factor so
+        // proportions survive reload without extreme values destabilizing layout.
         const normalization = Math.max(1, maxWeight / 100);
         for (const pane of panes) {
             const weight = pane.heightWeight;
@@ -1534,10 +1545,10 @@ export class ChartCell {
                 weights[pane.id] = Math.min(100, weight / normalization);
             }
         }
-        if (!this.paneHistoryReady && this.state.paneHeightWeights) {
-            for (const [paneId, weight] of Object.entries(this.state.paneHeightWeights)) {
+        if (pending) {
+            for (const [paneId, weight] of Object.entries(pending)) {
                 if (!(paneId in weights) && Number.isFinite(weight) && weight > 0 && weight <= 100) {
-                    weights[paneId] = weight;
+                    weights[paneId] = Math.min(100, weight / normalization);
                 }
             }
         }
