@@ -41,6 +41,30 @@ const legacy = decodeState(JSON.stringify({ version: 1, layout: '1', charts: [{ 
 assert.ok(legacy, 'pre-upgrade chart documents remain loadable');
 assert.equal(legacy.charts[0]!.paneHeightWeights, undefined, 'legacy documents retain default pane sizing without migration failure');
 
+const migratedStudies = sanitizeState({
+  version: 1,
+  layout: '1',
+  charts: [{
+    id: 'legacy-linear-regression',
+    indicators: {
+      manifest: [],
+      natives: [
+        { type: 'linear-regression', inputs: { mode: 'Curve', lineColor: '#f59e0b' }, hidden: true },
+        { type: 'linear-regression', inputs: { mode: 'Slope', lineColor: '#60a5fa', length: 14 } },
+      ],
+    },
+  }],
+});
+assert.ok(migratedStudies, 'legacy saved studies should survive state validation');
+assert.deepEqual(
+  migratedStudies.charts[0]!.indicators?.natives,
+  [
+    { type: 'lsma', inputs: { length: 100, neutralColor: '#f59e0b' }, hidden: true },
+    { type: 'linear-regression-slope', inputs: { length: 14, lineColor: '#60a5fa' } },
+  ],
+  'legacy Curve and Slope studies preserve mode, inputs, hidden state, and former 100-bar curve default',
+);
+
 const tooMany: Record<string, number> = Object.create(null);
 for (let i = 0; i < 80; i++) tooMany[`pane-${i}`] = i + 1;
 const capped = sanitizeState({ version: 1, layout: '1', charts: [{ id: 'c1', paneHeightWeights: tooMany }] });
