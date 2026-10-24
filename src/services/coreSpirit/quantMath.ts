@@ -196,6 +196,8 @@ export type CoreSpiritGaussianHMMOptions = Readonly<{
   maxObservations?: number;
   fitEvery?: number;
   fitIterations?: number;
+  /** Optional synchronous guard used by isolated batch training; never stored in artifacts. */
+  checkBudget?: () => void;
 }>;
 
 type GaussianParameters = { mean: number[]; covariance: number[][]; lower: number[][]; logDeterminant: number };
@@ -290,6 +292,7 @@ export class CoreSpiritGaussianHMM {
   readonly maxObservations: number;
   private readonly fitEvery: number;
   private readonly fitIterations: number;
+  private readonly checkBudget?: () => void;
   private observations: number[][] = [];
   private timestamps: number[] = [];
   private fields?: string[];
@@ -313,6 +316,7 @@ export class CoreSpiritGaussianHMM {
     this.maxObservations = Math.max(this.states * 4, Math.min(4_096, Math.floor(options.maxObservations ?? 512)));
     this.fitEvery = Math.max(1, Math.min(65_536, Math.floor(options.fitEvery ?? 8)));
     this.fitIterations = Math.max(1, Math.min(6, Math.floor(options.fitIterations ?? 3)));
+    this.checkBudget = options.checkBudget;
   }
 
   observe(row: readonly number[], timestamp: number, fields?: readonly string[]): number | null {
@@ -515,13 +519,16 @@ export class CoreSpiritGaussianHMM {
   }
 
   private fitBounded(): void {
+    this.checkBudget?.();
     const rows = this.observations;
     const count = rows.length;
     const dimensions = rows[0]!.length;
     const ordered = [...rows].sort((a, b) => a[0]! - b[0]!);
     const globalMean = Array.from({ length: dimensions }, (_, d) => rows.reduce((sum, row) => sum + row[d]!, 0) / count);
+    this.checkBudget?.();
     const globalCovariance = Array.from({ length: dimensions }, (_, i) =>
       Array.from({ length: dimensions }, (_, j) => rows.reduce((sum, row) => sum + (row[i]! - globalMean[i]!) * (row[j]! - globalMean[j]!), 0) / Math.max(1, count - 1)));
+    this.checkBudget?.();
     this.transition = Array.from({ length: this.states }, (_, i) =>
       normalizeProbabilities(Array.from({ length: this.states }, (_, j) => i === j ? 8 : 1)));
     this.startProbability = new Array<number>(this.states).fill(1 / this.states);
@@ -534,29 +541,37 @@ export class CoreSpiritGaussianHMM {
     this.emissions = means.map((mean, state) => gaussianParameters(mean, covariances[state]!, this.covarianceMode));
 
     for (let iteration = 0; iteration < this.fitIterations; iteration += 1) {
-      const logEmission = rows.map(row => this.emissions.map(parameters => gaussianLogDensity(row, parameters)));
+      this.checkBudget?.();
+      const logEmission = rows.map((row, index) => {
+        if ((index & 63) === 0) this.checkBudget?.();
+        return this.emissions.map(parameters => gaussianLogDensity(row, parameters));
+      });
       const alpha = Array.from({ length: count }, () => new Array<number>(this.states).fill(Number.NEGATIVE_INFINITY));
       const beta = Array.from({ length: count }, () => new Array<number>(this.states).fill(0));
       for (let state = 0; state < this.states; state += 1) alpha[0]![state] = Math.log(Math.max(this.startProbability[state]!, EPSILON)) + logEmission[0]![state]!;
       for (let time = 1; time < count; time += 1) {
+        if ((time & 63) === 0) this.checkBudget?.();
         for (let state = 0; state < this.states; state += 1) {
           alpha[time]![state] = logEmission[time]![state]! + logSumExp(Array.from({ length: this.states }, (_, previous) =>
             alpha[time - 1]![previous]! + Math.log(Math.max(this.transition[previous]![state]!, EPSILON))));
         }
       }
       for (let time = count - 2; time >= 0; time -= 1) {
+        if ((time & 63) === 0) this.checkBudget?.();
         for (let state = 0; state < this.states; state += 1) {
           beta[time]![state] = logSumExp(Array.from({ length: this.states }, (_, next) =>
             Math.log(Math.max(this.transition[state]![next]!, EPSILON)) + logEmission[time + 1]![next]! + beta[time + 1]![next]!));
         }
       }
       const posterior = alpha.map((row, time) => {
+        if ((time & 63) === 0) this.checkBudget?.();
         const logWeights = row.map((value, state) => value + beta[time]![state]!);
         const normalizer = logSumExp(logWeights);
         return normalizeProbabilities(logWeights.map(value => Math.exp(value - normalizer)));
       });
       const transitionCounts = Array.from({ length: this.states }, () => new Array<number>(this.states).fill(1e-3));
       for (let time = 0; time < count - 1; time += 1) {
+        if ((time & 63) === 0) this.checkBudget?.();
         const logXiValues: number[] = [];
         for (let from = 0; from < this.states; from += 1) {
           for (let to = 0; to < this.states; to += 1) {
@@ -581,7 +596,10 @@ export class CoreSpiritGaussianHMM {
         const total = posterior.reduce((sum, gamma) => sum + gamma[state]!, 0);
         return Array.from({ length: dimensions }, (_, dimension) => {
           let weighted = 0;
-          for (let time = 0; time < count; time += 1) weighted += posterior[time]![state]! * rows[time]![dimension]!;
+          for (let time = 0; time < count; time += 1) {
+            if ((time & 511) === 0) this.checkBudget?.();
+            weighted += posterior[time]![state]! * rows[time]![dimension]!;
+          }
           return total > EPSILON ? weighted / total : globalMean[dimension]!;
         });
       });
@@ -592,6 +610,7 @@ export class CoreSpiritGaussianHMM {
             if (this.covarianceMode === 'diagonal' && row !== column) return 0;
             let weighted = 0;
             for (let time = 0; time < count; time += 1) {
+              if ((time & 1_023) === 0) this.checkBudget?.();
               weighted += posterior[time]![state]! *
                 (rows[time]![row]! - means[state]![row]!) *
                 (rows[time]![column]! - means[state]![column]!);
@@ -613,6 +632,7 @@ export class CoreSpiritGaussianHMM {
     let normalizer = logSumExp(previous);
     previous = previous.map(value => value - normalizer);
     for (let time = 1; time < rows.length; time += 1) {
+      if ((time & 63) === 0) this.checkBudget?.();
       const next = new Array<number>(this.states).fill(0);
       for (let state = 0; state < this.states; state += 1) {
         next[state] = gaussianLogDensity(rows[time]!, this.emissions[state]!) + logSumExp(
