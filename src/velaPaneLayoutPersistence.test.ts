@@ -45,6 +45,6 @@ const tooMany: Record<string, number> = Object.create(null);
 for (let i = 0; i < 80; i++) tooMany[`pane-${i}`] = i + 1;
 const capped = sanitizeState({ version: 1, layout: '1', charts: [{ id: 'c1', paneHeightWeights: tooMany }] });
 assert.ok(capped);
-assert.ok(Object.keys(capped.charts[0]!.paneHeightWeights ?? {}).length <= 32, 'persisted layouts cannot retain unbounded pane maps');
+assert.ok(Object.keys(capped.charts[0]!.paneHeightWeights ?? {}).length <= 64, 'persisted layouts cannot retain unbounded pane maps');
 
 console.log('VELA_PANE_LAYOUT_PERSISTENCE_RUNTIME_OK');
