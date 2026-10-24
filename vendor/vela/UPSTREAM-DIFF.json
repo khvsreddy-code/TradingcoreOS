@@ -1439,7 +1439,7 @@
     {
       "path": "src/core/ports/IChartRenderer.ts",
       "upstreamBlob": "1561a9bd32daf39d6491740d93cbcc81643a87bd",
-      "localBlob": "a5695ca2e063e6340ef7ca7307e8699385eaf78f",
+      "localBlob": "593bf6c8233aae5558c42c370ad265c508b58969",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1607,7 +1607,7 @@
     {
       "path": "src/renderers/native/NativeRenderer.ts",
       "upstreamBlob": "0a1d31719d49cab09baaffc251e573917df283f4",
-      "localBlob": "c6e783d1e060e470f7b78be6e55cf7e1781ca776",
+      "localBlob": "9dd03b97e9bfbd4be47d1498d776f5cb5e8f8626",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1697,7 +1697,7 @@
     {
       "path": "src/workspace/ChartCell.ts",
       "upstreamBlob": "1656ed878502465b0cbe6a43d5e816d37e1cdc16",
-      "localBlob": "6a85aa8d7f36f87dcc01ddd66769f41df399d6d2",
+      "localBlob": "850ef87d81366f1fdc3efb9918bb57c72ef8ed64",
       "patchId": "pane-layout-persistence"
     },
     {
