@@ -1059,13 +1059,17 @@ export class ChartDataPlane {
         return merged;
       })
       .finally(() => {
+        // A stale page may settle after another request has replaced it. Only the
+        // owning request may clear the in-flight state or publish a ready transition.
+        if (this.state.olderHistoryRequestKey !== requestKey) return;
         this.state.olderHistoryLoading = false;
         this.state.olderHistoryPromise = undefined;
-        if (this.state.olderHistoryRequestKey === requestKey) {
-          this.state.olderHistoryRequestKey = undefined;
-          this.state.olderHistoryPriority = undefined;
+        this.state.olderHistoryRequestKey = undefined;
+        this.state.olderHistoryPriority = undefined;
+        if (!this.disposed && this.liveCandle.isCurrentGeneration(generation)
+          && (priority === 'visible' || this.state.historyReady)) {
+          this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         }
-        if (priority === 'visible' || this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
       });
     this.state.olderHistoryPromise = promise;
     return promise;
