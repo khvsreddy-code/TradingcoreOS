@@ -392,9 +392,12 @@ export class SceneGraph {
         this.syncRetainedZ(id);
     }
 
-    /** Snapshot of the current ordering for a UI/read API: `{ id, z }` sorted by z. */
+    /** Snapshot of the current ordering for a UI/read API: `{ id, z }` back to front, in the
+     *  order the indicators paint — on a shared key, mount order (see `orderedIndicatorsForPane`). */
     indicatorZOrder(): Array<{ id: string; z: number }> {
-        return [...this.seriesZ.entries()].map(([id, z]) => ({ id, z })).sort((a, b) => a.z - b.z);
+        const mounted = new Map([...this.indicators.keys()].map((id, i) => [id, i]));
+        const at = (id: string): number => mounted.get(id) ?? Number.MAX_SAFE_INTEGER;
+        return [...this.seriesZ.entries()].map(([id, z]) => ({ id, z })).sort((a, b) => a.z - b.z || at(a.id) - at(b.id));
     }
 
     /** The pane's series z keys (each indicator, plus the candles on the price pane), sorted
