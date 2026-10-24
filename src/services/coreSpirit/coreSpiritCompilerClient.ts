@@ -2,7 +2,7 @@ import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from '.
 import type { CoreSpiritCompileResult } from './compiler';
 import type { CoreSpiritMarketBar } from './marketData';
 
-type CompilerWorkerOptions={layer?:string};
+type CompilerWorkerOptions={layer?:string;signal?:AbortSignal};
 type CompileWorkerResponse=
   | {
       type:'compiled';requestId:string;sourceVersion:number;
@@ -18,6 +18,7 @@ type PendingCompile={
   resolve:(result:CoreSpiritOffThreadCompileResult)=>void;
   reject:(error:Error)=>void;
   timeout:ReturnType<typeof setTimeout>;
+  sourceId:string;sourceVersion:number;signal?:AbortSignal;abortHandler?:()=>void;
 };
 type PendingValidation={
   resolve:(valid:boolean)=>void;
@@ -42,16 +43,38 @@ let compilerWorker:Worker|undefined;
 let compilerWorkerBootError:Error|undefined;
 let sequence=0;
 const pending=new Map<string,PendingCompile>();
+const latestCompileVersionBySource=new Map<string,number>();
+const MAX_PENDING_COMPILATIONS=32;
 const pendingValidation=new Map<string,PendingValidation>();
 const pendingReplay=new Map<string,PendingReplay>();
 
-function rejectCompilerRequests(error:Error):void{
-  for(const request of pending.values()){clearTimeout(request.timeout);request.reject(error);}
-  pending.clear();
-  for(const request of pendingValidation.values()){clearTimeout(request.timeout);request.reject(error);}
-  pendingValidation.clear();
+function abortError(message:string):Error { const error=new Error(message);error.name='AbortError';return error; }
+function cleanupCompileRequest(request:PendingCompile):void {
+  clearTimeout(request.timeout);
+  if(request.signal&&request.abortHandler)request.signal.removeEventListener('abort',request.abortHandler);
+  request.abortHandler=undefined;
 }
-
+function rejectCompileRequest(requestId:string,error:Error):void {
+  const request=pending.get(requestId);if(!request)return;
+  pending.delete(requestId);cleanupCompileRequest(request);request.reject(error);
+}
+function rejectCompilerRequests(error:Error):void {
+  for(const [id,request] of pending){pending.delete(id);cleanupCompileRequest(request);request.reject(error);}
+  for(const [id,request] of pendingValidation){pendingValidation.delete(id);clearTimeout(request.timeout);request.reject(error);}
+}
+function restartCompilerWorker(error:Error,abortedRequestId?:string):void {
+  const worker=compilerWorker;compilerWorker=undefined;compilerWorkerBootError=error;
+  try{worker?.terminate();}catch{}
+  if(abortedRequestId==null){rejectCompilerRequests(error);return;}
+  for(const [id,request] of pending){
+    pending.delete(id);cleanupCompileRequest(request);
+    request.reject(id===abortedRequestId?error:abortError('Compiler worker restarted because work was cancelled.'));
+  }
+  for(const [id,request] of pendingValidation){
+    pendingValidation.delete(id);clearTimeout(request.timeout);
+    request.reject(abortError('Compiler validation cancelled because its worker restarted.'));
+  }
+}
 function rejectReplayRequests(error:Error):void{
   for(const request of pendingReplay.values()){clearTimeout(request.timeout);request.reject(error);}
   pendingReplay.clear();
@@ -73,16 +96,12 @@ function getCompilerWorker():Worker|undefined{
     if(!message || typeof message.requestId!=='string')return;
     const request=pending.get(message.requestId);
     if(request){
-      pending.delete(message.requestId);
-      clearTimeout(request.timeout);
-      if(message.type==='compileError'){
-        request.reject(new Error(message.message || 'CoreSpirit worker compilation failed'));
-        return;
-      }
-      if(message.type!=='compiled'){
-        request.reject(new Error('Unexpected CoreSpirit compiler worker response'));
-        return;
-      }
+      if(message.type!=='compiled'&&message.type!=='compileError'){rejectCompileRequest(message.requestId,new Error('Unexpected CoreSpirit compiler worker response'));return;}
+      const latestVersion=latestCompileVersionBySource.get(request.sourceId);
+      if(request.sourceVersion>0&&latestVersion!=null&&request.sourceVersion<latestVersion){rejectCompileRequest(message.requestId,abortError('Compiler result belongs to an obsolete source version.'));return;}
+      if(message.sourceVersion!==request.sourceVersion){rejectCompileRequest(message.requestId,new Error('Compiler response source version mismatch.'));return;}
+      if(message.type==='compileError'){rejectCompileRequest(message.requestId,new Error(message.message||'CoreSpirit worker compilation failed'));return;}
+      pending.delete(message.requestId);cleanupCompileRequest(request);
       request.resolve({
         ir:message.artifact?.ir,
         artifact:message.artifact,
@@ -104,9 +123,8 @@ function getCompilerWorker():Worker|undefined{
     }
   };
   worker.onerror=(event)=>{
-    rejectCompilerRequests(new Error(event.message || 'CoreSpirit compiler worker failed'));
-    try{worker.terminate();}catch{}
-    if(compilerWorker===worker)compilerWorker=undefined;
+    const error=new Error(event.message||'CoreSpirit compiler worker failed');
+    if(compilerWorker===worker)restartCompilerWorker(error);else try{worker.terminate();}catch{}
   };
   compilerWorker=worker;
   return worker;
@@ -173,6 +191,22 @@ export async function compileCoreSpiritSourceOffThread(
   sourceId='coreSpirit-editor',
   options:CompilerWorkerOptions={},
 ):Promise<CoreSpiritOffThreadCompileResult>{
+  if(options.signal?.aborted)throw abortError('CoreSpirit compilation cancelled before admission.');
+  if(sourceVersion>0){
+    const latest=latestCompileVersionBySource.get(sourceId);
+    if(latest!=null&&sourceVersion<latest)throw abortError('CoreSpirit source version is already obsolete.');
+    if(latest==null||sourceVersion>latest){
+      latestCompileVersionBySource.set(sourceId,sourceVersion);
+      for(const key of latestCompileVersionBySource.keys()){
+        if(latestCompileVersionBySource.size<=256)break;
+        if([...pending.values()].some(request=>request.sourceId===key))continue;
+        latestCompileVersionBySource.delete(key);
+      }
+      for(const [id,request] of pending){
+        if(request.sourceId===sourceId&&request.sourceVersion>0&&request.sourceVersion<sourceVersion)rejectCompileRequest(id,abortError('Superseded by a newer CoreSpirit source version.'));
+      }
+    }
+  }
   const worker=getCompilerWorker();
   if(!worker){
     // Never run an expensive compiler pass on the browser main thread: the
@@ -181,7 +215,9 @@ export async function compileCoreSpiritSourceOffThread(
     if(typeof Worker!=='undefined')throw new Error(`CoreSpirit compiler worker could not start: ${compilerWorkerBootError?.message || 'worker unavailable'}`);
     // Node/SSR compatibility only. Browser callers fail closed above.
     const {compileCoreSpirit}=await import('./coreSpiritPipeline');
+    if(options.signal?.aborted)throw abortError('CoreSpirit compilation cancelled before fallback execution.');
     const compiled=compileCoreSpirit(source,sourceId,{layer:options.layer as any});
+    if(options.signal?.aborted)throw abortError('CoreSpirit compilation cancelled after fallback execution.');
     if(compiled.artifact && !validateExecutableArtifact(compiled.artifact)){
       throw new Error('CoreSpirit compiler fallback produced an invalid executable artifact');
     }
@@ -193,20 +229,14 @@ export async function compileCoreSpiritSourceOffThread(
   }
   const requestId=`cs-compile-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
   return new Promise((resolve,reject)=>{
-    const timeout=setTimeout(()=>{
-      const active=pending.get(requestId);
-      if(!active)return;
-      pending.delete(requestId);
-      reject(new Error('CoreSpirit compiler worker timed out; try compiling the latest source again.'));
-    },20_000);
-    pending.set(requestId,{resolve,reject,timeout});
-    try{
-      worker.postMessage({type:'compile',requestId,sourceVersion,source,sourceId,layer:options.layer});
-    }catch(error){
-      clearTimeout(timeout);
-      pending.delete(requestId);
-      reject(error instanceof Error?error:new Error(String(error)));
-    }
+    if(pending.size>=MAX_PENDING_COMPILATIONS){reject(new Error('CoreSpirit compiler queue is saturated; retry the latest source version.'));return;}
+    const timeout=setTimeout(()=>{if(pending.has(requestId))restartCompilerWorker(new Error('CoreSpirit compiler timed out; worker terminated and will restart on demand.'));},20_000);
+    const request:PendingCompile={resolve,reject,timeout,sourceId,sourceVersion,signal:options.signal};
+    pending.set(requestId,request);
+    if(options.signal){request.abortHandler=()=>restartCompilerWorker(abortError('CoreSpirit compilation cancelled.'),requestId);options.signal.addEventListener('abort',request.abortHandler,{once:true});}
+    if(options.signal?.aborted){restartCompilerWorker(abortError('CoreSpirit compilation cancelled.'),requestId);return;}
+    try{worker.postMessage({type:'compile',requestId,sourceVersion,source,sourceId,layer:options.layer});}
+    catch(error){rejectCompileRequest(requestId,error instanceof Error?error:new Error(String(error)));}
   });
 }
 

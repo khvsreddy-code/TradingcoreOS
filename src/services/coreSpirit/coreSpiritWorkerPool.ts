@@ -58,6 +58,10 @@ export type CoreSpiritWorkerRunResult = {
 };
 
 type DirtyRange = { from:number; to:number };
+const MAX_QUEUED_WORKER_JOBS = 64;
+const MAX_CONTEXTS_PER_WORKER = 8;
+const WORKER_JOB_TIMEOUT_MS = 20_000;
+function abortError(message:string):Error { const error=new Error(message); error.name='AbortError'; return error; }
 
 type WorkerJob = {
   artifact:CoreSpiritExecutableArtifact;
@@ -69,6 +73,11 @@ type WorkerJob = {
   resolve:(value:CoreSpiritWorkerRunResult)=>void;
   reject:(reason:unknown)=>void;
   priority:0|1|2|3|4;
+  generation:number;
+  enqueuedAt:number;
+  signal?:AbortSignal;
+  abortHandler?:()=>void;
+  settled:boolean;
   graphSnapshot?:CoreSpiritGraphSnapshot;
   graphBaseSymbol?:string;
   graphBaseTimeframe?:string;
@@ -84,6 +93,7 @@ type WorkerSlot = {
   generation:number;
   contexts:Set<string>;
   job?:WorkerJob;
+  timeout?:ReturnType<typeof setTimeout>;
 };
 
 type WorkerRunEnvelope = {
@@ -136,6 +146,10 @@ export class CoreSpiritWorkerPool {
   private readonly contextGraphRevisions = new Map<string,number>();
   private readonly contextHMMArtifacts = new Map<string,string>();
   private readonly contextRuntimeOptions = new Map<string,string>();
+  private readonly contextGenerations = new Map<string,number>();
+  private requestSequence = 0;
+  private readonly maxQueuedJobs = MAX_QUEUED_WORKER_JOBS;
+  private readonly maxContextsPerWorker = MAX_CONTEXTS_PER_WORKER;
   private readonly fallbackContexts = new Map<string,FallbackRuntimeContext>();
 
   constructor(maxWorkers?:number) {
@@ -149,16 +163,18 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions;signal?:AbortSignal},
   ):Promise<CoreSpiritWorkerRunResult> {
+    if(options?.signal?.aborted)throw abortError('CoreSpirit request cancelled before compilation.');
     const [{loadOrCompileCoreSpiritArtifact},{compileCoreSpiritArtifactOffThread}]=await Promise.all([
       import('./artifactCache'),
       import('./coreSpiritCompilerClient'),
     ]);
     const artifact=await loadOrCompileCoreSpiritArtifact(source,sourceId,{
       backend:'worker-vm',
-      compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,compileOptions),
+      compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,{...compileOptions,signal:options?.signal}),
     });
+    if(options?.signal?.aborted)throw abortError('CoreSpirit request cancelled after compilation.');
     return this.runArtifact(artifact,undefined,bars,sourceId,options);
   }
 
@@ -169,6 +185,9 @@ export class CoreSpiritWorkerPool {
     sourceId='coreSpirit',
     options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
   ):Promise<CoreSpiritWorkerRunResult> {
+    const contextKey=options?.contextKey || sourceId;
+    const signal=options?.signal;
+    if(signal?.aborted)return Promise.reject(abortError('CoreSpirit execution cancelled before admission.'));
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
       // A browser must never fall back to interpreting a full history on the UI
@@ -177,16 +196,14 @@ export class CoreSpiritWorkerPool {
         return Promise.reject(new Error('CoreSpirit chart execution requires Web Worker support; inline browser-thread execution is disabled.'));
       }
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
-      return this.runFallback(
-        artifact,bars,sourceId,options?.contextKey||sourceId,
-        Math.max(1,Math.floor(options?.datasetVersion||1)),options?.dirtyRange,
-        options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,
-        options?.hmmArtifacts,options?.runtimeOptions,options?.readOnly===true,options?.suppressExternalEffectsForRun===true,
-      );
+      const generation=(this.contextGenerations.get(contextKey)??0)+1;this.contextGenerations.set(contextKey,generation);
+      return this.runFallback(artifact,bars,sourceId,contextKey,Math.max(1,Math.floor(options?.datasetVersion||1)),options?.dirtyRange,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,options?.hmmArtifacts,options?.runtimeOptions,options?.readOnly===true,options?.suppressExternalEffectsForRun===true).then(result=>{
+        if(signal?.aborted||this.contextGenerations.get(contextKey)!==generation)throw abortError('CoreSpirit fallback result belongs to an obsolete generation.');
+        return result;
+      });
     }
 
     return new Promise((resolve,reject)=>{
-      const contextKey=options?.contextKey || sourceId;
       const job:WorkerJob={
         artifact:artifact as CoreSpiritExecutableArtifact,
         sourceId,
@@ -199,9 +216,8 @@ export class CoreSpiritWorkerPool {
         // Use the declared execution target/mode, not the human-readable
         // sourceId, to prioritize live chart work. Vela's instance IDs are
         // generated and often do not contain the word "chart".
-        priority:options?.runtimeOptions?.executionTarget==='chart'
-          ? (options.runtimeOptions.executionMode==='realtime'?1:2)
-          : sourceId.includes('chart')?3:4,
+        priority:options?.runtimeOptions?.executionTarget==='chart'?(options.runtimeOptions.executionMode==='realtime'?0:1):sourceId.includes('chart')?2:4,
+        generation:this.contextGenerations.get(contextKey)??0,enqueuedAt:Date.now(),signal,settled:false,
         graphSnapshot:options?.graphSnapshot,
         graphBaseSymbol:options?.graphBaseSymbol,
         graphBaseTimeframe:options?.graphBaseTimeframe,
@@ -211,40 +227,73 @@ export class CoreSpiritWorkerPool {
         runtimeOptions:options?.runtimeOptions,
       };
 
-      // Market updates are snapshots, not a durable event queue. If this chart
-      // context is already queued behind a busy worker, only the newest snapshot
-      // can produce useful output; reject superseded promises so no caller hangs.
       for(let index=this.queue.length-1;index>=0;index-=1){
         const queued=this.queue[index]!;
         if(queued.contextKey!==contextKey)continue;
-        this.queue.splice(index,1);
-        queued.reject(new Error('CoreSpirit worker request superseded by a newer snapshot for the same context.'));
+        this.queue.splice(index,1);this.settleJob(queued,abortError('Superseded by a newer snapshot for this context.'));
       }
+      if(this.queue.length>=this.maxQueuedJobs){
+        let worstIndex=-1;
+        for(let index=0;index<this.queue.length;index+=1){
+          const candidate=this.queue[index]!,worst=worstIndex>=0?this.queue[worstIndex]!:undefined;
+          if(candidate.priority>job.priority&&(!worst||candidate.priority>worst.priority||(candidate.priority===worst.priority&&candidate.enqueuedAt<worst.enqueuedAt)))worstIndex=index;
+        }
+        if(worstIndex<0){this.settleJob(job,new Error('CoreSpirit worker queue is saturated; request was not admitted.'));return;}
+        const [evicted]=this.queue.splice(worstIndex,1);
+        if(evicted)this.settleJob(evicted,abortError('Background job pre-empted by visible chart work.'));
+      }
+      job.generation=(this.contextGenerations.get(contextKey)??0)+1;this.contextGenerations.set(contextKey,job.generation);
       this.queue.push(job);
-      this.queue.sort((a,b)=>a.priority-b.priority);
-      this.dispatch();
+      if(signal){job.abortHandler=()=>this.cancelJob(job,abortError('CoreSpirit worker request cancelled.'));signal.addEventListener('abort',job.abortHandler,{once:true});}
+      const activeSlot=this.contextSlots.get(contextKey);
+      if(activeSlot?.busy&&activeSlot.job&&activeSlot.job.generation<job.generation)this.retireSlot(activeSlot,abortError('Superseded by a newer CoreSpirit worker generation.'),false);
+      if(signal?.aborted){this.cancelJob(job,abortError('CoreSpirit worker request cancelled.'));return;}
+      this.sortQueue();this.dispatch();
     });
   }
 
   dispose():void {
-    this.disposed=true;
-    for(const slot of this.slots.splice(0)){
-      try{slot.job?.reject(new Error('CoreSpirit worker pool disposed'));}catch{}
-      try{slot.worker.terminate();}catch{}
-    }
-    for(const job of this.queue) job.reject(new Error('CoreSpirit worker pool disposed'));
-    this.queue.length=0;
+    this.disposed=true;const error=new Error('CoreSpirit worker pool disposed');
+    for(const slot of [...this.slots])this.retireSlot(slot,error,false);
+    for(const job of this.queue.splice(0))this.settleJob(job,error);
+    this.contextGenerations.clear();
     this.contextSlots.clear();
     this.sharedBuffers.clear();
     this.contextArtifacts.clear();
     this.contextGraphRevisions.clear();
     this.contextHMMArtifacts.clear();
-    this.contextRuntimeOptions.clear();
-    this.fallbackContexts.clear();
+    this.contextRuntimeOptions.clear();this.fallbackContexts.clear();
   }
-
+  private settleJob(job:WorkerJob,error?:unknown,value?:CoreSpiritWorkerRunResult):void {
+    if(job.settled)return;job.settled=true;
+    if(job.signal&&job.abortHandler)job.signal.removeEventListener('abort',job.abortHandler);job.abortHandler=undefined;
+    if(error!==undefined)job.reject(error);else job.resolve(value!);
+  }
+  private cancelJob(job:WorkerJob,error:Error):void {
+    if(job.settled)return;const index=this.queue.indexOf(job);
+    if(index>=0){this.queue.splice(index,1);this.settleJob(job,error);this.dispatch();return;}
+    const slot=this.contextSlots.get(job.contextKey);
+    if(slot?.job===job){this.retireSlot(slot,error);return;}this.settleJob(job,error);
+  }
+  private effectivePriority(job:WorkerJob):number {
+    const ageBoost=Math.floor(Math.max(0,Date.now()-job.enqueuedAt)/10_000);
+    return Math.max(job.priority===0?0:1,job.priority-ageBoost);
+  }
+  private sortQueue():void {this.queue.sort((a,b)=>this.effectivePriority(a)-this.effectivePriority(b)||a.enqueuedAt-b.enqueuedAt);}
+  private retireSlot(slot:WorkerSlot,error:Error,dispatch=true):void {
+    if(slot.timeout)clearTimeout(slot.timeout);slot.timeout=undefined;
+    const active=slot.job;slot.job=undefined;slot.busy=false;if(active)this.settleJob(active,error);
+    try{slot.worker.terminate();}catch{}
+    const index=this.slots.indexOf(slot);if(index>=0)this.slots.splice(index,1);
+    for(const [key,value] of this.contextSlots){if(value!==slot)continue;
+      this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);
+      this.contextHMMArtifacts.delete(key);this.contextRuntimeOptions.delete(key);this.sharedBuffers.delete(key);
+      if(!this.queue.some(job=>job.contextKey===key))this.contextGenerations.delete(key);
+    }
+    slot.contexts.clear();if(dispatch)this.dispatch();
+  }
   private dispatch():void {
-    if(this.disposed)return;
+    if(this.disposed)return;this.sortQueue();
 
     // Search for any runnable context rather than head-of-line blocking on a
     // chart whose own worker is busy. The queue itself contains only one pending
@@ -258,10 +307,10 @@ export class CoreSpiritWorkerPool {
         if(slot?.busy)continue;
         if(!slot){
           slot=this.slots.find(candidate=>!candidate.busy);
+          if(slot&&slot.contexts.size>=this.maxContextsPerWorker){this.retireSlot(slot,new Error('Worker context cache rotated to bound memory.'),false);slot=undefined;}
           if(!slot&&this.slots.length<this.maxWorkers)slot=this.createSlot();
           if(!slot)continue;
-          this.contextSlots.set(job.contextKey,slot);
-          slot.contexts.add(job.contextKey);
+          this.contextSlots.set(job.contextKey,slot);slot.contexts.add(job.contextKey);
         }
         this.queue.splice(index,1);
         this.attachJob(slot,job);
@@ -282,7 +331,7 @@ export class CoreSpiritWorkerPool {
     slot.busy=true;
     slot.job=job;
 
-    const requestId=Date.now().toString(36)+':'+(++slot.generation);
+    const requestId='cs-run-'+(++this.requestSequence).toString(36)+'-'+(++slot.generation).toString(36);
     const sharedBuffer=this.getOrCreateSharedBuffer(job.contextKey,job.bars.length);
     const sharedMarket=sharedBuffer
       ? sharedBuffer.writeBars(job.bars,job.datasetVersion,job.dirtyRange?.from ?? 0,job.dirtyRange?.to ?? job.bars.length)
@@ -292,7 +341,7 @@ export class CoreSpiritWorkerPool {
     // artifact is fully verified by installArtifact() inside the execution worker;
     // an already loaded context has already passed that same verification.
     if (!job.artifact?.abi?.artifactHash || !job.artifact.ir) {
-      job.reject(new Error('CoreSpirit worker job requires a valid executable artifact envelope'));
+      this.settleJob(job,new Error('CoreSpirit worker job requires a valid executable artifact envelope'));
       slot.busy=false;
       slot.job=undefined;
       this.dispatch();
@@ -334,15 +383,12 @@ export class CoreSpiritWorkerPool {
       graphBaseTimeframe:job.graphBaseTimeframe,
     } : null;
 
-    const cleanup=()=>{
-      slot.busy=false;
-      slot.job=undefined;
-      this.dispatch();
-    };
+    const cleanup=()=>{if(slot.timeout)clearTimeout(slot.timeout);slot.timeout=undefined;if(slot.job===job){slot.busy=false;slot.job=undefined;}this.dispatch();};
 
     slot.worker.onmessage=(event:MessageEvent<unknown>)=>{
       const message=event.data;
-      if(!isRecord(message)||message.requestId!==requestId)return;
+      if(slot.job!==job||!isRecord(message)||message.requestId!==requestId)return;
+      if(job.generation!==this.contextGenerations.get(job.contextKey)){this.retireSlot(slot,abortError('CoreSpirit result belongs to an obsolete generation.'));return;}
       try{
         if(message.type==='result'){
           if(artifactChanged){
@@ -351,22 +397,14 @@ export class CoreSpiritWorkerPool {
           }
           if(artifactChanged||hmmArtifactsChanged)this.contextHMMArtifacts.set(job.contextKey,hmmSignature);
           if(job.graphSnapshot&&graphChanged)this.contextGraphRevisions.set(job.contextKey,job.graphSnapshot.revision);
-          job.resolve(normalizeResult(message));
+          this.settleJob(job,undefined,normalizeResult(message));
         }
-        else if(message.type==='error')job.reject(new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
+        else if(message.type==='error')this.settleJob(job,new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
         else return;
-      }catch(error){job.reject(error);}
+      }catch(error){this.settleJob(job,error instanceof Error?error:new Error(String(error)));}
       cleanup();
     };
-
-    slot.worker.onerror=(event)=>{
-      job.reject(new Error(event.message||'CoreSpirit worker error'));
-      try{slot.worker.terminate();}catch{}
-      const index=this.slots.indexOf(slot);
-      if(index>=0)this.slots.splice(index,1);
-      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.contextHMMArtifacts.delete(key);this.contextRuntimeOptions.delete(key);this.sharedBuffers.delete(key);}}
-      cleanup();
-    };
+    slot.worker.onerror=(event)=>this.retireSlot(slot,new Error(event.message||'CoreSpirit worker error'));
 
     const mode:WorkerRunEnvelope['mode'] =
       !job.readOnly &&
@@ -376,6 +414,8 @@ export class CoreSpiritWorkerPool {
       job.dirtyRange.from>=Math.max(0,job.bars.length-2)
         ? 'incremental'
         : 'historical';
+
+    slot.timeout=setTimeout(()=>{if(slot.job===job)this.retireSlot(slot,new Error('CoreSpirit worker timed out; it was terminated and will restart on demand.'));},WORKER_JOB_TIMEOUT_MS);
 
     const envelope:WorkerRunEnvelope={
       type:'run',
@@ -399,10 +439,7 @@ export class CoreSpiritWorkerPool {
         envelope,
         sharedMarket && !sharedMarket.shared ? [sharedMarket.buffer] : [],
       );
-    }catch(error){
-      job.reject(error);
-      cleanup();
-    }
+    }catch(error){this.retireSlot(slot,error instanceof Error?error:new Error(String(error)));}
   }
 
   private getOrCreateSharedBuffer(contextKey:string,length:number):CoreSpiritSharedMarketBuffer|undefined {
