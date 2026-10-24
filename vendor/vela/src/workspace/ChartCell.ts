@@ -1539,7 +1539,15 @@ export class ChartCell {
         const chart = this.inner;
         const saved = this.state.paneHeightWeights;
         if (!chart || !saved) return;
-        for (const pane of chart.panes.list()) {
+        const panes = chart.panes.list();
+        const livePaneIds = new Set(panes.map((pane) => pane.id));
+        // A removed indicator pane may later be recreated with the same stable id.
+        // Forget only identities that disappeared, so their saved weights can be applied
+        // again without overriding weights on still-mounted panes during ordinary changes.
+        for (const restoredId of this.restoredPaneWeights) {
+            if (!livePaneIds.has(restoredId)) this.restoredPaneWeights.delete(restoredId);
+        }
+        for (const pane of panes) {
             const weight = saved[pane.id];
             if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0 || weight > 100) continue;
             if (this.restoredPaneWeights.has(pane.id)) continue;
