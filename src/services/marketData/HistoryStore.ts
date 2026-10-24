@@ -1,6 +1,7 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
+import { candleTimestampMs, mergeCanonicalCandleRows } from './chartCandleEvents';
 
-type Bucket = { data: HistoricalCandle[]; updatedAt: number; oldestAt: number; newestAt: number; target: number; loading?: Promise<HistoricalCandle[]> };
+type Bucket = { data: HistoricalCandle[]; updatedAt: number; oldestAt: number; newestAt: number; target: number; revision: number; estimatedBytes: number; loading?: Promise<HistoricalCandle[]> };
 
 /** Shared in-memory candle store. History is reusable across chart switches and is
  * deliberately independent from React/chart lifecycle. */
@@ -18,7 +19,11 @@ export class HistoryStore {
   }
   getStale(broker: string, symbol: string, timeframe: string): HistoricalCandle[] | undefined { const key=this.key(broker,symbol,timeframe); const bucket=this.buckets.get(key); return bucket ? this.touch(key,bucket).data : undefined; }
   set(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 25_000) {
-    const data = this.merge([], rows).slice(-this.maxCandles);
+    const key = this.key(broker, symbol, timeframe);
+    const previous = this.buckets.get(key);
+    // A shorter or later-arriving response must not erase known non-overlapping history.
+    // Incoming rows remain authoritative when a timestamp is present in both sets.
+    const data = this.merge(previous?.data ?? [], rows).slice(-this.maxCandles);
     if (!data.length) return data;
     let oldestAt = Number.POSITIVE_INFINITY;
     let newestAt = Number.NEGATIVE_INFINITY;
@@ -29,9 +34,8 @@ export class HistoryStore {
       if (timestamp > newestAt) newestAt = timestamp;
     }
     if (!Number.isFinite(oldestAt) || !Number.isFinite(newestAt)) return data;
-    const key = this.key(broker, symbol, timeframe);
     this.buckets.delete(key);
-    this.buckets.set(key, { data, updatedAt: Date.now(), oldestAt, newestAt, target });
+    this.buckets.set(key, { data, updatedAt: Date.now(), oldestAt, newestAt, target, revision: (previous?.revision ?? 0) + 1, estimatedBytes: data.length * 80 });
     this.trimBuckets();
     return data;
   }
@@ -44,26 +48,35 @@ export class HistoryStore {
     const bucket = this.buckets.get(key);
     if (!bucket) return this.set(broker, symbol, timeframe, [row], target);
     this.touch(key, bucket);
-    const timestamp = Date.parse(String(row.timestamp));
-    if (!Number.isFinite(timestamp)) return bucket.data;
+    const timestamp = candleTimestampMs(row.timestamp);
+    if (timestamp == null) return bucket.data;
     const last = bucket.data[bucket.data.length - 1];
-    const lastTimestamp = last ? Date.parse(String(last.timestamp)) : NaN;
-    if (Number.isFinite(lastTimestamp) && timestamp === lastTimestamp) bucket.data[bucket.data.length - 1] = row;
-    else if (!Number.isFinite(lastTimestamp) || timestamp > lastTimestamp) bucket.data.push(row);
+    const lastTimestamp = last ? candleTimestampMs(last.timestamp) : undefined;
+    if (lastTimestamp != null && Math.floor(timestamp / 1000) === Math.floor(lastTimestamp / 1000)) bucket.data[bucket.data.length - 1] = row;
+    else if (lastTimestamp == null || timestamp > lastTimestamp) bucket.data.push(row);
     else return bucket.data;
     if (bucket.data.length > this.maxCandles) bucket.data.splice(0, bucket.data.length - this.maxCandles);
     bucket.updatedAt = Date.now();
     bucket.target = target;
+    bucket.revision += 1;
+    bucket.estimatedBytes = bucket.data.length * 80;
     bucket.oldestAt = Date.parse(String(bucket.data[0]?.timestamp));
     bucket.newestAt = Date.parse(String(bucket.data[bucket.data.length - 1]?.timestamp));
     return bucket.data;
   }
-  merge(a: HistoricalCandle[], b: HistoricalCandle[]) {
-    const map = new Map<number, HistoricalCandle>();
-    for (const row of [...a, ...b]) { const t = Date.parse(String(row.timestamp)); if (Number.isFinite(t)) map.set(Math.floor(t / 1000), row); }
-    return [...map.entries()].sort((x,y)=>x[0]-y[0]).map(x=>x[1]).slice(-this.maxCandles);
+  merge(a: HistoricalCandle[], b: HistoricalCandle[]) { return mergeCanonicalCandleRows(a, b, this.maxCandles); }
+  estimatedBytesFor(broker: string, symbol: string, timeframe: string): number {
+    return this.buckets.get(this.key(broker, symbol, timeframe))?.estimatedBytes ?? 0;
   }
-  range(broker: string, symbol: string, timeframe: string) { const b=this.buckets.get(this.key(broker,symbol,timeframe)); return b ? {oldestAt:b.oldestAt,newestAt:b.newestAt,count:b.data.length,target:b.target,updatedAt:b.updatedAt} : undefined; }
+  stats() {
+    let candleCount = 0; let estimatedBytes = 0;
+    for (const bucket of this.buckets.values()) { candleCount += bucket.data.length; estimatedBytes += bucket.estimatedBytes; }
+    return Object.freeze({ buckets: this.buckets.size, candleCount, estimatedBytes, maxCandlesPerBucket: this.maxCandles, maxBuckets: this.maxBuckets });
+  }
+  range(broker: string, symbol: string, timeframe: string) {
+    const b = this.buckets.get(this.key(broker, symbol, timeframe));
+    return b ? { oldestAt:b.oldestAt, newestAt:b.newestAt, count:b.data.length, target:b.target, updatedAt:b.updatedAt, revision:b.revision, estimatedBytes:b.estimatedBytes } : undefined;
+  }
   getBefore(broker: string, symbol: string, timeframe: string, beforeTimestamp: string, limit = 1000): HistoricalCandle[] {
     const key = this.key(broker, symbol, timeframe);
     const bucket = this.buckets.get(key);

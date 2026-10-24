@@ -20,6 +20,8 @@ const PRIORITY: Record<HistoryRequestPriority, number> = { initial: -10, visible
  */
 export class ChartHistoryCoordinator {
   readonly maxConcurrent = 6;
+  /** Bound pending closures and prevent chart-mount bursts retaining unbounded work. */
+  readonly maxQueued = 128;
   /** Reserve most request slots for user-visible history. */
   readonly maxConcurrentWarm = 2;
   private active = 0;
@@ -56,6 +58,23 @@ export class ChartHistoryCoordinator {
 
     const promise = new Promise<T>((resolve, reject) => {
       const item: QueueItem<T> = { key, priority: PRIORITY[priority], sequence: ++this.sequence, run, resolve, reject };
+      if (this.queue.length >= this.maxQueued) {
+        let worstIndex = -1;
+        for (let i = 0; i < this.queue.length; i += 1) {
+          const candidate = this.queue[i]!;
+          const worst = worstIndex >= 0 ? this.queue[worstIndex]! : undefined;
+          if (!worst || candidate.priority > worst.priority || (candidate.priority === worst.priority && candidate.sequence < worst.sequence)) worstIndex = i;
+        }
+        const worst = worstIndex >= 0 ? this.queue[worstIndex]! : undefined;
+        // Visible work may displace speculative warm-up, never vice versa.
+        if (!worst || worst.priority <= item.priority) {
+          reject(new Error('Chart history queue is saturated; request was not admitted.'));
+          return;
+        }
+        this.queue.splice(worstIndex, 1);
+        this.queuedByKey.delete(worst.key);
+        worst.reject(new Error('Chart history request was pre-empted by higher-priority visible work.'));
+      }
       this.queue.push(item);
       this.queuedByKey.set(key, item);
       this.sortQueue();
@@ -99,6 +118,7 @@ export class ChartHistoryCoordinator {
       inflight: this.inflight.size,
       maxConcurrent: this.maxConcurrent,
       maxConcurrentWarm: this.maxConcurrentWarm,
+      maxQueued: this.maxQueued,
     };
   }
 }

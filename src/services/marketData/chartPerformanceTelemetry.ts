@@ -1,3 +1,5 @@
+import type { CandleMutationKind } from './chartCandleEvents';
+
 export type ChartPerformanceSnapshot = {
   key: string;
   packets: number;
@@ -38,6 +40,12 @@ export type ChartPerformanceSnapshot = {
   initialHistoryCandles: number;
   olderHistoryCandles: number;
   historyPrependOps: number;
+  candleChanges: number;
+  staleHistoryResponses: number;
+  incrementalInvalidations: number;
+  fullReplayInvalidations: number;
+  invalidationMs: number;
+  estimatedHistoryBytes: number;
   computeCoalescedTicks: number;
   stageMs: Readonly<{ transport:number; normalization:number; ingestion:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
@@ -84,6 +92,12 @@ type MutableMetrics = {
   initialHistoryCandles: number;
   olderHistoryCandles: number;
   historyPrependOps: number;
+  candleChanges: number;
+  staleHistoryResponses: number;
+  incrementalInvalidations: number;
+  fullReplayInvalidations: number;
+  invalidationMs: number;
+  estimatedHistoryBytes: number;
   stageMs: { transport:number; normalization:number; ingestion:number; compute:number; patch:number; renderer:number; frame:number };
 };
 
@@ -120,6 +134,7 @@ class ChartPerformanceTelemetry {
         tickToComputeCount: 0, tickToPatchCount: 0, tickToRenderCount: 0,
         tickToComputeCursor: 0, tickToPatchCursor: 0, tickToRenderCursor: 0,
         lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0, indicatorIncrementalUpdateCount: 0, initialHistoryLoadMs: 0, olderHistoryLoadMs: 0, initialHistoryCandles: 0, olderHistoryCandles: 0, historyPrependOps: 0,
+        candleChanges: 0, staleHistoryResponses: 0, incrementalInvalidations: 0, fullReplayInvalidations: 0, invalidationMs: 0, estimatedHistoryBytes: 0,
         stageMs: { transport:0, normalization:0, ingestion:0, compute:0, patch:0, renderer:0, frame:0 },
       };
       this.metrics.set(key, value);
@@ -190,6 +205,20 @@ class ChartPerformanceTelemetry {
     }
   }
 
+  recordCandleChange(key: string, kind: CandleMutationKind, durationMs = 0): void {
+    const m = this.entry(key);
+    m.candleChanges += 1;
+    if (kind === 'append' || kind === 'replace') m.incrementalInvalidations += 1;
+    else m.fullReplayInvalidations += 1;
+    m.invalidationMs += Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
+  }
+
+  recordStaleResponse(key: string): void { this.entry(key).staleHistoryResponses += 1; }
+
+  recordCacheMemory(key: string, estimatedBytes: number): void {
+    this.entry(key).estimatedHistoryBytes = Math.max(0, Math.floor(Number(estimatedBytes) || 0));
+  }
+
   private recordSample(
     samples: Float64Array,
     metrics: MutableMetrics,
@@ -258,7 +287,7 @@ class ChartPerformanceTelemetry {
       firstPacketAt:0, lastPacketAt:0, computeUpdates:0, renderUpdates:0, computeCoalescedTicks:0, packetsAtLastCompute:0,
       tickToComputeSamples:new Float64Array(SAMPLE_CAPACITY), tickToPatchSamples:new Float64Array(SAMPLE_CAPACITY), tickToRenderSamples:new Float64Array(SAMPLE_CAPACITY),
       tickToComputeCount:0, tickToPatchCount:0, tickToRenderCount:0, tickToComputeCursor:0, tickToPatchCursor:0, tickToRenderCursor:0, lastPacketAtForLatency:0,
-      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, initialHistoryLoadMs:0, olderHistoryLoadMs:0, initialHistoryCandles:0, olderHistoryCandles:0, historyPrependOps:0, stageMs:{transport:0,normalization:0,ingestion:0,compute:0,patch:0,renderer:0,frame:0},
+      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, initialHistoryLoadMs:0, olderHistoryLoadMs:0, initialHistoryCandles:0, olderHistoryCandles:0, historyPrependOps:0, candleChanges:0, staleHistoryResponses:0, incrementalInvalidations:0, fullReplayInvalidations:0, invalidationMs:0, estimatedHistoryBytes:0, stageMs:{transport:0,normalization:0,ingestion:0,compute:0,patch:0,renderer:0,frame:0},
     };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     const elapsedMs = m.firstPacketAt && m.lastPacketAt ? Math.max(1, m.lastPacketAt - m.firstPacketAt) : 0;
@@ -303,6 +332,12 @@ class ChartPerformanceTelemetry {
       initialHistoryCandles: m.initialHistoryCandles,
       olderHistoryCandles: m.olderHistoryCandles,
       historyPrependOps: m.historyPrependOps,
+      candleChanges: m.candleChanges,
+      staleHistoryResponses: m.staleHistoryResponses,
+      incrementalInvalidations: m.incrementalInvalidations,
+      fullReplayInvalidations: m.fullReplayInvalidations,
+      invalidationMs: m.invalidationMs,
+      estimatedHistoryBytes: m.estimatedHistoryBytes,
       computeCoalescedTicks: m.computeCoalescedTicks,
       stageMs: Object.freeze({ ...m.stageMs }),
     };

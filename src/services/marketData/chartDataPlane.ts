@@ -10,6 +10,7 @@ import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
 import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, historyWarmTarget, initialHistoryCandles, shouldLoadOlderHistory } from './chartHistoryCoordinator';
 import { marketDataGraph } from '../core/data/marketDataGraph';
 import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
+import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutationKind } from './chartCandleEvents';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -76,8 +77,8 @@ export type ChartDataPlaneSnapshot = Readonly<{
 }>;
 
 export type DataPlaneEvent =
-  | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history' | 'recovery'; snapshot: ChartDataPlaneSnapshot; olderAdded?: number; requestedLimit?: number; correctedBars?: number }
-  | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot; transition?: LiveCandleTransitionKind }
+  | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history' | 'recovery'; snapshot: ChartDataPlaneSnapshot; change?: CandleDatasetChange; olderAdded?: number; requestedLimit?: number; correctedBars?: number }
+  | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot; change?: CandleDatasetChange; transition?: LiveCandleTransitionKind }
   /** A quote whose exchange trade time is unknown. Consumers may update quote UI, but must not mutate candles. */
   | { type: 'quote'; snapshot: ChartDataPlaneSnapshot }
   | { type: 'status'; status: 'loading' | 'ready' | 'error'; error?: string; snapshot: ChartDataPlaneSnapshot };
@@ -246,6 +247,19 @@ export class ChartDataPlane {
     return this.snapshot();
   }
 
+  private makeCandleChange(kind: CandleMutationKind, previousRevision: number, from: number, to: number, startedAt = globalThis.performance?.now?.() ?? Date.now(), timestampMs?: number): CandleDatasetChange {
+    const change = createCandleDatasetChange({
+      datasetKey: this.key, datasetGeneration: this.liveCandle.generation,
+      previousRevision, revision: this.state.revision, kind, from, to,
+      candleCount: this.canonicalPlane.length, timestampMs,
+    });
+    chartPerformanceTelemetry.recordCandleChange(this.key, kind,
+      Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - startedAt));
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    chartPerformanceTelemetry.recordCacheMemory(this.key, historyStore.estimatedBytesFor(this.brokerId, this.instrumentKey, interval));
+    return change;
+  }
+
   private emit(event: DataPlaneEvent): void {
     const snapshot = event.snapshot || this.snapshot();
     const normalized = { ...event, snapshot } as DataPlaneEvent;
@@ -260,6 +274,8 @@ export class ChartDataPlane {
   }
 
   private setCandles(rows: HistoricalCandle[], reason: 'cache' | 'history' | 'older-history'): void {
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    const previousRevision = this.state.revision;
     this.state.candles = normalizeHistory(rows);
     this.state.columns = undefined;
     this.state.compatibilityCandles = this.state.candles;
@@ -269,7 +285,8 @@ export class ChartDataPlane {
       this.state.revision += 1;
       this.state.compatibilityRevision = this.state.revision;
       this.syncCanonical();
-      this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
+      const change = this.makeCandleChange(reason === 'older-history' ? 'backfill' : 'reset', previousRevision, 0, this.canonicalPlane.length, startedAt);
+      this.emit({ type: 'snapshot', reason, snapshot: this.snapshot(), change });
     }
   }
 
@@ -437,6 +454,7 @@ export class ChartDataPlane {
     }
 
     const ingestionStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const previousRevision = this.state.revision;
     const bar = transition.bar;
     const canonicalPoint = {
       time: Math.floor(Date.parse(bar.timestamp) / 1000),
@@ -472,12 +490,8 @@ export class ChartDataPlane {
       CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,
       bar,
     );
-    this.emit({
-      type: 'tick',
-      bucketChanged: transition.bucketChanged,
-      transition: transition.kind,
-      snapshot: this.snapshot(),
-    });
+    const change = this.makeCandleChange(transition.bucketChanged ? 'append' : 'replace', previousRevision, Math.max(0, this.canonicalPlane.length - 1), this.canonicalPlane.length, ingestionStartedAt, Date.parse(bar.timestamp));
+    this.emit({ type: 'tick', bucketChanged: transition.bucketChanged, transition: transition.kind, snapshot: this.snapshot(), change });
     chartPerformanceTelemetry.recordStage(
       this.key,
       'ingestion',
@@ -563,7 +577,8 @@ export class ChartDataPlane {
   }): number {
     const incoming = normalizeHistory(columnarHistoryToCandles(columns, 500));
     if (!incoming.length) return 0;
-
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    const previousChartRevision = this.state.revision;
     const before = this.canonicalPlane.revision;
     const view = this.canonicalPlane.read();
     const tailIndex = view.length - 1;
@@ -604,6 +619,9 @@ export class ChartDataPlane {
       return row;
     });
 
+    const priorOldestTime = view.length ? Number(view.time[0]) * 1000 : Number.POSITIVE_INFINITY;
+    const incomingOldestTime = incoming.reduce((min, row) => Math.min(min, Date.parse(row.timestamp)), Number.POSITIVE_INFINITY);
+    const mutationKind: CandleMutationKind = incomingOldestTime < priorOldestTime ? 'backfill' : 'correction';
     this.canonicalPlane.reconcileHistoricalCandleRows(reconciled);
     if (this.canonicalPlane.revision === before) return 0;
 
@@ -624,6 +642,8 @@ export class ChartDataPlane {
     marketDataGraph.syncBase(this.instrumentKey, this.timeframe, mirror);
     this.state.compatibilityCandles = [];
     this.state.compatibilityRevision = -1;
+    const change = this.makeCandleChange(mutationKind, previousChartRevision, 0, this.canonicalPlane.length, startedAt);
+    this.emit({ type: 'snapshot', reason: 'recovery', correctedBars, snapshot: this.snapshot(), change });
     return correctedBars;
   }
 
@@ -703,6 +723,8 @@ export class ChartDataPlane {
   }
 
   private mergeOlder(rows: HistoricalCandle[], reason: 'older-history', requestedLimit?: number): HistoricalCandle[] {
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    const previousRevision = this.state.revision;
     const currentRows = this.state.candles.length
       ? this.state.candles
       : this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
@@ -717,11 +739,14 @@ export class ChartDataPlane {
     this.state.revision += 1;
     this.syncCanonical();
     const olderAdded = Math.max(0, merged.length - previousLength);
-    this.emit({ type: 'snapshot', reason, snapshot: this.snapshot(), olderAdded, requestedLimit });
+    const change = this.makeCandleChange('backfill', previousRevision, 0, this.canonicalPlane.length, startedAt);
+    this.emit({ type: 'snapshot', reason, snapshot: this.snapshot(), change, olderAdded, requestedLimit });
     return merged;
   }
 
   private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds'; source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number> }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    const previousRevision = this.state.revision;
     const candlesForCache = columnarHistoryToCandles(columns, Math.min(5000, requestedLimit));
     if (!candlesForCache.length) return [];
     const retainedForCache = candlesForCache.slice(-MAX_HISTORY_CANDLES);
@@ -740,7 +765,8 @@ export class ChartDataPlane {
     this.state.lastHistoryLoadAt = Date.now();
     this.state.olderHistoryExhausted = false;
     this.state.historyReady = true;
-    this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
+    const change = this.makeCandleChange('reset', previousRevision, 0, this.canonicalPlane.length, startedAt);
+    this.emit({ type: 'snapshot', reason, snapshot: this.snapshot(), change });
     return retainedForCache;
   }
 
@@ -786,10 +812,16 @@ export class ChartDataPlane {
       const cachedCount = residentCount();
       if (cachedCount >= requestedLimit) return Promise.resolve(cachedCount);
       const requestKey = `${this.key}:initial:${requestedLimit}`;
+      const generation = this.liveCandle.generation;
       return chartHistoryCoordinator.request(requestKey, async () => {
         const rows = await tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, requestedLimit);
         const normalized = normalizeHistory(rows);
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          chartPerformanceTelemetry.recordStaleResponse(this.key);
+          return [];
+        }
         if (normalized.length) historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit);
+        chartPerformanceTelemetry.recordCacheMemory(this.key, historyStore.estimatedBytesFor(this.brokerId, this.instrumentKey, interval));
         return normalized;
       }, 'warm').then(rows => rows.length);
     };
@@ -844,6 +876,7 @@ export class ChartDataPlane {
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requestedLimit), 'initial')
       .then(columns => {
         if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          chartPerformanceTelemetry.recordStaleResponse(this.key);
           return this.getCompatibilityCandles(requestedLimit);
         }
         if (!columns || columns.time.length === 0) {
@@ -916,6 +949,7 @@ export class ChartDataPlane {
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, initialLimit), 'initial')
       .then(rows => {
         if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          chartPerformanceTelemetry.recordStaleResponse(this.key);
           return this.getCompatibilityCandles(initialLimit);
         }
         const normalized = normalizeHistory(rows);
@@ -1008,10 +1042,15 @@ export class ChartDataPlane {
       this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     }
     const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const generation = this.liveCandle.generation;
     this.state.olderHistoryRequestKey = requestKey;
     this.state.olderHistoryPriority = priority;
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataBefore(this.instrumentKey, interval, oldest.timestamp, limit), priority)
       .then(rows => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          chartPerformanceTelemetry.recordStaleResponse(this.key);
+          return this.state.candles.length ? this.state.candles : this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
+        }
         const older = normalizeHistory(rows).filter(row => Date.parse(row.timestamp) < Date.parse(oldest.timestamp));
         if (!older.length) { this.state.olderHistoryExhausted = true; return currentRows; }
         historyStore.mergeInto(this.brokerId, this.instrumentKey, interval, older, MAX_HISTORY_CANDLES);
