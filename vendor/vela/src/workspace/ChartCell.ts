@@ -291,8 +291,8 @@ export class ChartCell {
     private indicatorValuesOn = true;
     /** Pane ids whose saved weights have already been restored; never fight user resizing. */
     private readonly restoredPaneWeights = new Set<string>();
-    /** Keep not-yet-mounted saved panes through progressive history/manifest restoration. */
-    private paneHistoryReady = false;
+    /** Keep not-yet-mounted saved panes until chart loading and manifest restoration settle. */
+    private paneRestoreSettled = false;
     private destroyed = false;
 
     constructor(
@@ -443,7 +443,7 @@ export class ChartCell {
             this.restorePaneHeightWeights();
             // Some host manifests resolve after first paint. Preserve unmatched saved pane
             // ids until the indicator ledger is settled; otherwise discard panes actually gone.
-            this.paneHistoryReady = this.deps.manifestSettled();
+            this.paneRestoreSettled = this.deps.manifestSettled();
             this.state.paneHeightWeights = this.readPaneHeightWeights();
             this.volumeMayBePending = false;
             this.deps.onStateDirty();
@@ -458,7 +458,7 @@ export class ChartCell {
         });
         // The loading affordance and the watermark never share the canvas.
         this.inner.on('load:start', ({ symbol }) => {
-            this.paneHistoryReady = false;
+            this.paneRestoreSettled = false;
             this.watermark?.setLoading(true);
             // Probe the new symbol's metadata HERE rather than waiting for `market:changed`
             // (which fires only once the new bars are painted): the session toggle and the
@@ -1146,7 +1146,7 @@ export class ChartCell {
             this.pendingManifestNames = null;
             this.restoreWorkspaceScaleState();
             this.restorePaneHeightWeights();
-            this.paneHistoryReady = this.deps.manifestSettled();
+            this.paneRestoreSettled = this.deps.manifestSettled();
             this.state.paneHeightWeights = this.readPaneHeightWeights();
             return;
         }
@@ -1155,7 +1155,7 @@ export class ChartCell {
         }
         this.restoreWorkspaceScaleState();
         this.restorePaneHeightWeights();
-        this.paneHistoryReady = this.deps.manifestSettled();
+        this.paneRestoreSettled = this.deps.manifestSettled();
         this.state.paneHeightWeights = this.readPaneHeightWeights();
     }
 
@@ -1524,7 +1524,7 @@ export class ChartCell {
             const weight = pane.heightWeight;
             if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) maxWeight = Math.max(maxWeight, weight);
         }
-        const pending = !this.paneHistoryReady ? this.state.paneHeightWeights : undefined;
+        const pending = !this.paneRestoreSettled ? this.state.paneHeightWeights : undefined;
         // A saved pane may still be waiting for its indicator to mount. Include it in the
         // common scale factor so normalization preserves ratios between live and pending panes.
         if (pending) {
@@ -1589,7 +1589,7 @@ export class ChartCell {
         if (!this.inner || this.destroyed) return;
         this.state.paneHeightWeights = cs.paneHeightWeights;
         this.restoredPaneWeights.clear();
-        this.paneHistoryReady = false;
+        this.paneRestoreSettled = false;
         if (cs.priceStyle && cs.priceStyle !== this.priceStyle) this.setPriceStyle(cs.priceStyle);
         if (cs.watermark !== undefined && cs.watermark !== this.watermarkOn) this.setWatermarkVisible(cs.watermark);
         if (cs.replayWatermark !== undefined && cs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(cs.replayWatermark);
@@ -1632,7 +1632,7 @@ export class ChartCell {
             }
             this.restoreWorkspaceScaleState();
             this.restorePaneHeightWeights();
-            this.paneHistoryReady = this.deps.manifestSettled();
+            this.paneRestoreSettled = this.deps.manifestSettled();
             this.state.paneHeightWeights = this.readPaneHeightWeights();
         };
         if (Object.keys(next).length > 0) {
