@@ -19,6 +19,8 @@ assert.match(limits, /CORESPIRIT_BATCH_MAX_MEMORY_BYTES/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_EXECUTION_MS/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_TRAINING_WINDOW_ROWS/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_FIT_EVERY/);
+assert.match(limits, /HARD_MAX_TRAINING_WINDOW_ROWS = 4_096/);
+assert.match(limits, /HARD_MAX_TRAINING_FIT_EVERY = 65_536/);
 assert.match(limits, /CORESPIRIT_RESEARCH_HARD_MAX_ROWS = 1_000_000/);
 assert.match(routes, /const MAX_ROWS = getCoreSpiritResearchLimits\('interactive'\)\.maxRows/,
   'synchronous training payloads must remain separately capped');
