@@ -20,6 +20,19 @@ export interface CoreSpiritDirtyNode {
 
 export interface CoreSpiritDirtyRange { readonly from: number; readonly to: number; }
 
+export interface CoreSpiritDirtyCheckpoint {
+  /** Next bar index represented by the restored state; must be before the correction. */
+  readonly nextBarIndex: number;
+  readonly modelVersion: string;
+  readonly kernelType: string;
+  readonly kernelVersion: string | number;
+  readonly parametersSignature: string;
+  readonly dataRevision: string | number;
+  readonly inputDependencies: readonly string[];
+  /** Set only after the snapshot store validated every identity field against the active run. */
+  readonly compatibleWithCurrentExecution: true;
+}
+
 export interface CoreSpiritHistoricalCorrection {
   readonly changedRange: CoreSpiritDirtyRange;
   /** State snapshot contains bars strictly before this next execution index. */
@@ -201,16 +214,31 @@ export class CoreSpiritDirtyGraph {
     sources: readonly CoreSpiritDirtySource[],
     changedRange: CoreSpiritDirtyRange,
     executionEnd: number,
-    checkpointNextBarIndex?: number,
+    checkpoint?: number | CoreSpiritDirtyCheckpoint,
   ): CoreSpiritDirtyExecutionPlan {
     const base = this.planRange(sources, changedRange, executionEnd);
     const end = Math.max(0, Math.floor(Number.isFinite(executionEnd) ? executionEnd : 0));
     const from = Math.min(end, Math.max(0, Math.floor(Number.isFinite(changedRange.from) ? changedRange.from : 0)));
     const to = Math.min(end, Math.max(from, Math.floor(Number.isFinite(changedRange.to) ? changedRange.to : from)));
     const requiresStateRestore = [...base.nodes].some(id => this.nodesById.get(id)?.stateful === true);
-    const checkpointIsSafe = Number.isSafeInteger(checkpointNextBarIndex)
-      && (checkpointNextBarIndex as number) >= 0
-      && (checkpointNextBarIndex as number) <= from;
+    // A bare bar index cannot prove that the saved state belongs to this
+    // kernel version, parameter set, dependency chain or corrected data revision.
+    // Legacy numeric checkpoints are deliberately rejected and trigger full replay.
+    const checkpointIsSafe = typeof checkpoint === 'object' && checkpoint !== null &&
+      checkpoint.compatibleWithCurrentExecution === true &&
+      Number.isSafeInteger(checkpoint.nextBarIndex) && checkpoint.nextBarIndex >= 0 &&
+      checkpoint.nextBarIndex <= from &&
+      typeof checkpoint.modelVersion === 'string' && checkpoint.modelVersion.trim().length > 0 &&
+      typeof checkpoint.kernelType === 'string' && checkpoint.kernelType.trim().length > 0 &&
+      (typeof checkpoint.kernelVersion === 'string' || Number.isSafeInteger(checkpoint.kernelVersion)) &&
+      String(checkpoint.kernelVersion).trim().length > 0 &&
+      typeof checkpoint.parametersSignature === 'string' && checkpoint.parametersSignature.trim().length > 0 &&
+      (typeof checkpoint.dataRevision === 'string' ||
+        (typeof checkpoint.dataRevision === 'number' && Number.isSafeInteger(checkpoint.dataRevision))) &&
+      String(checkpoint.dataRevision).trim().length > 0 &&
+      Array.isArray(checkpoint.inputDependencies) &&
+      checkpoint.inputDependencies.every(value => typeof value === 'string' && value.trim().length > 0);
+    const checkpointNextBarIndex = checkpointIsSafe ? (checkpoint as CoreSpiritDirtyCheckpoint).nextBarIndex : undefined;
     const replayFrom = !requiresStateRestore ? from : checkpointIsSafe ? checkpointNextBarIndex as number : 0;
     const correction: CoreSpiritHistoricalCorrection = Object.freeze({
       changedRange: Object.freeze({ from, to }),
