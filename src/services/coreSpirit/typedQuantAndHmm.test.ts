@@ -138,6 +138,16 @@ assert(deferredPosterior.every((value, index) => value === checkpointPosterior[i
 deferredFilterHmm.fitFinal();
 assert(deferredFilterHmm.exportTrainedState().maxObservations === 128,
   'final fit should seal a finite research window rather than embedding all historical observations');
+const ringBufferHmm = new CoreSpiritGaussianHMM({
+  states: 3, maxObservations: 16, fitEvery: 64, fitIterations: 1, refreshPosteriorOnObserve: false,
+});
+for (let index = 0; index < 60; index += 1) {
+  ringBufferHmm.observe([Math.sin(index / 7), Math.cos(index / 9)], 1_720_000_000 + index * 60_000, ['return', 'volatility']);
+}
+assert(ringBufferHmm.observe([0.35, -0.18], 1_720_000_000 + 59 * 60_000, ['return', 'volatility']) !== null,
+  'the bounded ring buffer should replace a developing latest bar after repeated wraps');
+ringBufferHmm.fitFinal();
+assert(Boolean(ringBufferHmm.exportTrainedState()), 'ring-buffered chronological observations should remain fit-ready after wraparound');
 const hmm = new CoreSpiritGaussianHMM({ states: 3, emission: 'gaussian', covariance: 'full', fitEvery: 4, fitIterations: 2 });
 let state: number | null = null;
 for (let i = 0; i < 72; i += 1) {
