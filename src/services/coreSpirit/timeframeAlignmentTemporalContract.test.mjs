@@ -119,7 +119,7 @@ assert.equal(synchronized.get('ALPHA::1m')?.value, 2);
 const synchronizedRevisionFence = synchronizeMarketSnapshots([
   {symbol:'ALPHA',timeframe:'5m',timestamp:2000,value:20,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
   {symbol:'ALPHA',timeframe:'5m',timestamp:3000,value:30,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
-  {symbol:'ALPHA',timeframe:'5m',timestamp:3000,value:33,source:'feed',state:'developing',confirmationPhase:'developing',revision:2,dataRevision:'alpha-5m-r2'},
+  {symbol:'ALPHA',timeframe:'5',timestamp:3000,value:33,source:'feed',state:'developing',confirmationPhase:'developing',revision:2,dataRevision:'alpha-5m-r2'},
 ], {
   asOfTimestamp:4000, alignment:'last-confirmed', executionMode:'historical',
 });
@@ -127,6 +127,15 @@ assert.equal(synchronizedRevisionFence.get('ALPHA::5m')?.timestamp, 2000,
   'a newer developing revision must fence off older confirmed revisions of the same candle');
 assert.equal(synchronizedRevisionFence.get('ALPHA::5m')?.value, 20,
   'synchronization must fall back only to an earlier candle, never an earlier revision of the same candle');
+const reversedRevisionFence = synchronizeMarketSnapshots([
+  {symbol:'ALPHA',timeframe:'5',timestamp:3000,value:33,source:'feed',state:'developing',confirmationPhase:'developing',revision:2,dataRevision:'alpha-5m-r2'},
+  {symbol:'ALPHA',timeframe:'5m',timestamp:3000,value:30,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
+  {symbol:'ALPHA',timeframe:'5m',timestamp:2000,value:20,source:'feed',state:'confirmed',confirmationPhase:'confirmed',revision:1,dataRevision:'alpha-5m-r1'},
+], {
+  asOfTimestamp:4000, alignment:'last-confirmed', executionMode:'historical',
+});
+assert.equal(reversedRevisionFence.get('ALPHA::5m')?.value, 20,
+  'revision fencing must be independent of delivery order and canonicalize equivalent timeframe spellings');
 
 const parent = [{ timestamp:0, endTimestamp:300_000 }];
 const fullIntrabars = [0,60_000,120_000,180_000,240_000].map(timestamp => ({ timestamp }));
