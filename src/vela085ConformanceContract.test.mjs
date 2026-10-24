@@ -35,7 +35,7 @@ assert.match(engine, /setMarket\(/, 'market switches must have an explicit engin
 assert.match(engine, /resetHistoryTracking|historyComplete\(\)/, 'history readiness must reset per market load');
 assert.match(engine, /waitsForHistory/, 'only opt-in native indicators are gated by history completion');
 
-assert.match(sceneGraph, /applyPatch|applyOperations|replace/, 'the native scene graph must support replacement and incremental patch semantics');
+assert.match(sceneGraph, /this\.retained\.upsert\(|this\.retained\.remove\(/, 'the native retained scene graph records insertions and removals');
 assert.match(scenePatch, /replace|insert|update|remove/, 'the scene patch vocabulary must encode full and incremental mutations');
 assert.match(sceneDiff, /markers/, 'CoreSpirit scene diffs must retain marker updates');
 assert.match(sceneDiff, /priceLines/, 'CoreSpirit scene diffs must retain price-line updates');
