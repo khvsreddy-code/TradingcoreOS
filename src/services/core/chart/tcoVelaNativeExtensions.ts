@@ -67,6 +67,12 @@ const regimeLayer: RendererLayerDefinition = {
 
 registerRendererLayer(regimeLayer);
 
+/**
+ * This indicator reads a bounded trailing window (at most 500 bars) and reacts to each
+ * incremental bar update. It intentionally does not set waitsForHistory: true; gating it
+ * until the provider finishes older-history paging would add latency without improving
+ * correctness for this bounded calculation.
+ */
 class TcoRegimeRibbonIndicator implements NativeIndicator {
   private ctx: NativeIndicatorContext | null = null;
   private inputs: Record<string, InputValue> = {};
