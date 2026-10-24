@@ -49,6 +49,8 @@ app.use((req: TradingCoreRequest, res, next) => {
 // enforce row/feature limits, and these parsers run before the global 512 KiB parser.
 app.use('/api/predictions/production', express.json({ limit: '3mb' }));
 app.use('/api/corespirit/models', express.json({ limit: '4mb' }));
+// Chunk ingestion has its own immutable per-chunk 4 MiB serialized limit; give JSON framing room above it.
+app.use('/api/corespirit/dataset-batches', express.json({ limit: '5mb' }));
 app.use(express.json({ limit: '512kb' }));
 app.use(createRateLimiter({ windowMs: 60_000, max: 180, name: 'api', key: (req) => req.ip || 'unknown' }));
 
