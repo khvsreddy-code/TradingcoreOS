@@ -227,7 +227,7 @@ export function runStrategySimulation(input:{
     return lotFloor(Math.max(0,max),config.lotSize);
   };
   const execute=(args:{orderId:string;signalId:string;symbol:string;side:SimulationSide;qty:number;price:number;original:SimulationIntent;current:SimulationIntent;
-    feeState:{fixedFeeCharged:boolean};time:number;barIndex:number;phase:'open'|'intrabar';protective:boolean;partial:boolean;tag?:string}):{opened:number;closed:number}=>{
+    requestedTotal:number;remainingAfter:number;feeState:{fixedFeeCharged:boolean};time:number;barIndex:number;phase:'open'|'intrabar';protective:boolean;partial:boolean;tag?:string}):{opened:number;closed:number}=>{
     const qty=lotFloor(args.qty,config.lotSize),notional=qty*args.price;
     const fixed=args.feeState.fixedFeeCharged?0:config.brokeragePerOrder,brokerage=notional*config.brokerageBps/10_000;
     const exchange=notional*config.exchangeFeeBps/10_000,tax=notional*config.taxesBps/10_000,fee=fixed+brokerage+exchange+tax;
@@ -251,8 +251,8 @@ export function runStrategySimulation(input:{
     }
     p.quantity=Math.abs(next)<1e-10?0:next;
     record({eventType:args.protective?'protective_exit':args.partial?'partial_fill':'fill',orderId:args.orderId,signalId:args.signalId,
-      symbol:args.symbol,side:args.side,originalIntent:args.original,currentIntent:args.current,requestedQuantity:qty,filledQuantity:qty,
-      remainingQuantity:0,fillPrice:rounded(args.price),notional:rounded(notional),fee:rounded(fee),
+      symbol:args.symbol,side:args.side,originalIntent:args.original,currentIntent:args.current,requestedQuantity:args.requestedTotal,filledQuantity:qty,
+      remainingQuantity:Math.max(0,args.remainingAfter),fillPrice:rounded(args.price),notional:rounded(notional),fee:rounded(fee),
       costs:Object.freeze({fixedBrokerage:rounded(fixed),brokerage:rounded(brokerage),exchangeFees:rounded(exchange),taxes:rounded(tax)}),
       details:Object.freeze({protective:args.protective,tag:args.tag??null,costAssumptions:'configured simulation costs'}),
       timestampMs:args.time,barIndex:args.barIndex,phase:args.phase});
@@ -288,8 +288,9 @@ export function runStrategySimulation(input:{
       if(qty<=0)continue;
       const synthetic:SimulationIntent=Object.freeze({...b.intent,orderId:id,side,type:'market',quantity:b.remaining,
         limitPrice:undefined,stopPrice:undefined,stopLossPrice:undefined,takeProfitPrice:undefined});
-      execute({orderId:id,signalId:b.intent.signalId,symbol:b.symbol,side,qty,price,original:b.intent,current:synthetic,feeState:b,
-        time:frame.time,barIndex:frame.index,phase,protective:true,partial:qty<b.remaining,tag:targetExit?'take-profit':'stop-loss'});
+      execute({orderId:id,signalId:b.intent.signalId,symbol:b.symbol,side,qty,price,original:b.intent,current:synthetic,
+        requestedTotal:b.remaining,remainingAfter:Math.max(0,b.remaining-qty),feeState:b,time:frame.time,barIndex:frame.index,phase,
+        protective:true,partial:qty<b.remaining,tag:targetExit?'take-profit':'stop-loss'});
       b.remaining=lotFloor(b.remaining-qty,config.lotSize);liquidity.set(b.symbol,lotFloor(available-qty,config.lotSize));
       if(b.remaining<=1e-10)brackets.delete(id);pruneBrackets();
     }
@@ -423,7 +424,8 @@ export function runStrategySimulation(input:{
       }
       const partial=riskQty<order.remaining;
       const {opened}=execute({orderId:order.intent.orderId,signalId:order.intent.signalId,symbol:order.intent.symbol,side:order.intent.side,qty:riskQty,
-        price,original:order.original,current:order.intent,feeState:order,time:frame.time,barIndex:frame.index,phase:candidate.phase,
+        price,original:order.original,current:order.intent,requestedTotal:order.intent.quantity,
+        remainingAfter:Math.max(0,order.remaining-riskQty),feeState:order,time:frame.time,barIndex:frame.index,phase:candidate.phase,
         protective:false,partial,tag:order.intent.tag});
       order.filled=rounded(order.filled+riskQty);order.remaining=lotFloor(Math.max(0,order.intent.quantity-order.filled),config.lotSize);
       order.status=order.remaining<=1e-10?'filled':'partially-filled';
@@ -494,7 +496,7 @@ export function runStrategySimulation(input:{
     summary:Object.freeze({initialCash:rounded(config.initialCash),endingCash:rounded(cash),endingEquity:rounded(currentEquity),
       netProfit:rounded(currentEquity-config.initialCash),realizedNetPnl:rounded(realizedNet),feesPaid:rounded(feesPaid),
       fillCount:orderedLedger.filter(e=>['fill','partial_fill','protective_exit'].includes(e.eventType)).length,
-      rejectedOrderCount:allOrders.filter(o=>o.status==='rejected').length,cancelledOrderCount:allOrders.filter(o=>o.status==='cancelled').length,
+      rejectedOrderCount:orderedLedger.filter(e=>e.eventType==='order_rejected').length,cancelledOrderCount:allOrders.filter(o=>o.status==='cancelled').length,
       expiredOrderCount:allOrders.filter(o=>o.status==='expired').length,openOrderCount:allOrders.filter(o=>active(o.status)).length,
       closedTradeCount:trades.length,maxGrossExposure:rounded(maxGross)}),
   });

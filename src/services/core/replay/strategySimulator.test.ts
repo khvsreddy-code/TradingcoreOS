@@ -35,6 +35,28 @@ const betweenBars=runStrategySimulation({strategyId:'between-bars',sourceProgram
 const betweenFill=betweenBars.ledger.find(e=>e.eventType==='fill'&&e.orderId==='between-order');
 assert.equal(betweenFill?.timestampMs,Date.parse(bars[1]!.timestamp),'a signal between bars becomes eligible on the next bar, without an extra bar of delay');
 
+const gapBars=[bars[0]!,{...bars[1]!,open:106,high:108,low:104,close:107},...bars.slice(2)];
+const gapStop=runStrategySimulation({strategyId:'gap-stop',sourceProgramChecksum:checksum,datasetId:'gap-dataset',
+ datasets:[{symbol:'NSE:TEST',timeframe:'5m',bars:gapBars}],
+ actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(gapBars[0]!.timestamp),intent:{
+   orderId:'gap-stop-1',signalId:'gap-stop-signal',symbol:'NSE:TEST',side:'buy',type:'stop',quantity:1,stopPrice:103,
+ }}],config});
+const gapStopFill=gapStop.ledger.find(e=>e.eventType==='fill'&&e.orderId==='gap-stop-1');
+assert.ok((gapStopFill?.fillPrice??0)>=106,'a stop gapped through at the open fills at the open plus configured adverse impact');
+
+const gapLimit=runStrategySimulation({strategyId:'gap-limit',sourceProgramChecksum:checksum,datasetId:'gap-dataset',
+ datasets:[{symbol:'NSE:TEST',timeframe:'5m',bars}],
+ actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{
+   orderId:'gap-limit-1',signalId:'gap-limit-signal',symbol:'NSE:TEST',side:'buy',type:'limit',quantity:1,limitPrice:104,
+ }}],config});
+const gapLimitFill=gapLimit.ledger.find(e=>e.eventType==='fill'&&e.orderId==='gap-limit-1');
+assert.ok((gapLimitFill?.fillPrice??Infinity)<104,'a marketable limit receives a better open price, adjusted only by modeled impact');
+
+const deniedAction=runStrategySimulation({strategyId:'risk-denied',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
+ actions:[{kind:'reject',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),orderId:'denied-1',signalId:'denied-signal',
+   symbol:'NSE:TEST',side:'buy',reason:'portfolio exposure cap'}],config});
+assert.equal(deniedAction.summary.rejectedOrderCount,1,'host risk rejection is included in simulator summary');
+
 
 const stopLimit=runStrategySimulation({strategyId:'stop-limit-gap',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
  actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{
