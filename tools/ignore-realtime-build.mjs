@@ -202,8 +202,25 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   try {
     // The current checkout is authoritative; previous deployment commits may need
     // a one-commit fetch because Vercel's default source clone can be shallow.
-    if (!ensureCommitAvailable(currentSha) || !ensureCommitAvailable(previousSha)) {
-      return 1;
+    if (!ensureCommitAvailable(currentSha)) return 1;
+    if (!ensureCommitAvailable(previousSha)) {
+      // If Vercel supplies a previous-deployment SHA that is not fetchable from the
+      // build checkout, compare the current commit to its verified parent. This keeps
+      // frontend-only commits from needlessly rebuilding the gateway in a shallow
+      // checkout. Gateway changes in the current commit are still detected below.
+      try {
+        execFileSync('git', ['fetch', '--no-tags', '--depth=2', 'origin', currentSha], {
+          stdio: 'pipe',
+          encoding: 'utf8',
+          timeout: 15_000,
+        });
+        previousSha = execFileSync('git', ['rev-parse', '--verify', `${currentSha}^1`], { encoding: 'utf8' }).trim();
+        if (!ensureCommitAvailable(previousSha)) return 1;
+        console.warn('[realtime-ignore] Previous deployment SHA unavailable; using the verified current-parent diff.');
+      } catch (error) {
+        console.warn('[realtime-ignore] Could not verify the current parent; rebuilding safely.', error instanceof Error ? error.message : '');
+        return 1;
+      }
     }
     const changed = readChangedPaths(previousSha, currentSha);
     const relevant = changed.filter(isRealtimeRuntimePath);
