@@ -70,7 +70,7 @@ export class OAuthService {
       const adapter = BrokerRegistry.getAdapter(brokerId);
       const consumed = await OAuthStateRepository.consume(state, userId, adapter.brokerId);
       if (!consumed) return { success: false, error: 'OAuth state is invalid, expired, or already used' };
-      const tokenResult = await adapter.exchangeCodeForToken(code, redirectUri);
+      const tokenResult = await adapter.exchangeCodeForToken(code, redirectUri, undefined, userId);
 
       if (!tokenResult.success || !tokenResult.rawAccessToken) {
         return { success: false, error: tokenResult.error || 'Token exchange failed' };
@@ -176,11 +176,11 @@ export class OAuthService {
       const token = EncryptionService.decrypt(session.accessTokenEncrypted);
       const checks = { ...empty };
       const calls: Array<[keyof typeof checks, () => Promise<unknown>]> = [
-        ['profile', () => adapter.getProfile(token)],
-        ['funds', () => adapter.getFunds(token)],
-        ['holdings', () => adapter.getHoldings(token)],
-        ['positions', () => adapter.getPositions(token)],
-        ['orders', () => adapter.getOrders(token)],
+        ['profile', () => adapter.getProfile(token, userId)],
+        ['funds', () => adapter.getFunds(token, userId)],
+        ['holdings', () => adapter.getHoldings(token, userId)],
+        ['positions', () => adapter.getPositions(token, userId)],
+        ['orders', () => adapter.getOrders(token, userId)],
       ];
 
       // Run independently so one optional portfolio endpoint cannot hide which
