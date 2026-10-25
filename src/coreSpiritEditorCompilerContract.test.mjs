@@ -87,7 +87,7 @@ console.log('CORESPIRIT_FOUR_LEVEL_EDITOR_GUIDANCE_OK');
 
 assert.match(editor,/initialCapital = 100000/,
   'trader starter must set explicit initial capital for backtest assumptions');
-assert.match(editor,/commission = 0\\.05/,
+assert.match(editor,/commission = 0\.05/,
   'trader starter must include transaction commission');
 assert.match(editor,/slippage = 2/,
   'trader starter must include an explicit slippage assumption');
