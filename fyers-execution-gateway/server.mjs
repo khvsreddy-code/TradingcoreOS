@@ -170,7 +170,7 @@ async function admitFyersTransaction(context) {
   const lockDeadline = Date.now() + 2_500;
   let locked = false;
   while (!locked && Date.now() < lockDeadline) {
-    locked = (await redisCommand(['SET', lockKey, lockOwner, 'NX', 'PX', 2_000])) === 'OK';
+    locked = (await redisCommand(['SET', lockKey, lockOwner, 'NX', 'PX', 5_000])) === 'OK';
     if (!locked) await wait(25);
   }
   if (!locked) throw Object.assign(new Error('Unable to acquire shared FYERS transaction quota lock'), { statusCode: 503 });
@@ -276,11 +276,12 @@ const server = http.createServer(async (req, res) => {
     const accessToken = String(body.accessToken || '');
     if (!accessToken) return json(res, 400, { success: false, error: 'FYERS access token is required' });
     validateExecutionContext(body.order, body.executionContext);
+    // Validate the complete order before reserving a distributed API attempt.
+    const fyersPayload = buildFyersPayload(body.order);
+    enforceAccountOrderRate(String(body.executionContext.accountKey));
     // Every real order attempt shares FYERS's account/category counters with the
     // REST API service. No per-instance fallback is allowed when Redis is absent.
     await admitFyersTransaction(body.executionContext);
-    enforceAccountOrderRate(String(body.executionContext.accountKey));
-    const fyersPayload = buildFyersPayload(body.order);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
     try {
