@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { normalizeCoreSpiritSource } from './services/coreSpirit/syntax.ts';
-import { getCoreSpiritAuthoringProfile, detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
+import { getCoreSpiritAuthoringProfile, detectCoreSpiritAuthoringLevel, buildCoreSpiritAuthoringExperience, getCoreSpiritDebugProfile } from './services/coreSpirit/coreSpiritAuthoring.ts';
 import { CORE_SCRIPT_LANGUAGE, CORE_SCRIPT_LANGUAGE_VERSION } from './services/coreSpirit/coreScriptLanguagePolicy.ts';
 
 const beginner = `
@@ -140,3 +140,41 @@ assert.ok(quantProfile.showIr);
 assert.ok(systemProfile.showCapabilities);
 
 console.log('CORESCRIPT_PROGRESSIVE_UNIFIED_LANGUAGE_CONTRACT_OK');
+
+
+// The editor may change its affordances, but source inference and language identity
+// remain stable across all four views. A low-level selection never grants authority.
+const systemInBeginnerView = buildCoreSpiritAuthoringExperience(system, 'beginner');
+assert.equal(systemInBeginnerView.language, 'CoreScript');
+assert.equal(systemInBeginnerView.languageVersion, CORE_SCRIPT_LANGUAGE_VERSION);
+assert.equal(systemInBeginnerView.selectedLevel, 'beginner');
+assert.equal(systemInBeginnerView.requiredLevel, 'system');
+assert.equal(systemInBeginnerView.selectedViewMeetsSourceRequirements, false);
+assert.equal(systemInBeginnerView.recommendedDebugView, 'execution-trace');
+assert.ok(systemInBeginnerView.notice.includes('requires the system authoring surface'));
+assert.deepEqual(systemInBeginnerView.progression, ['trader', 'quant', 'system']);
+assert.ok(systemInBeginnerView.requiredProfile.showCapabilities);
+assert.ok(!systemInBeginnerView.selectedProfile.showCapabilities);
+
+const sameSystemSourceInSystemView = buildCoreSpiritAuthoringExperience(system, 'system');
+assert.equal(sameSystemSourceInSystemView.requiredLevel, systemInBeginnerView.requiredLevel);
+assert.equal(sameSystemSourceInSystemView.language, systemInBeginnerView.language);
+assert.equal(sameSystemSourceInSystemView.selectedViewMeetsSourceRequirements, true);
+assert.deepEqual(sameSystemSourceInSystemView.diagnostics, systemInBeginnerView.diagnostics);
+
+const traderInBeginnerView = buildCoreSpiritAuthoringExperience(trader, 'beginner');
+assert.equal(traderInBeginnerView.requiredLevel, 'trader');
+assert.equal(traderInBeginnerView.recommendedDebugView, 'signal-context');
+assert.ok(getCoreSpiritDebugProfile('signal-context').panels.includes('bar-context'));
+
+const quantInTraderView = buildCoreSpiritAuthoringExperience(quant, 'trader');
+assert.equal(quantInTraderView.requiredLevel, 'quant');
+assert.equal(quantInTraderView.recommendedDebugView, 'feature-inspection');
+assert.ok(getCoreSpiritDebugProfile('feature-inspection').panels.includes('lookback'));
+assert.ok(getCoreSpiritDebugProfile('feature-inspection').panels.includes('leakage'));
+assert.ok(getCoreSpiritDebugProfile('execution-trace').panels.includes('capabilities'));
+
+const invalidExperience = buildCoreSpiritAuthoringExperience('on market.tick: ???', 'beginner');
+assert.equal(invalidExperience.sourceAnalysisValid, false);
+assert.ok(invalidExperience.diagnostics.length > 0);
+console.log('CORESCRIPT_PROGRESSIVE_AUTHORING_EXPERIENCE_OK');
