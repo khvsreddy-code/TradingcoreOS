@@ -4,7 +4,7 @@ import {
   searchCoreSpiritCopilotKnowledge,
 } from './services/coreSpirit/copilotKnowledge.ts';
 
-assert.match(CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION, /corespirit-knowledge-v1:1:corespirit-compiler-v100:corespirit-runtime-v100/);
+assert.match(CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION, /corespirit-knowledge-v1\.0\.0:1:corespirit-compiler-v100:corespirit-runtime-v100/);
 
 const ema = searchCoreSpiritCopilotKnowledge('ema', 8);
 assert.ok(ema.length > 0, 'standard-library search should return EMA entries');
