@@ -299,7 +299,24 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
     const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities, session.userId);
     if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
     res.setHeader('Cache-Control', 'private, max-age=15');
-    return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
+    return res.json({
+      success: true,
+      data: candles,
+      requested: limit,
+      returned: candles.length,
+      // This endpoint returns one bounded request, not a complete historical dataset.
+      historyExhausted: false,
+      paginationSupported: false,
+      historyCompleteness: {
+        status: candles.length >= limit ? 'page-limit-reached' : 'bounded-range-partial',
+        requestedBars: limit,
+        returnedBars: candles.length,
+        providerPageLimit: 2_000,
+        datasetComplete: false,
+        moreMayExist: candles.length >= limit,
+        paginationSupported: false,
+      },
+    });
   } catch (err: any) {
     const status = Number(err?.status) === 429 ? 429 : Number(err?.status) === 403 ? 403 : Number(err?.status) === 504 ? 504 : 502;
     if (status === 429) res.setHeader('Retry-After','1');
