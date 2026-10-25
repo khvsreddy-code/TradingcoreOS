@@ -204,7 +204,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     if(req.body?.repairOnCompileError===true&&initialCompilerErrors.length&&!analysisOnly){
       // Hard cost cap: one optional repair call, no recursive repair loop.
       repairAttempts=1;
-      const repairContent=userContent+'\n\nONE REPAIR PASS ONLY. Attempt 1 produced these independent compiler diagnostics:\n'+JSON.stringify(initialCompilerErrors.slice(0,40).map(item=>({severity:item.severity,code:item.code,message:item.message,line:item.line,column:item.column}))).slice(0,10000)+'\nReturn a complete revised CoreScript source. Fix only reported defects; preserve intended signals, risk controls and causal semantics. Do not claim the revision is valid.';
+      const repairContent=userContent+'\n\nONE REPAIR PASS ONLY. Attempt 1 generated this candidate CoreScript source (untrusted; repair this exact draft rather than restarting from the original source):\n'+generated.source+'\n\nThe candidate summary was:\n'+generated.summary.slice(0,2000)+'\n\nIndependent compiler diagnostics for that exact candidate:\n'+JSON.stringify(initialCompilerErrors.slice(0,40).map(item=>({severity:item.severity,code:item.code,message:item.message,line:item.line,column:item.column}))).slice(0,10000)+'\nReturn a complete revised CoreScript source. Fix only reported defects; preserve intended signals, risk controls and causal semantics. Do not claim the revision is valid.';
       if(stream)emitSse(res,'status',{phase:'repair',message:'Compiler errors found. Running the single permitted repair pass.'});
       let repairedRaw='';
       if(stream){
