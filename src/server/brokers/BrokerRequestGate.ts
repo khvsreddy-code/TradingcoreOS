@@ -170,8 +170,16 @@ export async function withBrokerRequestGate<T>(
       const owner = crypto.randomUUID();
       let acquired = false;
       try {
-        while (!(acquired = await distributed.acquireLock(lockKey, owner, 2_000, effectiveSignal))) {
-          await sleepWithSignal(Math.min(50, limit.minIntervalMs), effectiveSignal);
+        const lockDeadline = Date.now() + 3_000;
+        while (!acquired && Date.now() < lockDeadline) {
+          acquired = await distributed.acquireLock(lockKey, owner, 5_000, effectiveSignal);
+          if (!acquired) await sleepWithSignal(Math.min(50, Math.max(10, limit.minIntervalMs)), effectiveSignal);
+        }
+        if (!acquired) {
+          throw Object.assign(new Error('Timed out acquiring shared broker quota coordination lock.'), {
+            status: 503,
+            code: 'BROKER_COORDINATION_LOCK_TIMEOUT',
+          });
         }
 
         const now = Date.now();
@@ -239,6 +247,17 @@ export async function withBrokerRequestGate<T>(
         const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
         if (spacing) await sleepWithSignal(spacing, effectiveSignal);
         await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, effectiveSignal);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        const details = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+        if (typeof details.code === 'string' && details.code.startsWith('BROKER_')) throw error;
+        // Redis configured but unavailable is still a hard admission failure; never
+        // fall back to process-local quota state and never send this provider request.
+        throw Object.assign(new Error('Shared Redis coordination is unavailable; broker request was not admitted.'), {
+          status: 503,
+          code: 'BROKER_COORDINATION_UNAVAILABLE',
+          cause: error,
+        });
       } finally {
         if (acquired) await distributed.releaseLock(lockKey, owner).catch(() => undefined);
       }
