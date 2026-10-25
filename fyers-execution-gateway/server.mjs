@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 const PORT = Number(process.env.PORT || 8787);
 const SECRET = process.env.FYERS_GATEWAY_SECRET;
 const FYERS_ORDER_URL = 'https://api-t1.fyers.in/api/v3/orders/sync';
+const FYERS_CLIENT_ID = String(process.env.FYERS_CLIENT_ID || '').trim();
 const MAX_SKEW_MS = Number(process.env.FYERS_GATEWAY_MAX_SKEW_MS || 60_000);
 const UPSTREAM_TIMEOUT_MS = Number(process.env.FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS || 8_000);
 const REDIS_URL = String(process.env.UPSTASH_REDIS_REST_URL || process.env.TRADINGCORE_REDIS_REST_URL || '').trim().replace(/\/$/, '');
@@ -257,7 +258,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     let redisHealthy = false;
     try { redisHealthy = REDIS_CONFIGURED && await redisCommand(['PING']) === 'PONG'; } catch { redisHealthy = false; }
-    return json(res, redisHealthy ? 200 : 503, { ok: redisHealthy, service: 'fyers-execution-gateway', sharedQuotaCoordination: redisHealthy });
+    const fyersConfigured = Boolean(FYERS_CLIENT_ID);
+    const ready = redisHealthy && fyersConfigured;
+    return json(res, ready ? 200 : 503, {
+      ok: ready,
+      service: 'fyers-execution-gateway',
+      sharedQuotaCoordination: redisHealthy,
+      fyersCredentialsConfigured: fyersConfigured,
+    });
   }
   if (req.method !== 'POST' || req.url !== '/v1/fyers/order') return json(res, 404, { success: false, error: 'Not found' });
 
@@ -282,7 +290,7 @@ const server = http.createServer(async (req, res) => {
         headers: {
           accept: 'application/json',
           'content-type': 'application/json',
-          authorization: `Bearer ${accessToken}`,
+          authorization: `${FYERS_CLIENT_ID}:${accessToken}`,
         },
         body: JSON.stringify(fyersPayload),
       });
@@ -293,7 +301,10 @@ const server = http.createServer(async (req, res) => {
       clearTimeout(timer);
     }
   } catch (error) {
-    const status = error?.name === 'AbortError' ? 504 : Number(error?.statusCode) === 429 ? 429 : 400;
+    const explicitStatus = Number(error?.statusCode);
+    const status = error?.name === 'AbortError' ? 504
+      : Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus <= 599 ? explicitStatus
+      : 400;
     return json(res, status, { success: false, error: error?.name === 'AbortError' ? 'FYERS upstream request timed out' : error?.message || 'Invalid request' });
   }
 });
