@@ -1,5 +1,6 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { CORE_SPIRIT_AUTHORING_LEVELS } from './coreSpiritExecutionModel';
 
 /**
  * Stable CoreSpirit VM contract. The VM executes this contract, never AST nodes.
@@ -45,6 +46,19 @@ export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrP
   if (p.repaintSafety && p.repaintSafety.version !== 1) return false;
   if (p.executionPlanVisualization && p.executionPlanVisualization.version !== 1) return false;
   if (p.compilerPipeline && !validateCoreSpiritCompilerPipelineTrace(p.compilerPipeline)) return false;
+  if (p.authoringLevel !== undefined &&
+      !(CORE_SPIRIT_AUTHORING_LEVELS as readonly string[]).includes(p.authoringLevel)) return false;
+  if (p.languagePolicy) {
+    if (p.languagePolicy.language !== 'CoreScript' ||
+        !(CORE_SPIRIT_AUTHORING_LEVELS as readonly string[]).includes(p.languagePolicy.level)) return false;
+    if (p.authoringLevel !== undefined && p.languagePolicy.level !== p.authoringLevel) return false;
+    if (p.requiredCapabilities && p.languagePolicy.requiredCapabilities) {
+      const required = [...new Set(p.requiredCapabilities)].sort();
+      const policyRequired = [...new Set(p.languagePolicy.requiredCapabilities)].sort();
+      if (required.length !== policyRequired.length ||
+          required.some((capability, index) => capability !== policyRequired[index])) return false;
+    }
+  }
   return p.entry.instructions.every(isCoreSpiritIrInstruction);
 }
 

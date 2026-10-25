@@ -1123,6 +1123,10 @@ export class CoreSpiritRuntime {
   getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
+    if (ir.languagePolicy && ir.authoringLevel !== undefined &&
+        ir.languagePolicy.level !== ir.authoringLevel) {
+      throw new Error('CoreSpirit runtime rejected inconsistent authoring-level metadata in the compiled artifact.');
+    }
     const requiredCapabilities = ir.requiredCapabilities ?? [];
     if (requiredCapabilities.length) {
       const sandbox = new CoreSpiritCapabilitySandbox({ layer:this.layer, target:this.executionTarget });
