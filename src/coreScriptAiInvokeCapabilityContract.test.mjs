@@ -44,6 +44,10 @@ assert.ok(compiled.ir, 'AI invocation source must compile to the canonical CoreS
 assert.ok(compiled.artifact, 'AI invocation source must produce an integrity-bound artifact');
 assert.ok(compiled.ir.requiredCapabilities.includes('ai.invoke'),
   'the compiler must derive ai.invoke from the canonical source declaration');
+assert.equal(compiled.ir.authoringLevel, 'system', 'the compiled authoring level must classify ai.invoke as a system capability');
+assert.equal(compiled.ir.languagePolicy.level, 'system', 'compiler language policy must agree with inferred authoring level');
+assert.ok(compiled.ir.languageFeatures.includes('ai-invocation'), 'the compiler must expose the explicit system AI-invocation feature');
+assert.ok(compiled.ir.capabilityRequirements.some(item => item.capability === 'ai.invoke'), 'the declared async capability must be visible in compiler provenance');
 assert.ok(compiled.ir.requiredCapabilities.includes('market.tick'));
 assert.equal(detectCoreSpiritAuthoringLevel(source), 'system',
   'ai.invoke is a system/automation surface rather than a beginner or chart-only feature');
