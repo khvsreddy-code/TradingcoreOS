@@ -87,6 +87,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
 
   try{
     const ai=new GoogleGenAI({apiKey});
+    const model=String(process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.8-flash').trim();
     const systemInstruction=[
       'You are CoreSpirit Copilot, a code author for the TradingCoreOS CoreScript language.',
       'Generate a draft source program only for source-changing modes. Never claim to execute, backtest, or trade it.',
@@ -101,7 +102,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       'When relevant, return up to 12 focused regression tests and up to 8 causal backtest scenarios with setup and expected behavior. Include warm-up and transaction-cost assumptions when applicable; never use future bars.',
     ].join('\n');
     const currentCompile = currentSource ? compileCoreSpirit(currentSource,'corespirit-editor',{layer:'script'}) : null;
-    const currentIr = currentCompile?.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
+    const currentIr = currentCompile?.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;requiredCapabilities?:readonly string[];semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
     const compilerContext = JSON.stringify({
       diagnostics:(currentCompile?.diagnostics??[]).slice(0,80).map(d=>({severity:d.severity,code:d.code,message:d.message,line:d.line,column:d.column})),
       maxLookback:currentIr?.maxLookback??null,
@@ -125,7 +126,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       currentSource||'(empty)',
     ].join('\n');
     const generation=await ai.models.generateContent({
-      model:String(process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.8-flash').trim(),
+      model,
       contents:userContent,
       config:{
         systemInstruction,
@@ -149,8 +150,10 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
     const generated=parseGeneratedPayload(String(generation.text||''),{allowEmptySource:analysisOnly});
     if(analysisOnly){
       const diagnostics=(currentCompile?.diagnostics??[]).slice(0,80);
+      const createdAt=new Date().toISOString();
+      const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:currentSource,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:null,repairAttempts:0,createdAt,analysisOnly:true});
       res.setHeader('Cache-Control','no-store');
-      res.json({success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
+      res.json({success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact,safetyReview:{maxLookback:currentIr?.maxLookback??null,repaintSafety:currentIr?.repaintSafety??null,causalityAnalysis:currentIr?.causalityAnalysis??null,requiredCapabilities:[]},validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
       return;
     }
     const compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
@@ -168,18 +171,22 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
     ];
     const diagnostics=[...compilerDiagnostics,...safetyDiagnostics];
     const valid=Boolean(artifactValid&&compiled.ir&&!diagnostics.some(d=>d.severity==='error'));
+    const sourceIr=compiled.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;requiredCapabilities?:readonly string[];semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
+    const createdAt=new Date().toISOString();
+    const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts:0,createdAt});
     res.setHeader('Cache-Control','no-store');
     res.json({
       success:true,
       source:generated.source,
       summary:generated.summary,
       assumptions:generated.assumptions,
-      validation:{
-        valid,
-        artifactHash:valid?compiled.artifact?.abi?.artifactHash:null,
-        diagnostics:diagnostics.slice(0,80),
-      },
-      nextStep:'Review the draft and validation diagnostics. Nothing has been executed; use Run only after you approve the source.',
+      tests:generated.tests,
+      backtestScenarios:generated.backtestScenarios,
+      diff:buildCoreSpiritReviewPatch(currentSource,generated.source),
+      draftArtifact,
+      safetyReview:{maxLookback:sourceIr?.maxLookback??null,repaintSafety:sourceIr?.repaintSafety??null,causalityAnalysis:sourceIr?.causalityAnalysis??null,requiredCapabilities:[...(sourceIr?.requiredCapabilities??[])],semanticNodeCount:sourceIr?.semanticDependencyGraph?.nodes?.length??null,semanticEdgeCount:sourceIr?.semanticDependencyGraph?.edges?.length??null,compilerDiagnostics:compilerDiagnostics.slice(0,40),sandboxDiagnostics:safetyDiagnostics.slice(0,40)},
+      validation:{valid,artifactHash:valid?compiled.artifact?.abi?.artifactHash:null,diagnostics:diagnostics.slice(0,80)},
+      nextStep:'Review the structured diff and diagnostics. Explicitly apply the draft before your own compile/replay workflow. Nothing was run and no broker/order action was authorized.',
     });
   }catch(error){
     const message=error instanceof Error?error.message:'Generation failed.';
