@@ -184,7 +184,7 @@ export class FyersAdapter extends BaseBroker {
   }
 
   async getOrders(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
-    const data = await this.fyersFetch('/orders', accessToken, {}, rateLimitIdentity, 'transactions');
+    const data = await this.fyersFetch('/orders', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.orderBook || [];
     return rows.map((o: any) => ({
       orderId: o.id || o.orderId,
@@ -195,7 +195,7 @@ export class FyersAdapter extends BaseBroker {
   }
 
   async getTrades(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
-    const data = await this.fyersFetch('/tradebook', accessToken, {}, rateLimitIdentity, 'transactions');
+    const data = await this.fyersFetch('/tradebook', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.tradeBook || [];
     return rows.map((t: any) => ({
       tradeId: t.tradeId || t.id,
