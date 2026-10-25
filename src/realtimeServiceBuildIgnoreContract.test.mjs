@@ -13,7 +13,7 @@ assert.match(ignoreSource, /git', \['fetch', '--no-tags', '--depth=2', 'origin',
 assert.match(ignoreSource, /verified current-parent diff/, 'an unavailable previous deployment SHA should fall back to the verified current-parent diff');
 assert.match(ignoreSource, /\[realtime-ignore\] Evaluating whether this commit changes the realtime gateway image/);
 assert.ok(deploymentConfig.services?.realtimegateway, 'the Vercel Services config must declare the fresh realtime gateway service');
-assert.equal(deploymentConfig.services.realtimegateway.ignoreCommand, 'node tools/ignore-realtime-build.mjs', 'the gateway service must use its skip command to avoid rebuilding images for frontend-only changes');
+assert.equal(deploymentConfig.services.realtimegateway.ignoreCommand, undefined, 'Vercel Services mode does not skip container image builds with per-service ignoreCommand');
 assert.deepEqual(
   deploymentConfig.rewrites
     .filter((route) => ['/api/realtime/healthz', '/api/realtime/ws'].includes(route.source))
