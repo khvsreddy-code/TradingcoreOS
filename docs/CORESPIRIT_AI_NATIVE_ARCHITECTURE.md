@@ -25,6 +25,8 @@ Draft artifacts hash the source and base source, request hash, model, symbol/tim
 
 CoreSpirit's existing research/model lifecycle remains the place for typed model declarations, training jobs, immutable dataset/model artifacts, feature-schema checks, chronological holdout separation, lookahead/leakage validation and audited release decisions. These checks are not delegated to a text model.
 
+A reusable strategy-output evaluator lives in `src/services/coreSpirit/outOfSampleEconomics.ts`. It checks chronological holdout boundaries, confirmed/non-overlapping outcome intervals and immutable dataset/model hashes, then computes compounded gross/after-cost/net return, turnover, drawdown, transaction-cost/slippage drag and optional frequency-aware annualization. Stability is measured over complete windows and explicitly returns `insufficient-windows` where evidence is too thin. This evaluator is not yet wired into the existing unsupervised HMM/regime-model promotion flow; an explicit strategy-position mapping is needed before those metrics can gate model release.
+
 Research evaluation should make train/validation/test windows and feature availability times explicit. Prediction accuracy is not tradability evidence: turnover, transaction costs/slippage, drawdown and stability should be considered where the evaluation backend computes those results. The Copilot knowledge index deliberately does not invent results or mark missing measurements as passes.
 
 ### 3. Asynchronous generative AI invocation
@@ -38,6 +40,8 @@ CoreScript now recognizes `requires ai.invoke` as a declared, system-level capab
 5. Enqueues `corespirit_ai_invoke` onto the background queue, separate from candle evaluation.
 6. The worker repeats source compilation, artifact/hash, capability, lease and fingerprint checks before calling the provider with a timeout and output-token limit.
 7. Results are content-addressed by the model version and canonical input fingerprint, cached briefly, and tagged `ready`, `unavailable` or `stale`. Old results are projected as stale by the job-read endpoint.
+
+The editor also exposes an **Async AI Invocation** host-API harness. It compiles the supplied automation source in the automation layer, asks for an explicit user submission, polls `/api/jobs/:id`, and labels the returned result. This is a manual integration harness; it does not feed a result back into a running CoreScript program.
 
 The current invocation API returns **advisory text data only**. It marks the result `executable: false` and `mayCreateOrderIntent: false`. It never compiles model output, invokes a broker, or changes account state. Order intents, risk validation and broker routing remain host-controlled.
 
