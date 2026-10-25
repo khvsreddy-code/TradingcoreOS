@@ -9,6 +9,7 @@ import { isRealtimeRuntimePath, shouldBuildRealtime } from '../tools/ignore-real
 const deploymentConfig = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 const ignoreSource = fs.readFileSync(new URL('../tools/ignore-realtime-build.mjs', import.meta.url), 'utf8');
 assert.match(ignoreSource, /git', \['fetch', '--no-tags', '--depth=1', 'origin', sha\]/, 'missing previous deployment commits must be fetched before failing open');
+assert.match(ignoreSource, /git', \['fetch', '--no-tags', '--depth=2', 'origin', currentSha\]/, 'shallow HEADs must fetch their parent before the ignore decision');
 assert.match(ignoreSource, /\[realtime-ignore\] Evaluating whether this commit changes the realtime gateway image/);
 assert.ok(deploymentConfig.services?.realtimegateway-live, 'the Vercel Services config must declare the fresh realtime gateway service');
 assert.equal(deploymentConfig.services.realtimegateway-live.ignoreCommand, 'node tools/ignore-realtime-build.mjs', 'the gateway service must retain its per-service build-skip command');
