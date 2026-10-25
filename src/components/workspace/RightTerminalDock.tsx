@@ -198,8 +198,9 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       while (active && cursor < pending.length) {
         const item = pending[cursor++]!;
         try {
-          await historyStore.hydrate(String(broker || 'unknown').toLowerCase(), item.key, '5minute');
-          const savedCandles = historyStore.getStale(String(broker || 'unknown').toLowerCase(), item.key, '5minute');
+          const cacheBrokerId = String(tradingCoreRuntime.getPrimaryBrokerId() || broker || 'unknown').toLowerCase();
+          await historyStore.hydrate(cacheBrokerId, item.key, '5minute');
+          const savedCandles = historyStore.getStale(cacheBrokerId, item.key, '5minute');
           const candles = savedCandles?.length
             ? savedCandles.slice(-2_000)
             : await tradingCoreRuntime.getHistoricalData(item.key, '5minute', controller.signal, 2_000);
