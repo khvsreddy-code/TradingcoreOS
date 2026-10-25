@@ -38,7 +38,7 @@ assert.match(aiWorker, /compileCoreSpirit\(input\.source/, 'worker re-compiles i
 assert.match(aiWorker, /validateExecutableArtifact/, 'worker revalidates artifact integrity');
 assert.match(aiWorker, /AbortSignal\.timeout\(CORE_SPIRIT_AI_INVOKE_LIMITS\.providerTimeoutMs\)/, 'remote model call has a timeout');
 assert.match(aiWorker, /finally\s*\{\s*await redis\.releaseLock/, 'the invocation lease is released after work');
-assert.match(aiWorker, /advisory text data/, 'worker documentation constrains output to inert advisory data');
+assert.match(aiWorker, /inert text data/, 'worker documentation constrains output to inert advisory data');
 assert.match(aiWorker, /automaticContinuation: false/, 'provider continuation is disabled');
 assert.match(draftHelper, /knowledgeHitIds/, 'draft fingerprint identity includes the matched knowledge entries');
 assert.match(draftHelper, /baseSourceHash/, 'draft fingerprint is tied to the exact base source');
