@@ -11,12 +11,12 @@ const baseline = Array.from({ length: 200 }, (_, index) => ({
   phase: 'historical' as const,
   values: [Math.sin(index / 7), Math.abs(Math.cos(index / 9))],
 }));
-const stableObserved = Array.from({ length: 60 }, (_, index) => ({
+const stableObserved = Array.from({ length: 200 }, (_, index) => ({
   timestamp: 1_700_000_000_000 + (200 + index) * 60_000,
   availableAt: 1_700_000_000_000 + (200 + index) * 60_000,
   confirmed: true,
   phase: 'confirmed' as const,
-  values: [Math.sin((200 + index) / 7), Math.abs(Math.cos((200 + index) / 9))],
+  values: [Math.sin(index / 7), Math.abs(Math.cos(index / 9))],
 }));
 const stable = monitorCoreSpiritFeatureDrift({
   artifactHash, featureSchemaHash, featureNames: names, baseline, observed: stableObserved,
