@@ -106,7 +106,10 @@ const SAFETY_DOCS: readonly KnowledgeDocument[] = [
 ];
 
 function tokenize(value: string): string[] {
-  return value.toLowerCase().normalize('NFKC').match(/[a-z0-9_.-]+/g) ?? [];
+  const identifiers = value.toLowerCase().normalize('NFKC').match(/[a-z0-9_.-]+/g) ?? [];
+  // Search both canonical qualified identifiers (for example, ai.invoke) and their
+  // human-friendly components (ai, invoke) so prose and symbol names cross-match.
+  return identifiers.flatMap(token => [token, ...token.split(/[._-]+/).filter(Boolean)]);
 }
 
 function scoreDocument(queryTokens: readonly string[], document: KnowledgeDocument): number {
