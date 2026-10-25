@@ -303,7 +303,7 @@ export function buildCoreScriptLanguagePolicy(input: {
     beginnerSurface: 'Readable market data, values, conditions and visuals on the same CoreScript language.',
     traderSurface: 'Inputs, strategies, multi-symbol/timeframe data, signals and broker-neutral order intents on the same CoreScript language.',
     quantSurface: 'Typed features, matrices/tensors, statistics, model declarations, predictions and research on the same CoreScript language.',
-    systemSurface: 'Explicit host events, automation and execution routing with declared capabilities on the same CoreScript language.',
+    systemSurface: 'Explicit host events, asynchronous AI job invocation, automation and execution routing with declared capabilities on the same CoreScript language.',
   });
 }
 
