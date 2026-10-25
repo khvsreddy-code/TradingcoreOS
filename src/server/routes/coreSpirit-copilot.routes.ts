@@ -4,7 +4,7 @@ import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 import { parseCoreSpiritAiInvocationRequest, createCoreSpiritAiInputFingerprint, CORE_SPIRIT_AI_INVOKE_LIMITS } from '../../services/coreSpirit/aiInvocation.js';
 import type { CoreScriptRequiredCapability } from '../../services/coreSpirit/coreScriptLanguagePolicy.js';
-import { buildCoreSpiritCopilotDraftArtifact, buildCoreSpiritReviewPatch, type CoreSpiritGeneratedBacktestScenario } from '../../services/coreSpirit/copilotDraft.js';
+import { buildCoreSpiritCopilotDraftArtifact, buildCoreSpiritReviewPatch, coreSpiritCopilotSha256, type CoreSpiritGeneratedBacktestScenario } from '../../services/coreSpirit/copilotDraft.js';
 import { Router, type Response } from 'express';
 import { requireUser } from '../auth/requireUser.js';
 import type { AuthenticatedRequest } from '../auth/requireUser.js';
