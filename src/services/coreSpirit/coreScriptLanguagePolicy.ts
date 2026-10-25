@@ -42,7 +42,8 @@ export type CoreScriptLanguageFeature =
   | 'multi-timeframe'
   | 'system-events'
   | 'automation'
-  | 'order-intent';
+  | 'order-intent'
+  | 'ai-invocation';
 
 export type CoreScriptCapabilityRequirement = Readonly<{
   capability: CoreScriptRequiredCapability;
@@ -78,6 +79,7 @@ const FEATURE_LEVEL: Readonly<Record<CoreScriptLanguageFeature, CoreSpiritAuthor
   'system-events': 'system',
   automation: 'system',
   'order-intent': 'trader',
+  'ai-invocation': 'system',
 });
 
 const CAPABILITY_ALIASES: Readonly<Record<string, CoreScriptRequiredCapability | undefined>> = Object.freeze({
