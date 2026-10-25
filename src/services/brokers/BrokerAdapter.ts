@@ -106,6 +106,8 @@ export interface HistoricalDataMetadata {
   degraded: boolean;
   historyExhausted?: boolean;
   paginationSupported?: boolean;
+  /** Explicitly distinguishes a per-page result from a complete historical dataset. */
+  historyCompleteness?: Record<string, unknown>;
   calendarPolicy?: string;
   sourceStatus: Record<string, unknown>;
 }
