@@ -46,15 +46,26 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       data: columnar ? historicalBarsToColumns(loaded.bars, loaded.metadata, loaded.quote) : loaded.bars,
       requested: limit,
       returned: loaded.bars.length,
+      // requested/returned describe this one page. Completeness is separate:
+      // a 2,000-bar API page is not proof that the dataset is exhausted.
       before: beforeTimestamp ? new Date(beforeTimestamp).toISOString() : null,
       oldestTimestamp: loaded.metadata.oldestTimestamp,
       newestTimestamp: loaded.metadata.newestTimestamp,
+      historyExhausted: loaded.metadata.historyExhausted === true,
+      paginationSupported: loaded.metadata.paginationSupported === true,
+      historyCompleteness: loaded.metadata.historyCompleteness,
       metadata: loaded.metadata,
       quote: loaded.quote,
     });
   } catch (error: unknown) {
-    const status = error instanceof CanonicalHistoryError ? error.statusCode : 502;
-    if (status === 429) res.setHeader('Retry-After', '1');
+    const sourceStatus = error && typeof error === 'object' ? Number((error as Record<string, unknown>).status || (error as Record<string, unknown>).statusCode) : NaN;
+    const status = error instanceof CanonicalHistoryError
+      ? error.statusCode
+      : Number.isInteger(sourceStatus) && sourceStatus >= 400 && sourceStatus <= 599
+        ? sourceStatus
+        : 502;
+    const retryAfterMs = error && typeof error === 'object' ? Number((error as Record<string, unknown>).retryAfterMs) : NaN;
+    if (status === 429) res.setHeader('Retry-After', Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? String(Math.max(1, Math.ceil(retryAfterMs / 1000))) : '1');
     return res.status(status).json({
       success: false,
       error: error instanceof Error ? error.message.replace(/[\r\n\t]+/g, ' ').slice(0, 240) : 'Unable to load validated historical candles.',
