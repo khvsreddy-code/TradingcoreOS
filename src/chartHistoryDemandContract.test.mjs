@@ -4,6 +4,8 @@ import path from 'node:path';
 const root = process.cwd();
 const dataPlane = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
 const policy = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryPolicy.ts'), 'utf8');
+const chartTimeframes = fs.readFileSync(path.join(root, 'src/services/core/chart/chartRuntimeSupport.ts'), 'utf8');
+const chartDataPlaneSource = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
 const coordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryCoordinator.ts'), 'utf8');
 const liveChart = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
 const runtime = fs.readFileSync(path.join(root, 'src/services/runtime/TradingCoreRuntime.ts'), 'utf8');
@@ -16,6 +18,8 @@ const values = [...policy.matchAll(/'[^']+':\s*([0-9_]+)/g)].map(m => Number(m[1
 if (!values.length || Math.min(...values) < 240 || Math.max(...values) > 5000) throw new Error('History policy values are outside the expected bounded range');
 if (/25_000/.test(dataPlane) || /20_000/.test(dataPlane) || /15_000/.test(dataPlane)) throw new Error('Legacy eager history page sizes remain in chartDataPlane');
 if (!/initialHistoryCandles/.test(dataPlane) || !/historyPageCandles/.test(dataPlane)) throw new Error('Staged history policy is not wired into data plane');
+if (!/'10m':\s*'10minute'/.test(chartTimeframes) || !/'45m':\s*'45minute'/.test(chartTimeframes)) throw new Error('10-minute and 45-minute timeframe choices are not exposed in the chart toolbar');
+if (!/'10m':\s*600/.test(chartDataPlaneSource) || !/'45m':\s*2700/.test(chartDataPlaneSource)) throw new Error('10-minute and 45-minute candle intervals are missing from the data plane');
 const historyStore = fs.readFileSync(path.join(root, 'src/services/marketData/HistoryStore.ts'), 'utf8');
 if (!/PERSISTED_HISTORY_CANDLE_LIMIT\s*=\s*2_000/.test(historyStore) || !/historyStore\.hydrate\(/.test(dataPlane)) throw new Error('Persistent 2,000-candle history cache is not wired into chart loading');
 if (!/historyStore\.getBefore/.test(dataPlane)) throw new Error('Warm/cache older history path missing');

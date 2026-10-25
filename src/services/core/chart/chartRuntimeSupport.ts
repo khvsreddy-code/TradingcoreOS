@@ -6,8 +6,8 @@ import type { SerializedDrawing } from './velaNativeChartKernel';
 import { migrateVelaDrawings } from './velaNativeChartKernel';
 
 export const chartIntervals = {
-  '1m':'1minute', '3m':'3minute', '5m':'5minute', '15m':'15minute',
-  '30m':'30minute', '1H':'60minute', '1D':'day',
+  '1m':'1minute', '3m':'3minute', '5m':'5minute', '10m':'10minute', '15m':'15minute',
+  '30m':'30minute', '45m':'45minute', '1H':'60minute', '1D':'day',
 } as const;
 
 export type PersistedChartState = {
