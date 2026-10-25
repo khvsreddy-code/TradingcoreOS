@@ -209,7 +209,7 @@ export async function withBrokerRequestGate<T>(
           }
           if (limit.maxPerDay != null) {
             const nonInteractiveDay = Number(await distributed.get<string | number>(nonInteractiveDayKey, effectiveSignal) || 0);
-            if (nonInteractiveDay >= Math.max(1, Math.floor(limit.maxPerDay * 0.7)) {
+            if (nonInteractiveDay >= Math.max(1, Math.floor(limit.maxPerDay * 0.7))) {
               throw Object.assign(new Error('Broker non-interactive daily reserve exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
             }
             if (priority === 'background') {
