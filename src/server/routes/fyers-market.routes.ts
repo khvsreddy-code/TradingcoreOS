@@ -65,25 +65,35 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
   const parsed = rawQuoteSymbols(req);
   if (parsed.error) return res.status(parsed.status ?? 400).json({ success: false, error: parsed.error });
   const symbols = [...new Set(parsed.values.map(fyersSymbol).map(symbol => symbol.trim()).filter(Boolean))];
-  try {
-    // The broker capability layer owns batch validation; this route maps the
-    // domain error to HTTP without duplicating Standard/Prime limit logic.
-    assertFyersQuoteBatch(symbols, capabilities);
-  } catch (error: unknown) {
-    if (error instanceof FyersCapabilityError) {
-      return res.status(error.status).json({
-        success: false,
-        error: error.message,
-        code: error.code,
-        limit: error.limit,
-        requested: error.requested,
-        plan: error.plan,
-      });
-    }
-    return next(error);
+  const maxSymbolsPerRequest = capabilities.plan === 'prime' ? 5_000 : 200;
+  if (symbols.length > maxSymbolsPerRequest) {
+    return res.status(413).json({
+      success: false,
+      error: `This FYERS ${capabilities.plan} request can contain at most ${maxSymbolsPerRequest} unique symbols; use smaller batches for larger watchlists.`,
+      code: 'FYERS_QUOTE_REQUEST_LIMIT',
+      limit: maxSymbolsPerRequest,
+      requested: symbols.length,
+      plan: capabilities.plan,
+    });
   }
+  const batchCount = Math.ceil(symbols.length / capabilities.maxQuoteBatch);
   try {
-    const data = await new FyersMarketDataService(client, capabilities).quotes(symbols);
+    // Each provider request respects its plan's exact symbol ceiling. Serial
+    // batching keeps a large watchlist from producing a burst of parallel REST
+    // calls; the shared account/category gate still admits every actual attempt.
+    const service = new FyersMarketDataService(client, capabilities);
+    const payloads: any[] = [];
+    for (let start = 0; start < symbols.length; start += capabilities.maxQuoteBatch) {
+      const batch = symbols.slice(start, start + capabilities.maxQuoteBatch);
+      assertFyersQuoteBatch(batch, capabilities);
+      payloads.push(await service.quotes(batch));
+    }
+    const data = payloads.length === 1
+      ? payloads[0]
+      : {
+          s: payloads.every(payload => String(payload?.s || '').toLowerCase() !== 'error') ? 'ok' : 'error',
+          d: payloads.flatMap(payload => Array.isArray(payload?.d) ? payload.d : []),
+        };
     res.setHeader('Cache-Control', 'private, max-age=2');
     return res.json({
       success: true,
@@ -91,8 +101,9 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
       capabilities: {
         plan: capabilities.plan,
         maxQuoteBatch: capabilities.maxQuoteBatch,
+        maxSymbolsPerRequest,
         requestedSymbols: symbols.length,
-        quoteBatches: 1,
+        quoteBatches: batchCount,
       },
     });
   } catch (error: any) {
