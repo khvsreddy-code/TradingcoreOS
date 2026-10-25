@@ -76,6 +76,8 @@ const accountService = read('./server/fyers/core/FyersAccountService.ts');
 const legacyHistoryRoute = read('./server/routes/broker-market-data.routes.ts');
 const marketTransport = read('./server/marketData/FyersMarketDataTransport.ts');
 const quotaTelemetry = read('./server/fyers/core/FyersQuotaTelemetry.ts');
+const orderGateway = read('./server/trading/fyersOrderExecution.ts');
+const tradingRoute = read('./server/routes/trading.routes.ts');
 
 
 assert.match(quoteRoute, /resolveFyersCapabilities/);
@@ -152,6 +154,9 @@ assert.match(quotaTelemetry,/scope: 'process-local; admission authority is share
 assert.match(quotaTelemetry,/`http-\$\{Math\.trunc\(status\)\}`/,'quota telemetry records the exact provider HTTP status instead of only broad status classes');
 assert.match(quotaTelemetry,/`local-gate-\$\{status\}`/,'quota telemetry preserves local gate denial status codes separately from provider responses');
 assert.match(accountRoute,/new FyersApiClient\(EncryptionService\.decrypt\(s\.accessTokenEncrypted\),undefined,capabilities,userId\)/,'account endpoints use stable authenticated identity and server-resolved capabilities');
+assert.match(orderGateway,/rateLimitIdentity: userId/,'fixed-IP order execution carries the authenticated user identity to the external quota authority');
+assert.match(orderGateway,/quotaPlan: resolveFyersCapabilities\(userId\)\.plan/,'fixed-IP order execution forwards only server-resolved FYERS plan entitlements');
+assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId\)/,'FYERS orders use the fixed-IP gateway with the authenticated user quota identity');
 
 
 console.log('FYERS_PLAN_CAPABILITIES_CONTRACT_OK');
