@@ -569,37 +569,143 @@ export class HistoricalDataService {
     const task = (async (): Promise<CacheRecord> => {
       const range = getBoundedHistoryPageRange(mapping, timeframe, requestedBars, historyMaxLookbackYears);
       const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
-      const tvEnabled = tvConfigured && this.tvContractCompatible(mapping);
+      const tvCompatible = Boolean(mapping.tvSymbol && mapping.tvExchange && this.tvContractCompatible(mapping));
+      const tvEnabled = tvConfigured && tvCompatible;
+      const targetBars = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+      const MAX_FYERS_PAGES_PER_REFRESH = 8;
+      const fyersByTime = new Map<number, StoredBar>();
+      const fyersPageStats: Array<Record<string, unknown>> = [];
+      let quote: HistoricalQuoteSnapshot | null = null;
+      let fyersFailed = false;
+      let fyersError: string | undefined;
+      let pagesFetched = 0;
+      let emptyPages = 0;
+      let exhaustedByPlan = false;
+      let stoppedByEmpty = false;
+      let nextToMs = range.toMs;
+
+      // A page is bounded by FYERS' per-resolution date-range ceiling. Walk back
+      // only until the chart's requested bar count is met, the plan lookback is
+      // exhausted, a source gap is detected, or a conservative per-refresh call
+      // budget is reached. Every individual attempt still enters the same Redis gate.
+      while (fetchFyersRecent && fyersByTime.size < targetBars && pagesFetched < MAX_FYERS_PAGES_PER_REFRESH) {
+        if (range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs) {
+          exhaustedByPlan = true;
+          break;
+        }
+        const pageRange = pagesFetched === 0
+          ? range
+          : getBoundedHistoryPageRange(
+              mapping,
+              timeframe,
+              Math.max(1, targetBars - fyersByTime.size),
+              historyMaxLookbackYears,
+              nextToMs,
+            );
+        if (pageRange.toMs <= pageRange.fromMs) {
+          exhaustedByPlan = range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs;
+          break;
+        }
+
+        pagesFetched += 1;
+        try {
+          const result = await fetchFyersRecent(mapping, pageRange);
+          const rawBars = Array.isArray(result.bars) ? result.bars : [];
+          if (!quote && result.quote) quote = result.quote;
+          const pageBars = normalizeRows(rawBars, 'fyers').filter(bar =>
+            bar.timestampMs >= pageRange.fromMs && bar.timestampMs <= pageRange.toMs,
+          );
+          for (const bar of pageBars) {
+            const previous = fyersByTime.get(bar.timestampMs);
+            if (!previous || bar.source === 'fyers') fyersByTime.set(bar.timestampMs, bar);
+          }
+          fyersPageStats.push({
+            page: pagesFetched,
+            fromMs: pageRange.fromMs,
+            toMs: pageRange.toMs,
+            rawCount: rawBars.length,
+            validatedCount: pageBars.length,
+            ...(isRecord(result.status) ? { providerStatus: result.status } : {}),
+          });
+          emptyPages = pageBars.length ? 0 : emptyPages + 1;
+          if (pageBars.length) {
+            const oldestPageBar = pageBars.reduce((oldest, bar) => Math.min(oldest, bar.timestampMs), Number.POSITIVE_INFINITY);
+            nextToMs = oldestPageBar - 1;
+          } else {
+            // No validated bar in this range; advance to the preceding bounded
+            // range, then fall back to the alternate feed only if the gap persists.
+            nextToMs = pageRange.fromMs - 1;
+          }
+          if (range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs) {
+            exhaustedByPlan = true;
+            break;
+          }
+          if (emptyPages >= 2) {
+            stoppedByEmpty = true;
+            break;
+          }
+        } catch (error) {
+          fyersFailed = true;
+          fyersError = errorText(error);
+          fyersPageStats.push({
+            page: pagesFetched,
+            fromMs: pageRange.fromMs,
+            toMs: pageRange.toMs,
+            status: 'error',
+            error: fyersError,
+          });
+          break;
+        }
+      }
+
+      const fyersRows: unknown[] = [...fyersByTime.values()]
+        .sort((a, b) => a.timestampMs - b.timestampMs)
+        .slice(-targetBars);
+      const fyersFallbackRequired = !fetchFyersRecent || fyersFailed || fyersRows.length === 0 || exhaustedByPlan || stoppedByEmpty;
+      let tvRows: unknown[] = [];
+      let tvFailed = false;
+      let tvStatus: Record<string, unknown> = {
+        status: !tvConfigured ? 'not-configured' : !mapping.tvSymbol || !mapping.tvExchange ? 'unmapped'
+          : !tvEnabled ? 'contract-mismatch'
+            : fyersFallbackRequired ? 'pending' : fyersRows.length >= targetBars ? 'not-needed-fyers-target-reached' : 'not-needed-fyers-pagination-available',
+      };
+
+      // The alternate feed is queried only when FYERS is unavailable, reaches the
+      // user's plan lookback, or repeatedly has no validated bars. If a Prime user
+      // still has more FYERS history but this request's page budget is exhausted,
+      // return explicit partial metadata instead of switching sources unnecessarily.
+      if (tvEnabled && fyersFallbackRequired) {
+        try {
+          tvRows = await this.fetchTvdatafeed(mapping, timeframe);
+          tvStatus = { status: tvRows.length ? 'ok' : 'empty', rawCount: tvRows.length };
+        } catch (error) {
+          tvFailed = true;
+          tvStatus = { status: 'error', error: errorText(error) };
+        }
+      }
+
+      const pageRangeFromMs = fyersPageStats.length
+        ? Number(fyersPageStats[fyersPageStats.length - 1]!.fromMs)
+        : range.fromMs;
+      const pageRangeToMs = fyersPageStats.length
+        ? Number(fyersPageStats[0]!.toMs)
+        : range.toMs;
       const sourceStatus: Record<string, unknown> = {
-        fyers: { status: fetchFyersRecent ? 'pending' : 'unavailable' },
-        tvdatafeed: { status: !tvConfigured ? 'not-configured' : !mapping.tvSymbol || !mapping.tvExchange ? 'unmapped' : !tvEnabled ? 'contract-mismatch' : 'pending' },
+        fyers: {
+          status: fyersRows.length ? fyersFailed ? 'partial-error' : 'ok' : fyersFailed ? 'error' : fetchFyersRecent ? 'empty' : 'unavailable',
+          rawCount: fyersPageStats.reduce((sum, page) => sum + Number(page.rawCount || 0), 0),
+          validatedCount: fyersRows.length,
+          pagesFetched,
+          pageBudget: MAX_FYERS_PAGES_PER_REFRESH,
+          pages: fyersPageStats,
+          ...(fyersError ? { error: fyersError } : {}),
+          ...(exhaustedByPlan ? { lookbackExhausted: true } : {}),
+        },
+        tvdatafeed: tvStatus,
         calendarPolicy: range.calendarPolicy,
         cache: { status: this.supabase && !this.cacheTableUnavailable ? 'durable' : 'memory-fallback' },
       };
-      const fyersTask: Promise<FyersRecentResult> = fetchFyersRecent
-        ? fetchFyersRecent(mapping, range) : Promise.reject(new Error('Fyers history unavailable for this request'));
-      const tvTask: Promise<unknown[]> = tvEnabled ? this.fetchTvdatafeed(mapping, timeframe) : Promise.resolve([]);
-      const [f, t] = await Promise.allSettled([fyersTask, tvTask]);
-      let fyersRows: unknown[] = [], tvRows: unknown[] = [], quote: HistoricalQuoteSnapshot | null = null;
-      let fyersFailed = false, tvFailed = false;
-      if (f.status === 'fulfilled') {
-        fyersRows = f.value.bars || []; quote = f.value.quote || null;
-        sourceStatus.fyers = { status: fyersRows.length ? 'ok' : 'empty', rawCount: fyersRows.length, ...(f.value.status || {}) };
-      } else {
-        fyersFailed = true; sourceStatus.fyers = { status: 'error', error: errorText(f.reason) };
-      }
-      if (t.status === 'fulfilled') {
-        tvRows = t.value;
-        if (tvEnabled) sourceStatus.tvdatafeed = { status: tvRows.length ? 'ok' : 'empty', rawCount: tvRows.length };
-      } else {
-        tvFailed = true; sourceStatus.tvdatafeed = { status: 'error', error: errorText(t.reason) };
-      }
-
-      // Keep every validated candle in the exact bounded FYERS range rather than
-      // silently discarding everything except three observed sessions.
-      const fyersAll = normalizeRows(fyersRows, 'fyers').filter(bar =>
-        bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs,
-      );
+      let fyersAll = fyersRows as StoredBar[];
       const dates = sessionDates(fyersAll, mapping.timezone);
       const recentDates = new Set(dates);
       const fyersBars = fyersAll;
