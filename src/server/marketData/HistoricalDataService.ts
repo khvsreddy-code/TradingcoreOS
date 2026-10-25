@@ -3,7 +3,28 @@ import type { HistoricalCandle, HistoricalDataMetadata, HistoricalQuoteSnapshot 
 
 export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'fyers-three-sessions+tvdatafeed-older-5000/v1';
+export const HISTORICAL_OPTION_RECENT_SESSIONS = 5;
+export const HISTORICAL_SOURCE_POLICY = 'fyers-instrument-window+tvdatafeed-older-5000/v2';
+
+// Version 1 caches used three FYERS sessions for every instrument. Their older
+// TV candles remain reusable after revalidating the FYERS-owned recent window.
+const LEGACY_HISTORICAL_SOURCE_POLICIES = new Set([
+  'fyers-three-sessions+tvdatafeed-older-5000/v1',
+]);
+
+function isCompatibleHistoricalCachePolicy(policy: string): boolean {
+  return policy === HISTORICAL_SOURCE_POLICY || LEGACY_HISTORICAL_SOURCE_POLICIES.has(policy);
+}
+
+/** Options keep one trading week of FYERS candles; other instruments keep three sessions. */
+export function recentHistorySessionsForInstrument(instrumentType: string, symbol = ''): number {
+  const type = String(instrumentType || '').trim().toLowerCase();
+  const optionType = ['option', 'options', 'option_contract', 'option-contract', 'option contract'].includes(type);
+  // Some symbol sources omit the instrument type. Contract suffix is only a
+  // fallback here; derivative source merging still requires an explicit mapping.
+  const optionSymbol = /(?:CE|PE)$/i.test(String(symbol || '').trim());
+  return optionType || optionSymbol ? HISTORICAL_OPTION_RECENT_SESSIONS : HISTORICAL_RECENT_SESSIONS;
+}
 const CACHE_TTL_MS = 60_000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const CACHE_TABLE = 'historical_dataset_cache';
@@ -67,11 +88,13 @@ function localDateTimeToEpoch(date: string, time: string, timezone: string): num
   return guess;
 }
 
-/** Count three configured weekday sessions; otherwise request a safe ten-day window and keep the last three observed sessions. */
+/** Count the instrument-specific recent trading sessions; widen the fallback window around holidays. */
 export function getRecentHistoryRequestRange(
-  mapping: Pick<HistoricalInstrumentMapping, 'timezone' | 'sessionOpen' | 'calendarHolidays' | 'calendarComplete'>,
+  mapping: Pick<HistoricalInstrumentMapping, 'timezone' | 'sessionOpen' | 'calendarHolidays' | 'calendarComplete'>
+    & Partial<Pick<HistoricalInstrumentMapping, 'instrumentType' | 'fyersSymbol'>>,
   now = new Date(),
 ): RecentHistoryRange {
+  const recentSessions = recentHistorySessionsForInstrument(mapping.instrumentType || '', mapping.fyersSymbol || '');
   const timezone = validTimezone(mapping.timezone);
   const today = zonedDate(now.getTime(), timezone);
   const localClockParts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
@@ -85,16 +108,18 @@ export function getRecentHistoryRequestRange(
   let calendarPolicy = 'observed-sessions-fallback-10-calendar-days';
   if (mapping.calendarComplete === true) {
     let cursor = firstSessionDate, seen = 0;
-    for (let walked = 0; walked < 370 && seen < HISTORICAL_RECENT_SESSIONS; walked += 1) {
+    for (let walked = 0; walked < 370 && seen < recentSessions; walked += 1) {
       const dow = new Date(cursor + 'T12:00:00Z').getUTCDay();
       if (dow !== 0 && dow !== 6 && !holidays.has(cursor)) { seen += 1; firstSessionDate = cursor; }
       cursor = previousDate(cursor);
     }
-    if (seen === HISTORICAL_RECENT_SESSIONS) calendarPolicy = 'configured-weekday-calendar+holiday-list';
+    if (seen === recentSessions) calendarPolicy = `configured-weekday-calendar+holiday-list-${recentSessions}-sessions`;
     else firstSessionDate = previousDate(today);
   } else {
     firstSessionDate = today;
-    for (let i = 0; i < 10; i += 1) firstSessionDate = previousDate(firstSessionDate);
+    // Five observed option sessions need a wider cushion for weekends and exchange holidays.
+    const fallbackCalendarDays = recentSessions === HISTORICAL_OPTION_RECENT_SESSIONS ? 14 : 10;
+    for (let i = 0; i < fallbackCalendarDays; i += 1) firstSessionDate = previousDate(firstSessionDate);
   }
   return {
     // Midnight includes daily bars stamped at 00:00 on the third session date.
@@ -493,6 +518,7 @@ export class HistoricalDataService {
     const existing = inflight.get(key);
     if (existing) return existing;
     const task = (async (): Promise<CacheRecord> => {
+      const recentSessionCount = recentHistorySessionsForInstrument(mapping.instrumentType, mapping.fyersSymbol);
       const range = getRecentHistoryRequestRange(mapping);
       const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
       const tvEnabled = tvConfigured && this.tvContractCompatible(mapping);
@@ -523,7 +549,7 @@ export class HistoricalDataService {
 
       const fyersAll = normalizeRows(fyersRows, 'fyers');
       const dates = sessionDates(fyersAll, mapping.timezone);
-      const recentDates = new Set(dates.slice(-HISTORICAL_RECENT_SESSIONS));
+      const recentDates = new Set(dates.slice(-recentSessionCount));
       const fyersBars = fyersAll.filter(bar => recentDates.has(zonedDate(bar.timestampMs, mapping.timezone)));
       let tvBars = normalizeRows(tvRows, 'tvdatafeed');
       const firstRecentDate = recentDates.size ? [...recentDates].sort()[0]! : null;
@@ -537,7 +563,7 @@ export class HistoricalDataService {
       // older portion of a previously validated dataset for this same, explicitly
       // compatible instrument mapping. Never reuse cached bars from recent Fyers
       // sessions, and never present the fallback as a fresh source response.
-      const cachedOlderBars = cached?.sourcePolicy === HISTORICAL_SOURCE_POLICY &&
+      const cachedOlderBars = cached != null && isCompatibleHistoricalCachePolicy(cached.sourcePolicy) &&
         cached.bars.length > 0 && tvBars.length === 0 && this.tvContractCompatible(mapping)
         ? cached.bars.filter(bar => !firstRecentDate || zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate)
         : [];
@@ -552,7 +578,12 @@ export class HistoricalDataService {
       }
       const merged = [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
       const degraded = fyersFailed || fyersBars.length === 0 || !tvEnabled || tvFailed || tvBars.length === 0;
-      sourceStatus.fyers = { ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}), validatedCount: fyersBars.length, sessions: [...recentDates].sort() };
+      sourceStatus.fyers = {
+        ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}),
+        validatedCount: fyersBars.length,
+        recentSessionsTarget: recentSessionCount,
+        sessions: [...recentDates].sort(),
+      };
       sourceStatus.tvdatafeed = {
         ...(isRecord(sourceStatus.tvdatafeed) ? sourceStatus.tvdatafeed : {}),
         validatedCount: tvBars.length,
@@ -565,7 +596,7 @@ export class HistoricalDataService {
         revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
         expiresAt: Date.now() + CACHE_TTL_MS, updatedAt: Date.now(), quote,
       };
-      if (!merged.length && cached?.bars.length && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY) {
+      if (!merged.length && cached?.bars.length && isCompatibleHistoricalCachePolicy(cached.sourcePolicy)) {
         return {
           ...cached,
           expiresAt: Date.now(),
