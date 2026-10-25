@@ -3,6 +3,7 @@ import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 import { CoreSpiritCopilotDraftRepository } from '../storage/CoreSpiritCopilotDraftRepository.js';
+import { CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION, searchCoreSpiritCopilotKnowledge } from '../../services/coreSpirit/copilotKnowledge.js';
 import { parseCoreSpiritAiInvocationRequest, createCoreSpiritAiInputFingerprint, CORE_SPIRIT_AI_INVOKE_LIMITS } from '../../services/coreSpirit/aiInvocation.js';
 import type { CoreScriptRequiredCapability } from '../../services/coreSpirit/coreScriptLanguagePolicy.js';
 import { buildCoreSpiritCopilotDraftArtifact, buildCoreSpiritReviewPatch, coreSpiritCopilotSha256, type CoreSpiritGeneratedBacktestScenario } from '../../services/coreSpirit/copilotDraft.js';
@@ -117,6 +118,8 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     ].join('\n');
     const currentCompile = currentSource ? compileCoreSpirit(currentSource,'corespirit-editor',{layer:'script'}) : null;
     const currentIr = currentCompile?.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;requiredCapabilities?:readonly string[];semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
+    const knowledgeHits=searchCoreSpiritCopilotKnowledge([mode,prompt,currentSource].join(' '),8);
+    const knowledgeContext=JSON.stringify({version:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,hits:knowledgeHits.map(hit=>({id:hit.id,title:hit.title,body:hit.body,category:hit.category,sourcePath:hit.sourcePath,kind:hit.kind}))}).slice(0,16000);
     const compilerContext = JSON.stringify({
       diagnostics:(currentCompile?.diagnostics??[]).slice(0,80).map(d=>({severity:d.severity,code:d.code,message:d.message,line:d.line,column:d.column})),
       maxLookback:currentIr?.maxLookback??null,
@@ -127,6 +130,9 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     }).slice(0,22000);
     const userContent=[
       `Selected Copilot mode: ${mode}`,
+      'Trusted, versioned documentation and standard-library knowledge from TradingCoreOS canonical registries:',
+      knowledgeContext,
+      '',
       'Current compiler and temporal-safety evidence (source-derived; treat diagnostics as higher-confidence than guesses):',
       compilerContext,
       '',
@@ -180,7 +186,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     if(analysisOnly){
       const diagnostics=(currentCompile?.diagnostics??[]).slice(0,80);
       const createdAt=new Date().toISOString();
-      const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:currentSource,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:null,repairAttempts:0,createdAt,analysisOnly:true});
+      const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:currentSource,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:null,repairAttempts:0,createdAt,analysisOnly:true,knowledgeVersion:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,knowledgeHitIds:knowledgeHits.map(hit=>hit.id)});
       const safetyReview={maxLookback:currentIr?.maxLookback??null,repaintSafety:currentIr?.repaintSafety??null,causalityAnalysis:currentIr?.causalityAnalysis??null,requiredCapabilities:[]};
       let artifactForResponse:Record<string,unknown>={...draftArtifact,persisted:false};
       try{
@@ -188,7 +194,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
         artifactForResponse={...draftArtifact,id:saved.id,persisted:true,createdAt:saved.createdAt};
       }catch{artifactForResponse={...draftArtifact,persisted:false};}
       res.setHeader('Cache-Control','no-store');
-      finishCopilotResponse(res,stream,{success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact:artifactForResponse,safetyReview,validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
+      finishCopilotResponse(res,stream,{success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact:artifactForResponse,knowledge:{version:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,hits:knowledgeHits.map(hit=>({id:hit.id,title:hit.title,sourcePath:hit.sourcePath}))},safetyReview,validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
       return;
     }
     let compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
@@ -230,7 +236,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     const valid=Boolean(artifactValid&&compiled.ir&&!diagnostics.some(d=>d.severity==='error'));
     const sourceIr=compiled.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;requiredCapabilities?:readonly string[];semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
     const createdAt=new Date().toISOString();
-    const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts,createdAt});
+    const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts,createdAt,knowledgeVersion:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,knowledgeHitIds:knowledgeHits.map(hit=>hit.id)});
     const safetyReview={maxLookback:sourceIr?.maxLookback??null,repaintSafety:sourceIr?.repaintSafety??null,causalityAnalysis:sourceIr?.causalityAnalysis??null,requiredCapabilities:[...(sourceIr?.requiredCapabilities??[])],semanticNodeCount:sourceIr?.semanticDependencyGraph?.nodes?.length??null,semanticEdgeCount:sourceIr?.semanticDependencyGraph?.edges?.length??null,compilerDiagnostics:compilerDiagnostics.slice(0,40),sandboxDiagnostics:safetyDiagnostics.slice(0,40)};
     let artifactForResponse:Record<string,unknown>={...draftArtifact,persisted:false};
     try{
@@ -247,6 +253,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       backtestScenarios:generated.backtestScenarios,
       diff:buildCoreSpiritReviewPatch(currentSource,generated.source),
       draftArtifact:artifactForResponse,
+      knowledge:{version:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,hits:knowledgeHits.map(hit=>({id:hit.id,title:hit.title,sourcePath:hit.sourcePath}))},
       repairAttempts,
       safetyReview,
       validation:{valid,artifactHash:valid?compiled.artifact?.abi?.artifactHash:null,diagnostics:diagnostics.slice(0,80)},
@@ -335,6 +342,16 @@ async function handleCoreSpiritAiInvoke(req:AuthenticatedRequest,res:Response):P
 }
 
 coreSpiritCopilotRoutes.post('/invoke',aiInvokeRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCoreSpiritAiInvoke(req,res);});
+
+
+coreSpiritCopilotRoutes.get('/knowledge', (req:AuthenticatedRequest,res:Response)=>{
+  const query=typeof req.query.q==='string'?req.query.q.slice(0,500):'';
+  const rawLimit=Number(req.query.limit||8);
+  const limit=Number.isFinite(rawLimit)?Math.max(1,Math.min(12,Math.trunc(rawLimit))):8;
+  const results=searchCoreSpiritCopilotKnowledge(query,limit);
+  res.setHeader('Cache-Control','no-store');
+  res.json({success:true,data:{knowledgeVersion:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,query,results}});
+});
 
 coreSpiritCopilotRoutes.get('/drafts',async(req:AuthenticatedRequest,res:Response)=>{
   const rawLimit=Number(req.query.limit||20);
