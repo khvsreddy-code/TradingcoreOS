@@ -25,7 +25,9 @@
     "bundle:budget": "node tools/check-bundle-budget.mjs",
     "bundle:report": "TCO_MAX_INITIAL_GZIP_KB=100000 TCO_MAX_LANDING_GZIP_KB=100000 TCO_MAX_LOGIN_GZIP_KB=100000 TCO_MAX_WORKSPACE_GZIP_KB=100000 TCO_MAX_CHART_GZIP_KB=100000 TCO_MAX_LIVE_GZIP_KB=100000 TCO_MAX_CORESPIRIT_EDITOR_GZIP_KB=100000 TCO_MAX_MODELS_GZIP_KB=100000 TCO_MAX_PREDICTIONS_GZIP_KB=100000 TCO_MAX_AUTOMATIONS_GZIP_KB=100000 TCO_MAX_INDICATORS_GZIP_KB=100000 node tools/check-bundle-budget.mjs",
     "verify:browser:auth": "node tools/verify-authenticated-chart-performance.mjs",
-    "verify:browser:matrix": "node tools/verify-chart-matrix.mjs"
+    "verify:browser:matrix": "node tools/verify-chart-matrix.mjs",
+    "verify:critical-contracts": "node --loader ./tools/nodeTsTranspileLoader.mjs src/fyersCapabilitiesContract.test.mjs && node src/vela083FoundationContract.test.mjs && node src/vela085ConformanceContract.test.mjs",
+    "prebuild": "npm run typecheck && npm run verify:critical-contracts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
