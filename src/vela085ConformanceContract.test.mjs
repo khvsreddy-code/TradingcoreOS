@@ -8,6 +8,7 @@ const scenePatch = read('../vendor/vela/src/core/model/patch.ts');
 const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
 const priceStyle = read('../vendor/vela/src/core/price-styles/heikin-ashi.ts');
 const dataProvider = read('./TcoVelaDataProvider.ts');
+const liveChart = read('./components/workspace/LiveChart.tsx');
 const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
 const outputLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const sceneDiff = read('./services/core/chart/coreSpiritSceneDiff.ts');
@@ -19,11 +20,11 @@ const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 
-assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'conformance must target the pinned Vela source commit');
-assert.equal(sourceSnapshot.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'the machine-generated source diff must use the same upstream pin');
+assert.match(provenance, /aecb13847dff3c1a50a2f3433e9804d26fc581ed/, 'conformance must target the pinned Vela source commit');
+assert.equal(sourceSnapshot.upstream.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'the machine-generated source diff must use the same upstream pin');
 assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
-assert.equal(releaseSnapshot.upstream.base.version, '0.8.4', 'upstream release delta starts at 0.8.4');
-assert.equal(releaseSnapshot.upstream.release.version, '0.8.5', 'upstream release delta ends at 0.8.5');
+assert.equal(releaseSnapshot.upstream.base.version, '0.8.5', 'upstream release delta starts at 0.8.5');
+assert.equal(releaseSnapshot.upstream.release.version, '0.9.0', 'upstream release delta ends at 0.9.0');
 assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
 
 assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
@@ -50,10 +51,24 @@ assert.match(rendererPorts, /paneId\?: string/, 'data-window groups carry native
 assert.match(renderer, /groups\.push\(\{ name: model\.title, paneId, paneKind, rows \}\)/, 'native data-window rows retain pane identity and kind');
 assert.match(adapter, /buildCoreSpiritVelaIndicatorModel/, 'CoreSpirit output conversion must stay behind its typed adapter');
 
+assert.match(chartKernel, /setLocale\(next: string \| LocalizationOptions\)/, 'TCO native chart facade exposes runtime locale switching');
+assert.match(chartKernel, /registerLocale/, 'the native chart loads and registers translated locale packs');
+assert.match(chartKernel, /locales\/hi/, 'Hindi translations are available to the TradingCoreOS native chart');
+assert.match(chartKernel, /setLocalization/, 'the native renderer receives locale state and refreshes its chart UI');
+assert.match(liveChart, /aria-label="Chart language"/, 'the live chart exposes Vela locale selection to users');
+assert.match(liveChart, /tradingcore:vela-locale:v1/, 'the selected chart locale is persisted between visits');
+assert.match(liveChart, /setLocale\(chartLocale\)/, 'changing the locale updates the existing chart surfaces in place');
 assert.match(dataProvider, /getBarsProgressive/, 'TCO initial history must remain progressively loaded');
 assert.match(dataProvider, /async loadRange\(/, 'older-history paging remains routed through the canonical provider');
 assert.match(dataProvider, /historyReady: snapshot\.historyReady/, 'history readiness comes from the TCO data plane');
 assert.doesNotMatch(extension, /waitsForHistory\s*:\s*true\s*[,}]/, 'bounded TCO regime ribbon stays incremental instead of waiting for all history');
 assert.match(extension, /anchor = Math\.max\(0, last - length\)/, 'the TCO regime ribbon uses a bounded trailing window');
 
-console.log('VELA_085_CONFORMANCE_CONTRACT_OK');
+const localizationApi = read('../vendor/vela/src/core/i18n/registry.ts');
+const hindiPack = read('../vendor/vela/src/locales/hi.ts');
+const velaApi = read('../vendor/vela/src/Vela.ts');
+assert.match(localizationApi, /export function registerLocale\(/, 'locale packs are opt-in registrations');
+assert.match(hindiPack, /locale: 'hi'/, 'Hindi locale pack is vendored');
+assert.match(velaApi, /setLocale\(next: string \| LocalizationOptions\)/, 'locale can change at runtime without rerunning indicators');
+assert.ok(hindiPack.length > 0, 'Hindi locale source must be present');
+console.log('VELA_090_CONFORMANCE_CONTRACT_OK');

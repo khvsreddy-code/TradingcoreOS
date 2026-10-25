@@ -33,6 +33,39 @@ import { chartPerformanceTelemetry } from '../../services/marketData/chartPerfor
 import { getWorkspaceAppearance, subscribeWorkspaceAppearance } from '../../theme/workspaceAppearance';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
+
+const VELA_LOCALES = [
+  { value: 'en', label: 'English' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'de', label: 'German' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'he', label: 'Hebrew' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'it', label: 'Italian' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'ms', label: 'Malay' },
+  { value: 'pl', label: 'Polish' },
+  { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'th', label: 'Thai' },
+  { value: 'tr', label: 'Turkish' },
+  { value: 'vi', label: 'Vietnamese' },
+  { value: 'zh-Hans', label: 'Chinese (Simplified)' },
+  { value: 'zh-Hant', label: 'Chinese (Traditional)' },
+] as const;
+
+function loadSavedChartLocale(): string {
+  if (typeof window === 'undefined') return 'en';
+  try {
+    const saved = window.localStorage.getItem('tradingcore:vela-locale:v1');
+    return saved && VELA_LOCALES.some((locale) => locale.value === saved) ? saved : 'en';
+  } catch {
+    return 'en';
+  }
+}
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=false}:Props){
   const resolvedInstrumentKey=canonicalInstrumentKey(brokerId,instrumentKey);
   const rendererController=useChartLifecycle();
@@ -80,6 +113,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const [predictionModelIds,setPredictionModelIds]=useState<string[]>(getSavedPredictionModelIds());
   const [predictionQuery,setPredictionQuery]=useState('');
   const [chartType,setChartType]=useState<'candlestick'|'line'>('candlestick');
+  const [chartLocale,setChartLocale]=useState<string>(loadSavedChartLocale);
   const [error,setError]=useState('');
   const [historyLoading,setHistoryLoading]=useState(false);
   const [candleAppearance,setCandleAppearance]=useState<CandleAppearance>(()=>loadCandleAppearance(brokerId,resolvedInstrumentKey));
@@ -245,6 +279,16 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     return runtime.mount();
   },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,persistedChart.velaDrawings]);
 
+  // Apply the saved language after both native chart surfaces mount. The preference is
+  // shared by the main and oscillator charts and never triggers an indicator recompute.
+  useEffect(()=>{
+    try { window.localStorage.setItem('tradingcore:vela-locale:v1',chartLocale); } catch {}
+    const primaryChart=chart.current;
+    const oscillatorChart=oscChart.current;
+    if(primaryChart)void primaryChart.setLocale(chartLocale).catch(()=>{});
+    if(oscillatorChart)void oscillatorChart.setLocale(chartLocale).catch(()=>{});
+  },[chartLocale,chartDatasetKey]);
+
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
   useEffect(()=>{
@@ -283,7 +327,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     historyLoading={historyLoading}
     toolbar={null}
     depthPanel={<ChartDepthPanel brokerId={brokerId} instrumentKey={resolvedInstrumentKey} visible={showDepth}/>}
-    header={<div className="flex items-center justify-between px-1 pb-2 text-[10px] font-mono"><span className="text-[var(--tco-dim)]">Normalized broker candles · native indicator engine</span><span className="text-[#3b82f6]">● LIVE ENGINE</span>{showOI&&oiAnalytics&&<span className="ml-2 text-[#a78bfa]">OI · PCR {oiAnalytics.pcr.toFixed(2)} · FLIP {oiAnalytics.flip?.strike??'—'}</span>}</div>}
+    header={<div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 pb-2 text-[10px] font-mono"><span className="text-[var(--tco-dim)]">Normalized broker candles · native indicator engine</span><span className="text-[#3b82f6]">● LIVE ENGINE</span><label className="ml-auto flex items-center gap-1.5 text-[var(--tco-dim)]">LANGUAGE<select aria-label="Chart language" value={chartLocale} onChange={event=>setChartLocale(event.target.value)} className="rounded border border-[var(--tco-control)] bg-[var(--tco-surface-2)] px-2 py-1 text-[var(--tco-text)] outline-none focus:border-[var(--tco-accent)]">{VELA_LOCALES.map(locale=><option key={locale.value} value={locale.value}>{locale.label}</option>)}</select></label>{showOI&&oiAnalytics&&<span className="ml-2 text-[#a78bfa]">OI · PCR {oiAnalytics.pcr.toFixed(2)} · FLIP {oiAnalytics.flip?.strike??'—'}</span>}</div>}
     overlay={<>
       {showEmbeddedDrawingToolbar&&<ChartToolbar activeTool={drawingTool} onSelectTool={tool=>selectDrawingTool(tool as DrawingTool)} onUndo={drawingUndo} onClear={drawingClear}/>}
       <ChartOverlay

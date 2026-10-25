@@ -27,20 +27,20 @@ const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseDiff = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
-assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
-assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
-assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include the 0.8.5 release notes');
+assert.match(provenance, /Upstream source version: \*\*0\.9\.0\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
+assert.match(provenance, /Previous source base: Vela 0\.8\.5/, 'record the 0.8.5 ancestry of the upstream release');
+assert.match(releaseNotes, /^## \[0\.9\.0\]/m, 'vendored changelog must include the 0.9.0 release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
 const noticeBytes = Buffer.from(notice, 'utf8');
 const noticeBlobSha = createHash('sha1').update(Buffer.from('blob ' + noticeBytes.length + '\0', 'utf8')).update(noticeBytes).digest('hex');
-assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.8.5');
-assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
-assert.equal(overlayDiff.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'machine-generated diff must use the pinned source commit');
-assert.equal(releaseDiff.upstream.base.commit, '850fa1f431e2065e9b0074c4b0555a48a2999eaf', 'release diff must compare from the exact 0.8.4 source base');
-assert.equal(releaseDiff.upstream.release.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'release diff must terminate at the exact 0.8.5 source commit');
+assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.9.0');
+assert.match(provenance, /aecb13847dff3c1a50a2f3433e9804d26fc581ed/, 'record the exact upstream source commit');
+assert.equal(overlayDiff.upstream.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'machine-generated diff must use the pinned source commit');
+assert.equal(releaseDiff.upstream.base.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'release diff must compare from the exact 0.8.5 source base');
+assert.equal(releaseDiff.upstream.release.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'release diff must terminate at the exact 0.9.0 source commit');
 assert.equal(releaseDiff.counts.total, releaseDiff.files.length, 'release diff summary must match changed source entries');
-assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/PanesControl.ts'), 'release diff must include the pane API change');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/i18n/registry.ts'), 'release diff must include the localization registry');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/native-indicators/classics/averages.ts'), 'release diff must include the breaking regression-study migration');
 assert.equal(overlayDiff.counts.modified, overlayDiff.modified.length, 'diff summary must agree with the per-file modifications');
 assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff summary must agree with TCO-only source files');
@@ -49,7 +49,7 @@ assert.ok(overlayDiff.localOnly.every((file) => patchManifest.patches.some((patc
 assert.match(persistedDocument, /paneHeightWeights\?: Record<string, number>/, 'pane weights are part of the versioned per-cell state');
 assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 64\)/, 'persisted pane count is bounded');
 assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
-assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.8.5 pane API');
+assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.9.0 pane API');
 assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
 assert.match(paneCell, /const normalization = Math\.max\(1, maxWeight \/ 100\)/, 'oversized API weights are normalized by a common factor so pane proportions survive persistence');
 assert.match(paneCell, /if \(pending\) \{[\s\S]*maxWeight = Math\.max\(maxWeight, weight\)/, 'pending panes participate in the same normalization factor during progressive restore');
@@ -74,7 +74,7 @@ for (const path of [
   '../vendor/vela/src/renderers/native/chrome/vela-logos.ts',
   '../vendor/vela/src/ui/surface-events.ts',
   '../vendor/vela/src/ui/surface-exit.ts',
-]) assert.equal(exists(path), true, path + ' must be present from upstream Vela 0.8.5');
+]) assert.equal(exists(path), true, path + ' must be present from upstream Vela 0.9.0');
 
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'keep native chart settings enabled');
 assert.match(nativeRenderer, /btn\.addEventListener\('pointerdown', \(event\) => event\.stopPropagation\(\)\)/, 'native settings gear must not bubble into chart gestures');
@@ -93,4 +93,11 @@ for (const path of [
   '../vendor/vela/src/core/drawings/advancedRegistryPatterns.ts',
 ]) assert.equal(exists(path), true, path + ' is a required TCO performance/feature extension');
 
-console.log('VELA_085_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');
+const localeRegistry = read('../vendor/vela/src/core/i18n/registry.ts');
+const hindiLocale = read('../vendor/vela/src/locales/hi.ts');
+assert.match(vela, /setLocale\(next: string \| LocalizationOptions\)/, 'Vela supports runtime localization');
+assert.match(localeRegistry, /export function registerLocale\(/, 'locale registration is explicit and opt-in');
+assert.match(hindiLocale, /locale: 'hi'/, 'the Hindi locale pack is included');
+assert.ok(exists('../vendor/vela/src/locales/hi.json'), 'Hindi translation catalogue is included');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/locales/hi.json'), '0.9.0 release delta includes the Hindi catalogue');
+console.log('VELA_090_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');

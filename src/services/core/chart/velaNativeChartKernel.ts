@@ -23,6 +23,9 @@ import type { VelaEventMap } from '../../../../vendor/vela/src/core/events/types
 import type { DrawingsOption } from '../../../../vendor/vela/src/core/drawings/toolbar';
 import type { SerializedDrawing } from '../../../../vendor/vela/src/core/drawings/Drawing';
 import { migrateVelaDrawingDocument } from './velaDrawingPersistence';
+import { LocaleState, pickLocalization } from '../../../../vendor/vela/src/core/i18n/translator';
+import { registerLocale } from '../../../../vendor/vela/src/core/i18n/registry';
+import type { LocalePack, LocalizationOptions } from '../../../../vendor/vela/src/core/i18n/types';
 
 export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
@@ -418,6 +421,62 @@ export function createSeriesMarkers(candle: ISeriesApi<'Candlestick'> | ISeriesA
   return { setMarkers, detach: () => host.chart.setMarkers([]), id: state.id };
 }
 
+
+type LocalePackModule = { default: LocalePack };
+
+/** Load chart translations only for the locale actually requested. */
+const localePackLoaders: Readonly<Record<string, () => Promise<LocalePackModule>>> = {
+  ar: () => import('../../../../vendor/vela/src/locales/ar'),
+  de: () => import('../../../../vendor/vela/src/locales/de'),
+  en: () => import('../../../../vendor/vela/src/locales/en'),
+  es: () => import('../../../../vendor/vela/src/locales/es'),
+  fr: () => import('../../../../vendor/vela/src/locales/fr'),
+  he: () => import('../../../../vendor/vela/src/locales/he'),
+  hi: () => import('../../../../vendor/vela/src/locales/hi'),
+  id: () => import('../../../../vendor/vela/src/locales/id'),
+  it: () => import('../../../../vendor/vela/src/locales/it'),
+  ja: () => import('../../../../vendor/vela/src/locales/ja'),
+  ko: () => import('../../../../vendor/vela/src/locales/ko'),
+  ms: () => import('../../../../vendor/vela/src/locales/ms'),
+  pl: () => import('../../../../vendor/vela/src/locales/pl'),
+  'pt-br': () => import('../../../../vendor/vela/src/locales/pt-BR'),
+  ru: () => import('../../../../vendor/vela/src/locales/ru'),
+  th: () => import('../../../../vendor/vela/src/locales/th'),
+  tr: () => import('../../../../vendor/vela/src/locales/tr'),
+  vi: () => import('../../../../vendor/vela/src/locales/vi'),
+  'zh-hans': () => import('../../../../vendor/vela/src/locales/zh-Hans'),
+  'zh-hant': () => import('../../../../vendor/vela/src/locales/zh-Hant'),
+};
+const registeredLocalePacks = new Set<string>();
+const localePackLoads = new Map<string, Promise<void>>();
+const LOCALIZATION_OPTION_KEYS = ['locale', 'direction', 'messages', 'numberingSystem', 'hourCycle', 'weekStart', 'formatters'] as const;
+
+function localePackKey(locale: string): string | null {
+  const normalized = locale.trim().replace(/_/g, '-').toLowerCase();
+  if (normalized.startsWith('zh-hans')) return 'zh-hans';
+  if (normalized.startsWith('zh-hant')) return 'zh-hant';
+  if (normalized.startsWith('pt-br')) return 'pt-br';
+  const language = normalized.split('-')[0] ?? '';
+  return Object.prototype.hasOwnProperty.call(localePackLoaders, language) ? language : null;
+}
+
+function ensureLocalePack(locale: string): Promise<void> {
+  const key = localePackKey(locale);
+  if (!key || registeredLocalePacks.has(key)) return Promise.resolve();
+  const pending = localePackLoads.get(key);
+  if (pending) return pending;
+  const loader = localePackLoaders[key];
+  if (!loader) return Promise.resolve();
+  const load = loader().then(({ default: pack }) => {
+    if (!registeredLocalePacks.has(key)) {
+      registerLocale(pack);
+      registeredLocalePacks.add(key);
+    }
+  }).finally(() => localePackLoads.delete(key));
+  localePackLoads.set(key, load);
+  return load;
+}
+
 export class VelaNativeChartKernel {
   readonly renderer = new NativeRenderer();
   readonly pricePaneId = 'price';
@@ -431,6 +490,8 @@ export class VelaNativeChartKernel {
   private priceLines: PriceLine[] = [];
   private lastCandleOptions: SeriesOptions = {};
   private themeOptions: any = {};
+  private readonly localeState: LocaleState;
+  private localeRevision = 0;
   private mounted = false;
   private onClickHandlers = new Set<(param: any) => void>();
   private logicalRangeSubscriptions = new Map<(range: { from: number; to: number } | null) => void, Unsubscribe>();
@@ -442,7 +503,11 @@ export class VelaNativeChartKernel {
 
   constructor(private readonly host: HTMLElement, options: any = {}) {
     this.themeOptions = mergeChartOptions({}, options);
+    const localization = options?.localization && typeof options.localization === 'object' ? options.localization : options;
+    this.localeState = new LocaleState(pickLocalization(localization));
     this.renderer.mount(host, velaThemeFromOptions(this.themeOptions));
+    this.pushLocalization();
+    void ensureLocalePack(this.localeState.locale).then(() => this.pushLocalization()).catch(() => this.pushLocalization());
     this.drawingController = new DrawingController(
       this.renderer,
       this.drawingEvents,
@@ -508,6 +573,27 @@ export class VelaNativeChartKernel {
     this.themeOptions = mergeChartOptions(this.themeOptions, options);
     this.renderer.setTheme(velaThemeFromOptions(this.themeOptions));
     if (options?.crosshair) this.renderer.applyFeature('crosshair.visible', Number(options.crosshair.mode) !== 2);
+    if (options && typeof options === 'object' && LOCALIZATION_OPTION_KEYS.some((key) => Object.prototype.hasOwnProperty.call(options, key))) {
+      void this.setLocale(pickLocalization(options)).catch(() => this.pushLocalization());
+    }
+  }
+
+  /** Change chart language, number/date formatting, or chrome direction in place. */
+  async setLocale(next: string | LocalizationOptions): Promise<this> {
+    this.localeState.update(typeof next === 'string' ? { locale: next } : pickLocalization(next));
+    const revision = ++this.localeRevision;
+    await ensureLocalePack(this.localeState.locale);
+    if (revision === this.localeRevision) this.pushLocalization();
+    return this;
+  }
+
+  get locale(): string { return this.localeState.locale; }
+
+  private pushLocalization(): void {
+    this.renderer.setLocalization(this.localeState, {
+      lang: this.localeState.localeExplicit ? this.localeState.locale : null,
+      dir: this.localeState.directionExplicit ? this.localeState.direction : null,
+    });
   }
   subscribeClick(cb: (param: any) => void): void { this.onClickHandlers.add(cb); }
   unsubscribeClick(cb: (param: any) => void): void { this.onClickHandlers.delete(cb); }
