@@ -1,4 +1,5 @@
 import { FyersApiClient } from './FyersApiClient.js';
+import { API_LATENCY_BUDGET_MS } from '../../latency/budgets.js';
 
 export class FyersAccountService {
   constructor(private readonly client: FyersApiClient) {}
@@ -8,6 +9,6 @@ export class FyersAccountService {
   orders(params: { id?: string; orderTag?: string } = {}, signal?: AbortSignal) { return this.client.apiGet('/orders', { id: params.id, order_tag: params.orderTag }, signal); }
   trades(signal?: AbortSignal) { return this.client.apiGet('/tradebook', {}, signal); }
   positions(signal?: AbortSignal) { return this.client.apiGet('/positions', {}, signal); }
-  margin(data: unknown, signal?: AbortSignal) { return this.client.apiPost('/multiorder/margin', { data }, signal); }
+  margin(data: unknown, signal?: AbortSignal) { return this.client.apiPost('/multiorder/margin', { data }, signal, API_LATENCY_BUDGET_MS.account, 'user-info'); }
   report(path: string, params: Record<string,string|number|undefined>, signal?: AbortSignal) { return this.client.apiGet(path, params, signal); }
 }
