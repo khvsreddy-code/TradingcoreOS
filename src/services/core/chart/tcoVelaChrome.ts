@@ -2587,6 +2587,17 @@ function clearVelaMarksForGroup(chart: { marks: { all: () => TimelineMark[]; set
   replaceVelaMarksForGroup(chart, group, []);
 }
 
+function parseNewsTimestamp(value: unknown): number {
+  const raw = String(value ?? '').trim();
+  const compact = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/.exec(raw);
+  if (compact) {
+    const [, year, month, day, hour, minute, second] = compact;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function stableNewsMarkId(value: string): string {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i += 1) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
@@ -2700,7 +2711,7 @@ const newsMarksAttachment: WidgetAttachment = {
         const now = Date.now();
         const marks: TimelineMark[] = bundle.items
           .map(item => {
-            const publishedAt = Date.parse(String(item.publishedAt || ''));
+            const publishedAt = parseNewsTimestamp(item.publishedAt);
             const url = String(item.url || '');
             if (!Number.isFinite(publishedAt) || publishedAt <= 0
               || publishedAt < now - 60 * 86_400_000 || publishedAt > now + 7 * 86_400_000

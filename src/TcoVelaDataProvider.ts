@@ -1,5 +1,6 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaNativeChartKernel';
 import { chartDataPlaneKey, getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
+import { historyStore } from './services/marketData/HistoryStore';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
@@ -469,21 +470,31 @@ export class TcoVelaDataProvider implements DataProvider {
     const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
-    // Paint from the current cache immediately, but request the FULL target in the
-    // background. ensureReadyHistory paints any short cache and continues fetching
-    // rather than treating it as complete merely because it contains a few sessions.
+    // Hydrate the disk cache before the target-sized request starts so reloads can
+    // paint saved candles immediately, even when no ChartDataPlane is resident yet.
+    const historyInterval = CHART_TIMEFRAME_INTERVALS[tcoTimeframe] || tcoTimeframe;
+    await historyStore.hydrate(brokerId, symbol, historyInterval);
+    if (abort()) return [];
+    let first: OHLCV[] = [];
+    const saved = historyStore.getStale(brokerId, symbol, historyInterval);
+    if (saved?.length) {
+      first = historicalToVelaBars(saved.slice(-firstPaintBars));
+      if (first.length) onBatch(first);
+    }
+
+    // Request the complete window after cached candles have painted. A cold ticker
+    // uses one full request; a cached ticker shows saved bars while refreshing.
     const historyPromise = plane.ensureReadyHistory(requested)
       .then(historicalToVelaBars)
       .catch(() => [] as OHLCV[]);
 
-    let first: OHLCV[] = [];
     const snapshot = plane.getSnapshot();
     if (snapshot.historyReady && !abort()) {
       const canonical = plane.readCanonical();
       const cached = canonical.length
         ? marketViewToBars(canonical, range, firstPaintBars)
         : historicalToVelaBars(plane.getCompatibilityCandles(firstPaintBars));
-      if (cached.length) {
+      if (cached.length && cached.length >= first.length) {
         first = cached.slice(-requested);
         onBatch(first);
       }
