@@ -114,11 +114,11 @@ assert.match(requestGate,/process\.env\.NODE_ENV === 'production'/,'production a
 assert.match(requestGate,/BROKER_COORDINATION_UNAVAILABLE/,'configured Redis outages must fail closed as 503 responses');
 assert.match(requestGate,/BROKER_COORDINATION_LOCK_TIMEOUT/,'shared quota lock waits are bounded');
 assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention storm cannot hold a request indefinitely');
-assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'transactions'/,'order book reads consume the transaction quota');
-assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'transactions'/,'trade book reads consume the transaction quota');
-assert.match(brokerAdapter,/fyersFetch\('\/orders', accessToken, \{\}, rateLimitIdentity, 'transactions'\)/,'legacy order-book calls consume transaction quota');
-assert.match(brokerAdapter,/fyersFetch\('\/tradebook', accessToken, \{\}, rateLimitIdentity, 'transactions'\)/,'legacy trade-book calls consume transaction quota');
-assert.match(accountService,/API_LATENCY_BUDGET_MS\.order, 'transactions'/,'margin requests are classified under transaction APIs');
+assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'user-info'/,'read-only order book requests consume the User Info quota');
+assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'user-info'/,'read-only trade book requests consume the User Info quota');
+assert.match(brokerAdapter,/fyersFetch\('\/orders', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only order-book calls consume User Info quota');
+assert.match(brokerAdapter,/fyersFetch\('\/tradebook', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only trade-book calls consume User Info quota');
+assert.match(accountService,/API_LATENCY_BUDGET_MS\.account, 'user-info'/,'margin calculation consumes the User Info quota');
 assert.match(legacyHistoryRoute,/datasetComplete: false/,'legacy history responses do not imply full dataset completeness');
 assert.match(legacyHistoryRoute,/providerPageLimit: 2_000/,'legacy history responses disclose the provider request ceiling');
 
