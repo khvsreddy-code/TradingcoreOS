@@ -6,7 +6,14 @@ const SECRET = process.env.FYERS_GATEWAY_SECRET;
 const FYERS_ORDER_URL = 'https://api-t1.fyers.in/api/v3/orders/sync';
 const MAX_SKEW_MS = Number(process.env.FYERS_GATEWAY_MAX_SKEW_MS || 60_000);
 const UPSTREAM_TIMEOUT_MS = Number(process.env.FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS || 8_000);
-const allowLegacySecret = process.env.FYERS_GATEWAY_ALLOW_LEGACY_SECRET === 'true';
+const REDIS_URL = String(process.env.UPSTASH_REDIS_REST_URL || process.env.TRADINGCORE_REDIS_REST_URL || '').trim().replace(/\/$/, '');
+const REDIS_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN || process.env.TRADINGCORE_REDIS_REST_TOKEN || '').trim();
+const REDIS_CONFIGURED = Boolean(REDIS_URL && REDIS_TOKEN);
+const TRANSACTION_LIMITS = Object.freeze({
+  standard: { requestsPerSecond: 8, requestsPerMinute: 160, requestsPerDay: 80_000 },
+  prime: { requestsPerSecond: 8, requestsPerMinute: 400, requestsPerDay: 400_000 },
+});
+const REDIS_INCREMENT_WINDOW_LUA = "local count = redis.call('incr', KEYS[1]); if count == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end; return count";
 const nonces = new Map();
 const orderTimestampsByAccount = new Map();
 let nextOrderRateCleanupAt = 0;
@@ -62,7 +69,7 @@ function authorize(req, rawBody) {
     nonces.set(nonce, issuedAt + MAX_SKEW_MS * 2);
     return true;
   }
-  return allowLegacySecret && req.headers['x-tradingcore-gateway-secret'] === SECRET;
+  return false;
 }
 
 function productType(value) {
@@ -102,8 +109,17 @@ function validateExecutionContext(order, context) {
   const decisionId = String(context.riskDecisionId || '').trim();
   const orderHash = String(context.orderHash || '').trim().toLowerCase();
   const accountKey = String(context.accountKey || '').trim();
+  const rateLimitIdentity = String(context.rateLimitIdentity || '').trim();
+  const quotaPlan = String(context.quotaPlan || '').trim();
   if (context.version !== 1 || context.riskApproved !== true) throw new Error('Execution context has no approved risk decision');
-  if (!strategyId || strategyId.length > 128 || !decisionId || decisionId.length > 128 || !/^[a-f0-9]{64}$/.test(accountKey)) throw new Error('Execution context strategy, account, or risk decision identity is invalid');
+  if (!strategyId || strategyId.length > 128 || !decisionId || decisionId.length > 128
+      || !/^[a-f0-9]{64}$/.test(accountKey)
+      || !rateLimitIdentity || rateLimitIdentity.length > 256
+      || !Object.hasOwn(TRANSACTION_LIMITS, quotaPlan)) {
+    throw new Error('Execution context strategy, account, quota plan, or risk decision identity is invalid');
+  }
+  const expectedAccountKey = crypto.createHash('sha256').update(rateLimitIdentity).digest('hex');
+  if (!timingSafeEqualHex(accountKey, expectedAccountKey)) throw new Error('Execution context user identity does not match its account key');
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || issuedAt > now + 2_000 || issuedAt < now - MAX_CONTEXT_TTL_MS || expiresAt <= now || expiresAt - issuedAt > MAX_CONTEXT_TTL_MS) {
     throw new Error('Execution context is expired or outside its permitted time window');
   }
@@ -114,6 +130,74 @@ function validateExecutionContext(order, context) {
   const expectedHash = crypto.createHash('sha256').update(JSON.stringify(order)).digest('hex');
   if (!/^[a-f0-9]{64}$/.test(orderHash) || !timingSafeEqualHex(orderHash, expectedHash)) {
     throw new Error('Execution context does not match the submitted order');
+  }
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function indiaDayKey(timestamp = Date.now()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(timestamp));
+}
+
+async function redisCommand(command, timeoutMs = 900) {
+  if (!REDIS_CONFIGURED) throw Object.assign(new Error('Shared Redis quota coordination is not configured'), { statusCode: 503 });
+  const response = await fetch(REDIS_URL, {
+    method: 'POST',
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(command),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.error) throw Object.assign(new Error('Shared Redis quota coordination is unavailable'), { statusCode: 503 });
+  return payload?.result;
+}
+
+/** Share exact FYERS transaction counter keys with the API service's BrokerRequestGate. */
+async function admitFyersTransaction(context) {
+  if (!REDIS_CONFIGURED) throw Object.assign(new Error('Shared Redis is required before FYERS orders can be submitted'), { statusCode: 503 });
+  const identity = String(context.rateLimitIdentity || '').trim();
+  const plan = String(context.quotaPlan || 'standard');
+  const limits = TRANSACTION_LIMITS[plan];
+  if (!identity || !limits) throw Object.assign(new Error('Authenticated quota identity and plan are required'), { statusCode: 503 });
+  const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
+  const budgetName = 'fyers:transactions';
+  const lockKey = `tco:broker:admit:${budgetName}:${identityHash}`;
+  const lastKey = `tco:broker:last:${budgetName}:${identityHash}`;
+  const lockOwner = crypto.randomUUID();
+  const lockDeadline = Date.now() + 2_500;
+  let locked = false;
+  while (!locked && Date.now() < lockDeadline) {
+    locked = (await redisCommand(['SET', lockKey, lockOwner, 'NX', 'PX', 2_000])) === 'OK';
+    if (!locked) await wait(25);
+  }
+  if (!locked) throw Object.assign(new Error('Unable to acquire shared FYERS transaction quota lock'), { statusCode: 503 });
+
+  try {
+    const last = Number(await redisCommand(['GET', lastKey]) || 0);
+    const spacingMs = Math.max(0, Math.ceil(1000 / limits.requestsPerSecond) - (Date.now() - last));
+    if (spacingMs > 0) await wait(spacingMs);
+
+    // Recompute fixed windows after spacing, then check and consume them under the lock.
+    const now = Date.now();
+    const minute = Math.floor(now / 60_000);
+    const day = indiaDayKey(now);
+    const minuteKey = `tco:broker:minute:${budgetName}:${identityHash}:${minute}`;
+    const dayKey = `tco:broker:day:${budgetName}:${identityHash}:${day}`;
+    const [minuteUsedRaw, dayUsedRaw] = await Promise.all([
+      redisCommand(['GET', minuteKey]),
+      redisCommand(['GET', dayKey]),
+    ]);
+    if (Number(minuteUsedRaw || 0) >= limits.requestsPerMinute || Number(dayUsedRaw || 0) >= limits.requestsPerDay) {
+      throw Object.assign(new Error('FYERS transaction quota is exhausted for this account'), { statusCode: 429 });
+    }
+    await redisCommand(['EVAL', REDIS_INCREMENT_WINDOW_LUA, '1', minuteKey, '61000']);
+    await redisCommand(['EVAL', REDIS_INCREMENT_WINDOW_LUA, '1', dayKey, String(48 * 60 * 60 * 1000)]);
+    await redisCommand(['SET', lastKey, String(Date.now()), 'PX', '61000']);
+  } finally {
+    // Compare-and-delete so an expired/reacquired lock can never be released by its previous owner.
+    await redisCommand(['EVAL', "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", '1', lockKey, lockOwner]).catch(() => undefined);
   }
 }
 
@@ -170,7 +254,11 @@ async function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   cleanupNonces();
-  if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true, service: 'fyers-execution-gateway' });
+  if (req.method === 'GET' && req.url === '/health') {
+    let redisHealthy = false;
+    try { redisHealthy = REDIS_CONFIGURED && await redisCommand(['PING']) === 'PONG'; } catch { redisHealthy = false; }
+    return json(res, redisHealthy ? 200 : 503, { ok: redisHealthy, service: 'fyers-execution-gateway', sharedQuotaCoordination: redisHealthy });
+  }
   if (req.method !== 'POST' || req.url !== '/v1/fyers/order') return json(res, 404, { success: false, error: 'Not found' });
 
   try {
@@ -180,6 +268,9 @@ const server = http.createServer(async (req, res) => {
     const accessToken = String(body.accessToken || '');
     if (!accessToken) return json(res, 400, { success: false, error: 'FYERS access token is required' });
     validateExecutionContext(body.order, body.executionContext);
+    // Every real order attempt shares FYERS's account/category counters with the
+    // REST API service. No per-instance fallback is allowed when Redis is absent.
+    await admitFyersTransaction(body.executionContext);
     enforceAccountOrderRate(String(body.executionContext.accountKey));
     const fyersPayload = buildFyersPayload(body.order);
     const controller = new AbortController();
