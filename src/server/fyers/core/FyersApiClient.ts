@@ -1,5 +1,12 @@
 import { withBrokerRequestGate } from '../../brokers/BrokerRequestGate.js';
-import { DEFAULT_FYERS_CAPABILITIES, type FyersCapabilities } from './FyersCapabilities.js';
+import {
+  DEFAULT_FYERS_CAPABILITIES,
+  resolveFyersAdmissionBudget,
+  type FyersApiCategory,
+  type FyersCapabilities,
+  type FyersRequestPriority,
+} from './FyersCapabilities.js';
+import { recordFyersQuotaAttempt, recordFyersQuotaDenial, recordFyersQuotaResponse } from './FyersQuotaTelemetry.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
 
 export class FyersApiError extends Error {
@@ -16,21 +23,25 @@ export class FyersApiError extends Error {
     this.payload = payload;
   }
 }
-
 const DATA_BASE = 'https://api-t1.fyers.in/data';
 const API_BASE = 'https://api-t1.fyers.in/api/v3';
 
 function retryDelay(response: Response): number | undefined {
   const ms = Number(response.headers.get('x-retry-after-ms') || 0);
-  if (ms > 0) return ms;
-  const seconds = Number(response.headers.get('retry-after') || 0);
-  return seconds > 0 ? seconds * 1000 : undefined;
+  if (Number.isFinite(ms) && ms > 0) return ms;
+  const header = String(response.headers.get('retry-after') || '').trim();
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const date = Date.parse(header);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
-
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500;
+function isRetryableStatus(status: number): boolean { return status === 429 || status >= 500; }
+function backoff(attempt: number, retryAfterMs?: number): number {
+  const exponential = Math.min(15_000, 500 * 2 ** attempt);
+  const jitter = Math.floor(Math.random() * Math.max(1, exponential * 0.25));
+  return Math.max(Number(retryAfterMs) || 0, exponential + jitter);
 }
-
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   if (signal?.aborted) return Promise.reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
@@ -42,17 +53,21 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       cleanup();
       reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
     };
-    timer = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, ms);
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
+    timer = setTimeout(() => { cleanup(); resolve(); }, ms);
+    if (signal?.aborted) { abort(); return; }
     signal?.addEventListener('abort', abort, { once: true });
   });
 }
+
+export type FyersApiRequestOptions = Readonly<{
+  method?: string;
+  params?: Record<string, string | number | undefined>;
+  body?: unknown;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  category?: FyersApiCategory;
+  priority?: FyersRequestPriority;
+}>;
 
 export class FyersApiClient {
   private readonly rateLimitIdentity: string;
@@ -63,95 +78,154 @@ export class FyersApiClient {
     private readonly capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
     rateLimitIdentity?: string,
   ) {
-    // Access tokens rotate; use the authenticated account/user identity for
-    // quota keys so reconnecting cannot reset that user's minute/day budget.
-    this.rateLimitIdentity = String(rateLimitIdentity || accessToken).trim();
+    const identity = String(rateLimitIdentity || '').trim();
+    if (!identity) {
+      throw Object.assign(new Error('Authenticated TradingCore user identity is required for FYERS quota enforcement.'), {
+        status: 503,
+        code: 'BROKER_IDENTITY_REQUIRED',
+      });
+    }
+    // Never key quota admission by the rotating access token.
+    this.rateLimitIdentity = identity;
   }
 
-  async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
-    return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'data');
+  dataGet<T = unknown>(
+    path: string,
+    params: Record<string, string | number | undefined>,
+    signal?: AbortSignal,
+    timeoutMs: number = API_LATENCY_BUDGET_MS.quote,
+    priority: FyersRequestPriority = 'normal',
+  ): Promise<T> {
+    return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'data', priority);
   }
 
-  async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.account): Promise<T> {
-    return this.request<T>(API_BASE, path, params, signal, 'GET', undefined, timeoutMs);
+  apiGet<T = unknown>(
+    path: string,
+    params: Record<string, string | number | undefined> = {},
+    signal?: AbortSignal,
+    timeoutMs: number = API_LATENCY_BUDGET_MS.account,
+    priority: FyersRequestPriority = 'interactive',
+  ): Promise<T> {
+    return this.request<T>(API_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'user-info', priority);
   }
 
-  async apiPost<T = unknown>(path: string, body: unknown, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.order): Promise<T> {
-    return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs);
+  apiPost<T = unknown>(
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+    timeoutMs: number = API_LATENCY_BUDGET_MS.order,
+    category: FyersApiCategory = 'transactions',
+    priority: FyersRequestPriority = 'interactive',
+  ): Promise<T> {
+    return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs, category, priority);
   }
 
-private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote, budget: 'data' | 'general' = 'general'): Promise<T> {
+  /** Shared quota-aware API v3 boundary for legacy adapter verbs and account calls. */
+  apiRequest<T = unknown>(path: string, options: FyersApiRequestOptions = {}): Promise<T> {
+    const method = String(options.method || 'GET').toUpperCase();
+    const category = options.category || (method === 'GET' ? 'user-info' : 'transactions');
+    const priority = options.priority || (category === 'transactions' ? 'interactive' : 'normal');
+    const timeoutMs = options.timeoutMs ?? (category === 'transactions' ? API_LATENCY_BUDGET_MS.order : API_LATENCY_BUDGET_MS.account);
+    return this.request<T>(API_BASE, path, options.params || {}, options.signal, method, options.body, timeoutMs, category, priority);
+  }
+
+  private request<T>(
+    base: string,
+    path: string,
+    params: Record<string, string | number | undefined>,
+    signal: AbortSignal | undefined,
+    method: string,
+    body: unknown,
+    timeoutMs: number,
+    category: FyersApiCategory,
+    priority: FyersRequestPriority,
+  ): Promise<T> {
     const deadlineSignal = timeoutSignal(timeoutMs, signal);
     const execute = async (): Promise<T> => {
-      const requestSignal = deadlineSignal;
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
-      const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
+      const qIndex = path.indexOf('?');
+      const pathOnly = qIndex >= 0 ? path.slice(0, qIndex) : path;
+      const existing = qIndex >= 0 ? path.slice(qIndex + 1) : '';
+      const combined = new URLSearchParams(existing);
+      query.forEach((value, key) => combined.set(key, value));
+      const url = `${base}${pathOnly}${combined.toString() ? `?${combined.toString()}` : ''}`;
       let lastError: unknown;
+      // Never auto-retry a side-effecting transaction: its outcome may be ambiguous.
+      const retrySafe = method === 'GET' || category === 'data' || (category === 'user-info' && method === 'POST');
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        if (requestSignal.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
+        if (deadlineSignal.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
         try {
-          // Admit each actual HTTP attempt, not just the logical operation.
-          // Otherwise one operation's automatic retries could bypass per-minute
-          // or per-day quotas during broker errors/rate-limit responses.
-          const response = await this.withRequestBudget(
-            budget,
-            (requestSignal) => fetch(url, {
-              method,
-              signal: requestSignal || deadlineSignal,
-              headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
-              body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
-            }),
-            deadlineSignal,
-          );
+          const response = await this.withRequestBudget(category, priority, async (gateSignal) => {
+            recordFyersQuotaAttempt(category, this.capabilities.plan, pathOnly);
+            try {
+              const upstream = await fetch(url, {
+                method,
+                signal: gateSignal || deadlineSignal,
+                headers: {
+                  Accept: 'application/json',
+                  'Content-Type': 'application/json',
+                  Authorization: `${this.appId}:${this.accessToken}`,
+                },
+                body: method === 'GET' || method === 'HEAD' ? undefined : (typeof body === 'string' ? body : JSON.stringify(body ?? {})),
+              });
+              recordFyersQuotaResponse(category, this.capabilities.plan, pathOnly, upstream.status);
+              return upstream;
+            } catch (error) {
+              recordFyersQuotaResponse(category, this.capabilities.plan, pathOnly, 0);
+              throw error;
+            }
+          }, deadlineSignal);
           const text = await response.text();
           let payload: unknown = null;
-          try { payload = text ? JSON.parse(text) : null; } catch {
-            throw new FyersApiError(`FYERS returned non-JSON (${response.status})`, response.status);
-          }
-          const payloadRecord = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-          const brokerCode = Number(payloadRecord.code);
-          const errorState = !response.ok || String(payloadRecord.s || '').toLowerCase() === 'error';
-          if (!errorState) return payload as T;
+          try { payload = text ? JSON.parse(text) : null; }
+          catch { throw new FyersApiError(`FYERS returned non-JSON (${response.status})`, response.status); }
+          const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+          const brokerCode = Number(record.code);
+          const failed = !response.ok || String(record.s || '').toLowerCase() === 'error' || (Number.isFinite(brokerCode) && brokerCode < 0);
+          if (!failed) return payload as T;
           const status = response.status === 429 || brokerCode === 429 ? 429 : response.status;
-          const err = new FyersApiError(typeof payloadRecord.message === 'string' ? payloadRecord.message : `FYERS request failed (${status})`, status, Number.isFinite(brokerCode) ? brokerCode : undefined, retryDelay(response), payload);
-          lastError = err;
-          if (!isRetryableStatus(status) || attempt === 2) throw err;
-          const delay = Math.min(15000, Math.max(err.retryAfterMs || 0, 500 * 2 ** attempt));
-          await sleep(delay, requestSignal);
+          const error = new FyersApiError(
+            typeof record.message === 'string' ? record.message : `FYERS request failed (${status})`,
+            status,
+            Number.isFinite(brokerCode) ? brokerCode : undefined,
+            retryDelay(response),
+            payload,
+          );
+          lastError = error;
+          if (!retrySafe || !isRetryableStatus(status) || attempt === 2) throw error;
+          await sleep(backoff(attempt, error.retryAfterMs), deadlineSignal);
         } catch (error: unknown) {
           if (error instanceof Error && error.name === 'AbortError') throw error;
-          const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : {};
-          // Rate-gate denials and fail-closed coordination errors are local
-          // admission decisions, not provider failures. Retrying them would
-          // burn more quota and cannot make the denied request eligible.
-          if (typeof errorRecord.code === 'string' && errorRecord.code.startsWith('BROKER_')) throw error;
+          const detail = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+          // Admission failures are local decisions, never retryable provider failures.
+          if (typeof detail.code === 'string' && detail.code.startsWith('BROKER_')) {
+            recordFyersQuotaDenial(category, this.capabilities.plan, pathOnly, Number(detail.status) === 503 ? 503 : 429);
+            throw error;
+          }
           lastError = error;
-          const status = Number(errorRecord.status || 0);
-          if ((!isRetryableStatus(status)) || attempt === 2) throw error;
-          await sleep(Math.min(15000, Math.max(Number(errorRecord.retryAfterMs || 0), 500 * 2 ** attempt)), requestSignal);
+          if (!retrySafe || !isRetryableStatus(Number(detail.status || 0)) || attempt === 2) throw error;
+          await sleep(backoff(attempt, Number(detail.retryAfterMs) || undefined), deadlineSignal);
         }
       }
       throw lastError || new Error('FYERS request failed');
     };
-
     return execute();
   }
 
   private withRequestBudget<T>(
-    budget: 'data' | 'general',
+    category: FyersApiCategory,
+    priority: FyersRequestPriority,
     task: (signal?: AbortSignal) => Promise<T>,
     signal: AbortSignal,
-  ): Promise<T> {
-    if (budget === 'data') {
-      const limits = this.capabilities.dataApiRateLimits;
-      return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, {
-        budgetKey: 'data',
-        minIntervalMs: Math.ceil(1000 / limits.requestsPerSecond),
-        maxPerMinute: limits.requestsPerMinute,
-        maxPerDay: limits.requestsPerDay,
-      });
-    }
-    return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal);
+  ) {
+    const budget = resolveFyersAdmissionBudget(this.capabilities, category);
+    return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, {
+      budgetKey: category,
+      minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
+      maxPerMinute: budget.requestsPerMinute,
+      maxPerDay: budget.requestsPerDay,
+      priority,
+    });
   }
 }
