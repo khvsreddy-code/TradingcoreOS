@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getRecentHistoryRequestRange, normalizeHistoricalCandles } from './server/marketData/HistoricalDataService.js';
+import { getBoundedHistoryPageRange, getRecentHistoryRequestRange, normalizeHistoricalCandles } from './server/marketData/HistoricalDataService.js';
 
 const rows = normalizeHistoricalCandles([
   [1_800_000_000, 100, 105, 99, 104, 1000],
@@ -20,5 +20,21 @@ const range = getRecentHistoryRequestRange({
   calendarComplete: true,
 }, new Date('2026-10-19T07:00:00.000Z'));
 assert.equal(range.fromDate, '2026-10-14', 'complete calendar should skip the Monday holiday and count three prior sessions');
-assert.equal(new Date(range.fromMs).toISOString(), '2026-10-13T18:30:00.000Z', 'request starts at local midnight so daily bars stamped at midnight remain included');
+assert.equal(new Date(range.fromMs).toISOString(), '2026-10-13T18:30:00.000Z', 'legacy calendar range utility remains deterministic');
+
+const pageEnd = new Date('2026-10-19T07:00:00.000Z').getTime();
+const intradayPage = getBoundedHistoryPageRange({
+  timezone: 'Asia/Kolkata',
+}, '1minute', 2_000, 1, pageEnd);
+assert.equal(intradayPage.requestedBars, 2_000);
+assert.ok(intradayPage.toMs - intradayPage.fromMs <= 10 * 86_400_000, '1-minute history pages should request a bounded range sized for approximately 2,000 bars');
+assert.ok(intradayPage.lookbackFloorMs != null, 'Standard-plan intraday history must have a plan-derived lookback floor');
+assert.ok(intradayPage.fromMs < intradayPage.toMs && intradayPage.toMs <= pageEnd);
+
+const dailyPage = getBoundedHistoryPageRange({
+  timezone: 'Asia/Kolkata',
+}, 'day', 2_000, 5, pageEnd);
+assert.ok(dailyPage.toMs - dailyPage.fromMs <= 360 * 86_400_000, 'individual daily ranges must remain within the provider-safe 360-day window');
+assert.ok(dailyPage.lookbackFloorMs != null, 'Standard daily history must use the published five-year cap');
+
 console.log('TRADINGCOREOS_HISTORICAL_DATA_RUNTIME_OK');
