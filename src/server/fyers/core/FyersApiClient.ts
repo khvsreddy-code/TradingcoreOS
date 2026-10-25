@@ -89,6 +89,11 @@ export class FyersApiClient {
     this.rateLimitIdentity = identity;
   }
 
+  /** Internal cache partition only; never serialize this identity to clients. */
+  get quotaIdentity(): string {
+    return this.rateLimitIdentity;
+  }
+
   dataGet<T = unknown>(
     path: string,
     params: Record<string, string | number | undefined>,
