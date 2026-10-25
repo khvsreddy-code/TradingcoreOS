@@ -43,12 +43,31 @@ backgroundJobRoutes.get('/:jobId', async (req: AuthenticatedRequest, res: Respon
     }
     res.setHeader('Cache-Control', 'no-store');
     let visibleResult = job.result;
-    if (job.kind === 'corespirit_ai_invoke' && visibleResult && typeof visibleResult === 'object' && !Array.isArray(visibleResult)) {
-      const aiResult = visibleResult as Record<string, unknown>;
-      const expiresAt = typeof aiResult.expiresAt === 'string' ? Date.parse(aiResult.expiresAt) : NaN;
-      if (aiResult.status === 'ready' && Number.isFinite(expiresAt) && Date.now() >= expiresAt) {
-        visibleResult = { ...aiResult, status: 'stale', result: null, reasonCode: 'result-expired', summary: 'This AI result passed its freshness window. Request a new asynchronous result before using it.' };
-      }
+    if (job.kind === 'corespirit_ai_invoke') {
+      const { validateCoreSpiritAiInvocationResult } = await import('../../services/coreSpirit/aiInvocation.js');
+      const payload = job.payload && typeof job.payload === 'object' ? job.payload : {};
+      const validated = validateCoreSpiritAiInvocationResult(job.result, {
+        artifactHash: typeof payload.artifactHash === 'string' ? payload.artifactHash : undefined,
+        sourceHash: typeof payload.sourceHash === 'string' ? payload.sourceHash : undefined,
+        inputFingerprint: typeof payload.inputFingerprint === 'string' ? payload.inputFingerprint : undefined,
+        modelVersion: typeof payload.modelVersion === 'string' ? payload.modelVersion : undefined,
+      });
+      visibleResult = validated ?? {
+        status: 'unavailable',
+        result: null,
+        summary: 'The stored AI result failed integrity or provenance validation. Submit a fresh request.',
+        modelVersion: typeof payload.modelVersion === 'string' ? payload.modelVersion : 'unknown',
+        artifactHash: typeof payload.artifactHash === 'string' ? payload.artifactHash : '',
+        sourceHash: typeof payload.sourceHash === 'string' ? payload.sourceHash : '',
+        inputFingerprint: typeof payload.inputFingerprint === 'string' ? payload.inputFingerprint : '',
+        outputHash: null,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date().toISOString(),
+        advisoryOnly: true,
+        executable: false,
+        mayCreateOrderIntent: false,
+        reasonCode: 'result-integrity-failed',
+      };
     }
     res.json({
       success: true,
