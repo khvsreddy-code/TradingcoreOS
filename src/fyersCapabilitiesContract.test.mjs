@@ -23,6 +23,10 @@ assert.equal(configuredStandard.maxQuoteBatch, 50);
 assert.equal(prime.plan, 'prime');
 assert.equal(prime.maxQuoteBatch, 1_000);
 assert.equal(standard.maxStreamSymbols, 100, 'Standard FYERS data socket supports 100 symbols');
+assert.match(legacyHistoryRoute, /symbols\.length > capabilities\.maxStreamSymbols/, 'the live subscription route uses the verified plan socket cap');
+assert.match(legacyHistoryRoute, /capabilities\.maxStreamSymbols, feedClass/, 'each shared stream passes the account plan cap into the transport');
+assert.match(marketTransport, /maxSymbols = DEFAULT_FYERS_CAPABILITIES\.maxStreamSymbols/, 'the socket transport defaults to the official Standard symbol allowance');
+assert.match(marketTransport, /capacity\.limit/, 'socket subscriptions enforce the unique active-symbol budget');
 assert.equal(prime.maxStreamSymbols, 5_000);
 assert.equal(standard.maxTbtSymbols, 1);
 assert.equal(prime.maxTbtSymbols, 15);
@@ -69,6 +73,7 @@ const brokerAdapter = read('./server/brokers/adapters/BrokerAdapters.ts');
 const accountRoute = read('./server/routes/fyers-account.routes.ts');
 const accountService = read('./server/fyers/core/FyersAccountService.ts');
 const legacyHistoryRoute = read('./server/routes/broker-market-data.routes.ts');
+const marketTransport = read('./server/marketData/FyersMarketDataTransport.ts');
 const quotaTelemetry = read('./server/fyers/core/FyersQuotaTelemetry.ts');
 
 
