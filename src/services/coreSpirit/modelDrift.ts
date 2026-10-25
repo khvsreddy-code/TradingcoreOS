@@ -50,10 +50,6 @@ const MAX_ROWS = 100_000;
 const MAX_FEATURES = 128;
 const HASH = /^[a-f0-9]{64}$/;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
 function validateSchema(featureNames: readonly string[]): void {
   if (!Array.isArray(featureNames) || featureNames.length < 1 || featureNames.length > MAX_FEATURES ||
       featureNames.some(name => typeof name !== 'string' || !name.trim() || name.length > 100) ||
@@ -69,7 +65,7 @@ function validateRows(rows: readonly CoreSpiritFeatureObservation[], width: numb
   let previousTimestamp = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
-    if (!isRecord(row) || !Number.isSafeInteger(row.timestamp) || !Number.isSafeInteger(row.availableAt) ||
+    if (!row || typeof row !== 'object' || !Number.isSafeInteger(row.timestamp) || !Number.isSafeInteger(row.availableAt) ||
         row.timestamp <= previousTimestamp || !Array.isArray(row.values) || row.values.length !== width ||
         typeof row.confirmed !== 'boolean' ||
         !['historical', 'confirmed', 'developing', 'realtime', 'forecast'].includes(String(row.phase))) {
