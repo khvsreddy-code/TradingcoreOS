@@ -2,6 +2,7 @@ import { createHmac, createHash, randomUUID } from 'node:crypto';
 import type { BrokerOrderPayload } from '../brokers/contracts.js';
 import { getErrorMessage, isRecord } from '../../services/boundary/brokerApiValidation.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
+import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
 export function parseBrokerOrderPayload(value: unknown): BrokerOrderPayload {
   if (!isRecord(value)) throw new Error('Order payload must be a JSON object');
@@ -99,6 +100,10 @@ export async function placeFyersOrderViaFixedIpGateway(accessToken: string, orde
     riskApproved: decision.approved,
     strategyId: 'tco-manual-order',
     accountKey: createHash('sha256').update(userId).digest('hex'),
+    // The HMAC binds this identity and entitlement to the order request. The
+    // gateway verifies them before charging the shared transaction quota.
+    rateLimitIdentity: userId,
+    quotaPlan: resolveFyersCapabilities(userId).plan,
     riskDecisionId: decisionId,
     issuedAt,
     expiresAt: issuedAt + (() => {
