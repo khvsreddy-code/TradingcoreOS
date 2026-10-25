@@ -3,7 +3,7 @@ import type { HistoricalCandle, HistoricalDataMetadata, HistoricalQuoteSnapshot 
 
 export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'fyers-three-sessions+tvdatafeed-older-5000/v1';
+export const HISTORICAL_SOURCE_POLICY = 'fyers-plan-bounded-pages+tvdatafeed-gap-fill-5000/v2';
 const CACHE_TTL_MS = 60_000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const CACHE_TABLE = 'historical_dataset_cache';
@@ -18,6 +18,10 @@ export interface HistoricalInstrumentMapping {
   calendarHolidays: string[]; calendarComplete: boolean; enabled: boolean;
 }
 export interface RecentHistoryRange { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string; }
+export interface BoundedHistoryPageRange extends RecentHistoryRange {
+  requestedBars: number;
+  lookbackFloorMs: number | null;
+}
 export interface FyersRecentResult { bars: unknown[]; quote?: HistoricalQuoteSnapshot | null; status?: Record<string, unknown>; }
 export type FyersRecentFetcher = (mapping: HistoricalInstrumentMapping, range: RecentHistoryRange) => Promise<FyersRecentResult>;
 interface StoredBar extends HistoricalCandle { source: 'fyers' | 'tvdatafeed'; timestampMs: number; }
@@ -28,7 +32,13 @@ interface CacheRecord {
 }
 export interface HistoricalLoadResult { bars: HistoricalCandle[]; metadata: HistoricalDataMetadata; quote: HistoricalQuoteSnapshot | null; }
 export interface HistoricalLoadRequest {
-  instrumentId: string; timeframe: string; maxBars?: number; beforeTimestamp?: number; fetchFyersRecent?: FyersRecentFetcher;
+  instrumentId: string;
+  timeframe: string;
+  maxBars?: number;
+  beforeTimestamp?: number;
+  /** FYERS plan history cap for this timeframe; null means no artificial cutoff. */
+  historyMaxLookbackYears?: number | null;
+  fetchFyersRecent?: FyersRecentFetcher;
 }
 
 const memoryCache = new Map<string, CacheRecord>();
@@ -100,6 +110,55 @@ export function getRecentHistoryRequestRange(
     // Midnight includes daily bars stamped at 00:00 on the third session date.
     fromMs: localDateTimeToEpoch(firstSessionDate, '00:00', timezone),
     toMs: now.getTime(), fromDate: firstSessionDate, calendarPolicy,
+  };
+}
+
+/**
+ * Plan-aware page range for one FYERS history request. The route limit is a
+ * per-request cap, not proof that the requested dataset is complete. Short
+ * timeframe pages estimate a tight date window; daily/weekly/monthly requests
+ * respect FYERS' bounded range windows and report incomplete pages to callers.
+ */
+export function getBoundedHistoryPageRange(
+  mapping: Pick<HistoricalInstrumentMapping, 'timezone'>,
+  timeframe: string,
+  requestedBars: number,
+  historyMaxLookbackYears: number | null,
+  requestedToMs = Date.now(),
+): BoundedHistoryPageRange {
+  const targetBars = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+  const normalizedTimeframe = String(timeframe || '').trim().toLowerCase();
+  const seconds = /^(\\d+)s$/.exec(normalizedTimeframe);
+  const minutes = /^(\\d+)minute$/.exec(normalizedTimeframe);
+  const daily = ['day','1day','daily','d','1d'].includes(normalizedTimeframe);
+  const weekly = ['week','1week','weekly','w','1w'].includes(normalizedTimeframe);
+  const monthly = ['month','1month','monthly','m','1mth'].includes(normalizedTimeframe);
+  const secondsSize = seconds ? Math.max(1, Number(seconds[1])) : 1;
+  const minuteSize = minutes ? Math.max(1, Number(minutes[1])) : 1;
+  const barsPerSession = seconds ? (6.25 * 60 * 60) / secondsSize
+    : minutes ? (6.25 * 60) / minuteSize
+    : weekly ? 0.2
+    : monthly ? 1 / 21
+    : daily ? 1
+    : 6.25 * 60;
+  const providerWindowDays = seconds ? 1 : (daily || weekly || monthly) ? 360 : 95;
+  const desiredCalendarDays = Math.ceil(targetBars / Math.max(0.01, barsPerSession) * 1.5) + 1;
+  const lookbackCalendarDays = Math.max(1, Math.min(providerWindowDays, desiredCalendarDays));
+  const nowMs = Date.now();
+  const toMs = Math.min(Math.max(1, Number(requestedToMs) || nowMs), nowMs);
+  const lookbackFloorMs = historyMaxLookbackYears == null
+    ? null
+    : nowMs - Math.max(1, Number(historyMaxLookbackYears) || 1) * 365.25 * 86_400_000;
+  const candidateFrom = toMs - lookbackCalendarDays * 86_400_000;
+  const fromMs = Math.max(candidateFrom, lookbackFloorMs ?? 0);
+  const effectiveFrom = Math.min(fromMs, toMs);
+  return {
+    fromMs: effectiveFrom,
+    toMs,
+    fromDate: zonedDate(effectiveFrom, mapping.timezone),
+    calendarPolicy: 'bounded-bars-page:' + targetBars + '-bars;window:' + lookbackCalendarDays + '-calendar-days',
+    requestedBars: targetBars,
+    lookbackFloorMs,
   };
 }
 
@@ -476,24 +535,32 @@ export class HistoricalDataService {
 
   private metadata(record: CacheRecord, bars: StoredBar[], overrides: Partial<HistoricalDataMetadata> = {}): HistoricalDataMetadata {
     const selected = bars.slice(-HISTORICAL_MAX_BARS);
+    const sourceStatus = record.sourceStatus;
     return {
       instrumentId: record.instrumentId, timeframe: record.timeframe, revision: record.revision,
       sourcePolicy: record.sourcePolicy, maxBars: HISTORICAL_MAX_BARS, barCount: selected.length,
       oldestTimestamp: selected[0]?.timestamp || null, newestTimestamp: selected[selected.length - 1]?.timestamp || null,
       cacheHit: false, stale: false, degraded: record.degraded, historyExhausted: false,
-      paginationSupported: false, sourceStatus: record.sourceStatus, ...overrides,
+      paginationSupported: Boolean(sourceStatus.historyCompleteness && (sourceStatus.historyCompleteness as Record<string, unknown>).paginationSupported),
+      historyCompleteness: isRecord(sourceStatus.historyCompleteness) ? sourceStatus.historyCompleteness : { status: 'unknown', requestedBars: selected.length, returnedBars: selected.length, providerPageLimit: 2_000, paginationSupported: false },
+      sourceStatus, ...overrides,
     };
   }
 
   private async refresh(
-    requestedInstrumentId: string, timeframe: string, mapping: HistoricalInstrumentMapping,
-    cached: CacheRecord | null, fetchFyersRecent?: FyersRecentFetcher,
+    requestedInstrumentId: string,
+    timeframe: string,
+    mapping: HistoricalInstrumentMapping,
+    cached: CacheRecord | null,
+    fetchFyersRecent: FyersRecentFetcher | undefined,
+    requestedBars: number,
+    historyMaxLookbackYears: number | null,
   ): Promise<CacheRecord> {
     const key = cacheKey(mapping.instrumentId, timeframe);
     const existing = inflight.get(key);
     if (existing) return existing;
     const task = (async (): Promise<CacheRecord> => {
-      const range = getRecentHistoryRequestRange(mapping);
+      const range = getBoundedHistoryPageRange(mapping, timeframe, requestedBars, historyMaxLookbackYears);
       const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
       const tvEnabled = tvConfigured && this.tvContractCompatible(mapping);
       const sourceStatus: Record<string, unknown> = {
@@ -521,15 +588,19 @@ export class HistoricalDataService {
         tvFailed = true; sourceStatus.tvdatafeed = { status: 'error', error: errorText(t.reason) };
       }
 
-      const fyersAll = normalizeRows(fyersRows, 'fyers');
+      // Keep every validated candle in the exact bounded FYERS range rather than
+      // silently discarding everything except three observed sessions.
+      const fyersAll = normalizeRows(fyersRows, 'fyers').filter(bar =>
+        bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs,
+      );
       const dates = sessionDates(fyersAll, mapping.timezone);
-      const recentDates = new Set(dates.slice(-HISTORICAL_RECENT_SESSIONS));
-      const fyersBars = fyersAll.filter(bar => recentDates.has(zonedDate(bar.timestampMs, mapping.timezone)));
+      const recentDates = new Set(dates);
+      const fyersBars = fyersAll;
       let tvBars = normalizeRows(tvRows, 'tvdatafeed');
-      const firstRecentDate = recentDates.size ? [...recentDates].sort()[0]! : null;
+      const firstRecentDate = dates[0] || null;
       if (firstRecentDate) {
-        // Fyers owns the observed recent sessions, even when tvdatafeed returned
-        // a row at a timestamp that Fyers did not include.
+        // FYERS wins for all sessions its bounded page covers. TV fills only
+        // validated older history outside that page and never overwrites it.
         tvBars = tvBars.filter(bar => zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate);
       }
 
@@ -551,14 +622,35 @@ export class HistoricalDataService {
         }
       }
       const merged = [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
-      const degraded = fyersFailed || fyersBars.length === 0 || !tvEnabled || tvFailed || tvBars.length === 0;
-      sourceStatus.fyers = { ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}), validatedCount: fyersBars.length, sessions: [...recentDates].sort() };
+      const pageTarget = Math.min(2_000, requestedBars);
+      const targetReached = merged.length >= pageTarget;
+      const tvNeededButUnavailable = !targetReached && (!tvEnabled || tvFailed || tvBars.length === 0);
+      const degraded = fyersFailed || fyersBars.length === 0 || tvNeededButUnavailable;
+      sourceStatus.fyers = {
+        ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}),
+        validatedCount: fyersBars.length,
+        sessions: [...recentDates].sort(),
+        pageRangeFrom: new Date(range.fromMs).toISOString(),
+        pageRangeTo: new Date(range.toMs).toISOString(),
+      };
+      sourceStatus.historyCompleteness = {
+        status: targetReached ? 'target-reached' : 'partial',
+        requestedBars: pageTarget,
+        returnedBars: Math.min(merged.length, HISTORICAL_MAX_BARS),
+        fyersReturnedBars: fyersBars.length,
+        providerPageLimit: 2_000,
+        paginationSupported: Boolean(fetchFyersRecent),
+        pageRangeFrom: new Date(range.fromMs).toISOString(),
+        pageRangeTo: new Date(range.toMs).toISOString(),
+        lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
+      };
       sourceStatus.tvdatafeed = {
         ...(isRecord(sourceStatus.tvdatafeed) ? sourceStatus.tvdatafeed : {}),
         validatedCount: tvBars.length,
         cachedOlderFallbackCount: cachedOlderBars.length,
         candidateCap: HISTORICAL_MAX_BARS,
-        arbitraryEndPaging: false,
+        arbitraryEndPaging: Boolean(fetchFyersRecent),
+        requestRange: { from: new Date(range.fromMs).toISOString(), to: new Date(range.toMs).toISOString() },
       };
       let record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
@@ -590,17 +682,127 @@ export class HistoricalDataService {
     const cached = await this.readCache(cacheInstrumentId, timeframe);
 
     if (request.beforeTimestamp != null) {
-      const older = (cached?.bars || []).filter(bar => bar.timestampMs < Number(request.beforeTimestamp)).slice(-maxBars);
+      const beforeTimestamp = Number(request.beforeTimestamp);
+      let older = (cached?.bars || []).filter(bar => bar.timestampMs < beforeTimestamp).sort((a, b) => a.timestampMs - b.timestampMs);
+      let pageBars: StoredBar[] = [];
+      let paginationStatus = 'cache-hit';
+      let historyExhausted = false;
+      const historyMaxLookbackYears = request.historyMaxLookbackYears ?? null;
+      const lookbackFloorMs = historyMaxLookbackYears == null ? null : Date.now() - Math.max(1, Number(historyMaxLookbackYears) || 1) * 365.25 * 86_400_000;
+      const oldestCachedMs = older[0]?.timestampMs;
+      const pageToMs = Math.min(beforeTimestamp - 1, oldestCachedMs == null ? beforeTimestamp - 1 : oldestCachedMs - 1);
+
+      if (older.length < maxBars && request.fetchFyersRecent) {
+        if (lookbackFloorMs != null && pageToMs < lookbackFloorMs) {
+          historyExhausted = older.length === 0;
+          paginationStatus = 'plan-lookback-limit';
+        } else if (pageToMs > 0) {
+          const range = getBoundedHistoryPageRange(mapping, timeframe, Math.min(2_000, maxBars), historyMaxLookbackYears, pageToMs);
+          if (range.fromMs < range.toMs) {
+            try {
+              const fetched = await request.fetchFyersRecent(mapping, range);
+              pageBars = normalizeRows(fetched.bars || [], 'fyers').filter(bar =>
+                bar.timestampMs < beforeTimestamp &&
+                bar.timestampMs >= range.fromMs &&
+                bar.timestampMs <= range.toMs,
+              );
+              const mergedOlder = new Map<number, StoredBar>();
+              for (const bar of [...older, ...pageBars]) {
+                const existing = mergedOlder.get(bar.timestampMs);
+                if (!existing || bar.source === 'fyers') mergedOlder.set(bar.timestampMs, bar);
+              }
+              older = [...mergedOlder.values()].sort((a, b) => a.timestampMs - b.timestampMs);
+              paginationStatus = pageBars.length ? 'fyers-page-fetched' : 'no-validated-bars-in-page';
+
+              const currentRecord: CacheRecord = cached || {
+                instrumentId: cacheInstrumentId,
+                timeframe,
+                bars: [],
+                revision: 0,
+                sourcePolicy: HISTORICAL_SOURCE_POLICY,
+                sourceStatus: { cache: { status: 'miss' } },
+                degraded: false,
+                expiresAt: 0,
+                updatedAt: 0,
+              };
+              const allBars = new Map<number, StoredBar>();
+              for (const bar of [...currentRecord.bars, ...pageBars]) {
+                const existing = allBars.get(bar.timestampMs);
+                if (!existing || (bar.source === 'fyers' && existing.source !== 'fyers')) allBars.set(bar.timestampMs, bar);
+              }
+              const combined = [...allBars.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
+              const sourceStatus = {
+                ...currentRecord.sourceStatus,
+                fyers: {
+                  ...(isRecord(currentRecord.sourceStatus.fyers) ? currentRecord.sourceStatus.fyers : {}),
+                  paginationStatus,
+                  pageValidatedCount: pageBars.length,
+                  pageRangeFrom: new Date(range.fromMs).toISOString(),
+                  pageRangeTo: new Date(range.toMs).toISOString(),
+                },
+                historyCompleteness: {
+                  status: pageBars.length >= Math.min(2_000, maxBars) ? 'target-reached' : 'partial',
+                  requestedBars: Math.min(2_000, maxBars),
+                  returnedBars: Math.min(maxBars, older.length),
+                  fyersReturnedBars: pageBars.length,
+                  providerPageLimit: 2_000,
+                  paginationSupported: true,
+                  pageRangeFrom: new Date(range.fromMs).toISOString(),
+                  pageRangeTo: new Date(range.toMs).toISOString(),
+                  lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
+                },
+              };
+              const updated = await this.writeCache({
+                ...currentRecord,
+                bars: combined,
+                revision: currentRecord.revision || 1,
+                sourcePolicy: HISTORICAL_SOURCE_POLICY,
+                sourceStatus,
+                degraded: currentRecord.degraded || pageBars.length === 0,
+                expiresAt: Date.now() + CACHE_TTL_MS,
+                updatedAt: Date.now(),
+              });
+              void updated;
+            } catch (error) {
+              paginationStatus = 'page-fetch-failed';
+              if (!older.length) throw error;
+            }
+          } else {
+            historyExhausted = older.length === 0;
+            paginationStatus = 'plan-lookback-limit';
+          }
+        }
+      } else if (!request.fetchFyersRecent && older.length < maxBars) {
+        paginationStatus = 'cache-only-no-fyers-session';
+      }
+
+      if (lookbackFloorMs != null && beforeTimestamp <= lookbackFloorMs && older.length === 0) historyExhausted = true;
+      const page = older.slice(-maxBars);
       const record: CacheRecord = cached || {
         instrumentId: cacheInstrumentId, timeframe, bars: [], revision: 0, sourcePolicy: HISTORICAL_SOURCE_POLICY,
-        sourceStatus: { cache: { status: 'miss' } }, degraded: false, expiresAt: 0, updatedAt: 0,
+        sourceStatus: { cache: { status: 'miss' } }, degraded: pageBars.length === 0, expiresAt: 0, updatedAt: 0,
       };
       return {
-        bars: toPublicBars(older, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
-        metadata: this.metadata(record, older, {
-          cacheHit: Boolean(cached), stale: Boolean(cached && cached.expiresAt <= Date.now()),
-          historyExhausted: older.length === 0, paginationSupported: false,
-          sourceStatus: { ...record.sourceStatus, pagination: { status: 'bounded-cache-only', reason: 'tvdatafeed has no arbitrary historical end timestamp' } },
+        bars: toPublicBars(page, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
+        metadata: this.metadata(record, page, {
+          cacheHit: Boolean(cached && pageBars.length === 0),
+          stale: Boolean(cached && cached.expiresAt <= Date.now()),
+          historyExhausted,
+          paginationSupported: Boolean(request.fetchFyersRecent),
+          historyCompleteness: {
+            status: page.length >= maxBars ? 'target-reached' : historyExhausted ? 'plan-lookback-exhausted' : pageBars.length ? 'partial-page' : 'cache-partial-or-no-data',
+            requestedBars: maxBars,
+            returnedBars: page.length,
+            fyersReturnedBars: pageBars.length,
+            providerPageLimit: 2_000,
+            paginationSupported: Boolean(request.fetchFyersRecent),
+            paginationStatus,
+            lookbackFloor: lookbackFloorMs == null ? null : new Date(lookbackFloorMs).toISOString(),
+          },
+          sourceStatus: {
+            ...(record.sourceStatus || {}),
+            pagination: { status: paginationStatus, pageValidatedCount: pageBars.length },
+          },
         }),
         quote: null,
       };
@@ -614,7 +816,15 @@ export class HistoricalDataService {
     const key = cacheKey(cacheInstrumentId, timeframe);
     let refreshed: CacheRecord;
     try {
-      refreshed = await (inflight.get(key) || this.refresh(instrumentId, timeframe, mapping, cached, request.fetchFyersRecent));
+      refreshed = await (inflight.get(key) || this.refresh(
+        instrumentId,
+        timeframe,
+        mapping,
+        cached,
+        request.fetchFyersRecent,
+        Math.min(2_000, maxBars),
+        request.historyMaxLookbackYears ?? null,
+      ));
     } catch (error) {
       if (!cached?.bars.length) throw error;
       refreshed = { ...cached, expiresAt: Date.now(), degraded: true, quote: null, sourceStatus: { ...cached.sourceStatus, refreshError: errorText(error) } };
