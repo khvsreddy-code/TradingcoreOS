@@ -19,11 +19,7 @@ import {
   getCoreSpiritAuthoringProfileForLevel,
   type CoreSpiritAuthoringLevel,
 } from '../services/coreSpirit/coreSpiritAuthoring';
-import {
-  CORE_SPIRIT_AUTHORING_LEVELS,
-  getCoreSpiritAuthoringProfileForLevel,
-  type CoreSpiritAuthoringLevel,
-} from '../services/coreSpirit/coreSpiritAuthoring';
+
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -63,20 +59,6 @@ const LEVEL_GUIDANCE: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Objec
   quant: 'Inspect typed features, model inputs, lookback windows, and causality/repaint diagnostics. Keep training and holdout periods separate and review leakage warnings.',
   system: 'Review event triggers, declared capabilities, risk gates and execution traces. This view never grants permissions; compiler, sandbox and host policy remain authoritative.',
 });
-const LEVEL_STARTERS: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
-  beginner: "let fast = ta.ema(close, 9)\nlet slow = ta.ema(close, 21)\n\nwhen fast > slow\n    show signal(\"BUY\")\n\nshow line(fast)\nshow line(slow)\n",
-  trader: "data nifty = market(\"NSE:NIFTY50\", \"5m\")\ndata bank = market(\"NSE:BANKNIFTY\", \"5m\")\n\nlet trend = ta.ema(nifty.close, 50)\nlet strength = ta.rsi(nifty.close, 14)\nlet relative = nifty.close / bank.close\n\nwhen trend > trend[1]\nand strength > 55\nand relative > relative[20]\n    signal(\"LONG\")\n",
-  quant: "let returns = log(close / close[1])\nlet z = stats.zscore(returns, 100)\nlet beta = stats.beta(returns, market(\"NSE:NIFTY50\").returns, 252)\n\nmodel alpha {\n    inputs: returns, z, beta\n    predict: forward_return(20)\n}\n\nlet prediction: prediction<float> = alpha.predict()\nlet confidence: probability = alpha.probability()\n\nshow line(prediction)\nwhen confidence > 0.70\n    signal(\"LONG\")\n",
-  system: "requires execution.route\nrequires risk.evaluate\nrequires automation\n\non signal(\"LONG\") {\n    if (risk.allowed()) {\n        automation.notify(\"High-confidence bullish regime\", \"ops\")\n        automation.route(\"execution.long\")\n    }\n}\n",
-});
-
-const LEVEL_GUIDANCE: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
-  beginner: 'Start with common indicators, readable conditions, editable source and clear syntax/compile diagnostics.',
-  trader: 'Inspect symbol/timeframe context and signals. Before comparing results, review warm-up, bar confirmation, commission and slippage assumptions.',
-  quant: 'Inspect typed features, model inputs, lookback windows, and causality/repaint diagnostics. Keep training and holdout periods separate and review leakage warnings.',
-  system: 'Review event triggers, declared capabilities, risk gates and execution traces. This view never grants permissions; compiler, sandbox and host policy remain authoritative.',
-});
-
 type CopilotMode = 'generate'|'explain-error'|'fix'|'optimize'|'convert-to-quant'|'generate-tests'|'generate-backtest'|'generate-features'|'generate-model'|'generate-docs'|'explain-lookback'|'find-lookahead'|'find-repainting'|'find-unused-computation';
 const COPILOT_MODE_OPTIONS:ReadonlyArray<{value:CopilotMode;label:string}> = [
   {value:'generate',label:'Generate script'},
