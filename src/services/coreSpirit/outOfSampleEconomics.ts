@@ -133,8 +133,6 @@ export function evaluateCoreSpiritOutOfSampleEconomics(
   let netEquity = 1;
   let peakEquity = 1;
   let maxDrawdown = 0;
-  const grossReturns: number[] = [];
-  const afterTransactionReturns: number[] = [];
   const netReturns: number[] = [];
 
   for (let index = 0; index < rows.length; index += 1) {
@@ -167,8 +165,6 @@ export function evaluateCoreSpiritOutOfSampleEconomics(
     peakEquity = Math.max(peakEquity, netEquity);
     if (peakEquity > 0) maxDrawdown = Math.max(maxDrawdown, (peakEquity - netEquity) / peakEquity);
 
-    grossReturns.push(grossReturn);
-    afterTransactionReturns.push(afterTransactionReturn);
     netReturns.push(netReturn);
     totalTurnover += turnover;
     previousTimestamp = row.timestamp;
