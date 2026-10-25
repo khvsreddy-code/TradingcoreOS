@@ -838,32 +838,34 @@ export class ChartDataPlane {
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
-    if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
-      if (!this.state.historyLoading && !this.state.recoveryPending && !this.state.recoveryInFlight && this.liveCandle.buffering) {
-        this.activateCachedHistory();
-      }
-      if (this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
-      if (this.state.columns?.time.length) {
-        // Keep Vela on the typed representation; only materialize the compatibility
-        // view when a legacy consumer explicitly asks for candles.
-        return this.getCompatibilityCandles(limitOverride);
-      }
-      // historyReady without candles/columns is an invalid terminal state.
-      // Fall through and rehydrate instead of short-circuiting with [].
-      this.state.historyReady = false;
-    }
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
+      const residentCount = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
+      if (!this.state.historyLoading && !this.state.recoveryPending && !this.state.recoveryInFlight && this.liveCandle.buffering) {
+        this.activateCachedHistory();
+      }
+      if (residentCount >= requestedLimit) {
+        if (this.state.candles.length) return this.activeWindow(this.state.candles, requestedLimit);
+        if (this.state.columns?.time.length) return this.getCompatibilityCandles(requestedLimit);
+      }
+      // A short cache is valid for first paint, not proof that the 2,000-bar
+      // request is complete. Keep it visible while the missing range is fetched.
+    }
     await historyStore.hydrate(this.brokerId, this.instrumentKey, interval);
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
       const active = this.activeWindow(fresh, requestedLimit);
-      this.state.historyReady = true;
-      this.state.olderHistoryExhausted = false;
-      this.setCandles(active, 'cache');
-      this.activateCachedHistory();
-      return this.state.candles;
+      const residentCount = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
+      if (!this.state.historyReady || active.length > residentCount || !this.canonicalPlane.length) {
+        this.state.olderHistoryExhausted = false;
+        this.setCandles(active, 'cache');
+      }
+      this.state.historyReady = this.canonicalPlane.length > 0;
+      if (this.state.historyReady) this.activateCachedHistory();
+      if (fresh.length >= requestedLimit) return this.state.candles.length ? this.state.candles : active;
+      // Don't return a three-session cache as though it fulfilled the target window.
     }
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
     if (stale?.length) {
@@ -925,6 +927,11 @@ export class ChartDataPlane {
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
     const initialLimit = requestedLimit;
+    const residentCount = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
+    if (this.state.historyReady && residentCount >= requestedLimit) {
+      if (this.state.candles.length) return this.activeWindow(this.state.candles, requestedLimit);
+      return this.getCompatibilityCandles(requestedLimit);
+    }
     await historyStore.hydrate(this.brokerId, this.instrumentKey, interval);
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
@@ -939,7 +946,8 @@ export class ChartDataPlane {
         this.activateCachedHistory();
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
       }
-      return this.state.candles.length ? this.state.candles : active;
+      if (fresh.length >= requestedLimit) return this.state.candles.length ? this.state.candles : active;
+      // Keep partial cache on-screen but continue to request the complete window.
     }
     if (stale?.length && !this.state.candles.length) {
       this.state.olderHistoryExhausted = false;

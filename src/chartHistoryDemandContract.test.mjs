@@ -8,6 +8,8 @@ const chartTimeframes = fs.readFileSync(path.join(root, 'src/services/core/chart
 const chartDataPlaneSource = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
 const coordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryCoordinator.ts'), 'utf8');
 const liveChart = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
+const velaTerminal = fs.readFileSync(path.join(root, 'src/services/core/chart/tcoVelaTerminal.ts'), 'utf8');
+const velaProvider = fs.readFileSync(path.join(root, 'src/TcoVelaDataProvider.ts'), 'utf8');
 const runtime = fs.readFileSync(path.join(root, 'src/services/runtime/TradingCoreRuntime.ts'), 'utf8');
 const chartRuntime = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartRuntimeController.ts'), 'utf8');
 const interaction = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartInteractionController.ts'), 'utf8');
@@ -30,6 +32,10 @@ if (!/priority: PRIORITY\[priority\]/.test(coordinator)) throw new Error('Histor
 if (!/shouldLoadOlderHistory\(/.test(interaction)) throw new Error('Visible-range history demand trigger missing from chart interaction controller');
 if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Active-chart warm request missing from chart runtime');
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial chart request must provide a bounded limit');
+if (!/bars:2_000/.test(velaTerminal) || !/timeframes:\[[^\]]*'45'/.test(velaTerminal)) throw new Error('Active Vela workspace must request 2,000 candles and expose 45-minute history');
+if (!/supportedTimeframes:\s*\[[^\]]*'45'/.test(velaProvider)) throw new Error('Vela provider must advertise the 45-minute timeframe');
+if (!/const maxPages = Math\.min\(8/.test(velaProvider) || !/await plane\.loadOlderHistory\('warm'/.test(velaProvider)) throw new Error('Vela initial history must continue paginating until the target window is reached');
+if (!/residentCount >= requestedLimit/.test(dataPlane) || !/fresh\.length >= requestedLimit/.test(dataPlane)) throw new Error('A partial cache must not short-circuit a larger history request');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
 if (!/req\.query\.limit/.test(route) || !/Math\.min\(2_000/.test(route)) throw new Error('Server history route must validate the 2,000-candle initial limit');
 if (!/requestedLimit/.test(serverAdapters)) throw new Error('Server broker adapter must honor bounded initial history');

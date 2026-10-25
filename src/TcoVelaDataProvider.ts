@@ -368,7 +368,7 @@ export class TcoVelaDataProvider implements DataProvider {
     return {
       name: 'tco',
       displayName: 'TradingCoreOS',
-      supportedTimeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
+      supportedTimeframes: ['1', '3', '5', '10', '15', '30', '45', '60', '120', '240', 'D', 'W', 'M'],
       capabilities: { enumerate: true, stream: true, symbolInfo: true },
     };
   }
@@ -424,7 +424,7 @@ export class TcoVelaDataProvider implements DataProvider {
   async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(100, Math.min(500, Math.floor(Number(range.limit) || 500)));
+    const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
 
@@ -509,18 +509,32 @@ export class TcoVelaDataProvider implements DataProvider {
     }
     if (!first.length) return [];
 
-    // Older pages never block first paint, and each consumer checks its abort signal.
+    // First paint stays small, but backfill repeatedly until the requested history
+    // window is actually filled. A single 1,500-bar older page may still leave the
+    // chart below 2,000 candles when starting from a short three-session cache.
     if (first.length < requested) {
-      void plane.loadOlderHistory('warm', { visibleBars: Math.min(300, requested - first.length) })
-        .then(() => {
+      void (async () => {
+        let loadedCount = first.length;
+        const maxPages = Math.min(8, Math.ceil((requested - loadedCount) / 250) + 2);
+        for (let page = 0; page < maxPages && loadedCount < requested; page += 1) {
+          if (abort()) return;
+          const before = Math.max(
+            plane.readCanonical().length,
+            plane.getCompatibilityCandles(requested).length,
+          );
+          await plane.loadOlderHistory('warm', { visibleBars: Math.min(300, requested - loadedCount) });
           if (abort()) return;
           const canonical = plane.readCanonical();
           const expanded = canonical.length
             ? marketViewToBars(canonical, range, requested)
             : historicalToVelaBars(plane.getCompatibilityCandles(requested));
-          if (expanded.length > first.length) onBatch(expanded.slice(-requested));
-        })
-        .catch(() => { /* older history is opportunistic; preserve the visible window */ });
+          if (expanded.length <= loadedCount) break;
+          const next = expanded.slice(-requested);
+          onBatch(next);
+          loadedCount = next.length;
+          if (loadedCount >= requested || expanded.length <= before) break;
+        }
+      })().catch(() => { /* preserve rendered bars if older-history backfill fails */ });
     }
     return first;
   }
@@ -553,7 +567,7 @@ export class TcoVelaDataProvider implements DataProvider {
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(100, Math.min(500, Math.floor(Number(range.limit) || 500)));
+    const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);

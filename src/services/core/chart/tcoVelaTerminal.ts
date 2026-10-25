@@ -46,8 +46,8 @@ export function createTcoVelaTerminalOptions(
     layout,
     symbol,
     timeframe,
-    bars:500,
-    timeframes:['1','3','5','10','15','30','60','120','240','D','W','M'],
+    bars:2_000,
+    timeframes:['1','3','5','10','15','30','45','60','120','240','D','W','M'],
     live:true,
     // Match Vela's current production visual language: neutral charcoal canvas,
     // restrained grid, standard Vela candle colors, and eased zoom/pan.
