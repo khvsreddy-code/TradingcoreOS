@@ -265,8 +265,11 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     const providerFailure=/API key|permission|quota|rate|billing|unavailable|fetch|timeout/i.test(message)
       ? 'CoreSpirit Copilot could not reach the configured generation service. Check the server-side AI key and provider quota.'
       : 'CoreSpirit Copilot could not produce a valid structured draft. Try clarifying the request.';
-    if(stream&&res.headersSent&&!res.writableEnded){emitSse(res,'error',{success:false,error:providerFailure});res.end();}
-    else res.status(502).json({success:false,error:providerFailure});
+    if(stream&&res.headersSent){
+      if(!res.writableEnded&&!res.destroyed){emitSse(res,'error',{success:false,error:providerFailure});res.end();}
+      return;
+    }
+    res.status(502).json({success:false,error:providerFailure});
   }
 }
 
