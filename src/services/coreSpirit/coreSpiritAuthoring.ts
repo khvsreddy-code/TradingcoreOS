@@ -173,6 +173,7 @@ export function analyzeCoreSpiritAuthoringSource(
       model:hasModel, research:hasResearch, matrix:hasMatrix, tensor:hasTensor,
       multiSymbol:hasMultiSymbol, multiTimeframe:hasMultiTimeframe, strategy:hasStrategy,
       systemEvent:hasSystemEvent, automation:hasAutomation, orderIntent:hasOrderIntent,
+      aiInvoke:(surface.requiredCapabilities??[]).includes('ai.invoke'),
     });
     const reasons = [
       ...(hasMultiSymbol ? ['Multiple market symbols'] : []),
