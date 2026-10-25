@@ -252,7 +252,7 @@ for (const [sourceText, expectedLevel] of [
 }
 assert.equal(detectCoreSpiritAuthoringLevel('let note = "model alpha backtest automate matrix tensor order"'), 'beginner',
   'mentions inside strings must not elevate the required level');
-assert.equal(detectCoreSpiritAuthoringLevel('// model alpha backtest\\nlet x = ta.ema(close, 9)'), 'beginner',
+assert.equal(detectCoreSpiritAuthoringLevel('// model alpha backtest\nlet x = ta.ema(close, 9)'), 'beginner',
   'comment-only mentions must not elevate the required level');
 
 const sharedFacts = { strategy:true, model:true, multiTimeframe:true, automation:true };

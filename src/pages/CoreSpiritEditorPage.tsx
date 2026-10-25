@@ -19,6 +19,11 @@ import {
   getCoreSpiritAuthoringProfileForLevel,
   type CoreSpiritAuthoringLevel,
 } from '../services/coreSpirit/coreSpiritAuthoring';
+import {
+  CORE_SPIRIT_AUTHORING_LEVELS,
+  getCoreSpiritAuthoringProfileForLevel,
+  type CoreSpiritAuthoringLevel,
+} from '../services/coreSpirit/coreSpiritAuthoring';
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -45,6 +50,19 @@ const EXAMPLES: Array<[string, string]> = [
   ['Levels', `indicator("Range Levels")\n\nhi = highest(high, 20)\nlo = lowest(low, 20)\nplot(hi, name = "20-bar High")\nplot(lo, name = "20-bar Low")`],
   ['Interactive UI', `let panel = ui.panel("Market Structure")\npanel.number("ATR", atr(14))\npanel.button("Recalculate", recalibrate)\npanel.toggle("Show Liquidity", true, toggle_liquidity)\npanel.slider("Sensitivity", 1, 10, 5, set_sensitivity)`],
 ];
+const LEVEL_STARTERS: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
+  beginner: "let fast = ta.ema(close, 9)\nlet slow = ta.ema(close, 21)\n\nwhen fast > slow\n    show signal(\"BUY\")\n\nshow line(fast)\nshow line(slow)\n",
+  trader: "data nifty = market(\"NSE:NIFTY50\", \"5m\")\ndata bank = market(\"NSE:BANKNIFTY\", \"5m\")\n\nlet trend = ta.ema(nifty.close, 50)\nlet strength = ta.rsi(nifty.close, 14)\nlet relative = nifty.close / bank.close\n\nwhen trend > trend[1]\nand strength > 55\nand relative > relative[20]\n    signal(\"LONG\")\n",
+  quant: "let returns = log(close / close[1])\nlet z = stats.zscore(returns, 100)\nlet beta = stats.beta(returns, market(\"NSE:NIFTY50\").returns, 252)\n\nmodel alpha {\n    inputs: returns, z, beta\n    predict: forward_return(20)\n}\n\nlet prediction: prediction<float> = alpha.predict()\nlet confidence: probability = alpha.probability()\n\nshow line(prediction)\nwhen confidence > 0.70\n    signal(\"LONG\")\n",
+  system: "requires execution.route\nrequires risk.evaluate\nrequires automation\n\non signal(\"LONG\") {\n    if (risk.allowed()) {\n        automation.notify(\"High-confidence bullish regime\", \"ops\")\n        automation.route(\"execution.long\")\n    }\n}\n",
+});
+
+const LEVEL_GUIDANCE: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
+  beginner: 'Start with common indicators, readable conditions, editable source and clear syntax/compile diagnostics.',
+  trader: 'Inspect symbol/timeframe context and signals. Before comparing results, review warm-up, bar confirmation, commission and slippage assumptions.',
+  quant: 'Inspect typed features, model inputs, lookback windows, and causality/repaint diagnostics. Keep training and holdout periods separate and review leakage warnings.',
+  system: 'Review event triggers, declared capabilities, risk gates and execution traces. This view never grants permissions; compiler, sandbox and host policy remain authoritative.',
+});
 const LEVEL_STARTERS: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
   beginner: "let fast = ta.ema(close, 9)\nlet slow = ta.ema(close, 21)\n\nwhen fast > slow\n    show signal(\"BUY\")\n\nshow line(fast)\nshow line(slow)\n",
   trader: "data nifty = market(\"NSE:NIFTY50\", \"5m\")\ndata bank = market(\"NSE:BANKNIFTY\", \"5m\")\n\nlet trend = ta.ema(nifty.close, 50)\nlet strength = ta.rsi(nifty.close, 14)\nlet relative = nifty.close / bank.close\n\nwhen trend > trend[1]\nand strength > 55\nand relative > relative[20]\n    signal(\"LONG\")\n",
@@ -162,6 +180,8 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       ? saved as CoreSpiritAuthoringLevel
       : 'beginner';
   });
+  const [guidedFastLength, setGuidedFastLength] = useState(9);
+  const [guidedSlowLength, setGuidedSlowLength] = useState(21);
   const authoringProfile = useMemo(() => getCoreSpiritAuthoringProfileForLevel(authoringLens), [authoringLens]);
   const compiledRequiredLevel = lastCompile?.ir?.authoringLevel;
   const [selectedExplanation, setSelectedExplanation] = useState<string | null>(null);
@@ -334,6 +354,36 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       setCopilotArtifactHash(null);
     }
     if(monacoAdapterRef.current)monacoAdapterRef.current.setSource(next);
+  };
+
+  const applyGuidedEmaSettings = () => {
+    const fast = Math.trunc(guidedFastLength);
+    const slow = Math.trunc(guidedSlowLength);
+    if (!Number.isFinite(fast) || fast < 1 || fast > 499 ||
+        !Number.isFinite(slow) || slow < 2 || slow > 500 || slow <= fast) {
+      setRunStatus('Choose whole-number EMA lengths from 1–499 and 2–500, with slow greater than fast.');
+      return;
+    }
+    const guidedSource = [
+      'indicator("Guided EMA Cross") {',
+      '    overlay: true',
+      '    input fastLength = int(' + fast + ', min: 1, max: 499)',
+      '    input slowLength = int(' + slow + ', min: 2, max: 500)',
+      '}',
+      '',
+      'fast = ema(close, fastLength)',
+      'slow = ema(close, slowLength)',
+      'plot fast',
+      'plot slow',
+      'if fast crossesAbove slow {',
+      '    signal "BUY"',
+      '}',
+      'if fast crossesBelow slow {',
+      '    signal "SELL"',
+      '}',
+    ].join('\n');
+    setEditorSource(guidedSource);
+    setRunStatus('Generated editable CoreScript from guided EMA settings. Review it, then compile; nothing has run on a chart.');
   };
 
   const compileSource=(sourceSnapshot:string):Promise<CoreSpiritCompileResult|null>=>{
@@ -741,7 +791,19 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
               {compiledRequiredLevel && <div className="mt-2 text-[8px] leading-4 text-[var(--tco-dim)]">Required host capabilities: {(lastCompile?.ir?.requiredCapabilities ?? []).length ? (lastCompile?.ir?.requiredCapabilities ?? []).join(' · ') : 'None declared by this compiled program.'}</div>}
             </div>
             <button onClick={()=>{ if(window.confirm('Replace the current source with the '+authoringProfile.label+' starter? The current editor contents will be replaced only after confirmation.')) { setEditorSource(LEVEL_STARTERS[authoringLens]); setRunStatus('Loaded the '+authoringProfile.label+' starter. Review it and compile.'); } }} className="premium-button w-full justify-center"><BookOpen className="h-4 w-4"/>Replace editor with {authoringProfile.label} starter</button>
-            {authoringLens==='beginner' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Start with the first diagnostic and common indicators. The source remains visible and editable—no hidden conversion into another language.</div>}
+            {authoringLens==='beginner' && <div className="space-y-2 rounded border border-[var(--tco-border)] p-3">
+              <div className="text-[9px] font-semibold text-[var(--tco-text-2)]">Guided EMA crossover</div>
+              <p className="text-[9px] leading-4 text-[var(--tco-code-muted)]">Choose the lengths, then generate ordinary editable CoreScript with visible inputs and BUY/SELL conditions. This does not compile or run it automatically.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[8px] text-[var(--tco-dim)]">Fast EMA length
+                  <input type="number" min={1} max={499} step={1} value={guidedFastLength} onChange={event=>setGuidedFastLength(Number(event.target.value))} className="mt-1 w-full rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] text-white"/>
+                </label>
+                <label className="text-[8px] text-[var(--tco-dim)]">Slow EMA length
+                  <input type="number" min={2} max={500} step={1} value={guidedSlowLength} onChange={event=>setGuidedSlowLength(Number(event.target.value))} className="mt-1 w-full rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] text-white"/>
+                </label>
+              </div>
+              <button onClick={applyGuidedEmaSettings} className="premium-button w-full justify-center"><Code2 className="h-4 w-4"/>Generate editable CoreScript from settings</button>
+            </div>}
             {authoringLens==='trader' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Market context: {runtimeInspector.target ? runtimeInspector.target.symbol + ' · ' + runtimeInspector.target.timeframe : 'Open a chart to inspect symbol/timeframe context.'} · signal explanations: {runtimeInspector.explanations.length}.</div>}
             {authoringLens==='quant' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Lookback: {sourceInspection.maxLookback} bars · causality/repaint diagnostics: {sourceInspection.diagnostics.filter(d=>/CAUSALITY|REPAINT|LOOKAHEAD/i.test(String(d.code??''))).length}. Review source windows and holdout assumptions before accepting model results.</div>}
             {authoringLens==='system' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Event triggers: {lastCompile?.ir?.tradingNativePlan?.eventTriggers.length ?? 0} · automation preview: {runtimeInspector.automationPreview.execution}. Compiler capability checks and host risk controls remain mandatory.</div>}
