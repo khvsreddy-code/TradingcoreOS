@@ -264,6 +264,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const copilotReplayPassRef = useRef<boolean|null>(null);
   const copilotReplayGateRef = useRef<CopilotReplayGate|null>(null);
   const copilotGenerationRef = useRef(0);
+  const copilotStreamPhaseRef = useRef<'generate'|'repair'|null>(null);
   const [compilePending,setCompilePending]=useState(false);
   const [copilotPrompt,setCopilotPrompt]=useState('');
   const [copilotMode,setCopilotMode]=useState<CopilotMode>('generate');
@@ -650,13 +651,11 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     const generationRequest=++copilotGenerationRef.current;
     const requestedSource=source;
     const requestedEditorVersion=editorModel.getVersion();
-    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;copilotReplayGateRef.current=null;
+    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);setCopilotDraft(null);setCopilotStreamPreview('');copilotStreamPhaseRef.current=null;copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;copilotReplayGateRef.current=null;
     try{
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
       const target=coreSpiritChartRegistry.getActive();
-      setCopilotDraft(null);
-      setCopilotStreamPreview('');
       const response=await fetch('/api/corespirit/copilot/generate/stream',{
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},
@@ -666,13 +665,15 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       const payload=await readCoreSpiritCopilotResponse(response,(event,data)=>{
         if(event==='status'&&typeof data.message==='string')setCopilotSummary(String(data.message));
         if(event==='delta'&&typeof data.text==='string'){
-          const phase=String(data.phase||'generate');
-          setCopilotStreamPreview(previous=>((phase==='repair'?'[repair pass]\n':'')+previous+String(data.text)).slice(-12000));
+          const phase=data.phase==='repair'?'repair':'generate';
+          const phaseChanged=copilotStreamPhaseRef.current!==phase;
+          copilotStreamPhaseRef.current=phase;
+          setCopilotStreamPreview(previous=>((phaseChanged?(phase==='repair'?'[repair pass]\n':''):previous)+String(data.text)).slice(-12000));
         }
       });
       if(generationRequest!==copilotGenerationRef.current)return;
       if(!response.ok||!payload?.success||typeof payload.source!=='string')throw new Error(payload?.error||'CoreSpirit Copilot request failed.');
-      setCopilotStreamPreview('');
+      setCopilotStreamPreview('');copilotStreamPhaseRef.current=null;
       if(editorModel.getSource()!==requestedSource||editorModel.getVersion()!==requestedEditorVersion){
         setCopilotStatus('needs-fixes');
         setCopilotError('The editor changed while Copilot was generating. Your edits were preserved; generate again to apply a draft to the current source.');
@@ -950,7 +951,7 @@ rn; }
   {copilotDraft.payload.tests?.length>0&&<div><div className="mb-1 text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Generated test ideas · not executed</div><div className="space-y-1">{copilotDraft.payload.tests.map((test,index)=><div key={index} className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">{test}</div>)}</div></div>}
   {copilotDraft.payload.backtestScenarios?.length>0&&<div><div className="mb-1 text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Backtest scenarios · not executed</div><div className="space-y-1">{copilotDraft.payload.backtestScenarios.map((scenario,index)=><div key={index} className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4"><div className="font-semibold text-[var(--tco-text-2)]">{scenario.name}</div><div className="mt-1 text-[var(--tco-code-muted)]">Setup: {scenario.setup}</div><div className="mt-1 text-[var(--tco-code-muted)]">Expected: {scenario.expected}</div></div>)}</div></div>}
   {copilotDraft.payload.safetyReview&&<div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]"><div className="mb-1 font-mono uppercase tracking-widest text-[var(--tco-dim)]">Independent safety review</div><div>Max lookback: {String(copilotDraft.payload.safetyReview.maxLookback??'unknown')}</div><div>Required capabilities: {Array.isArray(copilotDraft.payload.safetyReview.requiredCapabilities)?copilotDraft.payload.safetyReview.requiredCapabilities.map(String).join(', ')||'none declared':'not available'}</div><div>Compiler/sandbox diagnostics: {Array.isArray(copilotDraft.payload.safetyReview.compilerDiagnostics)?copilotDraft.payload.safetyReview.compilerDiagnostics.length:0}/{Array.isArray(copilotDraft.payload.safetyReview.sandboxDiagnostics)?copilotDraft.payload.safetyReview.sandboxDiagnostics.length:0}</div></div>}
-  <div className="flex gap-2"><button onClick={()=>void applyCopilotDraft()} className="premium-button premium-button-primary flex-1 justify-center"><CheckCircle2 className="h-3 w-3"/> Apply reviewed draft</button><button onClick={()=>{setCopilotDraft(null);setCopilotStreamPreview('');setCopilotStatus('idle');setCopilotError('');}} className="premium-button flex-1 justify-center">Discard</button></div>
+  <div className="flex gap-2"><button onClick={()=>void applyCopilotDraft()} className="premium-button premium-button-primary flex-1 justify-center"><CheckCircle2 className="h-3 w-3"/> Apply reviewed draft</button><button onClick={()=>{setCopilotDraft(null);setCopilotStreamPreview('');copilotStreamPhaseRef.current=null;setCopilotStatus('idle');setCopilotError('');}} className="premium-button flex-1 justify-center">Discard</button></div>
 </div>}
             {copilotAssumptions.length>0&&<div className="space-y-1 text-[9px] leading-4 text-[var(--tco-dim)]">{copilotAssumptions.map((item,i)=><div key={i}>• {item}</div>)}</div>}
             {copilotError&&<div className="text-[10px] leading-4 text-[#f59e0b]">{copilotError}</div>}
