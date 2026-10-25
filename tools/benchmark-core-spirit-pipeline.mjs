@@ -16,9 +16,9 @@ function barCounts() {
   return [...new Set(values)].sort((a, b) => a - b);
 }
 function updateIterations() {
-  const value = Number(process.env.TCO_BENCH_UPDATE_ITERATIONS ?? 9);
-  if (!Number.isInteger(value) || value < 5 || value > 50) {
-    throw new Error('TCO_BENCH_UPDATE_ITERATIONS must be an integer in [5, 50]');
+  const value = Number(process.env.TCO_BENCH_UPDATE_ITERATIONS ?? 100);
+  if (!Number.isInteger(value) || value < 20 || value > 250) {
+    throw new Error('TCO_BENCH_UPDATE_ITERATIONS must be an integer in [20, 250]');
   }
   return value;
 }
@@ -193,6 +193,7 @@ async function main() {
     environment: { node: process.version, platform: process.platform, arch: process.arch },
     barCounts: sizes,
     liveUpdateSamples: updateCount,
+    liveLatencyQuantilesNote: 'P95/P99 are descriptive sample quantiles; compare runs on the same machine with identical settings.',
     performancePolicy: 'No universal Pine Script speed claim; only same-process reference/optimized parity and measured latencies are reported.',
     memoryPolicy: 'Heap/ArrayBuffer values are retained-memory deltas, not allocation counts; browser paint time is not measured.',
     workloads: [],
