@@ -13,18 +13,50 @@ export function normalizeCoreSpiritAuthoringLevel(level: string): CoreSpiritAuth
   return CORE_SPIRIT_AUTHORING_LEVEL_ALIASES[value as keyof typeof CORE_SPIRIT_AUTHORING_LEVEL_ALIASES] ?? 'beginner';
 }
 
-export function inferCoreSpiritAuthoringLevel(input: {
+export type CoreSpiritAuthoringLevelFacts = Readonly<{
+  baseLevel?: CoreSpiritAuthoringLevel;
   model?: boolean;
-  multiSymbol?: boolean;
   research?: boolean;
+  matrix?: boolean;
+  tensor?: boolean;
+  multiSymbol?: boolean;
+  multiTimeframe?: boolean;
   strategy?: boolean;
+  systemEvent?: boolean;
   automation?: boolean;
   orderIntent?: boolean;
-}): CoreSpiritAuthoringLevel {
-  if (input.automation) return 'system';
-  if (input.model || input.research) return 'quant';
-  if (input.strategy || input.multiSymbol || input.orderIntent) return 'trader';
-  return 'beginner';
+}>;
+
+const CORE_SPIRIT_AUTHORING_LEVEL_RANK: Readonly<Record<CoreSpiritAuthoringLevel, number>> = Object.freeze({
+  beginner: 0,
+  trader: 1,
+  quant: 2,
+  system: 3,
+});
+
+export function coreSpiritAuthoringLevelRank(level: CoreSpiritAuthoringLevel): number {
+  return CORE_SPIRIT_AUTHORING_LEVEL_RANK[level];
+}
+
+function higherAuthoringLevel(left: CoreSpiritAuthoringLevel, right: CoreSpiritAuthoringLevel): CoreSpiritAuthoringLevel {
+  return coreSpiritAuthoringLevelRank(left) >= coreSpiritAuthoringLevelRank(right) ? left : right;
+}
+
+/**
+ * Canonical source-requirement classifier shared by the compiler and editor.
+ * This is descriptive metadata, not a permission or sandbox boundary.
+ */
+export function inferCoreSpiritRequiredLevel(input: CoreSpiritAuthoringLevelFacts): CoreSpiritAuthoringLevel {
+  let level = input.baseLevel ?? 'beginner';
+  if (input.strategy || input.multiSymbol || input.multiTimeframe || input.orderIntent) level = higherAuthoringLevel(level, 'trader');
+  if (input.model || input.research || input.matrix || input.tensor) level = higherAuthoringLevel(level, 'quant');
+  if (input.systemEvent || input.automation) level = higherAuthoringLevel(level, 'system');
+  return level;
+}
+
+/** Backwards-compatible API that delegates to the canonical classifier. */
+export function inferCoreSpiritAuthoringLevel(input: CoreSpiritAuthoringLevelFacts): CoreSpiritAuthoringLevel {
+  return inferCoreSpiritRequiredLevel(input);
 }
 
 export const CORE_SPIRIT_EXECUTION_CONTEXTS = Object.freeze([

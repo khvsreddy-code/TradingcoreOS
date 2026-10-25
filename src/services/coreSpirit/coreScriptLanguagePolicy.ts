@@ -1,7 +1,7 @@
 import type { CoreSpiritAstNode } from './ast';
 import { CoreSpiritParser } from './parser';
 import { normalizeCoreSpiritSource } from './syntax';
-import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
+import { coreSpiritAuthoringLevelRank, inferCoreSpiritRequiredLevel, type CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export const CORE_SCRIPT_LANGUAGE = 'CoreScript' as const;
@@ -31,6 +31,7 @@ export type CoreScriptLanguageFeature =
   | 'trader'
   | 'quant'
   | 'system'
+  | 'strategy'
   | 'matrix'
   | 'tensor'
   | 'models'
@@ -65,6 +66,7 @@ const FEATURE_LEVEL: Readonly<Record<CoreScriptLanguageFeature, CoreSpiritAuthor
   trader: 'trader',
   quant: 'quant',
   system: 'system',
+  strategy: 'trader',
   matrix: 'quant',
   tensor: 'quant',
   models: 'quant',
@@ -74,13 +76,6 @@ const FEATURE_LEVEL: Readonly<Record<CoreScriptLanguageFeature, CoreSpiritAuthor
   'system-events': 'system',
   automation: 'system',
   'order-intent': 'trader',
-});
-
-const LEVEL_RANK: Readonly<Record<CoreSpiritAuthoringLevel, number>> = Object.freeze({
-  beginner: 0,
-  trader: 1,
-  quant: 2,
-  system: 3,
 });
 
 const CAPABILITY_ALIASES: Readonly<Record<string, CoreScriptRequiredCapability | undefined>> = Object.freeze({
@@ -111,13 +106,10 @@ export function coreScriptCapabilityForEvent(eventName: string): CoreScriptRequi
 }
 
 function rank(level: CoreSpiritAuthoringLevel): number {
-  return LEVEL_RANK[level];
+  return coreSpiritAuthoringLevelRank(level);
 }
 
-function maxLevel(a: CoreSpiritAuthoringLevel, b: CoreSpiritAuthoringLevel): CoreSpiritAuthoringLevel {
-  return rank(a) >= rank(b) ? a : b;
-}
-
+/** Compatibility facade: precedence is owned by coreSpiritExecutionModel. */
 export function inferCoreScriptLevel(input: {
   baseLevel?: CoreSpiritAuthoringLevel;
   hasModel?: boolean;
@@ -126,15 +118,24 @@ export function inferCoreScriptLevel(input: {
   hasTensor?: boolean;
   hasMultiSymbol?: boolean;
   hasMultiTimeframe?: boolean;
+  hasStrategy?: boolean;
   hasSystemEvent?: boolean;
   hasAutomation?: boolean;
   hasOrderIntent?: boolean;
 }): CoreSpiritAuthoringLevel {
-  let level = input.baseLevel ?? 'beginner';
-  if (input.hasMultiSymbol || input.hasMultiTimeframe || input.hasOrderIntent) level = maxLevel(level, 'trader');
-  if (input.hasModel || input.hasResearch || input.hasMatrix || input.hasTensor) level = maxLevel(level, 'quant');
-  if (input.hasSystemEvent || input.hasAutomation) level = maxLevel(level, 'system');
-  return level;
+  return inferCoreSpiritRequiredLevel({
+    baseLevel:input.baseLevel,
+    model:input.hasModel,
+    research:input.hasResearch,
+    matrix:input.hasMatrix,
+    tensor:input.hasTensor,
+    multiSymbol:input.hasMultiSymbol,
+    multiTimeframe:input.hasMultiTimeframe,
+    strategy:input.hasStrategy,
+    systemEvent:input.hasSystemEvent,
+    automation:input.hasAutomation,
+    orderIntent:input.hasOrderIntent,
+  });
 }
 
 function astCalleeName(node: CoreSpiritAstNode): string {

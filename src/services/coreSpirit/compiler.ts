@@ -26,8 +26,8 @@ import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { analyzeCoreSpiritCausality } from './causalityAnalysis';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
-import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
-import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
+import { inferCoreSpiritRequiredLevel } from './coreSpiritExecutionModel';
+import { validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 import { buildCoreSpiritSemanticFingerprint as fingerprintCoreSpiritSemantics } from './artifactLookupIdentity';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
@@ -441,11 +441,17 @@ export class CoreSpiritCompiler {
       const hasMultiSymbol = tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
       const hasMultiTimeframe = tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
       const hasSystemEvent = semanticDependencyGraph.nodes.some(node => node.kind === 'event');
-      const hasAutomation = layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation');
+      // The source determines its required level. Execution-layer selection is
+      // separate policy context and must not silently rewrite authoring metadata.
+      const hasAutomation = semanticDependencyGraph.nodes.some(node => node.kind === 'automation') ||
+        surface.declarations.some(declaration => declaration.kind === 'automation');
       const hasOrderIntent = semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent');
+      const hasStrategy = surface.declarations.some(declaration => declaration.kind === 'indicator' && declaration.role === 'strategy') ||
+        hasOrderIntent;
       const languageFeatures:CoreScriptLanguageFeature[] = ['beginner'];
       if (hasMultiSymbol) languageFeatures.push('trader','multi-symbol');
       if (hasMultiTimeframe) languageFeatures.push('trader','multi-timeframe');
+      if (hasStrategy) languageFeatures.push('trader','strategy');
       if (hasModel) languageFeatures.push('quant','models');
       if (hasResearch) languageFeatures.push('quant','research');
       if (hasMatrix) languageFeatures.push('quant','matrix');
@@ -453,16 +459,10 @@ export class CoreSpiritCompiler {
       if (hasOrderIntent) languageFeatures.push('trader','order-intent');
       if (hasSystemEvent) languageFeatures.push('system','system-events');
       if (hasAutomation) languageFeatures.push('system','automation');
-      const authoringLevel = inferCoreScriptLevel({
-        baseLevel: inferCoreSpiritAuthoringLevel({
-          model:hasModel,
-          multiSymbol:hasMultiSymbol,
-          research:hasResearch,
-          strategy:layer === 'strategy' || hasOrderIntent,
-          automation:hasAutomation,
-          orderIntent:hasOrderIntent,
-        }),
-        hasModel, hasResearch, hasMatrix, hasTensor, hasMultiSymbol, hasMultiTimeframe, hasSystemEvent, hasAutomation, hasOrderIntent,
+      const authoringLevel = inferCoreSpiritRequiredLevel({
+        model:hasModel, research:hasResearch, matrix:hasMatrix, tensor:hasTensor,
+        multiSymbol:hasMultiSymbol, multiTimeframe:hasMultiTimeframe, strategy:hasStrategy,
+        systemEvent:hasSystemEvent, automation:hasAutomation, orderIntent:hasOrderIntent,
       });
       const requiredCapabilities = Object.freeze([...new Set(capabilityCheck.requirements.map(item => item.capability))]);
       const languageCapabilities = Object.freeze([...new Set([
