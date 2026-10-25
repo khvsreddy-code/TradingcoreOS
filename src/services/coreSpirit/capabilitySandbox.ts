@@ -30,7 +30,8 @@ export type CoreSpiritSandboxCapability =
   | 'policy-evaluation'
   | 'compute-cpu'
   | 'compute-wasm'
-  | 'compute-gpu';
+  | 'compute-gpu'
+  | 'ai-invoke';
 
 export type CoreSpiritForbiddenCapability =
   | 'raw-network'
@@ -73,7 +74,7 @@ const TARGET_CAPABILITY_MAP: Readonly<Record<CoreSpiritExecutionTarget, readonly
   backtest: ['series','signals','models','strategy-events','order-intents','risk-queries','market-data','compute-cpu','compute-wasm','compute-gpu'],
   scanner: ['series','signals','models','scanner','market-data','compute-cpu','compute-wasm','compute-gpu'],
   alert: ['series','signals','models','webhooks','market-data','compute-cpu'],
-  server: ['series','signals','models','webhooks','market-data','compute-cpu','compute-wasm','compute-gpu'],
+  server: ['series','signals','models','webhooks','market-data','compute-cpu','compute-wasm','compute-gpu','ai-invoke'],
   automation: ['series','models','market-data','signals','automation','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
   research: ['series','signals','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
 };
@@ -82,7 +83,7 @@ const LAYER_CAPABILITY_MAP: Readonly<Record<CoreSpiritProgramLayer, readonly Cor
   script: ['series','visuals','interactive-ui','signals','market-data','compute-cpu','compute-wasm','compute-gpu'],
   model: ['series','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
   strategy: ['series','visuals','interactive-ui','signals','models','strategy-events','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
+  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu','ai-invoke'],
 };
 
 export class CoreSpiritCapabilityDeniedError extends Error {
@@ -179,6 +180,12 @@ export function validateCoreSpiritSandboxArchitecture(): string[] {
     if ((TARGET_CAPABILITY_MAP as any)[name]) errors.push(`forbidden capability '${name}' leaked into target capability map`);
     if ((LAYER_CAPABILITY_MAP as any)[name]) errors.push(`forbidden capability '${name}' leaked into layer capability map`);
   }
+  if (TARGET_CAPABILITY_MAP.chart.includes('ai-invoke') || TARGET_CAPABILITY_MAP.replay.includes('ai-invoke') ||
+      TARGET_CAPABILITY_MAP.backtest.includes('ai-invoke') || TARGET_CAPABILITY_MAP.scanner.includes('ai-invoke') ||
+      TARGET_CAPABILITY_MAP.alert.includes('ai-invoke')) errors.push('ai.invoke must remain outside synchronous chart/replay/backtest/scanner/alert execution targets');
+  if (LAYER_CAPABILITY_MAP.script.includes('ai-invoke') || LAYER_CAPABILITY_MAP.model.includes('ai-invoke') || LAYER_CAPABILITY_MAP.strategy.includes('ai-invoke')) {
+    errors.push('ai.invoke must be restricted to the automation authoring layer');
+  }
   return errors;
 }
 
@@ -201,6 +208,7 @@ const CORE_SCRIPT_TO_SANDBOX_CAPABILITY: Readonly<Record<CoreScriptRequiredCapab
   'execution.route':'order-intents',
   'webhooks':'webhooks',
   'automation':'automation',
+  'ai.invoke':'ai-invoke',
 });
 
 export function sandboxCapabilityForCoreScriptCapability(
