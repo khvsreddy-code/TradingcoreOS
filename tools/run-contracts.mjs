@@ -155,6 +155,7 @@ const contracts = [
   ['corespirit-ai-native', ['src/coreSpiritAiNativeContract.test.mjs', false]],
   ['corescript-ai-invoke-capability', ['src/coreScriptAiInvokeCapabilityContract.test.mjs', true]],
   ['corespirit-copilot-knowledge', ['src/coreSpiritCopilotKnowledge.test.mjs', true]],
+  ['corespirit-feature-drift-monitoring', ['src/services/coreSpirit/modelDrift.test.ts', true]],
   ['corespirit-out-of-sample-economics', ['src/coreSpiritOutOfSampleEconomicsContract.test.mjs', true]],
   ['corespirit-copilot-compile-before-run', ['src/coreSpiritCopilotContract.test.mjs', false]],
   ['corespirit-timeframe-temporal-alignment', ['src/services/coreSpirit/timeframeAlignmentTemporalContract.test.mjs', true]],
