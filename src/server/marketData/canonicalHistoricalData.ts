@@ -30,6 +30,7 @@ const TIMEFRAMES: Record<string, TimeframeSpec> = {
   '10': { interval: '10minute', resolution: '10' }, '10m': { interval: '10minute', resolution: '10' }, '10minute': { interval: '10minute', resolution: '10' },
   '15': { interval: '15minute', resolution: '15' }, '15m': { interval: '15minute', resolution: '15' }, '15minute': { interval: '15minute', resolution: '15' },
   '30': { interval: '30minute', resolution: '30' }, '30m': { interval: '30minute', resolution: '30' }, '30minute': { interval: '30minute', resolution: '30' },
+  '45': { interval: '45minute', resolution: '45' }, '45m': { interval: '45minute', resolution: '45' }, '45minute': { interval: '45minute', resolution: '45' },
   '60': { interval: '60minute', resolution: '60' }, '60m': { interval: '60minute', resolution: '60' }, '1h': { interval: '60minute', resolution: '60' }, '60minute': { interval: '60minute', resolution: '60' },
   '120': { interval: '120minute', resolution: '120' }, '120m': { interval: '120minute', resolution: '120' }, '2h': { interval: '120minute', resolution: '120' }, '120minute': { interval: '120minute', resolution: '120' },
   '240': { interval: '240minute', resolution: '240' }, '240m': { interval: '240minute', resolution: '240' }, '4h': { interval: '240minute', resolution: '240' }, '240minute': { interval: '240minute', resolution: '240' },
@@ -125,8 +126,8 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
   if (!userId) throw new CanonicalHistoryError('Authenticated user is required.', 401, 'AUTH_REQUIRED');
   const instrumentId = canonicalInstrument(request.symbol);
   const spec = normalizeCanonicalHistoryTimeframe(request.timeframe);
-  const rawLimit = Number(request.limit ?? 5000);
-  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(5000, Math.floor(rawLimit))) : 5000;
+  const rawLimit = Number(request.limit ?? 2_000);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(2_000, Math.floor(rawLimit))) : 2_000;
   if (request.beforeTimestamp !== undefined && (!Number.isFinite(request.beforeTimestamp) || request.beforeTimestamp <= 0)) {
     throw new CanonicalHistoryError('beforeTimestamp must be a positive epoch-millisecond timestamp.');
   }

@@ -225,13 +225,13 @@ export class FyersAdapter extends BaseBroker {
     accessToken: string,
     instrumentKey: string,
     interval: string,
-    limit = 10_000,
+    limit = 2_000,
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
     rateLimitIdentity = accessToken,
   ): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute':'1','2minute':'2','3minute':'3','5minute':'5','10minute':'10',
-      '15minute':'15','20minute':'20','30minute':'30','60minute':'60',
+      '15minute':'15','20minute':'20','30minute':'30','45minute':'45','60minute':'60',
       '120minute':'120','240minute':'240','day':'D','1day':'D','week':'1W','month':'1M',
     };
     const secondsMatch = /^([0-9]+)(?:s|sec|second|seconds)$/i.exec(interval.trim()) || /^([0-9]+)S$/i.exec(interval.trim());
@@ -245,7 +245,7 @@ export class FyersAdapter extends BaseBroker {
       );
     }
 
-    const requestedLimit = Math.max(2, Math.min(5_000, Math.floor(Number(limit) || 5_000)));
+    const requestedLimit = Math.max(2, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const now = new Date();
     const to = Math.floor(now.getTime() / 1000);
     const dailyResolution = ['D','1D','1W','1M','W','M'].includes(resolution.toUpperCase());
