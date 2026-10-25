@@ -8,6 +8,7 @@ const scenePatch = read('../vendor/vela/src/core/model/patch.ts');
 const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
 const priceStyle = read('../vendor/vela/src/core/price-styles/heikin-ashi.ts');
 const dataProvider = read('./TcoVelaDataProvider.ts');
+const liveChart = read('./components/workspace/LiveChart.tsx');
 const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
 const outputLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const sceneDiff = read('./services/core/chart/coreSpiritSceneDiff.ts');
@@ -54,6 +55,9 @@ assert.match(chartKernel, /setLocale\(next: string \| LocalizationOptions\)/, 'T
 assert.match(chartKernel, /registerLocale/, 'the native chart loads and registers translated locale packs');
 assert.match(chartKernel, /locales\/hi/, 'Hindi translations are available to the TradingCoreOS native chart');
 assert.match(chartKernel, /setLocalization/, 'the native renderer receives locale state and refreshes its chart UI');
+assert.match(liveChart, /aria-label="Chart language"/, 'the live chart exposes Vela locale selection to users');
+assert.match(liveChart, /tradingcore:vela-locale:v1/, 'the selected chart locale is persisted between visits');
+assert.match(liveChart, /setLocale\(chartLocale\)/, 'changing the locale updates the existing chart surfaces in place');
 assert.match(dataProvider, /getBarsProgressive/, 'TCO initial history must remain progressively loaded');
 assert.match(dataProvider, /async loadRange\(/, 'older-history paging remains routed through the canonical provider');
 assert.match(dataProvider, /historyReady: snapshot\.historyReady/, 'history readiness comes from the TCO data plane');
