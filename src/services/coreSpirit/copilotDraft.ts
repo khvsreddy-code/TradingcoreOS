@@ -30,6 +30,8 @@ export type CoreSpiritCopilotDraftIdentityInput = Readonly<{
   repairAttempts: number;
   createdAt: string;
   analysisOnly?: boolean;
+  knowledgeVersion?: string;
+  knowledgeHitIds?: readonly string[];
 }>;
 
 function canonicalJson(value: unknown): string {
@@ -102,6 +104,8 @@ export function buildCoreSpiritCopilotDraftArtifact(input: CoreSpiritCopilotDraf
     compilerVersion: CORE_SPIRIT_COMPILER_VERSION,
     runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION,
     diagnosticsHash,
+    knowledgeVersion: input.knowledgeVersion ?? 'not-recorded',
+    knowledgeHitIds: [...(input.knowledgeHitIds ?? [])].slice(0, 12),
     testsHash,
     backtestScenariosHash: scenariosHash,
     compiledArtifactHash: input.compiledArtifactHash,
