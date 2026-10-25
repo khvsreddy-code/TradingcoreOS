@@ -76,7 +76,7 @@ assert.match(quoteService, /assertFyersQuoteBatch/, 'the service layer must enfo
 assert.match(streamRoute, /capabilities\.maxStreamSymbols/);
 assert.match(streamRoute, /post\('\/:brokerId\/market-stream'/, 'large Prime stream subscriptions need a POST transport');
 assert.match(streamTransport, /checkSubscriptionCapacity/, 'active subscriptions must be capped as a union, not only per request');
-assert.match(apiClient, /budgetKey: 'data'/);
+assert.match(apiClient, /budgetKey: category/, 'all three FYERS API categories must use separate shared quota buckets');
 assert.match(apiClient, /maxPerDay: budget\.requestsPerDay/);
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyRoute, /FYERS_HISTORY_DEPTH_LIMIT/);
@@ -94,7 +94,8 @@ assert.match(apiClient,/Authenticated TradingCore user identity is required for 
 assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable per-user quota bucket');
 assert.match(quoteRoute,/capabilities, userId\)/,'the canonical quote client must be keyed by authenticated user, not rotating token');
 assert.match(historyRoute,/new FyersApiClient\(accessToken, undefined, capabilities, userId\)/,'history requests must share the same stable quota identity');
-assert.match(brokerAdapter,/rateLimitIdentity = accessToken/,'legacy adapter methods must support explicit stable quota identity');
+assert.match(brokerAdapter,/Authenticated TradingCore user identity is required for FYERS quota enforcement/,'legacy adapter requests must reject absent user identity instead of using rotating tokens');
+assert.doesNotMatch(brokerAdapter,/rateLimitIdentity\s*=\s*accessToken/,'no legacy adapter may fall back to access-token quota identity');
 assert.match(streamRoute,/capabilities, session\.userId\)/,'legacy history requests must pass authenticated user identity');
 
 assert.match(requestGate,/process\.env\.NODE_ENV === 'production'/,'production always requires distributed quota coordination');
