@@ -81,7 +81,7 @@ async function requestFyersHistory(
   from: string,
   to: string,
   capabilities: ReturnType<typeof resolveFyersCapabilities>,
-  rateLimitIdentity = accessToken,
+  rateLimitIdentity: string,
 ): Promise<any[]> {
   // Use the canonical FYERS client so every History request is admitted by the
   // same plan-specific Data API rate budget as quotes/options/depth.
@@ -109,7 +109,7 @@ async function fetchFyersHistoryTarget(
   interval: string,
   target: number,
   capabilities: ReturnType<typeof resolveFyersCapabilities>,
-  rateLimitIdentity = accessToken,
+  rateLimitIdentity: string,
 ): Promise<any[]> {
   const secondsMatch = /^(\d+)\s*(?:s|sec|second|seconds)$/i.exec(interval) || /^(\d+)S$/i.exec(interval);
   const secondsInterval = Boolean(secondsMatch);
