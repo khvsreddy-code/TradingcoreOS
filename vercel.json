@@ -34,7 +34,8 @@
     "realtimegateway": {
       "root": ".",
       "entrypoint": "Dockerfile",
-      "runtime": "container"
+      "runtime": "container",
+      "ignoreCommand": "node tools/ignore-realtime-build.mjs"
     }
   },
   "regions": [
