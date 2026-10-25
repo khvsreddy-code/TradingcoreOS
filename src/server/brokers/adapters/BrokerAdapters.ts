@@ -224,6 +224,7 @@ export class FyersAdapter extends BaseBroker {
       { symbols: symbols.join(',') },
       timeoutSignal(API_LATENCY_BUDGET_MS.quote),
       API_LATENCY_BUDGET_MS.quote,
+      'interactive',
     );
     return Object.fromEntries((data?.d || []).map((quote: any) => [
       quote.n || quote.v?.symbol,
@@ -311,6 +312,7 @@ export class FyersAdapter extends BaseBroker {
       },
       timeoutSignal(API_LATENCY_BUDGET_MS.history),
       API_LATENCY_BUDGET_MS.history,
+      'interactive',
     )));
 
     const byTimestamp = new Map<number, { timestamp: string; open: number; high: number; low: number; close: number; volume: number }>();
@@ -354,6 +356,7 @@ export class FyersAdapter extends BaseBroker {
       params,
       timeoutSignal(API_LATENCY_BUDGET_MS.depth),
       API_LATENCY_BUDGET_MS.depth,
+      'interactive',
     );
 
     const data = payload?.data || {};
