@@ -161,9 +161,13 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
           range_from: String(Math.floor(range.fromMs / 1000)),
           range_to: String(Math.floor(range.toMs / 1000)),
           cont_flag: '1',
-        }, signal, API_LATENCY_BUDGET_MS.history);
+        }, signal, API_LATENCY_BUDGET_MS.history, 'interactive');
         const bars = Array.isArray(payload?.candles) ? payload.candles : [];
-        const quote = bars.length ? null : await fallbackQuoteSnapshot(client!, mapping.fyersSymbol);
+        // A historical "before" page must not trigger a second quote request
+        // merely because that older range contains no candles.
+        const quote = bars.length || request.beforeTimestamp !== undefined
+          ? null
+          : await fallbackQuoteSnapshot(client!, mapping.fyersSymbol);
         return {
           bars,
           quote,
@@ -176,6 +180,9 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
     instrumentId,
     timeframe: spec.interval,
     maxBars: limit,
+    historyMaxLookbackYears: ['D', '1W', '1M'].includes(spec.resolution.toUpperCase())
+      ? capabilities.historyDepth.dailyYears
+      : capabilities.historyDepth.intradayYears,
     ...(request.beforeTimestamp !== undefined ? { beforeTimestamp: request.beforeTimestamp } : {}),
     fetchFyersRecent,
   });
