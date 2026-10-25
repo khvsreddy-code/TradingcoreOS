@@ -185,6 +185,7 @@ export function analyzeCoreSpiritAuthoringSource(
       ...(hasTensor ? ['Typed tensor computation'] : []),
       ...(hasSystemEvent ? ['Event-driven source'] : []),
       ...(hasAutomation ? ['Automation source'] : []),
+      ...((surface.requiredCapabilities??[]).includes('ai.invoke') ? ['Asynchronous AI invocation requires the system-level automation capability'] : []),
     ];
     return cacheAnalysis(cacheKey, Object.freeze({
       level:inferCoreSpiritRequiredLevel(facts),
