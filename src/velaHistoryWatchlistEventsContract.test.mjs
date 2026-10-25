@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
+const terminal = read('src/services/core/chart/tcoVelaTerminal.ts');
+const provider = read('src/TcoVelaDataProvider.ts');
+const dataPlane = read('src/services/marketData/chartDataPlane.ts');
+const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
+const callback = read('src/pages/BrokerCallbackPage.tsx');
+const adapter = read('src/server/brokers/adapters/BrokerAdapters.ts');
+
+assert.match(terminal, /bars:2_000/);
+assert.match(terminal, /timeframes:\[[^\]]*'45'/);
+assert.match(provider, /supportedTimeframes:\s*\[[^\]]*'45'/);
+assert.match(provider, /const maxPages = Math\.min\(8/);
+assert.match(provider, /await plane\.loadOlderHistory\('warm'/);
+assert.match(dataPlane, /residentCount >= requestedLimit/);
+assert.match(dataPlane, /fresh\.length >= requestedLimit/);
+assert.match(chrome, /const bookmarksPanel: SidePanelDescriptor/);
+assert.match(chrome, /buildWatchlistTechnicalSummary/);
+assert.match(chrome, /fetchTradingCoreNewsBundle/);
+assert.match(chrome, /updateEnrichmentRow/);
+assert.match(chrome, /const newsMarksAttachment: WidgetAttachment/);
+assert.match(chrome, /chart\.marks\.defineGroup\(\{ id: 'news', label: 'News'/);
+assert.match(chrome, /replaceVelaMarksForGroup\(chart, 'news', marks\)/);
+assert.match(chrome, /replaceVelaMarksForGroup\(chart, 'trades', marks\)/, 'news markers must not be overwritten by trade markers');
+assert.match(callback, /AbortSignal\.timeout\(20_000\)/);
+assert.match(adapter, /signal: timeoutSignal\(12_000\)/);
+console.log('TRADINGCORE_VELA_HISTORY_WATCHLIST_NEWS_MARKERS_OK');

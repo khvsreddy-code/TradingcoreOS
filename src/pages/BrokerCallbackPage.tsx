@@ -38,6 +38,7 @@ export const BrokerCallbackPage: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
+          signal: AbortSignal.timeout(20_000),
           body: JSON.stringify({
             broker: paramBrokerId || undefined,
             code,
@@ -98,7 +99,9 @@ export const BrokerCallbackPage: React.FC = () => {
         }, 250);
       } catch (err: any) {
         setStatus('error');
-        setErrorMsg(err?.message || 'Server connection error during broker token exchange.');
+        setErrorMsg(err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? 'Broker token exchange timed out. Start the broker connection again.'
+          : err?.message || 'Server connection error during broker token exchange.');
       }
     };
 

@@ -37,6 +37,7 @@ export class FyersAdapter extends BaseBroker {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ grant_type: 'authorization_code', appIdHash, code }),
+        signal: timeoutSignal(12_000),
       });
 
       const text = await response.text();
@@ -59,7 +60,10 @@ export class FyersAdapter extends BaseBroker {
         clientCode: data.fy_id || data.user_id || data.client_id,
       };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to connect to Fyers API' };
+      const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+      return { success: false, error: timedOut
+        ? 'FYERS token exchange timed out. Start broker authorization again.'
+        : err?.message || 'Failed to connect to Fyers API' };
     }
   }
 

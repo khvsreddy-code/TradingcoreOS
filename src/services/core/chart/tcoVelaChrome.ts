@@ -15,6 +15,10 @@ import {
   type SymbolRankingHook,
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
+import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
+import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../marketData/watchlistTechnicals';
+import { historyStore } from '../../marketData/HistoryStore';
+import type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import {
   deleteTcoVelaSavedWorkspace,
@@ -1430,7 +1434,31 @@ const bookmarksPanel: SidePanelDescriptor = {
     detailHint.className = 'tco-frame-help';
     detailHint.style.marginTop = '9px';
     detailHint.textContent = 'Select a row to switch the chart to that instrument.';
-    detailCard.append(detailHead, metrics, detailHint);
+    const technicalSection = document.createElement('section');
+    technicalSection.style.cssText = 'margin-top:10px;padding:9px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-elev,rgba(255,255,255,.02));';
+    const technicalTitle = document.createElement('div');
+    technicalTitle.textContent = 'TECHNICALS';
+    technicalTitle.style.cssText = 'font-size:9px;font-weight:750;letter-spacing:.08em;color:var(--vela-fg-muted);';
+    const technicalSummary = document.createElement('div');
+    technicalSummary.style.cssText = 'margin-top:6px;font-size:11px;font-weight:750;color:var(--vela-fg-bright);';
+    const technicalValues = document.createElement('div');
+    technicalValues.style.cssText = 'margin-top:5px;font-size:10px;line-height:1.5;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
+    technicalSection.append(technicalTitle, technicalSummary, technicalValues);
+
+    const newsSection = document.createElement('section');
+    newsSection.style.cssText = 'margin-top:9px;padding:9px;border:1px solid var(--vela-border);border-radius:7px;';
+    const newsHeading = document.createElement('div');
+    newsHeading.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;font-weight:750;letter-spacing:.08em;color:var(--vela-fg-muted);';
+    const newsHeadingLabel = document.createElement('span');
+    newsHeadingLabel.textContent = 'LATEST NEWS';
+    const newsMeta = document.createElement('span');
+    newsMeta.style.cssText = 'font-size:9px;font-weight:500;letter-spacing:0;';
+    newsHeading.append(newsHeadingLabel, newsMeta);
+    const newsList = document.createElement('div');
+    newsList.style.cssText = 'display:flex;flex-direction:column;gap:7px;margin-top:7px;';
+    newsSection.append(newsHeading, newsList);
+
+    detailCard.append(detailHead, metrics, detailHint, technicalSection, newsSection);
     root.appendChild(rows);
     root.appendChild(detailCard);
 
@@ -1547,8 +1575,14 @@ const bookmarksPanel: SidePanelDescriptor = {
       button: HTMLButtonElement;
       value: HTMLSpanElement;
       change: HTMLSpanElement;
+      technicals: HTMLSpanElement;
+      news: HTMLSpanElement;
     };
     const rowRefs = new Map<string, RowRef>();
+    const newsBySymbol = new Map<string, { bundle: { provider: string; items: TradingCoreNewsItem[] }; expiresAt: number }>();
+    const technicalBySymbol = new Map<string, { summary: WatchlistTechnicalSummary | null; expiresAt: number }>();
+    const enrichmentInFlight = new Map<string, Promise<void>>();
+    let lastRenderedNewsSignature = '';
 
     const updateDetails = (): void => {
       const current = String(ctx.symbol || '').trim();
@@ -1580,6 +1614,59 @@ const bookmarksPanel: SidePanelDescriptor = {
             ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
             : 'Live broker quote · waiting for complete day-range fields from the market feed.'
         : 'Waiting for a market quote for this instrument. No sample price is shown.';
+
+      const technical = technicalBySymbol.get(current.toUpperCase())?.summary;
+      technicalSummary.textContent = technical
+        ? `${technical.trend.toUpperCase()} · RSI(14) ${technical.rsi14.toFixed(1)}`
+        : technicalBySymbol.has(current.toUpperCase()) ? 'Technicals unavailable for this history window' : 'Calculating technicals…';
+      technicalSummary.style.color = technical?.trend === 'Bullish' ? '#22c55e' : technical?.trend === 'Bearish' ? '#f23645' : 'var(--vela-fg-bright)';
+      technicalValues.textContent = technical
+        ? `EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:2})} · EMA50 ${technical.ema50.toLocaleString('en-IN',{maximumFractionDigits:2})} · MACD H ${technical.macdHistogram.toFixed(2)} · ${technical.candleCount} bars`
+        : 'RSI · EMA20 · EMA50 · MACD';
+
+      const newsRecord = newsBySymbol.get(current.toUpperCase());
+      const newsItems = newsRecord?.bundle.items || [];
+      newsMeta.textContent = newsRecord ? newsRecord.bundle.provider : 'Loading…';
+      const signature = `${newsRecord?.expiresAt ?? 'pending'}:${newsItems.map(item => item.id || item.url || item.title).join('|')}`;
+      if (signature !== lastRenderedNewsSignature) {
+        lastRenderedNewsSignature = signature;
+        newsList.textContent = '';
+        if (!newsItems.length) {
+          const empty = document.createElement('div');
+          empty.textContent = newsRecord ? 'No recent news for this instrument.' : 'Fetching symbol headlines…';
+          empty.style.cssText = 'font-size:10px;color:var(--vela-fg-muted);';
+          newsList.appendChild(empty);
+        } else {
+          for (const item of newsItems.slice(0, 3)) {
+            const link = document.createElement('a');
+            const safeUrl = /^https?:\/\//i.test(String(item.url || '')) ? String(item.url) : '';
+            link.href = safeUrl || '#';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = item.title;
+            link.style.cssText = 'font-size:10px;line-height:1.4;color:var(--vela-fg-bright);text-decoration:none;overflow-wrap:anywhere;';
+            if (!safeUrl) link.removeAttribute('href');
+            const source = document.createElement('div');
+            source.textContent = `${item.source || 'News'} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'recent'}`;
+            source.style.cssText = 'margin-top:2px;font-size:9px;color:var(--vela-fg-muted);';
+            const entry = document.createElement('div');
+            entry.append(link, source);
+            newsList.appendChild(entry);
+          }
+        }
+      }
+    };
+
+    const updateEnrichmentRow = (item: WatchlistItem, ref: RowRef): void => {
+      const technical = technicalBySymbol.get(item.symbol)?.summary;
+      ref.technicals.textContent = technical
+        ? `${technical.trend.toUpperCase()} · RSI ${technical.rsi14.toFixed(0)} · EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:1})}`
+        : technicalBySymbol.has(item.symbol) ? 'TECHNICALS UNAVAILABLE' : 'TECHNICALS · calculating…';
+      ref.technicals.style.color = technical?.trend === 'Bullish' ? '#22c55e' : technical?.trend === 'Bearish' ? '#f23645' : 'var(--vela-fg-muted)';
+      const newsRecord = newsBySymbol.get(item.symbol);
+      const headline = newsRecord?.bundle.items[0];
+      ref.news.textContent = headline?.title || (newsRecord ? 'No recent news' : 'NEWS · loading…');
+      ref.news.title = headline?.title || 'Latest ticker headline';
     };
 
     const updateRows = (changedSymbol?: string): void => {
@@ -1624,6 +1711,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
         const changeTone = absolute !== undefined ? absolute : pct;
         ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        updateEnrichmentRow(item, ref);
         if (isSelected) updateDetails();
         return;
       }
@@ -1664,6 +1752,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
         const changeTone = absolute !== undefined ? absolute : pct;
         ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        updateEnrichmentRow(item, ref);
       }
       updateDetails();
     };
@@ -1702,7 +1791,13 @@ const bookmarksPanel: SidePanelDescriptor = {
           const detail = document.createElement('span');
           detail.textContent = item.label;
           detail.style.cssText = 'font:400 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-          left.append(label, detail);
+          const technicals = document.createElement('span');
+          technicals.style.cssText = 'display:block;max-width:190px;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          technicals.textContent = 'TECHNICALS · calculating…';
+          const news = document.createElement('span');
+          news.style.cssText = 'display:block;max-width:190px;font:400 9px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          news.textContent = 'NEWS · loading…';
+          left.append(label, detail, technicals, news);
 
           const right = document.createElement('span');
           right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
@@ -1735,7 +1830,7 @@ const bookmarksPanel: SidePanelDescriptor = {
 
           row.append(button, remove);
           rows.appendChild(row);
-          ref = { row, button, value, change };
+          ref = { row, button, value, change, technicals: left.children[2] as HTMLSpanElement, news: left.children[3] as HTMLSpanElement };
           rowRefs.set(item.symbol, ref);
         }
         rows.appendChild(ref.row);
@@ -1745,9 +1840,75 @@ const bookmarksPanel: SidePanelDescriptor = {
       updateRows();
     };
 
+    const loadSymbolEnrichment = (item: WatchlistItem): Promise<void> => {
+      const existing = enrichmentInFlight.get(item.symbol);
+      if (existing) return existing;
+      const promise = (async () => {
+        const now = Date.now();
+        const cachedNews = newsBySymbol.get(item.symbol);
+        const cachedTechnical = technicalBySymbol.get(item.symbol);
+        const newsTask = !cachedNews || cachedNews.expiresAt <= now
+          ? (async () => {
+              try {
+                const bundle = await fetchTradingCoreNewsBundle(item.short || item.label || item.symbol, AbortSignal.timeout(8_000));
+                newsBySymbol.set(item.symbol, { bundle, expiresAt: Date.now() + 90_000 });
+              } catch {
+                newsBySymbol.set(item.symbol, { bundle: { provider: 'Unavailable', items: [] }, expiresAt: Date.now() + 25_000 });
+              }
+            })()
+          : Promise.resolve();
+        const technicalTask = !cachedTechnical || cachedTechnical.expiresAt <= now
+          ? (async () => {
+              try {
+                const brokerId = String(tradingCoreRuntime.getPrimaryBrokerId() || 'fyers').toLowerCase();
+                await historyStore.hydrate(brokerId, item.symbol, '5minute');
+                let candles = historyStore.get(brokerId, item.symbol, '5minute');
+                if (!candles || candles.length < 50) {
+                  candles = await tradingCoreRuntime.getHistoricalData(item.symbol, '5minute', AbortSignal.timeout(12_000), 2_000);
+                }
+                technicalBySymbol.set(item.symbol, {
+                  summary: buildWatchlistTechnicalSummary(candles || []),
+                  expiresAt: Date.now() + ((candles?.length || 0) >= 50 ? 120_000 : 30_000),
+                });
+              } catch {
+                technicalBySymbol.set(item.symbol, { summary: null, expiresAt: Date.now() + 30_000 });
+              }
+            })()
+          : Promise.resolve();
+        await Promise.all([newsTask, technicalTask]);
+        updateRows(item.symbol);
+      })().finally(() => enrichmentInFlight.delete(item.symbol));
+      enrichmentInFlight.set(item.symbol, promise);
+      return promise;
+    };
+
+    let enrichmentWarmPromise: Promise<void> | undefined;
+    const warmWatchlistEnrichment = (): Promise<void> => {
+      if (enrichmentWarmPromise) return enrichmentWarmPromise;
+      const candidates = [...watchlist];
+      const activeSymbol = String(ctx.symbol || '').trim().toUpperCase();
+      if (activeSymbol && !candidates.some(item => item.symbol === activeSymbol)) {
+        const ticker = activeSymbol.includes(':') ? activeSymbol.split(':', 2)[1] || activeSymbol : activeSymbol;
+        candidates.push({ symbol: activeSymbol, label: ticker, short: ticker });
+      }
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < candidates.length) {
+          const item = candidates[cursor++]!;
+          await loadSymbolEnrichment(item);
+        }
+      };
+      const pending = Promise.all(Array.from({ length: Math.min(2, candidates.length) }, () => worker()))
+        .then(() => undefined)
+        .finally(() => { enrichmentWarmPromise = undefined; });
+      enrichmentWarmPromise = pending;
+      return pending;
+    };
+
     const refresh = (): void => {
       buildRows();
       if (watchlist.length) quoteSubscribe();
+      void warmWatchlistEnrichment();
     };
 
     addCurrent.addEventListener('click', () => {
@@ -1772,12 +1933,14 @@ const bookmarksPanel: SidePanelDescriptor = {
     // Refresh the stale marker while the market is quiet or closed; otherwise an old
     // quote can remain visually LIVE simply because no later tick arrived to repaint it.
     const freshnessTimer = window.setInterval(updateRows, 5000);
+    const enrichmentTimer = window.setInterval(() => void warmWatchlistEnrichment(), 30_000);
 
     return {
       onOpen: refresh,
       onChart: refresh,
       destroy() {
         window.clearInterval(freshnessTimer);
+        window.clearInterval(enrichmentTimer);
         watchlistRefreshers.delete(refresh);
         quoteStop?.();
         quoteStop = undefined;
@@ -2415,6 +2578,21 @@ const tradingPanel:SidePanelDescriptor={
   },
 };
 
+function replaceVelaMarksForGroup(chart: { marks: { all: () => TimelineMark[]; set: (marks: readonly TimelineMark[]) => unknown } }, group: string, next: readonly TimelineMark[]): void {
+  const retained = chart.marks.all().filter(mark => mark.group !== group);
+  chart.marks.set([...retained, ...next]);
+}
+
+function clearVelaMarksForGroup(chart: { marks: { all: () => TimelineMark[]; set: (marks: readonly TimelineMark[]) => unknown } }, group: string): void {
+  replaceVelaMarksForGroup(chart, group, []);
+}
+
+function stableNewsMarkId(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  return (hash >>> 0).toString(36);
+}
+
 const tradeMarksAttachment: WidgetAttachment = {
   id: 'tco.trade-marks',
   mount(ctx) {
@@ -2428,7 +2606,7 @@ const tradeMarksAttachment: WidgetAttachment = {
       if (chart !== lastChart) {
         lastMarketListener?.();
         lastMarketListener = undefined;
-        lastChart?.marks.clear();
+        if (lastChart) clearVelaMarksForGroup(lastChart, 'trades');
         lastChart = chart;
         chart.marks.defineGroup({ id: 'trades', label: 'Trades', visible: true });
         lastMarketListener = chart.on('market:changed', () => void refresh());
@@ -2476,9 +2654,9 @@ const tradeMarksAttachment: WidgetAttachment = {
           })
           .filter((mark): mark is NonNullable<typeof mark> => Boolean(mark));
 
-        chart.marks.set(marks);
+        replaceVelaMarksForGroup(chart, 'trades', marks);
       } catch {
-        if (currentGeneration === generation) chart.marks.clear();
+        if (currentGeneration === generation) clearVelaMarksForGroup(chart, 'trades');
       }
     };
 
@@ -2489,7 +2667,79 @@ const tradeMarksAttachment: WidgetAttachment = {
       window.clearInterval(timer);
       lastMarketListener?.();
       lastMarketListener = undefined;
-      lastChart?.marks.clear();
+      if (lastChart) clearVelaMarksForGroup(lastChart, 'trades');
+      lastChart = null;
+    };
+  },
+};
+
+const newsMarksAttachment: WidgetAttachment = {
+  id: 'tco.news-marks',
+  mount(ctx) {
+    let lastChart: typeof ctx.chart | null = null;
+    let stopMarketListener: (() => void) | undefined;
+    let generation = 0;
+
+    const refresh = async (): Promise<void> => {
+      const chart = ctx.chart;
+      const currentGeneration = ++generation;
+      if (chart !== lastChart) {
+        stopMarketListener?.();
+        stopMarketListener = undefined;
+        if (lastChart) clearVelaMarksForGroup(lastChart, 'news');
+        lastChart = chart;
+        chart.marks.defineGroup({ id: 'news', label: 'News', visible: true });
+        stopMarketListener = chart.on('market:changed', () => void refresh());
+      }
+
+      const symbol = String(ctx.symbol || '').trim().toUpperCase();
+      if (!symbol) return;
+      try {
+        const bundle = await fetchTradingCoreNewsBundle(symbol, AbortSignal.timeout(8_000));
+        if (currentGeneration !== generation) return;
+        const now = Date.now();
+        const marks: TimelineMark[] = bundle.items
+          .map(item => {
+            const publishedAt = Date.parse(String(item.publishedAt || ''));
+            const url = String(item.url || '');
+            if (!Number.isFinite(publishedAt) || publishedAt <= 0
+              || publishedAt < now - 60 * 86_400_000 || publishedAt > now + 7 * 86_400_000
+              || !/^https?:\/\//i.test(url) || !String(item.title || '').trim()) return null;
+            const id = stableNewsMarkId(`${symbol}| ${publishedAt}|${url}`);
+            return {
+              id: `tco.news.${id}`,
+              time: publishedAt,
+              title: String(item.title).slice(0, 180),
+              glyph: { shape: 'pin' as const, color: '#60a5fa', letter: 'N' },
+              tooltip: `${item.source || 'Market news'} · ${String(item.title).slice(0, 140)}`,
+              group: 'news',
+              content: {
+                panel: {
+                  items: [
+                    { type: 'text' as const, text: String(item.title) },
+                    { type: 'field' as const, label: 'Source', value: String(item.source || 'Market news') },
+                    { type: 'field' as const, label: 'Published', value: new Date(publishedAt).toLocaleString() },
+                    { type: 'button' as const, label: 'Open article', primary: true, run: () => { window.open(url, '_blank', 'noopener,noreferrer'); } },
+                  ],
+                },
+              },
+            } satisfies TimelineMark;
+          })
+          .filter((mark): mark is TimelineMark => mark !== null)
+          .slice(0, 40);
+        replaceVelaMarksForGroup(chart, 'news', marks);
+      } catch {
+        // Keep the last valid markers during a temporary news-provider outage.
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 180_000);
+    return () => {
+      window.clearInterval(timer);
+      stopMarketListener?.();
+      stopMarketListener = undefined;
+      if (lastChart) clearVelaMarksForGroup(lastChart, 'news');
       lastChart = null;
     };
   },
@@ -2802,6 +3052,7 @@ registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAttachment(newsMarksAttachment);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
