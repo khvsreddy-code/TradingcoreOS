@@ -61,6 +61,10 @@ export class UpstashRedisRest {
     return payload.result as T;
   }
 
+  async ping(signal?: AbortSignal): Promise<boolean> {
+    return (await this.command<string>(['PING'], signal)) === 'PONG';
+  }
+
   async get<T = string>(key: string, signal?: AbortSignal): Promise<T | null> {
     return this.command<T | null>(['GET', key], signal);
   }
@@ -132,4 +136,13 @@ export function getSharedRedis(): UpstashRedisRest {
 
 export function sharedRedisConfigured(): boolean {
   return getSharedRedis().configured;
+}
+
+export async function sharedRedisHealthy(): Promise<boolean> {
+  if (!sharedRedisConfigured()) return false;
+  try {
+    return await getSharedRedis().ping(AbortSignal.timeout(1_200));
+  } catch {
+    return false;
+  }
 }
