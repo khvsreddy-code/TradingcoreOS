@@ -216,7 +216,7 @@ export class TradingCoreRuntime {
     this.optionChainPromises.set(key, promise);
     return promise;
   }
-  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandle[]> {
+  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 2000): Promise<HistoricalCandle[]> {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
     // A chart can mount while the authenticated broker session is still being
     // rehydrated. The old implementation returned [] in that race, which made
@@ -232,8 +232,9 @@ export class TradingCoreRuntime {
     let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
 
-    const requestedLimit = Math.max(2, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const requestedLimit = Math.max(2, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const key = `${brokerId}:${symbol}:${timeframe}:initial-progressive-v15:${requestedLimit}`;
+    await historyStore.hydrate(brokerId, symbol, timeframe);
     const storeCached = historyStore.get(brokerId, symbol, timeframe);
     if (storeCached?.length) return storeCached.slice(-requestedLimit);
     const cached = this.historyCache.get(key);
@@ -294,7 +295,7 @@ export class TradingCoreRuntime {
    * Compact history path for native Vela loads. No candle objects are created in the
    * browser before the chart receives its OHLCV columns.
    */
-  public async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
+  public async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 2000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
     let brokerInfo = this.getPrimaryBrokerInfo();
     if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
@@ -304,7 +305,7 @@ export class TradingCoreRuntime {
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return null;
-    const requestedLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const requestedLimit = Math.max(100, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
 
     // Prefer the compact broker-native path, but never let an empty/unsupported
     // column response strand Vela with a blank chart when the ordinary history API
@@ -411,7 +412,7 @@ export class TradingCoreRuntime {
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-    const requestedLimit = Math.max(2, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const requestedLimit = Math.max(2, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const key = brokerId + ':' + symbol + ':' + timeframe + ':' + beforeTimestamp + ':' + requestedLimit;
     const cached = this.olderHistoryCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.data;

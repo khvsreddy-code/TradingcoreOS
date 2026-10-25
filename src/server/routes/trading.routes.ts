@@ -114,8 +114,8 @@ tradingRoutes.get('/:brokerId/market-data', injectBrokerSession, async (req: Bro
 tradingRoutes.get('/:brokerId/historical', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   const instrumentKey = String(req.query.instrument_key || '');
   const interval = String(req.query.interval || '');
-  const requestedLimit = Number(req.query.limit);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(100, Math.min(5000, Math.floor(requestedLimit))) : 1000;
+  const requestedLimit = Number(req.query.limit ?? 2_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(100, Math.min(2_000, Math.floor(requestedLimit))) : 2_000;
   if (!instrumentKey || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
   try { res.json({ success: true, data: await req.brokerAdapter.getHistoricalData(req.accessToken, instrumentKey, interval, limit) }); }
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load historical data') }); }

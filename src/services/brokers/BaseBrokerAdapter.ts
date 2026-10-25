@@ -103,16 +103,16 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     return out;
   }
 
-  async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 10000): Promise<HistoricalCandle[]> {
-    const safeLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+  async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 2000): Promise<HistoricalCandle[]> {
+    const safeLimit = Math.max(100, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}`, { signal });
     const payload = readJson(await res.text());
     if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
     return requireArray(requireSuccessData(payload, 'Historical data request failed'), isHistoricalCandle, 'historical candles');
   }
 
-  async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
-    const safeLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+  async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 2000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
+    const safeLimit = Math.max(100, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&format=columns${beforeTimestamp != null ? `&before=${encodeURIComponent(new Date(beforeTimestamp).toISOString())}` : ''}`, { signal });
     const payload = readJson(await res.text());
     if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
@@ -145,7 +145,7 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 500, signal?: AbortSignal): Promise<HistoricalCandle[]> {
-    const safeLimit = Math.max(2, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const safeLimit = Math.max(2, Math.min(2_000, Math.floor(Number(limit) || 2_000)));
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&before=${encodeURIComponent(beforeTimestamp)}`, { signal });
     const payload = readJson(await res.text());
     if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
