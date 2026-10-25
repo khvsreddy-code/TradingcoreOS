@@ -67,6 +67,8 @@ const historyDataRoute = read('./server/routes/broker-market-data.routes.ts');
 const canonicalHistory = read('./server/marketData/canonicalHistoricalData.ts');
 const brokerAdapter = read('./server/brokers/adapters/BrokerAdapters.ts');
 const accountRoute = read('./server/routes/fyers-account.routes.ts');
+const accountService = read('./server/fyers/core/FyersAccountService.ts');
+const legacyHistoryRoute = read('./server/routes/broker-market-data.routes.ts');
 const quotaTelemetry = read('./server/fyers/core/FyersQuotaTelemetry.ts');
 
 
@@ -105,6 +107,15 @@ assert.doesNotMatch(brokerAdapter,/rateLimitIdentity\s*=\s*accessToken/,'no lega
 assert.match(streamRoute,/capabilities, session\.userId\)/,'legacy history requests must pass authenticated user identity');
 
 assert.match(requestGate,/process\.env\.NODE_ENV === 'production'/,'production always requires distributed quota coordination');
+assert.match(requestGate,/BROKER_COORDINATION_UNAVAILABLE/,'configured Redis outages must fail closed as 503 responses');
+assert.match(requestGate,/BROKER_COORDINATION_LOCK_TIMEOUT/,'shared quota lock waits are bounded');
+assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention storm cannot hold a request indefinitely');
+assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'transactions'/,'order book reads consume the transaction quota');
+assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'transactions'/,'trade book reads consume the transaction quota');
+assert.match(accountService,/API_LATENCY_BUDGET_MS\.order, 'transactions'/,'margin requests are classified under transaction APIs');
+assert.match(legacyHistoryRoute,/datasetComplete: false/,'legacy history responses do not imply full dataset completeness');
+assert.match(legacyHistoryRoute,/providerPageLimit: 2_000/,'legacy history responses disclose the provider request ceiling');
+
 assert.match(requestGate,/tco:broker:priority-minute:noninteractive/,'background/normal requests reserve quota for interactive traffic');
 assert.match(requestGate,/tco:broker:priority-minute:background/,'background requests have an independent smaller quota');
 assert.match(apiClient,/retry-after/,'Retry-After header support exists');
