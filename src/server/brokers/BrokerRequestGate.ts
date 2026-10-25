@@ -147,6 +147,13 @@ export async function withBrokerRequestGate<T>(
 
     const distributed = getSharedRedis();
     const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
+    const coordinationRequired = process.env.NODE_ENV === 'production' || process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true';
+    if (coordinationRequired && (!distributedEnabled() || !distributed.configured)) {
+      throw Object.assign(
+        new Error('Shared Redis coordination is required before broker API calls can be admitted.'),
+        { status:503, code:'BROKER_COORDINATION_REQUIRED' },
+      );
+    }
 
     if (distributedEnabled() && distributed.configured) {
       const lockKey = 'tco:broker:admit:' + budgetName + ':' + identityHash;
@@ -189,18 +196,6 @@ export async function withBrokerRequestGate<T>(
         await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, effectiveSignal);
       } finally {
         if (acquired) await distributed.releaseLock(lockKey, owner).catch(() => undefined);
-      }
-    } else if (process.env.NODE_ENV === 'production' && (distributedEnabled() || process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true')) {
-      if (process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true') {
-        throw Object.assign(
-          new Error('Shared Redis coordination is required before broker API calls can be admitted.'),
-          { status:503, code:'BROKER_COORDINATION_REQUIRED' },
-        );
-      }
-      const marker = globalThis as typeof globalThis & { __tradingCoreRedisWarningLogged?: boolean };
-      if (!marker.__tradingCoreRedisWarningLogged) {
-        marker.__tradingCoreRedisWarningLogged = true;
-        console.warn('[TradingCore] Shared Redis coordination is not configured; broker limits are only enforced per function instance.');
       }
     }
 
