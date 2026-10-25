@@ -542,7 +542,14 @@ export class HistoricalDataService {
       oldestTimestamp: selected[0]?.timestamp || null, newestTimestamp: selected[selected.length - 1]?.timestamp || null,
       cacheHit: false, stale: false, degraded: record.degraded, historyExhausted: false,
       paginationSupported: Boolean(sourceStatus.historyCompleteness && (sourceStatus.historyCompleteness as Record<string, unknown>).paginationSupported),
-      historyCompleteness: isRecord(sourceStatus.historyCompleteness) ? sourceStatus.historyCompleteness : { status: 'unknown', requestedBars: selected.length, returnedBars: selected.length, providerPageLimit: 2_000, paginationSupported: false },
+      historyCompleteness: {
+        ...(isRecord(sourceStatus.historyCompleteness) ? sourceStatus.historyCompleteness : { status: 'unknown' }),
+        // This is the number returned by this response, not the size of the cached dataset.
+        returnedBars: selected.length,
+        providerPageLimit: 2_000,
+        datasetComplete: false,
+        hasMoreHistory: Boolean(sourceStatus.historyCompleteness && (sourceStatus.historyCompleteness as Record<string, unknown>).paginationSupported),
+      },
       sourceStatus, ...overrides,
     };
   }
@@ -634,12 +641,14 @@ export class HistoricalDataService {
         pageRangeTo: new Date(range.toMs).toISOString(),
       };
       sourceStatus.historyCompleteness = {
-        status: targetReached ? 'target-reached' : 'partial',
+        status: targetReached ? 'page-target-reached' : 'partial-page',
         requestedBars: pageTarget,
-        returnedBars: Math.min(merged.length, HISTORICAL_MAX_BARS),
+        returnedBars: Math.min(merged.length, pageTarget),
         fyersReturnedBars: fyersBars.length,
         providerPageLimit: 2_000,
         paginationSupported: Boolean(fetchFyersRecent),
+        datasetComplete: false,
+        hasMoreHistory: Boolean(fetchFyersRecent),
         pageRangeFrom: new Date(range.fromMs).toISOString(),
         pageRangeTo: new Date(range.toMs).toISOString(),
         lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
@@ -685,14 +694,19 @@ export class HistoricalDataService {
       const beforeTimestamp = Number(request.beforeTimestamp);
       let older = (cached?.bars || []).filter(bar => bar.timestampMs < beforeTimestamp).sort((a, b) => a.timestampMs - b.timestampMs);
       let pageBars: StoredBar[] = [];
-      let paginationStatus = 'cache-hit';
-      let historyExhausted = false;
+      let responseCacheRecord: CacheRecord | null = cached;
+      const previousPagination = isRecord(cached?.sourceStatus.pagination) ? cached.sourceStatus.pagination : {};
+      const sameCachedPage = Boolean(cached && cached.expiresAt > Date.now()
+        && Number(previousPagination.requestedBeforeTimestamp) === beforeTimestamp
+        && (previousPagination.status === 'no-validated-bars-in-page' || previousPagination.status === 'plan-lookback-limit'));
+      let paginationStatus = sameCachedPage ? String(previousPagination.status) : 'cache-hit';
+      let historyExhausted = sameCachedPage && previousPagination.status === 'plan-lookback-limit' && older.length === 0;
       const historyMaxLookbackYears = request.historyMaxLookbackYears ?? null;
       const lookbackFloorMs = historyMaxLookbackYears == null ? null : Date.now() - Math.max(1, Number(historyMaxLookbackYears) || 1) * 365.25 * 86_400_000;
       const oldestCachedMs = older[0]?.timestampMs;
       const pageToMs = Math.min(beforeTimestamp - 1, oldestCachedMs == null ? beforeTimestamp - 1 : oldestCachedMs - 1);
 
-      if (older.length < maxBars && request.fetchFyersRecent) {
+      if (older.length < maxBars && request.fetchFyersRecent && !sameCachedPage) {
         if (lookbackFloorMs != null && pageToMs < lookbackFloorMs) {
           historyExhausted = older.length === 0;
           paginationStatus = 'plan-lookback-limit';
@@ -740,19 +754,22 @@ export class HistoricalDataService {
                   pageRangeFrom: new Date(range.fromMs).toISOString(),
                   pageRangeTo: new Date(range.toMs).toISOString(),
                 },
+                pagination: { status: paginationStatus, requestedBeforeTimestamp: beforeTimestamp, pageValidatedCount: pageBars.length },
                 historyCompleteness: {
-                  status: pageBars.length >= Math.min(2_000, maxBars) ? 'target-reached' : 'partial',
+                  status: pageBars.length >= Math.min(2_000, maxBars) ? 'page-target-reached' : 'partial-page',
                   requestedBars: Math.min(2_000, maxBars),
                   returnedBars: Math.min(maxBars, older.length),
                   fyersReturnedBars: pageBars.length,
                   providerPageLimit: 2_000,
                   paginationSupported: true,
+                  datasetComplete: false,
+                  hasMoreHistory: true,
                   pageRangeFrom: new Date(range.fromMs).toISOString(),
                   pageRangeTo: new Date(range.toMs).toISOString(),
                   lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
                 },
               };
-              const updated = await this.writeCache({
+              responseCacheRecord = await this.writeCache({
                 ...currentRecord,
                 bars: combined,
                 revision: currentRecord.revision || 1,
@@ -762,7 +779,6 @@ export class HistoricalDataService {
                 expiresAt: Date.now() + CACHE_TTL_MS,
                 updatedAt: Date.now(),
               });
-              void updated;
             } catch (error) {
               paginationStatus = 'page-fetch-failed';
               if (!older.length) throw error;
@@ -778,7 +794,7 @@ export class HistoricalDataService {
 
       if (lookbackFloorMs != null && beforeTimestamp <= lookbackFloorMs && older.length === 0) historyExhausted = true;
       const page = older.slice(-maxBars);
-      const record: CacheRecord = cached || {
+      const record: CacheRecord = responseCacheRecord || {
         instrumentId: cacheInstrumentId, timeframe, bars: [], revision: 0, sourcePolicy: HISTORICAL_SOURCE_POLICY,
         sourceStatus: { cache: { status: 'miss' } }, degraded: pageBars.length === 0, expiresAt: 0, updatedAt: 0,
       };
@@ -790,18 +806,20 @@ export class HistoricalDataService {
           historyExhausted,
           paginationSupported: Boolean(request.fetchFyersRecent),
           historyCompleteness: {
-            status: page.length >= maxBars ? 'target-reached' : historyExhausted ? 'plan-lookback-exhausted' : pageBars.length ? 'partial-page' : 'cache-partial-or-no-data',
+            status: page.length >= maxBars ? 'page-target-reached' : historyExhausted ? 'plan-lookback-exhausted' : pageBars.length ? 'partial-page' : 'cache-partial-or-no-data',
             requestedBars: maxBars,
             returnedBars: page.length,
             fyersReturnedBars: pageBars.length,
             providerPageLimit: 2_000,
             paginationSupported: Boolean(request.fetchFyersRecent),
+            datasetComplete: historyExhausted,
+            hasMoreHistory: Boolean(request.fetchFyersRecent) && !historyExhausted,
             paginationStatus,
             lookbackFloor: lookbackFloorMs == null ? null : new Date(lookbackFloorMs).toISOString(),
           },
           sourceStatus: {
             ...(record.sourceStatus || {}),
-            pagination: { status: paginationStatus, pageValidatedCount: pageBars.length },
+            pagination: { status: paginationStatus, requestedBeforeTimestamp: beforeTimestamp, pageValidatedCount: pageBars.length },
           },
         }),
         quote: null,
