@@ -42,8 +42,8 @@ function fail(res:Response,status:number,message:string):void {
   res.status(status).json({success:false,error:message});
 }
 function emitSse(res:Response,event:string,value:unknown):void {
-  res.write('event: '+event+'\\n');
-  res.write('data: '+JSON.stringify(value)+'\\n\\n');
+  res.write('event: '+event+'\n');
+  res.write('data: '+JSON.stringify(value)+'\n\n');
 }
 function finishCopilotResponse(res:Response,stream:boolean,payload:unknown):void {
   if(stream){emitSse(res,'complete',payload);res.end();return;}
@@ -170,7 +170,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       const generation=await ai.models.generateContent({model,contents:userContent,config:generationConfig});
       generatedRaw=String(generation.text||'');
     }
-    const generated=parseGeneratedPayload(generatedRaw,{allowEmptySource:analysisOnly});
+    let generated=parseGeneratedPayload(generatedRaw,{allowEmptySource:analysisOnly});
     if(analysisOnly){
       const diagnostics=(currentCompile?.diagnostics??[]).slice(0,80);
       const createdAt=new Date().toISOString();
@@ -179,7 +179,29 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       finishCopilotResponse(res,stream,{success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact,safetyReview:{maxLookback:currentIr?.maxLookback??null,repaintSafety:currentIr?.repaintSafety??null,causalityAnalysis:currentIr?.causalityAnalysis??null,requiredCapabilities:[]},validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
       return;
     }
-    const compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
+    let compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
+    let repairAttempts=0;
+    const initialCompilerErrors=compiled.diagnostics.filter(item=>item.severity==='error');
+    if(req.body?.repairOnCompileError===true&&initialCompilerErrors.length&&!analysisOnly){
+      // Hard cost cap: one optional repair call, no recursive repair loop.
+      repairAttempts=1;
+      const repairContent=userContent+'\n\nONE REPAIR PASS ONLY. Attempt 1 produced these independent compiler diagnostics:\n'+JSON.stringify(initialCompilerErrors.slice(0,40).map(item=>({severity:item.severity,code:item.code,message:item.message,line:item.line,column:item.column}))).slice(0,10000)+'\nReturn a complete revised CoreScript source. Fix only reported defects; preserve intended signals, risk controls and causal semantics. Do not claim the revision is valid.';
+      if(stream)emitSse(res,'status',{phase:'repair',message:'Compiler errors found. Running the single permitted repair pass.'});
+      let repairedRaw='';
+      if(stream){
+        const repairedStream=await ai.models.generateContentStream({model,contents:repairContent,config:generationConfig});
+        for await(const chunk of repairedStream){
+          if(res.destroyed||res.writableEnded)break;
+          const delta=String(chunk.text||'');repairedRaw+=delta;
+          if(delta)emitSse(res,'delta',{phase:'repair',text:delta});
+        }
+      }else{
+        const repaired=await ai.models.generateContent({model,contents:repairContent,config:generationConfig});
+        repairedRaw=String(repaired.text||'');
+      }
+      generated=parseGeneratedPayload(repairedRaw);
+      compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
+    }
     const compilerDiagnostics=[...(compiled.diagnostics||[])];
     const artifactValid=Boolean(compiled.artifact&&validateExecutableArtifact(compiled.artifact));
     if(compiled.artifact&&!artifactValid)compilerDiagnostics.push({severity:'error' as const,message:'Compiler artifact failed integrity validation.',code:'COPILOT_INVALID_ARTIFACT'});
@@ -196,7 +218,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     const valid=Boolean(artifactValid&&compiled.ir&&!diagnostics.some(d=>d.severity==='error'));
     const sourceIr=compiled.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;requiredCapabilities?:readonly string[];semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
     const createdAt=new Date().toISOString();
-    const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts:0,createdAt});
+    const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts,createdAt});
     res.setHeader('Cache-Control','no-store');
     finishCopilotResponse(res,stream,{
       success:true,
@@ -207,6 +229,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       backtestScenarios:generated.backtestScenarios,
       diff:buildCoreSpiritReviewPatch(currentSource,generated.source),
       draftArtifact,
+      repairAttempts,
       safetyReview:{maxLookback:sourceIr?.maxLookback??null,repaintSafety:sourceIr?.repaintSafety??null,causalityAnalysis:sourceIr?.causalityAnalysis??null,requiredCapabilities:[...(sourceIr?.requiredCapabilities??[])],semanticNodeCount:sourceIr?.semanticDependencyGraph?.nodes?.length??null,semanticEdgeCount:sourceIr?.semanticDependencyGraph?.edges?.length??null,compilerDiagnostics:compilerDiagnostics.slice(0,40),sandboxDiagnostics:safetyDiagnostics.slice(0,40)},
       validation:{valid,artifactHash:valid?compiled.artifact?.abi?.artifactHash:null,diagnostics:diagnostics.slice(0,80)},
       nextStep:'Review the structured diff and diagnostics. Explicitly apply the draft before your own compile/replay workflow. Nothing was run and no broker/order action was authorized.',
