@@ -4,7 +4,7 @@ import { CORE_SPIRIT_BUILTINS } from './standardLibrary.js';
 import { CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES } from './standardLibraryNamespaces.js';
 
 /** Increment this corpus revision whenever curated safety entries, ranking, or index shape changes. */
-export const CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION = '1.0.0';
+export const CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION = '1.0.1';
 export const CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION =
   'corespirit-knowledge-v' + CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION + ':' + CORE_SCRIPT_LANGUAGE_VERSION + ':' + CORE_SPIRIT_COMPILER_VERSION + ':' + CORE_SPIRIT_RUNTIME_VERSION;
 
