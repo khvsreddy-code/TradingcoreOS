@@ -304,6 +304,11 @@ export function requiredCapabilitiesForSurface(surface: CoreSpiritSurfaceMetadat
   return Object.freeze([...(surface.requiredCapabilities ?? [])]);
 }
 
+/**
+ * UI affordance check only. It must never be used to authorize compilation,
+ * sandbox operations, event subscriptions or broker/order execution. Required
+ * capabilities are derived from source and enforced by compiler + host runtime.
+ */
 export function isFeatureAllowedForLevel(feature: CoreScriptLanguageFeature, level: CoreSpiritAuthoringLevel): boolean {
   return rank(level) >= rank(FEATURE_LEVEL[feature]);
 }
