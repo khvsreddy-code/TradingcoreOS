@@ -1,7 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
-import { fetchTradingCoreNews, type TradingCoreNewsItem } from '../../services/news/newsService';
+import { fetchTradingCoreNewsBundle, type TradingCoreNewsBundle, type TradingCoreNewsItem } from '../../services/news/newsService';
 import type { InstrumentSearchSegment, SearchInstrument } from '../../services/marketData/instrumentSearch';
+import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../services/marketData/watchlistTechnicals';
+import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
 
 export type RightDockTab = 'watchlist' | 'orderbook' | 'alerts';
@@ -117,22 +119,128 @@ function useSymbolAlerts(selectedKey?: string) {
 
 const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceProps) {
   const { watch, selected, selectedItem, selectedTick, broker, ticks, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching } = props;
-  const [news, setNews] = useState<TradingCoreNewsItem[]>([]);
-  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsByKey, setNewsByKey] = useState<Record<string, TradingCoreNewsBundle>>({});
+  const [newsLoadingByKey, setNewsLoadingByKey] = useState<Record<string, boolean>>({});
+  const [technicalByKey, setTechnicalByKey] = useState<Record<string, WatchlistTechnicalSummary | null>>({});
+  const [technicalLoadingByKey, setTechnicalLoadingByKey] = useState<Record<string, boolean>>({});
+  const newsByKeyRef = useRef<Record<string, TradingCoreNewsBundle>>({});
+  const technicalByKeyRef = useRef<Record<string, WatchlistTechnicalSummary | null>>({});
+  const newsInFlightRef = useRef(new Set<string>());
+  const technicalInFlightRef = useRef(new Set<string>());
 
+  const watchItems = useMemo(() => {
+    const byKey = new Map<string, WatchlistDockItem>();
+    for (const item of watch) byKey.set(item.key, item);
+    if (selectedItem) byKey.set(selectedItem.key, selectedItem);
+    return [...byKey.values()];
+  }, [watch, selectedItem?.key]);
+  const watchKeys = watchItems.map(item => item.key).join('\u001f');
+
+  // Fetch news for all visible watchlist symbols with a small concurrency budget.
+  // The server already deduplicates in-flight calls and caches feeds for 90 seconds.
   useEffect(() => {
-    if (!selectedItem) { setNews([]); return; }
+    let active = true;
     const controller = new AbortController();
-    let dead = false;
-    setNewsLoading(true);
-    const timer = window.setTimeout(() => {
-      void fetchTradingCoreNews(selectedItem.short || selectedItem.label || selectedItem.key, controller.signal)
-        .then(items => { if (!dead) setNews(items); })
-        .catch(() => { if (!dead) setNews([]); })
-        .finally(() => { if (!dead) setNewsLoading(false); });
-    }, 80);
-    return () => { dead = true; controller.abort(); window.clearTimeout(timer); };
-  }, [selectedItem?.key]);
+    const pending = watchItems.filter(item =>
+      !Object.prototype.hasOwnProperty.call(newsByKeyRef.current, item.key)
+      && !newsInFlightRef.current.has(item.key));
+    for (const item of pending) {
+      newsInFlightRef.current.add(item.key);
+      setNewsLoadingByKey(current => ({ ...current, [item.key]: true }));
+    }
+    let cursor = 0;
+    const worker = async () => {
+      while (active && cursor < pending.length) {
+        const item = pending[cursor++]!;
+        try {
+          const bundle = await fetchTradingCoreNewsBundle(item.short || item.label || item.key, controller.signal);
+          if (active) {
+            newsByKeyRef.current[item.key] = bundle;
+            setNewsByKey(current => ({ ...current, [item.key]: bundle }));
+          }
+        } catch {
+          if (active && !controller.signal.aborted) {
+            const unavailable: TradingCoreNewsBundle = { provider: 'Unavailable', items: [], fetchedAt: new Date().toISOString() };
+            newsByKeyRef.current[item.key] = unavailable;
+            setNewsByKey(current => ({ ...current, [item.key]: unavailable }));
+          }
+        } finally {
+          newsInFlightRef.current.delete(item.key);
+          if (active) setNewsLoadingByKey(current => ({ ...current, [item.key]: false }));
+        }
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(2, pending.length) }, () => worker()));
+    return () => {
+      active = false;
+      controller.abort();
+      for (const item of pending) newsInFlightRef.current.delete(item.key);
+    };
+  }, [watchKeys]);
+
+  // Calculate watchlist technicals from the same cached 5-minute candle timeline.
+  // No external indicator endpoint is needed for RSI/EMA/MACD summaries.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const pending = watchItems.filter(item =>
+      !Object.prototype.hasOwnProperty.call(technicalByKeyRef.current, item.key)
+      && !technicalInFlightRef.current.has(item.key));
+    for (const item of pending) {
+      technicalInFlightRef.current.add(item.key);
+      setTechnicalLoadingByKey(current => ({ ...current, [item.key]: true }));
+    }
+    let cursor = 0;
+    const worker = async () => {
+      while (active && cursor < pending.length) {
+        const item = pending[cursor++]!;
+        try {
+          const candles = await tradingCoreRuntime.getHistoricalData(item.key, '5minute', controller.signal, 2_000);
+          if (active) {
+            const summary = buildWatchlistTechnicalSummary(candles);
+            technicalByKeyRef.current[item.key] = summary;
+            setTechnicalByKey(current => ({ ...current, [item.key]: summary }));
+          }
+        } catch {
+          if (active && !controller.signal.aborted) {
+            technicalByKeyRef.current[item.key] = null;
+            setTechnicalByKey(current => ({ ...current, [item.key]: null }));
+          }
+        } finally {
+          technicalInFlightRef.current.delete(item.key);
+          if (active) setTechnicalLoadingByKey(current => ({ ...current, [item.key]: false }));
+        }
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(2, pending.length) }, () => worker()));
+    return () => {
+      active = false;
+      controller.abort();
+      for (const item of pending) technicalInFlightRef.current.delete(item.key);
+    };
+  }, [watchKeys]);
+
+  const refreshNews = (item: WatchlistDockItem) => {
+    const key = item.key;
+    setNewsLoadingByKey(current => ({ ...current, [key]: true }));
+    void fetchTradingCoreNewsBundle(item.short || item.label || item.key)
+      .then(bundle => {
+        newsByKeyRef.current[key] = bundle;
+        setNewsByKey(current => ({ ...current, [key]: bundle }));
+      })
+      .catch(() => {
+        const unavailable: TradingCoreNewsBundle = { provider: 'Unavailable', items: [], fetchedAt: new Date().toISOString() };
+        newsByKeyRef.current[key] = unavailable;
+        setNewsByKey(current => ({ ...current, [key]: unavailable }));
+      })
+      .finally(() => setNewsLoadingByKey(current => ({ ...current, [key]: false })));
+  };
+
+  const selectedNewsBundle = selectedItem ? newsByKey[selectedItem.key] : undefined;
+  const news: TradingCoreNewsItem[] = selectedNewsBundle?.items || [];
+  const newsLoading = Boolean(selectedItem && newsLoadingByKey[selectedItem.key]);
+  const selectedTechnical = selectedItem ? technicalByKey[selectedItem.key] : undefined;
+  const selectedTechnicalLoading = Boolean(selectedItem && technicalLoadingByKey[selectedItem.key]);
 
   const groups = useMemo(() => {
     const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
@@ -164,7 +272,18 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
           const positive = Number(pct ?? change ?? 0) >= 0;
           return <button type="button" key={item.key} className={`tct-wl-row ${selected === item.key ? 'selected' : ''}`} onClick={() => onSelect(item.key)}>
             <span className="tct-wl-badge">{(item.short || item.label || '?').slice(0, 3).toUpperCase()}</span>
-            <span className="tct-wl-symbol"><b>{item.short || item.label}</b><small>{item.label !== item.short ? item.label : item.type || ''}</small></span>
+            <span className="tct-wl-symbol">
+              <b>{item.short || item.label}</b>
+              <small>{item.label !== item.short ? item.label : item.type || ''}</small>
+              <small className={technicalByKey[item.key] ? `tct-wl-tech tct-wl-tech-${technicalByKey[item.key]!.trend.toLowerCase()}` : 'tct-wl-tech'}>
+                {technicalByKey[item.key]
+                  ? `${technicalByKey[item.key]!.trend.toUpperCase()} · RSI ${technicalByKey[item.key]!.rsi14.toFixed(1)} · EMA20 ${formatPrice(technicalByKey[item.key]!.ema20)}`
+                  : technicalLoadingByKey[item.key] ? 'Calculating technicals…' : 'Technicals pending'}
+              </small>
+              <small className="tct-wl-news">
+                {newsByKey[item.key]?.items[0]?.title || (newsLoadingByKey[item.key] ? 'Fetching news…' : newsByKey[item.key] ? 'No recent news' : 'News pending')}
+              </small>
+            </span>
             <span className="tct-wl-last">{formatPrice(tick?.ltp)}</span>
             <span className={positive ? 'tct-wl-up' : 'tct-wl-down'}>{change == null ? '—' : `${positive ? '+' : ''}${formatPrice(change)}`}</span>
             <span className={positive ? 'tct-wl-up' : 'tct-wl-down'}>{pct == null ? '—' : `${positive ? '+' : ''}${Number(pct).toFixed(2)}%`}</span>
@@ -180,8 +299,18 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       <div className="tct-ticker-price">{formatPrice(selectedTick?.ltp)} <span>LAST</span></div>
       <div className={`tct-ticker-change ${(selectedTick?.changePercent ?? selectedTick?.change ?? 0) >= 0 ? 'tct-wl-up' : 'tct-wl-down'}`}>{selectedTick?.change == null ? '—' : `${selectedTick.change >= 0 ? '+' : ''}${formatPrice(selectedTick.change)}`} <b>{selectedTick?.changePercent == null ? '—' : `${selectedTick.changePercent >= 0 ? '+' : ''}${Number(selectedTick.changePercent).toFixed(2)}%`}</b></div>
       <div className="tct-market-state"><span className="tct-state-dot"/> Market data live <small>{selectedTick?.receivedAt ? new Date(selectedTick.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</small></div>
+      <div className={selectedTechnical ? `tct-ticker-technical tct-wl-tech-${selectedTechnical.trend.toLowerCase()}` : 'tct-ticker-technical'}>
+        <div className="tct-ticker-technical-title"><b>TECHNICALS</b><span>{selectedTechnical?.trend.toUpperCase() || (selectedTechnicalLoading ? 'CALCULATING…' : 'UNAVAILABLE')}</span></div>
+        {selectedTechnical && <div className="tct-ticker-technical-values">
+          <span>RSI 14 <b>{selectedTechnical.rsi14.toFixed(1)}</b></span>
+          <span>EMA 20 <b>{formatPrice(selectedTechnical.ema20)}</b></span>
+          <span>EMA 50 <b>{formatPrice(selectedTechnical.ema50)}</b></span>
+          <span>MACD H <b>{selectedTechnical.macdHistogram.toFixed(2)}</b></span>
+        </div>}
+        {selectedTechnical && <small>From {selectedTechnical.candleCount.toLocaleString()} 5-minute candles · {formatNewsTime(selectedTechnical.asOf)}</small>}
+      </div>
       <div className="tct-news">
-        <div className="tct-news-head"><b>NEWS</b><span>GDELT · free</span><button type="button" title="Refresh news" onClick={() => { if (!selectedItem) return; setNewsLoading(true); void fetchTradingCoreNews(selectedItem.short || selectedItem.label || selectedItem.key).then(setNews).catch(() => setNews([])).finally(() => setNewsLoading(false)); }}>{newsLoading ? '…' : '↻'}</button></div>
+        <div className="tct-news-head"><b>NEWS</b><span>{selectedNewsBundle?.provider || (newsLoading ? 'Loading provider…' : 'Market news')}</span><button type="button" title="Refresh news" onClick={() => { if (selectedItem) refreshNews(selectedItem); }}>{newsLoading ? '…' : '↻'}</button></div>
         {newsLoading && !news.length ? <small>Loading market news…</small> : news.length ? <div className="tct-news-list">{news.slice(0, 4).map(item => <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="tct-news-item"><b>{item.title}</b><small>{item.source} · {formatNewsTime(item.publishedAt)}</small></a>)}</div> : <small>No news available for this instrument right now.</small>}
       </div>
     </section>}

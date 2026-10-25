@@ -602,3 +602,34 @@ html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="border
 html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="bg-[#3b82f6]"] {
   background-color: color-mix(in srgb, var(--tco-user-workspace-accent) 12%, transparent) !important;
 }
+
+
+/* Compact per-symbol technical and headline rows in the watchlist. */
+.tct-wl-symbol { min-width: 0; overflow: hidden; text-align: left; }
+.tct-wl-tech, .tct-wl-news {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.tct-wl-tech { color: var(--tco-muted); font-variant-numeric: tabular-nums; }
+.tct-wl-tech-bullish { color: #22c55e !important; }
+.tct-wl-tech-bearish { color: #f87171 !important; }
+.tct-wl-tech-neutral { color: var(--tco-muted) !important; }
+.tct-wl-news { color: var(--tco-dim); opacity: .9; }
+.tct-ticker-technical {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid var(--tco-border);
+  border-radius: 8px;
+  background: var(--tco-surface-2);
+}
+.tct-ticker-technical-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; letter-spacing: .06em; }
+.tct-ticker-technical-title span { font-weight: 700; }
+.tct-ticker-technical-values { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 8px; }
+.tct-ticker-technical-values span { display: flex; justify-content: space-between; gap: 6px; color: var(--tco-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tct-ticker-technical-values b { color: var(--tco-text); font-weight: 600; }
+.tct-ticker-technical > small { display: block; margin-top: 7px; color: var(--tco-dim); font-size: 10px; }
