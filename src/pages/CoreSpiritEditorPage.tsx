@@ -138,6 +138,7 @@ type CoreSpiritCopilotKnowledgeHit = { id:string; title:string; body:string; cat
 type CoreSpiritCopilotDraftHistoryItem = { id:string; artifactHash:string; kind:string; version:number; mode:string; modelVersion:string; compilerVersion:string; runtimeVersion:string; sourceHash:string; baseSourceHash:string; createdAt:string; summary:string };
 type CoreSpiritCopilotSavedDraftDetail = { id:string; artifactHash:string; kind:string; version:number; mode:string; modelVersion:string; compilerVersion:string; runtimeVersion:string; sourceHash:string; baseSourceHash:string; promptHash:string; diagnosticsHash:string; createdAt:string; payload:Record<string,unknown> };
 type CoreSpiritCopilotReport = { summary:string; assumptions:string[]; tests:string[]; backtestScenarios:Array<{name:string;setup:string;expected:string}>; artifact?:Record<string,unknown>; safetyReview?:Record<string,unknown>; diagnostics:Array<{severity:string;message:string;line?:number;column?:number;code?:string}> };
+type CoreSpiritAiInvocationResultView = { status:'ready'|'unavailable'|'stale'; result:string|null; summary:string; modelVersion:string; artifactHash:string; sourceHash:string; inputFingerprint:string; outputHash:string|null; createdAt:string; expiresAt:string; reasonCode?:string; cacheHit?:boolean; advisoryOnly:true; executable:false; mayCreateOrderIntent:false };
 type CoreSpiritCopilotDraftReview = {
   payload: CoreSpiritCopilotDraftPayload;
   baseSource: string;
@@ -272,6 +273,17 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [copilotDraftHistoryError,setCopilotDraftHistoryError]=useState('');
   const [copilotSavedDraft,setCopilotSavedDraft]=useState<CoreSpiritCopilotSavedDraftDetail|null>(null);
   const [copilotSavedDraftBusy,setCopilotSavedDraftBusy]=useState(false);
+  const [aiInvocationSource,setAiInvocationSource]=useState('requires ai.invoke, market.tick\\n\\non market.tick:\\n    signal "AI_REQUEST_PENDING"\\n');
+  const [aiInvocationPrompt,setAiInvocationPrompt]=useState('Review the supplied context, describe what it does and does not support, and state uncertainty explicitly.');
+  const [aiInvocationContext,setAiInvocationContext]=useState('{\\n  "symbol": "NIFTY",\\n  "timeframe": "5m",\\n  "features": {}\\n}');
+  const [aiInvocationOutputTokens,setAiInvocationOutputTokens]=useState(512);
+  const [aiInvocationStatus,setAiInvocationStatus]=useState<'idle'|'compiling'|'queued'|'running'|'ready'|'unavailable'|'stale'|'error'>('idle');
+  const [aiInvocationJobId,setAiInvocationJobId]=useState('');
+  const [aiInvocationArtifactHash,setAiInvocationArtifactHash]=useState('');
+  const [aiInvocationResult,setAiInvocationResult]=useState<CoreSpiritAiInvocationResultView|null>(null);
+  const [aiInvocationError,setAiInvocationError]=useState('');
+  const [aiInvocationBusy,setAiInvocationBusy]=useState(false);
+  const aiInvocationRequestRef=useRef(0);
   const [modelReleaseHash,setModelReleaseHash]=useState('');
   const [modelReleaseReason,setModelReleaseReason]=useState('Reviewed out-of-sample validation, provenance, and temporal-safety results.');
   const [modelReleaseInfo,setModelReleaseInfo]=useState<ModelReleaseInfo|null>(null);
@@ -627,6 +639,67 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     }
   };
 
+  const submitAsyncAiInvocation=async()=>{
+    const requestId=++aiInvocationRequestRef.current;
+    setAiInvocationBusy(true);setAiInvocationStatus('compiling');setAiInvocationError('');setAiInvocationResult(null);setAiInvocationJobId('');setAiInvocationArtifactHash('');
+    try{
+      const source=aiInvocationSource.trim();
+      const prompt=aiInvocationPrompt.trim();
+      if(!source)throw new Error('Add a CoreScript automation program with requires ai.invoke.');
+      if(!prompt||prompt.length>2000)throw new Error('The AI prompt must contain 1–2,000 characters.');
+      let context:Record<string,unknown>;
+      try{const parsed=JSON.parse(aiInvocationContext);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('Context must be a JSON object.');context=parsed as Record<string,unknown>;}catch(error){throw new Error(error instanceof Error&&error.message==='Context must be a JSON object.'?error.message:'Context must be valid JSON.');}
+      if(new TextEncoder().encode(JSON.stringify(context)).byteLength>16*1024)throw new Error('Context must be at most 16 KiB.');
+      const compiled=await compileCoreSpiritSourceOffThread(source,0,'corespirit-ai-invoke',{layer:'automation'});
+      if(requestId!==aiInvocationRequestRef.current)return;
+      const compilerErrors=compiled.diagnostics.filter(item=>item.severity==='error');
+      const artifactHash=compiled.artifact?.abi?.artifactHash;
+      if(!compiled.artifact||!artifactHash||compilerErrors.length){
+        throw new Error('Automation source must compile cleanly before an AI job can be submitted. '+compilerErrors.slice(0,3).map(item=>item.message).join(' '));
+      }
+      setAiInvocationArtifactHash(artifactHash);
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to submit an asynchronous AI invocation.');
+      const response=await fetch('/api/corespirit/copilot/invoke',{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+        body:JSON.stringify({source,artifactHash,prompt,context,outputTokenLimit:aiInvocationOutputTokens}),
+        cache:'no-store',
+      });
+      const submission=await response.json().catch(()=>null) as {success?:boolean;error?:string;cached?:boolean;result?:CoreSpiritAiInvocationResultView;data?:{jobId?:string;status?:string;invocationId?:string;inputFingerprint?:string}}|null;
+      if(!response.ok||!submission?.success)throw new Error(submission?.error||'CoreSpirit could not queue the AI invocation.');
+      if(requestId!==aiInvocationRequestRef.current)return;
+      if(submission.cached&&submission.result){
+        setAiInvocationResult(submission.result);
+        setAiInvocationStatus(submission.result.status);
+        return;
+      }
+      const jobId=submission.data?.jobId;
+      if(!jobId)throw new Error('The server accepted no job identifier.');
+      setAiInvocationJobId(jobId);setAiInvocationStatus('queued');
+      for(let attempt=0;attempt<40;attempt++){
+        await new Promise(resolve=>setTimeout(resolve,1500));
+        if(requestId!==aiInvocationRequestRef.current)return;
+        const poll=await fetch('/api/jobs/'+encodeURIComponent(jobId),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+        const snapshot=await poll.json().catch(()=>null) as {success?:boolean;error?:string;data?:{status?:string;progress?:number;result?:CoreSpiritAiInvocationResultView|null;error?:string|null}}|null;
+        if(!poll.ok||!snapshot?.success||!snapshot.data)throw new Error(snapshot?.error||'Could not inspect the asynchronous AI job.');
+        if(snapshot.data.status==='running'){setAiInvocationStatus('running');continue;}
+        if(snapshot.data.status==='failed')throw new Error(snapshot.data.error||'The asynchronous AI job failed.');
+        if(snapshot.data.status==='succeeded'&&snapshot.data.result){
+          setAiInvocationResult(snapshot.data.result);setAiInvocationStatus(snapshot.data.result.status);
+          return;
+        }
+        setAiInvocationStatus('queued');
+      }
+      setAiInvocationError('The job is still queued or running. Its server-side result remains available using job '+jobId+'.');
+    }catch(error){if(requestId===aiInvocationRequestRef.current){setAiInvocationStatus('error');setAiInvocationError(error instanceof Error?error.message:String(error));}}
+    finally{if(requestId===aiInvocationRequestRef.current)setAiInvocationBusy(false);}
+  };
+
+  const stopAsyncAiPolling=()=>{
+    aiInvocationRequestRef.current+=1;setAiInvocationBusy(false);
+    if(aiInvocationStatus==='queued'||aiInvocationStatus==='running')setAiInvocationError('Stopped waiting in this panel only. The server-side job may continue; inspect it using the job id before submitting another.');
+  };
   const searchCopilotKnowledge=async()=>{
     setCopilotKnowledgeBusy(true);setCopilotKnowledgeError('');
     try{
@@ -1023,6 +1096,21 @@ rn; }
               <div className="mt-2 space-y-1">{copilotDraftHistory.map(item=><div key={item.id} className="flex items-center gap-2 rounded border border-[var(--tco-border)] bg-[#090b11] p-2"><div className="min-w-0 flex-1"><div className="truncate text-[9px] font-semibold text-[var(--tco-text-2)]">{item.mode} · v{item.version}</div><div className="mt-1 truncate font-mono text-[8px] text-[var(--tco-dim)]">{item.artifactHash}</div><div className="mt-1 text-[8px] text-[var(--tco-dim)]">{new Date(item.createdAt).toLocaleString()} · {item.compilerVersion}</div></div><button disabled={copilotSavedDraftBusy} onClick={()=>void loadCopilotSavedDraft(item.id)} className="premium-button disabled:opacity-50">View</button></div>)}</div>
               {copilotSavedDraft&&<div className="mt-3 space-y-2 rounded border border-[#60a5fa]/25 bg-[#0b111b] p-2"><div className="flex items-center justify-between gap-2"><div className="text-[9px] font-semibold text-[var(--tco-text-2)]">Saved artifact · read-only</div><button onClick={()=>setCopilotSavedDraft(null)} className="premium-button">Close</button></div><div className="break-all text-[8px] font-mono text-[var(--tco-dim)]">{copilotSavedDraft.artifactHash}</div><div className="text-[9px] leading-4 text-[var(--tco-code-muted)]">{typeof copilotSavedDraft.payload.summary==='string'?copilotSavedDraft.payload.summary:'No summary was saved.'}</div><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--tco-border)] bg-[#07090d] p-2 text-[8px] leading-4 text-[var(--tco-code-muted)]">{typeof copilotSavedDraft.payload.source==='string'?copilotSavedDraft.payload.source:'Source text is unavailable in this record.'}</pre><div className="text-[8px] leading-4 text-[#fbbf24]">This saved revision is not automatically applied, executed, or trusted as a current compiled artifact.</div></div>}
             </div>
+          </div>
+        </Panel>
+        <Panel title="ASYNC AI INVOCATION" subtitle="Server-side automation capability · explicit submit · no per-candle network call">
+          <div className="space-y-3">
+            <div className="rounded border border-[#fbbf24]/25 bg-[#fbbf24]/5 p-2 text-[9px] leading-4 text-[#fbbf24]">Host API preview, not a native language builtin yet. This panel submits one bounded asynchronous job from an automation artifact; the result is advisory text and is not injected back into the program or routed to an order.</div>
+            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Automation CoreScript source · requires ai.invoke<textarea value={aiInvocationSource} onChange={event=>setAiInvocationSource(event.target.value)} maxLength={65536} rows={5} spellCheck={false} className="mt-1 w-full resize-y rounded border border-[var(--tco-border)] bg-[#07090d] p-2 font-mono text-[9px] leading-4 text-[var(--tco-code-muted)] outline-none focus:border-[#3b82f6]/50" /></label>
+            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Prompt<textarea value={aiInvocationPrompt} onChange={event=>setAiInvocationPrompt(event.target.value)} maxLength={2000} rows={3} className="mt-1 w-full resize-y rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[9px] leading-4 text-[var(--tco-text-2)] outline-none focus:border-[#3b82f6]/50" /></label>
+            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Bounded JSON context · do not include credentials<textarea value={aiInvocationContext} onChange={event=>setAiInvocationContext(event.target.value)} maxLength={18000} rows={4} spellCheck={false} className="mt-1 w-full resize-y rounded border border-[var(--tco-border)] bg-[#090b11] p-2 font-mono text-[9px] leading-4 text-[var(--tco-code-muted)] outline-none focus:border-[#3b82f6]/50" /></label>
+            <div className="flex items-center justify-between gap-2"><label className="text-[9px] text-[var(--tco-dim)]">Maximum output tokens<select value={aiInvocationOutputTokens} onChange={event=>setAiInvocationOutputTokens(Number(event.target.value))} className="ml-2 rounded border border-[var(--tco-border)] bg-[#090b11] px-2 py-1.5 text-[9px] text-[var(--tco-text-2)]"><option value={128}>128</option><option value={256}>256</option><option value={512}>512</option><option value={1024}>1,024</option></select></label><span className="text-[8px] font-mono uppercase text-[var(--tco-dim)]">{aiInvocationStatus}</span></div>
+            <div className="flex gap-2"><button disabled={aiInvocationBusy} onClick={()=>void submitAsyncAiInvocation()} className="premium-button premium-button-primary flex-1 justify-center disabled:opacity-50">{aiInvocationBusy?'Waiting for job…':'Compile & submit async AI job'}</button>{aiInvocationBusy&&<button onClick={stopAsyncAiPolling} className="premium-button justify-center">Stop waiting</button>}</div>
+            {aiInvocationJobId&&<div className="break-all rounded border border-[var(--tco-border)] p-2 text-[8px] font-mono text-[var(--tco-dim)]">Job {aiInvocationJobId}</div>}
+            {aiInvocationArtifactHash&&<div className="break-all rounded border border-[var(--tco-border)] p-2 text-[8px] font-mono text-[var(--tco-dim)]">Automation artifact {aiInvocationArtifactHash}</div>}
+            {aiInvocationError&&<div role="alert" className="whitespace-pre-wrap rounded border border-[#fbbf24]/25 bg-[#fbbf24]/5 p-2 text-[9px] leading-4 text-[#fbbf24]">{aiInvocationError}</div>}
+            {aiInvocationResult&&<div className="space-y-2 rounded border border-[var(--tco-border)] bg-[#090b11] p-3"><div className="flex items-start justify-between gap-2"><div className="text-[10px] font-semibold text-[var(--tco-text-2)]">AI job result</div><span className={'rounded border px-2 py-1 text-[8px] font-mono '+(aiInvocationResult.status==='ready'?'border-[#34d399]/30 text-[#34d399]':aiInvocationResult.status==='stale'?'border-[#fbbf24]/30 text-[#fbbf24]':'border-[#f87171]/30 text-[#f87171]')}>{aiInvocationResult.status.toUpperCase()}</span></div><div className="text-[9px] leading-4 text-[var(--tco-code-muted)]">{aiInvocationResult.summary}</div>{aiInvocationResult.result&&<pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--tco-border)] bg-[#07090d] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">{aiInvocationResult.result}</pre>}<div className="break-all text-[8px] font-mono text-[var(--tco-dim)]">Model {aiInvocationResult.modelVersion} · input {aiInvocationResult.inputFingerprint} · output {aiInvocationResult.outputHash||'none'}{aiInvocationResult.cacheHit?' · cache hit':''}</div><div className="text-[8px] leading-4 text-[var(--tco-dim)]">Created {new Date(aiInvocationResult.createdAt).toLocaleString()} · expires {new Date(aiInvocationResult.expiresAt).toLocaleString()}</div><div className="text-[8px] leading-4 text-[#fbbf24]">Inert advisory data. Executable: no. Order intent: no. Review and independently validate any derived strategy idea.</div></div>}
+            <div className="text-[8px] leading-4 text-[var(--tco-dim)]">The backend independently recompiles the artifact, checks the declared capability, enforces Redis budgets/concurrency and provider timeout, then saves the result with model/input hashes. Historical replay/backtest is not allowed to invoke this remote lane.</div>
           </div>
         </Panel>
         <Panel title="EXAMPLES" subtitle="Starter CoreSpirit scripts"><div className="space-y-2">{EXAMPLES.map(([name, code]) => <button key={name} onClick={() => setEditorSource(code)} className="flex w-full items-center gap-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-left hover:border-[#3b82f6]/40"><BookOpen className="h-4 w-4 text-[#3b82f6]"/><span className="text-[10px] font-mono text-[var(--tco-text-2)]">{name}</span></button>)}</div></Panel>
