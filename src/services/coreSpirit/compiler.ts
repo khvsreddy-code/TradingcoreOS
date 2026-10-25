@@ -441,6 +441,10 @@ export class CoreSpiritCompiler {
       const hasMultiSymbol = tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
       const hasMultiTimeframe = tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
       const hasSystemEvent = semanticDependencyGraph.nodes.some(node => node.kind === 'event');
+      // `requires ai.invoke` is a host-job capability declaration, not a callable
+      // function in the per-candle runtime. It still affects authoring level and
+      // must be included in the canonical compiled capability manifest.
+      const hasAiInvoke = (surface.requiredCapabilities ?? []).includes('ai.invoke');
       // The source determines its required level. Execution-layer selection is
       // separate policy context and must not silently rewrite authoring metadata.
       const hasAutomation = semanticDependencyGraph.nodes.some(node => node.kind === 'automation') ||
@@ -459,12 +463,27 @@ export class CoreSpiritCompiler {
       if (hasOrderIntent) languageFeatures.push('trader','order-intent');
       if (hasSystemEvent) languageFeatures.push('system','system-events');
       if (hasAutomation) languageFeatures.push('system','automation');
+      if (hasAiInvoke) languageFeatures.push('system','ai-invocation');
       const authoringLevel = inferCoreSpiritRequiredLevel({
         model:hasModel, research:hasResearch, matrix:hasMatrix, tensor:hasTensor,
         multiSymbol:hasMultiSymbol, multiTimeframe:hasMultiTimeframe, strategy:hasStrategy,
         systemEvent:hasSystemEvent, automation:hasAutomation, orderIntent:hasOrderIntent,
+        aiInvoke:hasAiInvoke,
       });
-      const requiredCapabilities = Object.freeze([...new Set(capabilityCheck.requirements.map(item => item.capability))]);
+      const capabilityRequirements = Object.freeze([
+        ...capabilityCheck.requirements,
+        ...(hasAiInvoke ? [Object.freeze({
+          capability:'ai.invoke' as const,
+          source:'requires ai.invoke',
+          reason:'Asynchronous remote AI invocation is explicitly declared and is only available through the server automation job lane.',
+        })] : []),
+      ]);
+      // Preserve declared capabilities as part of the immutable compiled artifact,
+      // even when a capability has no synchronous AST call by design.
+      const requiredCapabilities = Object.freeze([...new Set([
+        ...capabilityCheck.requirements.map(item => item.capability),
+        ...(surface.requiredCapabilities ?? []),
+      ])]);
       const languageCapabilities = Object.freeze([...new Set([
         'core',
         ...(hasMultiSymbol ? ['multi-symbol'] : []),
@@ -476,6 +495,7 @@ export class CoreSpiritCompiler {
         ...(hasOrderIntent ? ['strategy','order-intents'] : []),
         ...(hasSystemEvent ? ['events','system-events'] : []),
         ...(hasAutomation ? ['automation'] : []),
+        ...(hasAiInvoke ? ['ai-invocation'] : []),
         ...(semanticDependencyGraph.nodes.some(node => node.kind === 'data-source') ? ['market-data'] : []),
         ...(semanticDependencyGraph.nodes.some(node => node.kind === 'visual') ? ['visualization'] : []),
       ])]);
@@ -498,9 +518,9 @@ export class CoreSpiritCompiler {
         level:authoringLevel,
         features:uniqueLanguageFeatures,
         requiredCapabilities,
-        capabilityRequirements:capabilityCheck.requirements,
+        capabilityRequirements,
       });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}], symbols };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext),symbols};
     } catch(error) {
