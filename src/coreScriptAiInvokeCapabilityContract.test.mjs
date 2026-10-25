@@ -66,7 +66,7 @@ assert.ok(
   'a chart script must not get the AI invocation capability, even when its source declares it',
 );
 
-for (const target of ['replay', 'backtest', 'scanner', 'alert'] as const) {
+for (const target of ['replay', 'backtest', 'scanner', 'alert']) {
   const sandbox = createCoreSpiritSandbox({
     layer: target === 'backtest' ? 'strategy' : 'script',
     target,
