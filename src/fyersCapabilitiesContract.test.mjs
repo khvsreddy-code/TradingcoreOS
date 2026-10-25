@@ -103,6 +103,8 @@ assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy 
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
 assert.match(historyDataRoute, /fetchFyersHistoryTarget\(session\.token, symbol, interval, limit, capabilities, session\.userId\)/, 'legacy history must pass the resolved plan and stable user ID');
 assert.match(legacyHistoryRoute, /rateLimitIdentity: string/, 'legacy history helper APIs require an explicit stable identity');
+assert.match(legacyHistoryRoute, /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'user-requested legacy history uses interactive admission priority');
+assert.match(read('./server/fyers/market/FyersMarketDataService.ts'), /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'the shared FYERS history service prioritizes visible chart requests');
 assert.doesNotMatch(legacyHistoryRoute, /rateLimitIdentity\s*=\s*accessToken/, 'legacy history must never fall back to rotating access-token quota identity');
 assert.match(canonicalHistory, /client!\.dataGet<any>\('\/history'/, 'canonical history requests must use the capability-aware Data API client');
 assert.match(canonicalHistory, /fallbackQuoteSnapshot\(client!/, 'only initial empty history may fetch a quote snapshot');
@@ -134,6 +136,7 @@ assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention s
 assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'user-info'/,'read-only order book requests consume the User Info quota');
 assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'user-info'/,'read-only trade book requests consume the User Info quota');
 assert.match(brokerAdapter,/fyersFetch\('\/orders', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only order-book calls consume User Info quota');
+assert.match(brokerAdapter,/priority: 'interactive'/,'legacy account reads and order mutations receive interactive quota priority');
 assert.match(brokerAdapter,/fyersFetch\('\/tradebook', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only trade-book calls consume User Info quota');
 assert.match(accountService,/API_LATENCY_BUDGET_MS\.account, 'user-info'/,'margin calculation consumes the User Info quota');
 assert.match(legacyHistoryRoute,/datasetComplete: false/,'legacy history responses do not imply full dataset completeness');
