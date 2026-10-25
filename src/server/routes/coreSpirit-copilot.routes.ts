@@ -241,7 +241,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
     let artifactForResponse:Record<string,unknown>={...draftArtifact,persisted:false};
     try{
       const saved=await CoreSpiritCopilotDraftRepository.create(userId,{artifact:draftArtifact as unknown as Record<string,unknown>,source:generated.source,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diagnostics,safetyReview});
-      artifactForResponse={...draftArtifact,id:saved.id,persisted:true,createdAt:saved.createdAt};
+      artifactForResponse={...draftArtifact,id:saved.id,persisted:true,persistedAt:saved.createdAt};
     }catch{artifactForResponse={...draftArtifact,persisted:false};}
     res.setHeader('Cache-Control','no-store');
     finishCopilotResponse(res,stream,{
