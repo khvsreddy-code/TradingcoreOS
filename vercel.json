@@ -34,7 +34,7 @@
     "realtimegateway": {
       "root": ".",
       "entrypoint": "Dockerfile",
-      "runtime": "container",
+      "runtime": "container"
     }
   },
   "regions": [
