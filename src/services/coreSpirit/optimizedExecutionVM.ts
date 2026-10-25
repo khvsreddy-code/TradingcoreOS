@@ -13,7 +13,12 @@ export type CoreSpiritExecutionCacheVersions = Readonly<{
   componentDefinitionVersion?: string | number;
   executionConfigurationVersion?: string | number;
 }>;
-type ReusableStoreLease = { readonly store: CoreSpiritSlotValueStore; inUse: boolean };
+type ReusableStoreLease = {
+  readonly store: CoreSpiritSlotValueStore;
+  inUse: boolean;
+  /** True only after a complete successful run has populated every register on its executed paths. */
+  hasValidValues: boolean;
+};
 interface CompiledPlan {
   readonly instructions: readonly FastInstruction[];
   readonly slotByName: ReadonlyMap<string, number>;
@@ -123,6 +128,91 @@ function validateSpecializedPlan(
   }
 }
 
+function instructionReads(instruction: CoreSpiritIrInstruction): readonly string[] {
+  switch (instruction.op) {
+    case 'setLocal':
+    case 'setState': return [instruction.source];
+    case 'unary': return [instruction.operand];
+    case 'binary': return [instruction.left, instruction.right];
+    case 'call': return instruction.args;
+    case 'index': return [instruction.index, instruction.target];
+    case 'jumpIfFalse': return [instruction.condition];
+    case 'emit': return instruction.args;
+    default: return [];
+  }
+}
+
+function isComputationalInstruction(instruction: CoreSpiritIrInstruction): boolean {
+  return instruction.op === 'const' || instruction.op === 'loadSeries' ||
+    instruction.op === 'loadState' || instruction.op === 'move' ||
+    instruction.op === 'unary' || instruction.op === 'binary' ||
+    instruction.op === 'call' || instruction.op === 'index';
+}
+
+/**
+ * Only skip pure deterministic expressions whose input registers have known-good
+ * retained values. State, locals, and unclassified calls are always executed.
+ */
+function isSafeToSkipDirty(instruction: CoreSpiritIrInstruction): boolean {
+  switch (instruction.op) {
+    case 'const':
+    case 'loadSeries':
+    case 'unary':
+    case 'binary':
+    case 'index':
+      return true;
+    case 'call':
+      return instruction.componentPure === true &&
+        instruction.componentDeterministic === true &&
+        instruction.componentStateful !== true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Extend a caller's invalidation set through register consumers. This is
+ * deliberately conservative: reused register names and control-flow joins
+ * over-invalidate rather than permit a dependent expression to read stale data.
+ * An invalid index disables incremental skipping and requests a full run.
+ */
+function expandDirtyInstructionSet(
+  instructions: readonly CoreSpiritIrInstruction[],
+  requested: ReadonlySet<number>,
+): Set<number> | undefined {
+  const dirty = new Set<number>();
+  for (const index of requested) {
+    if (!Number.isInteger(index) || index < 0 || index >= instructions.length) return undefined;
+    dirty.add(index);
+  }
+
+  const consumers = new Map<string, number[]>();
+  for (let index = 0; index < instructions.length; index += 1) {
+    for (const register of instructionReads(instructions[index]!)) {
+      const list = consumers.get(register) ?? [];
+      list.push(index);
+      consumers.set(register, list);
+    }
+    // Loads from mutable state/locals and calls without an explicit pure,
+    // deterministic contract may change on every tick; propagate their
+    // invalidation to downstream expressions even if the caller omitted them.
+    const instruction = instructions[index]!;
+    if (isComputationalInstruction(instruction) && !isSafeToSkipDirty(instruction)) dirty.add(index);
+  }
+
+  const queue = [...dirty];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const instruction = instructions[queue[cursor]!];
+    if (!instruction || !('dest' in instruction) || typeof instruction.dest !== 'string') continue;
+    for (const dependent of consumers.get(instruction.dest) ?? []) {
+      if (dirty.has(dependent)) continue;
+      dirty.add(dependent);
+      queue.push(dependent);
+    }
+  }
+  return dirty;
+}
+
 function compilePlan(
   instructions: readonly CoreSpiritIrInstruction[],
   seriesRegistry: CoreSpiritSeriesRegistry | undefined,
@@ -182,6 +272,8 @@ export class CoreSpiritOptimizedExecutionVM {
     output: CoreSpiritOutputCollector,
     options: {
       reuseValues?: boolean;
+      /** Clear the reusable register file before a complete run, e.g. on a new candle/program pass. */
+      resetValues?: boolean;
       dirtyInstructions?: ReadonlySet<number>;
       seriesRegistry?: CoreSpiritSeriesRegistry;
       specializedPlan?: CoreSpiritSpecializedPlan;
@@ -212,7 +304,7 @@ export class CoreSpiritOptimizedExecutionVM {
       const contextKey = options.executionContextKey ?? host;
       lease = plan.reusableStores.get(contextKey);
       if (!lease) {
-        lease = { store: new CoreSpiritSlotValueStore(plan.slotByName, plan.slotCount), inUse: false };
+        lease = { store: new CoreSpiritSlotValueStore(plan.slotByName, plan.slotCount), inUse: false, hasValidValues: false };
         plan.reusableStores.set(contextKey, lease);
       }
       if (lease.inUse) {
@@ -230,18 +322,37 @@ export class CoreSpiritOptimizedExecutionVM {
     }
 
     try {
-      const dirty = options.dirtyInstructions;
+      const requestedDirty = options.dirtyInstructions;
+      const canReuseDirtyValues = Boolean(
+        requestedDirty &&
+        options.reuseValues === true &&
+        options.resetValues !== true &&
+        ownsLease &&
+        lease?.hasValidValues,
+      );
+      // Any failed run leaves a partial register file. Mark it invalid until a
+      // full/dirty execution finishes successfully, so the next tick falls back.
+      if (ownsLease && lease) lease.hasValidValues = false;
+      if (options.resetValues === true) values.clear();
+      const dirty = canReuseDirtyValues && requestedDirty
+        ? expandDirtyInstructionSet(instructions, requestedDirty)
+        : undefined;
       let pc = 0;
       let steps = 0;
       while (pc < plan.instructions.length) {
         if (++steps > host.maxStepsPerBar) throw new Error('execution step limit exceeded');
         if ((steps & 1023) === 0) host.throwIfAborted();
         const ins = plan.instructions[pc]!;
-        const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'loadState' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
-        if (dirty && computational && !dirty.has(pc)) { pc += 1; continue; }
+        const instructionPc = pc;
+        const computational = isComputationalInstruction(instructions[instructionPc]!);
+        if (dirty && computational && !dirty.has(instructionPc) && isSafeToSkipDirty(instructions[instructionPc]!)) {
+          pc = instructionPc + 1;
+          continue;
+        }
         const profiler = host.profileInstruction;
-        const sourceInstruction = instructions[pc] ?? (ins.op === 'call' || ins.op === 'index' || ins.op === 'emit' ? ins.instruction : null);
-        if (sourceInstruction) profiler?.beforeInstruction(pc, sourceInstruction);
+        const ins = plan.instructions[instructionPc]!;
+        const sourceInstruction = instructions[instructionPc] ?? (ins.op === 'call' || ins.op === 'index' || ins.op === 'emit' ? ins.instruction : null);
+        if (sourceInstruction) profiler?.beforeInstruction(instructionPc, sourceInstruction);
         try {
           switch (ins.op) {
             case 'const': values.set(ins.dest, ins.value); pc += 1; break;
@@ -274,9 +385,10 @@ export class CoreSpiritOptimizedExecutionVM {
             case 'emit': host.emit(ins.instruction, values, output); pc += 1; break;
           }
         } finally {
-          if (sourceInstruction) profiler?.afterInstruction(pc, sourceInstruction);
+          if (sourceInstruction) profiler?.afterInstruction(instructionPc, sourceInstruction);
         }
       }
+      if (ownsLease && lease) lease.hasValidValues = true;
     } finally {
       if (ownsLease && lease) lease.inUse = false;
     }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CoreSpiritCompiler } from './compiler.ts';
+import { CoreSpiritIncrementalCompiler } from './incrementalCompiler.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace, createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
 import { executeCoreSpirit } from './coreSpiritPipeline.ts';
@@ -70,3 +71,21 @@ assert.deepEqual(
 assert.equal(capabilityResult.errors.length, 2, 'undeclared event and webhook capabilities must fail closed');
 
 console.log('CORESPIRIT_CANONICAL_COMPILER_PIPELINE_OK');
+
+// Identical source is served from the bounded compiled-result cache, and
+// changed source/source identity must never alias an older compile artifact.
+const incrementalCompiler = new CoreSpiritIncrementalCompiler();
+const incrementalSource = 'let fast = ema(close, 9)';
+const incrementalFirst = incrementalCompiler.compile(incrementalSource, 'warm-cache-contract');
+assert.equal(incrementalFirst.cacheHit, false);
+assert.ok(incrementalFirst.ir, incrementalFirst.diagnostics.map(d => d.message).join('\n'));
+const incrementalWarm = incrementalCompiler.compile(incrementalSource, 'warm-cache-contract');
+assert.equal(incrementalWarm.cacheHit, true);
+assert.equal(incrementalWarm.sourceHash, incrementalFirst.sourceHash);
+assert.equal(incrementalWarm.ir, incrementalFirst.ir, 'warm cache should reuse the validated immutable-by-contract IR artifact');
+const incrementalChanged = incrementalCompiler.compile('let fast = ema(close, 10)', 'warm-cache-contract');
+assert.equal(incrementalChanged.cacheHit, false);
+assert.notEqual(incrementalChanged.sourceHash, incrementalFirst.sourceHash);
+const incrementalDifferentSourceId = incrementalCompiler.compile(incrementalSource, 'warm-cache-contract-other-id');
+assert.equal(incrementalDifferentSourceId.cacheHit, false, 'different source identities must not share cache entries');
+console.log('CORESPIRIT_INCREMENTAL_COMPILER_CACHE_CONTRACT_OK');

@@ -20,6 +20,7 @@
     "verify:browser": "node tools/verify-chart-performance.mjs",
     "build:corespirit:wasm": "sh tools/build-core-spirit-wasm.sh",
     "benchmark:corespirit:wasm": "tsx tools/benchmark-core-spirit-wasm.mjs",
+    "benchmark:corespirit:pipeline": "tsx tools/benchmark-core-spirit-pipeline.mjs",
     "realtime:gateway": "tsx realtime-gateway/server.ts",
     "latency:contracts": "node src/realtimeArchitectureContract.test.mjs",
     "bundle:budget": "node tools/check-bundle-budget.mjs",

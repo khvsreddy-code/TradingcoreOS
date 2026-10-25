@@ -3,6 +3,7 @@ import { CoreSpiritCompiler, type CoreSpiritCompileResult } from './compiler';
 import type { CoreSpiritAst } from './ast';
 import type { CoreSpiritIrProgram } from './ir';
 import { coreSpiritChecksum } from './artifact';
+import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
 export type CoreSpiritIncrementalCompileResult = CoreSpiritCompileResult & Readonly<{
@@ -38,7 +39,8 @@ export class CoreSpiritIncrementalCompiler {
   compile(source: string, sourceId = 'coreSpirit', options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritIncrementalCompileResult {
     const sourceHashValue = sourceHash(source);
     const componentKey = options.components ? coreSpiritChecksum(options.components instanceof Object && 'listContracts' in options.components ? (options.components as any).listContracts() : options.components) : 'default';
-    const hash = `${sourceId}:${sourceHashValue}:${componentKey}`;
+    // A source hash alone cannot safely reuse an artifact across compiler releases.
+    const hash = `${CORE_SPIRIT_COMPILER_VERSION}:${sourceId}:${sourceHashValue}:${componentKey}`;
     const parsed = this.ast.update(source);
     const cached = this.cache.get(hash);
     if (cached) {

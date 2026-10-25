@@ -291,3 +291,113 @@ try {
 }
 
 console.log('CORESPIRIT_RUNTIME_CACHE_VERSION_INTEGRATION_OK');
+
+
+// Instruction profiling must attribute both timestamps to the original PC,
+// even when an instruction changes the control-flow PC before its finally block.
+function profileCase(executor, instructions, overrides = {}, errorPattern) {
+  const before = [];
+  const after = [];
+  const pending = [];
+  const output = new CoreSpiritOutputCollector(32);
+  const state = { iterations: 0 };
+  const host = {
+    maxStepsPerBar:5000,
+    throwIfAborted(){},
+    loadSeries(){return 10;},
+    moveLocal(){return null;},
+    loadState(){return null;},
+    setState(){},
+    setLocal(){},
+    unary(op,value){return op==='-' ? -Number(value) : value;},
+    binary(op,a,b){return op==='+' ? Number(a)+Number(b) : null;},
+    tryFused(){return false;},
+    call(ins){
+      if (ins.name === 'loopCondition') {
+        state.iterations += 1;
+        return state.iterations < 3;
+      }
+      return null;
+    },
+    loadIndexed(){return null;},
+    truthy(value){return !!value;},
+    eventActive(){return false;},
+    emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'profile'});},
+    profileInstruction: {
+      beforeInstruction(pc, ins) { before.push({pc, op:ins.op}); pending.push({pc, op:ins.op}); },
+      afterInstruction(pc, ins) {
+        const start = pending.pop();
+        assert.ok(start, 'afterInstruction must have a matching beforeInstruction');
+        assert.equal(pc, start.pc, 'before/after profiling must retain the dispatched instruction PC');
+        assert.equal(ins.op, start.op, 'before/after profiling must retain instruction identity');
+        after.push({pc, op:ins.op});
+      },
+    },
+    ...overrides,
+  };
+  let thrown;
+  try { executor.run(instructions, 0, host, output); } catch (error) { thrown = error; }
+  assert.equal(pending.length, 0, 'errors and aborts must close every entered instruction profile');
+  assert.deepEqual(after, before, 'each instruction must be profiled at its own unchanged PC');
+  if (errorPattern) assert.match(String(thrown?.message ?? thrown), errorPattern);
+  else assert.equal(thrown, undefined, 'unexpected VM exception in profiling fixture');
+  return { before, output:output.values() };
+}
+const profileExecutors = [new CoreSpiritExecutionVM(), new CoreSpiritOptimizedExecutionVM()];
+for (const executor of profileExecutors) {
+  profileCase(executor, [
+    {op:'const',dest:'left',value:2},
+    {op:'const',dest:'right',value:3},
+    {op:'binary',dest:'sum',operator:'+',left:'left',right:'right'},
+    {op:'emit',kind:'plot',args:['sum'],outputId:'profile-sequential'},
+  ]);
+
+  const conditional = profileCase(executor, [
+    {op:'const',dest:'condition',value:false},
+    {op:'jumpIfFalse',condition:'condition',target:3},
+    {op:'const',dest:'unreachable',value:1},
+    {op:'emit',kind:'plot',args:['condition'],outputId:'profile-conditional'},
+  ]);
+  assert.deepEqual(conditional.before.map(item=>item.pc), [0,1,3],
+    'conditional-jump profiler should record only executed instructions at their original PCs');
+
+  const gated = profileCase(executor, [
+    {op:'eventGate',eventName:'market.tick',target:2},
+    {op:'const',dest:'unreachable',value:1},
+    {op:'emit',kind:'plot',args:['unreachable'],outputId:'profile-gate'},
+  ]);
+  assert.deepEqual(gated.before.map(item=>item.pc), [0,2],
+    'event gates must be attributed to their source instruction rather than their jump target');
+
+  const looped = profileCase(executor, [
+    {op:'call',dest:'condition',name:'loopCondition',args:[],componentPure:false,componentStateful:true,componentDeterministic:false},
+    {op:'jumpIfFalse',condition:'condition',target:3},
+    {op:'jump',target:0},
+    {op:'emit',kind:'plot',args:['condition'],outputId:'profile-loop'},
+  ]);
+  assert.deepEqual(looped.before.map(item=>item.pc), [0,1,2,0,1,2,0,1,3],
+    'loop iterations must preserve per-instruction profile attribution');
+
+  profileCase(executor, [
+    {op:'const',dest:'left',value:2},
+    {op:'binary',dest:'failure',operator:'+',left:'left',right:'left'},
+    {op:'emit',kind:'plot',args:['failure'],outputId:'profile-error'},
+  ], { binary(){ throw new Error('profile fixture failure'); } }, /profile fixture failure/);
+
+  profileCase(executor, [
+    {op:'const',dest:'loop',value:1},
+    {op:'jump',target:0},
+  ], { throwIfAborted(){ throw new Error('profile fixture aborted'); } }, /profile fixture aborted/);
+}
+console.log('CORESPIRIT_INSTRUCTION_PROFILE_PC_CONTRACT_OK');
+
+
+// Dirty execution on a new/unprimed context must perform a full run rather
+// than read empty or stale slots. Once primed, source invalidation is propagated
+// through every dependent register consumer even if the caller under-specifies it.
+const unprimedContext = {};
+assert.equal(runContext(unprimedContext,999,new Set([1,2,3])),1000,
+  'dirty execution without a valid prior register store must fall back to a full calculation');
+assert.equal(runContext(contextA,999,new Set([0])),1000,
+  'a dirty source register must invalidate transitive derived registers automatically');
+console.log('CORESPIRIT_DIRTY_REGISTER_VALIDITY_AND_DEPENDENCY_CLOSURE_OK');

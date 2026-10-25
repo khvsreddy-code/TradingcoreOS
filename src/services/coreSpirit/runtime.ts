@@ -291,6 +291,8 @@ export class CoreSpiritRuntime {
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
+  /** Stable per-runtime key lets the optimized VM retain registers across ticks without crossing runtimes. */
+  private readonly optimizedExecutionContextKey = {};
   private optimizedComponentDefinitionSignature = '';
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
@@ -537,6 +539,9 @@ export class CoreSpiritRuntime {
     this.profiler.recordAllocation(1);
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
+    // A same-timestamp candle is incremental only when there is a captured
+    // forming-bar snapshot to roll back to. A history replay alone is not one.
+    const canIncremental = sameBucket && Boolean(this.currentBarSnapshot);
     const dirtyPlan = sameBucket && this.dirtyGraph
       ? this.dirtyGraph.planTail(dirtySourcesForBar({ open:Number(last!.open), high:Number(last!.high), low:Number(last!.low), close:Number(last!.close), volume:Number(last!.volume) }, { open:Number(normalized.open), high:Number(normalized.high), low:Number(normalized.low), close:Number(normalized.close), volume:Number(normalized.volume) }), this.history.length - 1)
       : this.dirtyGraph?.planFull(this.history.length);
@@ -595,12 +600,18 @@ export class CoreSpiritRuntime {
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
-    if (sameBucket && dirtyPlan) {
+    if (canIncremental && dirtyPlan) {
       this.realtimeDirtyInstructions.clear();
       for (const instruction of dirtyPlan.instructions) this.realtimeDirtyInstructions.add(instruction);
-      // Stateful kernels are dirty only when their dependency graph reaches the changed bar inputs.
+      // The VM expands this graph-derived set through register consumers before skipping any pure work.
     }
-    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? this.realtimeDirtyInstructions : undefined }); }
+    try {
+      this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, {
+        reuseValues: this.executionTier === 'optimized',
+        resetValues: !canIncremental,
+        dirtyInstructions: canIncremental ? this.realtimeDirtyInstructions : undefined,
+      });
+    }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
     this.profiler.endBar();
     return { outputs, state: this.getState({ clone:false }), diagnostics };
@@ -1225,7 +1236,7 @@ export class CoreSpiritRuntime {
     barIndex: number,
     outputs: CoreSpiritOutputCollector,
     diagnostics: string[],
-    executionOptions: { reuseValues?: boolean; dirtyInstructions?: ReadonlySet<number> } = {},
+    executionOptions: { reuseValues?: boolean; resetValues?: boolean; dirtyInstructions?: ReadonlySet<number> } = {},
   ): void {
     this.prefetchTradingNativeData(barIndex, this.toEpoch(bar.timestamp));
     const host: CoreSpiritExecutionVMHost = {
@@ -1260,7 +1271,13 @@ export class CoreSpiritRuntime {
       profileInstruction: this.profiler.hooks(),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
-    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan, ...this.optimizedExecutionCacheVersions() });
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, {
+      ...executionOptions,
+      executionContextKey:this.optimizedExecutionContextKey,
+      seriesRegistry:this.seriesRegistry,
+      specializedPlan:this.compiledIr?.specializedPlan,
+      ...this.optimizedExecutionCacheVersions(),
+    });
   }
 
   private prefetchTradingNativeData(barIndex:number, asOfTimestamp:number): void {

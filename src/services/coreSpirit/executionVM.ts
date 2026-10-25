@@ -44,9 +44,10 @@ export class CoreSpiritExecutionVM {
     while (pc < instructions.length) {
       if (++steps > host.maxStepsPerBar) throw new Error('execution step limit exceeded');
       if ((steps & 1023) === 0) host.throwIfAborted();
-      const ins = instructions[pc];
+      const instructionPc = pc;
+      const ins = instructions[instructionPc];
       const profiler = host.profileInstruction;
-      profiler?.beforeInstruction(pc, ins);
+      profiler?.beforeInstruction(instructionPc, ins);
       try {
         switch (ins.op) {
           case 'const':
@@ -113,7 +114,7 @@ export class CoreSpiritExecutionVM {
             break;
         }
       } finally {
-        profiler?.afterInstruction(pc, ins);
+        profiler?.afterInstruction(instructionPc, ins);
       }
     }
   }
