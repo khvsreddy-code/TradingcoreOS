@@ -125,6 +125,7 @@ export function inferCoreScriptLevel(input: {
   hasSystemEvent?: boolean;
   hasAutomation?: boolean;
   hasOrderIntent?: boolean;
+  hasAiInvoke?: boolean;
 }): CoreSpiritAuthoringLevel {
   return inferCoreSpiritRequiredLevel({
     baseLevel:input.baseLevel,
@@ -138,6 +139,7 @@ export function inferCoreScriptLevel(input: {
     systemEvent:input.hasSystemEvent,
     automation:input.hasAutomation,
     orderIntent:input.hasOrderIntent,
+    aiInvoke:input.hasAiInvoke,
   });
 }
 
