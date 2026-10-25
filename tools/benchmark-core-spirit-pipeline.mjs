@@ -218,6 +218,7 @@ async function main() {
       incrementalCompileColdMs: Number(incrementalCold.elapsedMs.toFixed(3)),
       incrementalCompileWarmMs: Number(incrementalWarm.elapsedMs.toFixed(3)),
       incrementalCacheHit: incrementalWarm.value.cacheHit,
+      incrementalParseCacheHit: incrementalWarm.value.parseCacheHit,
       bars: [],
     };
 

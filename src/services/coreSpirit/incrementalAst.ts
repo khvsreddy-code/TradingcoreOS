@@ -70,6 +70,14 @@ export class CoreSpiritIncrementalAst {
     this.source = source; this.diagnostics = parsed.diagnostics; this.version++;
     return { ast:this.ast, diagnostics:this.diagnostics, reusedNodes, reparsed:true };
   }
+  /** Restore a cached parse tree without reparsing identical source text. */
+  restore(source: string, ast: CoreSpiritAst, diagnostics: IncrementalAstResult['diagnostics'] = []): void {
+    this.source = source;
+    this.ast = ast;
+    this.diagnostics = diagnostics;
+    this.version++;
+  }
+
   getVersion() { return this.version; }
   getAst() { return this.ast; }
 }
