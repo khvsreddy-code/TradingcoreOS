@@ -42,6 +42,14 @@ backgroundJobRoutes.get('/:jobId', async (req: AuthenticatedRequest, res: Respon
       return;
     }
     res.setHeader('Cache-Control', 'no-store');
+    let visibleResult = job.result;
+    if (job.kind === 'corespirit_ai_invoke' && visibleResult && typeof visibleResult === 'object' && !Array.isArray(visibleResult)) {
+      const aiResult = visibleResult as Record<string, unknown>;
+      const expiresAt = typeof aiResult.expiresAt === 'string' ? Date.parse(aiResult.expiresAt) : NaN;
+      if (aiResult.status === 'ready' && Number.isFinite(expiresAt) && Date.now() >= expiresAt) {
+        visibleResult = { ...aiResult, status: 'stale', result: null, reasonCode: 'result-expired', summary: 'This AI result passed its freshness window. Request a new asynchronous result before using it.' };
+      }
+    }
     res.json({
       success: true,
       data: {
@@ -49,7 +57,7 @@ backgroundJobRoutes.get('/:jobId', async (req: AuthenticatedRequest, res: Respon
         kind: job.kind,
         status: job.status,
         progress: job.progress,
-        result: job.result,
+        result: visibleResult,
         error: job.error,
         attempts: job.attempts,
         createdAt: job.createdAt,
