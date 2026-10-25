@@ -5,6 +5,9 @@ import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurfa
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './services/coreSpirit/quantKernels.ts';
 import { CoreSpiritCapabilitySandbox } from './services/coreSpirit/capabilitySandbox.ts';
 import { getCoreSpiritLibraryEntry } from './services/coreSpirit/standardLibraryNamespaces.ts';
+import { analyzeCoreSpiritAuthoringSource, detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
+import { inferCoreSpiritRequiredLevel, inferCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritExecutionModel.ts';
+import { inferCoreScriptLevel } from './services/coreSpirit/coreScriptLanguagePolicy.ts';
 
 const source=`
 data market = market("NSE:NIFTY50", "5m")
@@ -200,3 +203,75 @@ for (const [namespace, member] of [
 ]) {
   assert.ok(getCoreSpiritLibraryEntry(namespace, member), 'missing CoreSpirit domain entry ' + namespace + '.' + member);
 }
+
+const levelBeginner = `
+let fast = ta.ema(close, 9)
+let slow = ta.ema(close, 21)
+when fast > slow
+    show signal("BUY")
+`;
+const levelTrader = `
+data nifty = market("NSE:NIFTY50", "5m")
+data bank = market("NSE:BANKNIFTY", "15m")
+let trend = ta.ema(nifty.close, 20)
+let relative = nifty.close / bank.close
+when trend > trend[1]
+    signal("LONG")
+`;
+const levelQuant = `
+let returns = log(close / close[1])
+model alpha {
+    inputs: returns
+    predict: forward_return(20)
+}
+let prediction: prediction<float> = alpha.predict()
+show line(prediction)
+`;
+const levelSystem = `
+requires execution.route
+requires risk.evaluate
+requires automation
+on signal("LONG") {
+    if (risk.allowed()) {
+        automation.notify("Long signal")
+        automation.route("execution.long")
+    }
+}
+`;
+
+for (const [sourceText, expectedLevel] of [
+  [levelBeginner, 'beginner'],
+  [levelTrader, 'trader'],
+  [levelQuant, 'quant'],
+  [levelSystem, 'system'],
+]) {
+  const analysis = analyzeCoreSpiritAuthoringSource(sourceText);
+  assert.equal(analysis.syntaxValid, true, analysis.diagnostics.join('; '));
+  assert.equal(analysis.level, expectedLevel);
+  assert.equal(detectCoreSpiritAuthoringLevel(sourceText), expectedLevel);
+}
+assert.equal(detectCoreSpiritAuthoringLevel('let note = "model alpha backtest automate matrix tensor order"'), 'beginner',
+  'mentions inside strings must not elevate the required level');
+assert.equal(detectCoreSpiritAuthoringLevel('// model alpha backtest\\nlet x = ta.ema(close, 9)'), 'beginner',
+  'comment-only mentions must not elevate the required level');
+
+const sharedFacts = { strategy:true, model:true, multiTimeframe:true, automation:true };
+const requiredLevel = inferCoreSpiritRequiredLevel(sharedFacts);
+assert.equal(requiredLevel, 'system');
+assert.equal(inferCoreSpiritAuthoringLevel(sharedFacts), requiredLevel);
+assert.equal(inferCoreScriptLevel({
+  hasStrategy:true, hasModel:true, hasMultiTimeframe:true, hasAutomation:true,
+}), requiredLevel, 'all compatibility helpers must delegate to the canonical classifier');
+
+const sourceOnlyCompile = compileCoreSpirit(levelBeginner, 'level-layer-source', { layer:'script' });
+const strategyLayerCompile = compileCoreSpirit(levelBeginner, 'level-layer-strategy', { layer:'strategy' });
+assert.equal(sourceOnlyCompile.ir?.authoringLevel, 'beginner');
+assert.equal(strategyLayerCompile.ir?.authoringLevel, 'beginner',
+  'execution layer must not invent a higher authoring level for identical source');
+assert.equal(sourceOnlyCompile.ir?.languagePolicy?.level, sourceOnlyCompile.ir?.authoringLevel);
+assert.deepEqual(
+  [...(sourceOnlyCompile.ir?.languagePolicy?.requiredCapabilities ?? [])].sort(),
+  [...(sourceOnlyCompile.ir?.requiredCapabilities ?? [])].sort(),
+  'compiler policy and artifact capability metadata must agree',
+);
+console.log('CORESPIRIT_CANONICAL_LEVEL_INFERENCE_OK');

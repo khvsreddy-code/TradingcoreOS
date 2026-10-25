@@ -4,6 +4,7 @@ import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritPlatformRuntime } from './services/coreSpirit/platformRuntime.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { semanticTypeForDeclaredName } from './services/coreSpirit/semanticTypeSystem.ts';
+import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
 
 const beginner=`
 let fast = ta.ema(close, 20)
@@ -111,3 +112,18 @@ assert.ok(platformCompile.artifact);
 assert.ok(platformCompile.artifact?.ir.researchPlan?.modelSpecs.some(model=>model.name==='alpha'));
 
 console.log('CORESPIRIT_UNIFIED_LANGUAGE_CONTRACT_OK');
+
+assert.equal(validateCoreSpiritIr(quantIr), true, 'valid compiled IR must satisfy its level and capability metadata contract');
+assert.equal(validateCoreSpiritIr({ ...quantIr, authoringLevel:'beginner' }), false,
+  'IR validation must reject a source-level mismatch with the compiled language policy');
+const chartRuntimeCapabilityBoundary = new CoreSpiritRuntime({
+  sourceId:'chart-capability-boundary',
+  symbol:'NSE:NIFTY50',
+  timeframe:'5m',
+  executionMode:'historical',
+  executionTarget:'chart',
+  layer:'script',
+});
+assert.throws(() => chartRuntimeCapabilityBoundary.loadIr(automationIr), /CoreScript capability/,
+  'selecting a beginner/trader/quant editor view must not bypass actual host capability policy');
+console.log('CORESPIRIT_RUNTIME_LEVEL_AND_CAPABILITY_BOUNDARY_OK');

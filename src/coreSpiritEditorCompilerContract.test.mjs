@@ -72,3 +72,15 @@ assert.match(editor,/Executed artifact/,'runtime inspector must surface the exac
 assert.match(editor,/runtimeInspector\.run\.sourceHash/,'runtime inspector must show the source hash associated with chart outputs');
 assert.match(editor,/artifactHash/,'editor must retain/expose verified artifact identity');
 console.log('CORESPIRIT_EDITOR_OFF_THREAD_PIPELINE_OK');
+
+assert.match(editor,/FOUR LEVELS · ONE CORE SCRIPT/,
+  'the editor must present four guided views over one CoreScript language');
+assert.match(editor,/UI lens only/,
+  'selected authoring view must be separate from required program level');
+assert.match(editor,/compiledRequiredLevel/,
+  'the required level must come from compiler output rather than the selected view');
+assert.match(editor,/LEVEL_STARTERS/,
+  'each view must offer a visible editable CoreScript starter');
+assert.match(editor,/validateCoreScriptCapabilitiesAgainstSandbox/,
+  'the selected authoring view must not replace host capability enforcement');
+console.log('CORESPIRIT_FOUR_LEVEL_EDITOR_GUIDANCE_OK');
