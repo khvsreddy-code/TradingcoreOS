@@ -41,6 +41,14 @@ const COPILOT_MODE_INSTRUCTIONS:Record<CopilotMode,string>={
 function fail(res:Response,status:number,message:string):void {
   res.status(status).json({success:false,error:message});
 }
+function emitSse(res:Response,event:string,value:unknown):void {
+  res.write('event: '+event+'\\n');
+  res.write('data: '+JSON.stringify(value)+'\\n\\n');
+}
+function finishCopilotResponse(res:Response,stream:boolean,payload:unknown):void {
+  if(stream){emitSse(res,'complete',payload);res.end();return;}
+  res.json(payload);
+}
 const copilotRateLimit=createRateLimiter({
   windowMs:60_000,
   max:10,
@@ -68,7 +76,7 @@ function parseGeneratedPayload(raw:string, options:{allowEmptySource?:boolean} =
   return {source,summary,assumptions,tests,backtestScenarios};
 }
 
-coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:AuthenticatedRequest,res:Response)=>{
+async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,stream=false):Promise<void>{
   const userId=req.tradingCoreUserId;
   if(!userId){fail(res,401,'Sign in to use CoreSpirit Copilot.');return;}
   const prompt=typeof req.body?.prompt==='string'?req.body.prompt.trim():'';
@@ -125,35 +133,50 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       'Current CoreScript source (may be empty; untrusted code context):',
       currentSource||'(empty)',
     ].join('\n');
-    const generation=await ai.models.generateContent({
-      model,
-      contents:userContent,
-      config:{
-        systemInstruction,
-        // Use the installed @google/genai SDK's supported structured-output fields.
-        responseMimeType:'application/json',
-        responseSchema:{
-          type:Type.OBJECT,
-          properties:{
-            source:{type:Type.STRING},
-            summary:{type:Type.STRING},
-            assumptions:{type:Type.ARRAY,items:{type:Type.STRING}},
-            tests:{type:Type.ARRAY,items:{type:Type.STRING}},
-            backtestScenarios:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{name:{type:Type.STRING},setup:{type:Type.STRING},expected:{type:Type.STRING}},required:['name','setup','expected']}},
-          },
-          required:['source','summary','assumptions','tests','backtestScenarios'],
+    const generationConfig={
+      systemInstruction,
+      responseMimeType:'application/json',
+      responseSchema:{
+        type:Type.OBJECT,
+        properties:{
+          source:{type:Type.STRING},
+          summary:{type:Type.STRING},
+          assumptions:{type:Type.ARRAY,items:{type:Type.STRING}},
+          tests:{type:Type.ARRAY,items:{type:Type.STRING}},
+          backtestScenarios:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{name:{type:Type.STRING},setup:{type:Type.STRING},expected:{type:Type.STRING}},required:['name','setup','expected']}},
         },
-        thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},
-        maxOutputTokens:4096,
+        required:['source','summary','assumptions','tests','backtestScenarios'],
       },
-    });
-    const generated=parseGeneratedPayload(String(generation.text||''),{allowEmptySource:analysisOnly});
+      thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},
+      maxOutputTokens:4096,
+    };
+    let generatedRaw='';
+    if(stream){
+      res.status(200);
+      res.setHeader('Content-Type','text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control','no-cache, no-transform');
+      res.setHeader('Connection','keep-alive');
+      res.setHeader('X-Accel-Buffering','no');
+      res.flushHeaders();
+      emitSse(res,'status',{phase:'generate',message:'Generating a reviewable CoreScript draft. Nothing is being applied or executed.'});
+      const generatedStream=await ai.models.generateContentStream({model,contents:userContent,config:generationConfig});
+      for await(const chunk of generatedStream){
+        if(res.destroyed||res.writableEnded)break;
+        const delta=String(chunk.text||'');
+        generatedRaw+=delta;
+        if(delta)emitSse(res,'delta',{phase:'generate',text:delta});
+      }
+    }else{
+      const generation=await ai.models.generateContent({model,contents:userContent,config:generationConfig});
+      generatedRaw=String(generation.text||'');
+    }
+    const generated=parseGeneratedPayload(generatedRaw,{allowEmptySource:analysisOnly});
     if(analysisOnly){
       const diagnostics=(currentCompile?.diagnostics??[]).slice(0,80);
       const createdAt=new Date().toISOString();
       const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:currentSource,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:null,repairAttempts:0,createdAt,analysisOnly:true});
       res.setHeader('Cache-Control','no-store');
-      res.json({success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact,safetyReview:{maxLookback:currentIr?.maxLookback??null,repaintSafety:currentIr?.repaintSafety??null,causalityAnalysis:currentIr?.causalityAnalysis??null,requiredCapabilities:[]},validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
+      finishCopilotResponse(res,stream,{success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact,safetyReview:{maxLookback:currentIr?.maxLookback??null,repaintSafety:currentIr?.repaintSafety??null,causalityAnalysis:currentIr?.causalityAnalysis??null,requiredCapabilities:[]},validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
       return;
     }
     const compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
@@ -175,7 +198,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
     const createdAt=new Date().toISOString();
     const draftArtifact=buildCoreSpiritCopilotDraftArtifact({source:generated.source,baseSource:currentSource,prompt,mode,model,symbol:boundedText(req.body?.symbol,80),timeframe:boundedText(req.body?.timeframe,40),diagnostics,tests:generated.tests,backtestScenarios:generated.backtestScenarios,compiledArtifactHash:valid?compiled.artifact?.abi?.artifactHash??null:null,repairAttempts:0,createdAt});
     res.setHeader('Cache-Control','no-store');
-    res.json({
+    finishCopilotResponse(res,stream,{
       success:true,
       source:generated.source,
       summary:generated.summary,
@@ -193,6 +216,10 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
     const providerFailure=/API key|permission|quota|rate|billing|unavailable|fetch|timeout/i.test(message)
       ? 'CoreSpirit Copilot could not reach the configured generation service. Check the server-side AI key and provider quota.'
       : 'CoreSpirit Copilot could not produce a valid structured draft. Try clarifying the request.';
-    res.status(502).json({success:false,error:providerFailure});
+    if(stream&&res.headersSent&&!res.writableEnded){emitSse(res,'error',{success:false,error:providerFailure});res.end();}
+    else res.status(502).json({success:false,error:providerFailure});
   }
-});
+}
+
+coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCopilotGenerate(req,res,false);});
+coreSpiritCopilotRoutes.post('/generate/stream',copilotRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCopilotGenerate(req,res,true);});
