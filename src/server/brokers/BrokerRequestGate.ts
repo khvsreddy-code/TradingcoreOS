@@ -182,10 +182,18 @@ export async function withBrokerRequestGate<T>(
           });
         }
 
-        const now = Date.now();
-        const window = Math.floor(now / 60_000);
+        // Enforce per-second spacing before choosing the fixed-window keys. If the
+        // wait crosses a minute/India-day boundary, this request is counted in the
+        // window in which it will actually be admitted.
+        const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
+        const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
+        const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
+        if (spacing) await sleepWithSignal(spacing, effectiveSignal);
+
+        const admittedAt = Date.now();
+        const window = Math.floor(admittedAt / 60_000);
         const countKey = 'tco:broker:minute:' + budgetName + ':' + identityHash + ':' + window;
-        const dayKey = indiaDayKey(now);
+        const dayKey = indiaDayKey(admittedAt);
         const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
         const nonInteractiveMinuteKey = `tco:broker:priority-minute:noninteractive:${budgetName}:${identityHash}:${window}`;
         const backgroundMinuteKey = `tco:broker:priority-minute:background:${budgetName}:${identityHash}:${window}`;
@@ -242,11 +250,7 @@ export async function withBrokerRequestGate<T>(
           if (priority === 'background') await distributed.incrementWindow(backgroundMinuteKey, 61_000, effectiveSignal);
         }
 
-        const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
-        const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
-        const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
-        if (spacing) await sleepWithSignal(spacing, effectiveSignal);
-        await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, effectiveSignal);
+        await distributed.set(lastKey, String(admittedAt), { px: 61_000 }, effectiveSignal);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') throw error;
         const details = error && typeof error === 'object' ? error as Record<string, unknown> : {};
