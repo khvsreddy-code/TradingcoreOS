@@ -266,27 +266,56 @@ export class FyersAdapter extends BaseBroker {
     const lookbackDays = Math.min(maxLookbackDays, Math.max(secondsInterval ? 1 : 7, estimatedCalendarDays));
     const from = Math.floor((now.getTime() - lookbackDays * 86_400_000) / 1000);
     const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
-    const payload = await client.dataGet<any>(
+
+    // FYERS restricts the date span of an individual history request. Request
+    // only the estimated lookback needed for the desired candle count, then split
+    // that window into compliant chunks. The shared FYERS request gate still
+    // enforces this account's per-second/minute/day quota across all chunks.
+    const chunkDays = secondsInterval ? 1 : dailyResolution ? 360 : 95;
+    const ranges: Array<{ from: number; to: number }> = [];
+    let rangeEnd = to;
+    while (rangeEnd > from) {
+      const rangeStart = Math.max(from, rangeEnd - chunkDays * 86_400);
+      ranges.push({ from: rangeStart, to: rangeEnd });
+      rangeEnd = rangeStart - 1;
+    }
+
+    const payloads = await Promise.all(ranges.map(range => client.dataGet<any>(
       '/history',
       {
         symbol: instrumentKey,
         resolution,
-        date_format:'0',
-        range_from:String(from),
-        range_to:String(to),
-        cont_flag:'1',
+        date_format: '0',
+        range_from: String(range.from),
+        range_to: String(range.to),
+        cont_flag: '1',
       },
       timeoutSignal(API_LATENCY_BUDGET_MS.history),
       API_LATENCY_BUDGET_MS.history,
-    );
-    return (payload?.candles || []).map((candle: any[]) => ({
-      timestamp: new Date(Number(candle[0]) * 1000).toISOString(),
-      open: Number(candle[1]),
-      high: Number(candle[2]),
-      low: Number(candle[3]),
-      close: Number(candle[4]),
-      volume: Number(candle[5] || 0),
-    })).filter((candle: any) => [candle.open,candle.high,candle.low,candle.close].every(Number.isFinite)).slice(-requestedLimit);
+    )));
+
+    const byTimestamp = new Map<number, { timestamp: string; open: number; high: number; low: number; close: number; volume: number }>();
+    for (const payload of payloads) {
+      for (const candle of Array.isArray(payload?.candles) ? payload.candles : []) {
+        const timestampMs = Number(candle?.[0]) * 1000;
+        const open = Number(candle?.[1]), high = Number(candle?.[2]);
+        const low = Number(candle?.[3]), close = Number(candle?.[4]);
+        const rawVolume = candle?.[5];
+        const volume = rawVolume == null || rawVolume === '' ? 0 : Number(rawVolume);
+        if (!Number.isFinite(timestampMs) || timestampMs <= 0
+          || ![open, high, low, close, volume].every(Number.isFinite)
+          || volume < 0 || high < Math.max(open, close)
+          || low > Math.min(open, close) || high < low) continue;
+        byTimestamp.set(timestampMs, {
+          timestamp: new Date(timestampMs).toISOString(),
+          open, high, low, close, volume,
+        });
+      }
+    }
+    return [...byTimestamp.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, candle]) => candle)
+      .slice(-requestedLimit);
   }
 
   async getOptionChain(
