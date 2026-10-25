@@ -14,7 +14,8 @@ export type CoreScriptRequiredCapability =
   | 'risk.evaluate'
   | 'execution.route'
   | 'webhooks'
-  | 'automation';
+  | 'automation'
+  | 'ai.invoke';
 
 export const CORE_SCRIPT_REQUIRED_CAPABILITIES = Object.freeze([
   'market.tick',
@@ -24,6 +25,7 @@ export const CORE_SCRIPT_REQUIRED_CAPABILITIES = Object.freeze([
   'execution.route',
   'webhooks',
   'automation',
+  'ai.invoke',
 ] as const);
 
 export type CoreScriptLanguageFeature =
@@ -91,6 +93,7 @@ const CAPABILITY_ALIASES: Readonly<Record<string, CoreScriptRequiredCapability |
   'execution-routing': 'execution.route',
   'webhooks': 'webhooks',
   'automation': 'automation',
+  'ai.invoke': 'ai.invoke',
 });
 
 export function normalizeCoreScriptCapability(value: string): CoreScriptRequiredCapability | undefined {
