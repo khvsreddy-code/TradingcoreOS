@@ -2,7 +2,15 @@ import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
 import { withBrokerRequestGate } from '../BrokerRequestGate.js';
 import { FyersApiClient } from '../../fyers/core/FyersApiClient.js';
-import { assertFyersQuoteBatch, DEFAULT_FYERS_CAPABILITIES, type FyersCapabilities } from '../../fyers/core/FyersCapabilities.js';
+import {
+  assertFyersQuoteBatch,
+  DEFAULT_FYERS_CAPABILITIES,
+  resolveFyersCapabilities,
+  resolveFyersAdmissionBudget,
+  type FyersApiCategory,
+  type FyersCapabilities,
+} from '../../fyers/core/FyersCapabilities.js';
+import { recordFyersQuotaAttempt, recordFyersQuotaResponse } from '../../fyers/core/FyersQuotaTelemetry.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
 import type {
   BrokerHistory,
@@ -24,7 +32,11 @@ export class FyersAdapter extends BaseBroker {
     return `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${encodeURIComponent(appId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&state=${encodeURIComponent(state)}`;
   }
 
-  async exchangeCodeForToken(code: string, _redirectUri: string, _clientId?: string): Promise<TokenExchangeResult> {
+  async exchangeCodeForToken(code: string, _redirectUri: string, _clientId?: string, rateLimitIdentity?: string): Promise<TokenExchangeResult> {
+    const identity = String(rateLimitIdentity || '').trim();
+    if (!identity) return { success: false, error: 'Authenticated TradingCore user identity is required for FYERS quota enforcement.' };
+    const capabilities = resolveFyersCapabilities(identity);
+    const budget = resolveFyersAdmissionBudget(capabilities, 'user-info');
     const appId = process.env.FYERS_CLIENT_ID;
     const secret = process.env.FYERS_CLIENT_SECRET;
     if (!appId || !secret) {
@@ -33,11 +45,27 @@ export class FyersAdapter extends BaseBroker {
 
     try {
       const appIdHash = crypto.createHash('sha256').update(`${appId}:${secret}`).digest('hex');
-      const response = await fetch('https://api-t1.fyers.in/api/v3/validate-authcode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ grant_type: 'authorization_code', appIdHash, code }),
-        signal: timeoutSignal(12_000),
+      const response = await withBrokerRequestGate('fyers', identity, async (gateSignal) => {
+        recordFyersQuotaAttempt('user-info', capabilities.plan, '/validate-authcode');
+        try {
+          const upstream = await fetch('https://api-t1.fyers.in/api/v3/validate-authcode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ grant_type: 'authorization_code', appIdHash, code }),
+            signal: gateSignal || timeoutSignal(12_000),
+          });
+          recordFyersQuotaResponse('user-info', capabilities.plan, '/validate-authcode', upstream.status);
+          return upstream;
+        } catch (error) {
+          recordFyersQuotaResponse('user-info', capabilities.plan, '/validate-authcode', 0);
+          throw error;
+        }
+      }, timeoutSignal(12_000), {
+        budgetKey: 'user-info',
+        minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
+        maxPerMinute: budget.requestsPerMinute,
+        maxPerDay: budget.requestsPerDay,
+        priority: 'interactive',
       });
 
       const text = await response.text();
@@ -76,48 +104,35 @@ export class FyersAdapter extends BaseBroker {
 
   }
 
-  private authorization(accessToken: string): string {
-    const appId = process.env.FYERS_CLIENT_ID;
-    if (!appId) throw new Error('FYERS_CLIENT_ID is not configured');
-    return `${appId}:${accessToken}`;
-  }
-
-  private async fyersFetch(path: string, accessToken: string, options: RequestInit = {}): Promise<any> {
+  private async fyersFetch(
+    path: string,
+    accessToken: string,
+    options: RequestInit = {},
+    rateLimitIdentity?: string,
+    category?: FyersApiCategory,
+  ): Promise<any> {
+    const identity = String(rateLimitIdentity || '').trim();
+    if (!identity) throw Object.assign(new Error('Authenticated TradingCore user identity is required for FYERS quota enforcement.'), { status:503, code:'BROKER_IDENTITY_REQUIRED' });
     const timeoutMs = path.startsWith('/orders') ? API_LATENCY_BUDGET_MS.order : API_LATENCY_BUDGET_MS.account;
-    const signal = options.signal || timeoutSignal(timeoutMs);
-    return withBrokerRequestGate('fyers', accessToken, async (gateSignal) => {
-      const response = await fetch(`https://api-t1.fyers.in/api/v3${path}`, {
-        ...options,
-        signal: gateSignal || signal,
-        headers: {
-          Accept: 'application/json',
-          Authorization: this.authorization(accessToken),
-          'Content-Type': 'application/json',
-          version: '3',
-          ...(options.headers || {}),
-        },
-      });
-      const text = await response.text();
-      let data: any;
-      try { data = JSON.parse(text); }
-      catch {
-        const error: any = new Error(`Fyers returned a non-JSON response (${response.status})`);
-        error.status = response.status;
-        throw error;
-      }
-
-      if (!response.ok || data?.s === 'error' || (typeof data?.code === 'number' && data.code < 0)) {
-        const error: any = new Error(data?.message || `Fyers API error (${response.status})`);
-        error.status = response.status || (Number(data?.code) === 429 ? 429 : 0);
-        error.brokerRateLimited = error.status === 429 || Number(data?.code) === 429;
-        throw error;
-      }
-      return data;
+    let body: unknown = options.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { /* Preserve valid non-JSON body formats as-is. */ }
+    }
+    const client = new FyersApiClient(accessToken, undefined, resolveFyersCapabilities(identity), identity);
+    const method = String(options.method || 'GET').toUpperCase();
+    const resolvedCategory: FyersApiCategory = category || (method === 'GET' ? 'user-info' : 'transactions');
+    return client.apiRequest(path, {
+      method,
+      body,
+      signal: options.signal || timeoutSignal(timeoutMs),
+      timeoutMs,
+      category: resolvedCategory,
+      priority: resolvedCategory === 'transactions' ? 'interactive' : 'normal',
     });
   }
 
-  async getProfile(accessToken: string): Promise<BrokerProfile> {
-    const data = await this.fyersFetch('/profile', accessToken);
+  async getProfile(accessToken: string, rateLimitIdentity?: string): Promise<BrokerProfile> {
+    const data = await this.fyersFetch('/profile', accessToken, {}, rateLimitIdentity, 'user-info');
     const p = data?.data || {};
     return {
       userId: p.fy_id,
@@ -127,8 +142,8 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async getFunds(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').AccountFunds> {
-    const data = await this.fyersFetch('/funds', accessToken);
+  async getFunds(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').AccountFunds> {
+    const data = await this.fyersFetch('/funds', accessToken, {}, rateLimitIdentity, 'user-info');
     const limits = Array.isArray(data?.fund_limit) ? data.fund_limit : [];
     const pick = (keys: string[]) => {
       const row = limits.find((x: any) => keys.some((k) => String(x?.title || '').toLowerCase().includes(k)));
@@ -140,8 +155,8 @@ export class FyersAdapter extends BaseBroker {
     return { totalCapital, availableMargin, usedMargin, collateralMargin: 0 };
   }
 
-  async getHoldings(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Holding[]> {
-    const data = await this.fyersFetch('/holdings', accessToken);
+  async getHoldings(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Holding[]> {
+    const data = await this.fyersFetch('/holdings', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.holdings || [];
     return rows.map((h: any) => ({
       id: h.fytoken || h.symbol,
@@ -154,8 +169,8 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getPositions(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Position[]> {
-    const data = await this.fyersFetch('/positions', accessToken);
+  async getPositions(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Position[]> {
+    const data = await this.fyersFetch('/positions', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.netPositions || [];
     return rows.map((p: any) => ({
       id: p.id || `${p.symbol}-${p.productType || ''}`,
@@ -168,8 +183,8 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getOrders(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
-    const data = await this.fyersFetch('/orders', accessToken);
+  async getOrders(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
+    const data = await this.fyersFetch('/orders', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.orderBook || [];
     return rows.map((o: any) => ({
       orderId: o.id || o.orderId,
@@ -179,8 +194,8 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getTrades(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
-    const data = await this.fyersFetch('/tradebook', accessToken);
+  async getTrades(accessToken: string, rateLimitIdentity?: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
+    const data = await this.fyersFetch('/tradebook', accessToken, {}, rateLimitIdentity, 'user-info');
     const rows = data?.tradeBook || [];
     return rows.map((t: any) => ({
       tradeId: t.tradeId || t.id,
@@ -198,7 +213,7 @@ export class FyersAdapter extends BaseBroker {
     accessToken: string,
     instrumentKeys: string[],
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
-    rateLimitIdentity = accessToken,
+    rateLimitIdentity?: string,
   ): Promise<BrokerMarketQuotes> {
     const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
     if (!symbols.length) return {};
@@ -231,7 +246,7 @@ export class FyersAdapter extends BaseBroker {
     interval: string,
     limit = 2_000,
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
-    rateLimitIdentity = accessToken,
+    rateLimitIdentity?: string,
   ): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute':'1','2minute':'2','3minute':'3','5minute':'5','10minute':'10',
@@ -327,7 +342,7 @@ export class FyersAdapter extends BaseBroker {
     instrumentKey: string,
     expiryDate: string,
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
-    rateLimitIdentity = accessToken,
+    rateLimitIdentity?: string,
   ): Promise<BrokerOptionChain> {
     // Keep this legacy adapter compatible with the same Data API quota gate as
     // the dedicated FYERS route. The newer route preserves the fuller chain.
@@ -391,11 +406,11 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
+  async placeOrder(accessToken: string, orderData: BrokerOrderPayload, rateLimitIdentity?: string): Promise<OrderMutationResult> {
     const data = await this.fyersFetch('/orders/sync', accessToken, {
       method: 'POST',
       body: JSON.stringify(this.orderPayload(orderData)),
-    });
+    }, rateLimitIdentity, 'transactions');
     const result = data?.data || data;
     return {
       orderId: result?.id || result?.orderId,
@@ -405,19 +420,19 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
+  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload, rateLimitIdentity?: string): Promise<OrderMutationResult> {
     const type = String(orderData.order_type || orderData.orderType || '').toUpperCase();
     const payload: Record<string, unknown> = { id: orderId };
     if (orderData.quantity || orderData.qty) payload.qty = Number(orderData.quantity || orderData.qty);
     if (orderData.price || orderData.limitPrice) payload.limitPrice = Number(orderData.price || orderData.limitPrice);
     if (orderData.triggerPrice || orderData.trigger_price) payload.stopPrice = Number(orderData.triggerPrice || orderData.trigger_price);
     if (type) payload.type = ({ MARKET: 2, LIMIT: 1, SL: 3, 'SL-M': 4 } as Record<string, number>)[type] || Number(orderData.type);
-    const data = await this.fyersFetch('/orders/sync', accessToken, { method: 'PATCH', body: JSON.stringify(payload) });
+    const data = await this.fyersFetch('/orders/sync', accessToken, { method: 'PATCH', body: JSON.stringify(payload) }, rateLimitIdentity, 'transactions');
     return { orderId, status: 'PENDING', message: data?.message || 'Order modified successfully', timestamp: new Date().toISOString() };
   }
 
-  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> {
-    await this.fyersFetch(`/orders/sync?id=${encodeURIComponent(orderId)}`, accessToken, { method: 'DELETE' });
+  async cancelOrder(accessToken: string, orderId: string, rateLimitIdentity?: string): Promise<CancelResult> {
+    await this.fyersFetch(`/orders/sync?id=${encodeURIComponent(orderId)}`, accessToken, { method: 'DELETE' }, rateLimitIdentity, 'transactions');
     return { success: true, message: `Order ${orderId} cancelled` };
   }
 }
