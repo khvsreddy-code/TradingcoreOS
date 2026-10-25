@@ -1,5 +1,6 @@
 import type { BrokerProfile, BrokerHistory, BrokerMarketQuotes, BrokerOptionChain, BrokerOrderPayload, OrderMutationResult, CancelResult } from '../contracts.js';
-import type { AccountFunds, Holding, Position, OrderResult, TradeRecord } from '../../../services/brokers/BrokerAdapter.js' ;
+import type { AccountFunds, Holding, Position, OrderResult, TradeRecord } from '../../../services/brokers/BrokerAdapter.js';
+import type { FyersCapabilities } from '../../fyers/core/FyersCapabilities.js';
 export interface TokenExchangeResult {
   success: boolean;
   rawAccessToken?: string;
@@ -21,7 +22,7 @@ export abstract class BaseBroker {
   /**
    * Performs server-side HTTPS token exchange
    */
-  abstract exchangeCodeForToken(code: string, redirectUri: string, clientId?: string): Promise<TokenExchangeResult>;
+  abstract exchangeCodeForToken(code: string, redirectUri: string, clientId?: string, rateLimitIdentity?: string): Promise<TokenExchangeResult>;
 
   /**
    * Refreshes access token using refresh token
@@ -30,16 +31,16 @@ export abstract class BaseBroker {
 
   // --- Real Broker API Integration Methods ---
 
-  async getProfile(accessToken: string): Promise<BrokerProfile> { throw new Error('Not implemented'); }
-  async getFunds(accessToken: string): Promise<AccountFunds> { throw new Error('Not implemented'); }
-  async getHoldings(accessToken: string): Promise<Holding[]> { throw new Error('Not implemented'); }
-  async getPositions(accessToken: string): Promise<Position[]> { throw new Error('Not implemented'); }
-  async getOrders(accessToken: string): Promise<OrderResult[]> { throw new Error('Not implemented'); }
-  async getTrades(accessToken: string): Promise<TradeRecord[]> { throw new Error('Not implemented'); }
-  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string, _limit = 10000): Promise<BrokerHistory> { throw new Error('Not implemented'); }
-  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> { throw new Error('Not implemented'); }
-  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> { throw new Error('Not implemented'); }
-  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
-  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
-  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> { throw new Error('Not implemented'); }
+  async getProfile(accessToken: string, rateLimitIdentity?: string): Promise<BrokerProfile> { throw new Error('Not implemented'); }
+  async getFunds(accessToken: string, rateLimitIdentity?: string): Promise<AccountFunds> { throw new Error('Not implemented'); }
+  async getHoldings(accessToken: string, rateLimitIdentity?: string): Promise<Holding[]> { throw new Error('Not implemented'); }
+  async getPositions(accessToken: string, rateLimitIdentity?: string): Promise<Position[]> { throw new Error('Not implemented'); }
+  async getOrders(accessToken: string, rateLimitIdentity?: string): Promise<OrderResult[]> { throw new Error('Not implemented'); }
+  async getTrades(accessToken: string, rateLimitIdentity?: string): Promise<TradeRecord[]> { throw new Error('Not implemented'); }
+  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string, _limit = 10000, _capabilities?: FyersCapabilities, _rateLimitIdentity?: string): Promise<BrokerHistory> { throw new Error('Not implemented'); }
+  async getMarketQuotes(accessToken: string, instrumentKeys: string[], _capabilities?: FyersCapabilities, _rateLimitIdentity?: string): Promise<BrokerMarketQuotes> { throw new Error('Not implemented'); }
+  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string, _capabilities?: FyersCapabilities, _rateLimitIdentity?: string): Promise<BrokerOptionChain> { throw new Error('Not implemented'); }
+  async placeOrder(accessToken: string, orderData: BrokerOrderPayload, _rateLimitIdentity?: string): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
+  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload, _rateLimitIdentity?: string): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
+  async cancelOrder(accessToken: string, orderId: string, _rateLimitIdentity?: string): Promise<CancelResult> { throw new Error('Not implemented'); }
 }
