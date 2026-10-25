@@ -93,7 +93,10 @@ assert.match(quoteService, /withCallerAbort\(sharedRequest, signal\)/, 'one call
 assert.match(streamRoute, /capabilities\.maxStreamSymbols/);
 assert.match(streamRoute, /post\('\/:brokerId\/market-stream'/, 'large Prime stream subscriptions need a POST transport');
 assert.match(streamTransport, /checkSubscriptionCapacity/, 'active subscriptions must be capped as a union, not only per request');
-assert.match(apiClient, /budgetKey: category/, 'all three FYERS API categories must use separate shared quota buckets');
+assert.match(apiClient, /const budgetKey = category === 'data' \? 'data' : 'account'/, 'Data has its own pool while User Info and Transactions share the provider's combined account/API ceiling');
+assert.match(apiClient, /recordFyersQuotaAttempt\(category, this\.capabilities\.plan, pathOnly\)/, 'quota telemetry retains the precise API category even when admission shares a provider pool');
+assert.match(apiClient, /isRetryableNetworkError/, 'transient network failures receive bounded retry handling on safe requests');
+assert.match(apiClient, /retryableNetworkError/, 'network retries are limited to retry-safe API operations');
 assert.match(apiClient, /maxPerDay: budget\.requestsPerDay/);
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy history endpoint must gate seconds data by server-resolved plan');
@@ -106,6 +109,8 @@ assert.match(canonicalHistory, /fallbackQuoteSnapshot\(client!/, 'only initial e
 assert.match(brokerAdapter,/assertFyersQuoteBatch\(symbols, capabilities\)/,'legacy adapter quotes must share the capability boundary');
 assert.match(brokerAdapter,/dataGet<any>\(\s*'\/quotes'/,'legacy adapter quotes must use the shared Data API rate gate');
 assert.match(brokerAdapter,/capabilities\.historyDepth/,'legacy adapter history must honor the same depth capabilities');
+assert.doesNotMatch(brokerAdapter,/Promise\.all\(ranges\.map/, 'legacy history pages must not fan out concurrently and expire while waiting for quota admission');
+assert.match(brokerAdapter,/if \(byTimestamp\.size >= requestedLimit\) break/, 'legacy history stops once the requested newest-bar target is met');
 assert.match(brokerAdapter,/FYERS_SECONDS_DATA_REQUIRES_PRIME/,'legacy adapter must reject Standard seconds-data requests');
 assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy option-chain requests must use the Data API gate');
 assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities, session\.userId\)/,'option-chain route must pass plan and stable user quota identity');
