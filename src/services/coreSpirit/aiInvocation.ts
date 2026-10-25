@@ -101,7 +101,7 @@ export function parseCoreSpiritAiInvocationRequest(value: unknown): CoreSpiritAi
   if (!prompt || prompt.length > CORE_SPIRIT_AI_INVOKE_LIMITS.maxPromptChars) {
     throw new Error('AI invocation prompt must contain 1–2,000 characters.');
   }
-  if (/(?:password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|cookie|credential)\\s*[:=]\\s*\\S+/i.test(prompt) || /Bearer\\s+[A-Za-z0-9._~+\\/-]{16,}/i.test(prompt)) {
+  if (/(?:password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|cookie|credential)\s*[:=]\s*\S+/i.test(prompt) || /Bearer\s+[A-Za-z0-9._~+\/-]{16,}/i.test(prompt)) {
     throw new Error('AI invocation prompt must not contain credentials or secret values.');
   }
   if (!isRecord(context)) throw new Error('AI invocation context must be a JSON object.');
