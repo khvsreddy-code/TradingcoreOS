@@ -200,6 +200,12 @@ function expandDirtyInstructionSet(
     if (isComputationalInstruction(instruction) && !isSafeToSkipDirty(instruction)) dirty.add(index);
   }
 
+  // Event gates can change independently of bar fields. A dirty conditional
+  // means the taken CFG path may have changed, so we must rebuild all live
+  // registers on that pass rather than reuse values from the opposite branch.
+  for (let index = 0; index < instructions.length; index += 1) {
+    if (instructions[index]?.op === 'eventGate') dirty.add(index);
+  }
   const queue = [...dirty];
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const instruction = instructions[queue[cursor]!];
@@ -210,6 +216,10 @@ function expandDirtyInstructionSet(
       queue.push(dependent);
     }
   }
+  if ([...dirty].some(index => {
+    const instruction = instructions[index];
+    return instruction?.op === 'jumpIfFalse' || instruction?.op === 'eventGate';
+  })) return undefined;
   return dirty;
 }
 
@@ -337,6 +347,9 @@ export class CoreSpiritOptimizedExecutionVM {
       const dirty = canReuseDirtyValues && requestedDirty
         ? expandDirtyInstructionSet(instructions, requestedDirty)
         : undefined;
+      // A missing, stale, or CFG-invalid dirty plan must start from an empty
+      // register file. This includes recovery after a prior partial/error run.
+      if (options.resetValues === true || !dirty) values.clear();
       let pc = 0;
       let steps = 0;
       while (pc < plan.instructions.length) {

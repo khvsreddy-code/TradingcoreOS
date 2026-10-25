@@ -401,3 +401,34 @@ assert.equal(runContext(unprimedContext,999,new Set([1,2,3])),1000,
 assert.equal(runContext(contextA,999,new Set([0])),1000,
   'a dirty source register must invalidate transitive derived registers automatically');
 console.log('CORESPIRIT_DIRTY_REGISTER_VALIDITY_AND_DEPENDENCY_CLOSURE_OK');
+
+// Reusable registers from one conditional arm must never leak into the other
+// arm when a forming-bar input flips the branch decision.
+const branchVm = new CoreSpiritOptimizedExecutionVM();
+const branchContext = {};
+const branchInstructions = [
+  {op:'loadSeries',dest:'condition',name:'close',offset:0},
+  {op:'jumpIfFalse',condition:'condition',target:4},
+  {op:'const',dest:'answer',value:5},
+  {op:'jump',target:5},
+  {op:'const',dest:'answer',value:9},
+  {op:'emit',kind:'plot',args:['answer'],outputId:'dirty-branch'},
+];
+function runBranch(close, dirtyInstructions) {
+  const output = new CoreSpiritOutputCollector(8);
+  const host = {
+    maxStepsPerBar:32,throwIfAborted(){},loadSeries(){return close;},moveLocal(){return null;},
+    loadState(){return null;},setState(){},setLocal(){},unary(){return null;},binary(){return null;},
+    tryFused(){return false;},call(){return null;},loadIndexed(){return null;},
+    truthy(value){return !!value;},eventActive(){return false;},
+    emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'branch'});},
+  };
+  branchVm.run(branchInstructions,0,host,output,{
+    reuseValues:true,executionContextKey:branchContext,dirtyInstructions,
+  });
+  return output.values().at(-1)?.value;
+}
+assert.equal(runBranch(1),5);
+assert.equal(runBranch(0,new Set([0])),9,
+  'a changed branch predicate must force a safe complete execution');
+console.log('CORESPIRIT_DIRTY_CONTROL_FLOW_FALLBACK_OK');
