@@ -117,9 +117,9 @@ async function fallbackQuoteSnapshot(client: FyersApiClient, symbol: string): Pr
 }
 
 /**
- * Authoritative per-user history boundary. FYERS supplies the latest three observed
- * sessions; older history comes from the configured TV-datafeed adapter. Both sources
- * share the existing validated cache, source policy and exact contract compatibility rules.
+ * Authoritative per-user history boundary. FYERS is queried in plan-aware bounded
+ * pages; the configured TV-datafeed adapter may fill validated older gaps. Both
+ * sources share the existing validated cache, source policy and contract compatibility rules.
  */
 export async function loadCanonicalHistoryForUser(request: CanonicalHistoryRequest) {
   const userId = String(request.userId || '').trim();
