@@ -136,6 +136,60 @@ export function createCoreSpiritAiInputFingerprint(input: {
   });
 }
 
+/** Validate a persisted/transported result before exposing it to the editor or research UI. */
+export function validateCoreSpiritAiInvocationResult(
+  value: unknown,
+  expected: Partial<Pick<CoreSpiritAiInvocationResult, 'artifactHash' | 'sourceHash' | 'inputFingerprint' | 'modelVersion'>> = {},
+  now = Date.now(),
+): CoreSpiritAiInvocationResult | null {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  const result = value.result;
+  const summary = value.summary;
+  const modelVersion = value.modelVersion;
+  const artifactHash = value.artifactHash;
+  const sourceHash = value.sourceHash;
+  const inputFingerprint = value.inputFingerprint;
+  const outputHash = value.outputHash;
+  const createdAt = value.createdAt;
+  const expiresAt = value.expiresAt;
+  if (status !== 'ready' && status !== 'unavailable' && status !== 'stale') return null;
+  if (typeof summary !== 'string' || summary.length > 2_000 ||
+      typeof modelVersion !== 'string' || !modelVersion ||
+      typeof artifactHash !== 'string' || !/^[a-f0-9]{64}$/.test(artifactHash) ||
+      typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash) ||
+      typeof inputFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(inputFingerprint) ||
+      typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
+      typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt)) ||
+      value.advisoryOnly !== true || value.executable !== false || value.mayCreateOrderIntent !== false) return null;
+  for (const key of ['artifactHash', 'sourceHash', 'inputFingerprint', 'modelVersion'] as const) {
+    if (expected[key] !== undefined && expected[key] !== value[key]) return null;
+  }
+  if (status === 'ready') {
+    if (typeof result !== 'string' || !result.length || result.length > 8_000 ||
+        typeof outputHash !== 'string' || !/^[a-f0-9]{64}$/.test(outputHash) ||
+        coreSpiritCopilotSha256(result) !== outputHash) return null;
+    if (Date.parse(expiresAt) <= now) {
+      return Object.freeze({
+        status: 'stale', result: null,
+        summary: 'This AI result expired or failed its freshness window. Request a new asynchronous result before using it.',
+        modelVersion, artifactHash, sourceHash, inputFingerprint, outputHash: null,
+        createdAt, expiresAt, advisoryOnly: true, executable: false, mayCreateOrderIntent: false,
+        reasonCode: 'result-expired',
+      });
+    }
+  } else if (result !== null || outputHash !== null) {
+    return null;
+  }
+  return Object.freeze({
+    status, result: result as string | null, summary, modelVersion, artifactHash, sourceHash,
+    inputFingerprint, outputHash: outputHash as string | null, createdAt, expiresAt,
+    advisoryOnly: true, executable: false, mayCreateOrderIntent: false,
+    ...(value.cacheHit === true ? { cacheHit: true } : {}),
+    ...(typeof value.reasonCode === 'string' ? { reasonCode: value.reasonCode.slice(0, 120) } : {}),
+  });
+}
+
 export function buildCoreSpiritAiInvocationResult(input: {
   status: 'ready' | 'unavailable' | 'stale';
   result?: string | null;
