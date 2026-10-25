@@ -152,6 +152,10 @@ type CoreSpiritCopilotDraftPayload = {
   analysisOnly?: boolean;
   validation?: { valid?: boolean; analysisOnly?: boolean; artifactHash?: string | null; diagnostics?: Array<{ severity: string; message: string; line?: number; column?: number; start?: number; end?: number; code?: string }> };
 };
+type CoreSpiritCopilotKnowledgeHit = { id:string; title:string; body:string; category:string; sourcePath:string; knowledgeVersion:string; kind:string; score:number };
+type CoreSpiritCopilotDraftHistoryItem = { id:string; artifactHash:string; kind:string; version:number; mode:string; modelVersion:string; compilerVersion:string; runtimeVersion:string; sourceHash:string; baseSourceHash:string; createdAt:string; summary:string };
+type CoreSpiritCopilotSavedDraftDetail = { id:string; artifactHash:string; kind:string; version:number; mode:string; modelVersion:string; compilerVersion:string; runtimeVersion:string; sourceHash:string; baseSourceHash:string; promptHash:string; diagnosticsHash:string; createdAt:string; payload:Record<string,unknown> };
+type CoreSpiritCopilotReport = { summary:string; assumptions:string[]; tests:string[]; backtestScenarios:Array<{name:string;setup:string;expected:string}>; artifact?:Record<string,unknown>; safetyReview?:Record<string,unknown>; diagnostics:Array<{severity:string;message:string;line?:number;column?:number;code?:string}> };
 type CoreSpiritCopilotDraftReview = {
   payload: CoreSpiritCopilotDraftPayload;
   baseSource: string;
@@ -275,6 +279,17 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [copilotError,setCopilotError]=useState('');
   const [copilotDraft,setCopilotDraft]=useState<CoreSpiritCopilotDraftReview|null>(null);
   const [copilotStreamPreview,setCopilotStreamPreview]=useState('');
+  const [copilotReport,setCopilotReport]=useState<CoreSpiritCopilotReport|null>(null);
+  const [copilotKnowledgeQuery,setCopilotKnowledgeQuery]=useState('');
+  const [copilotKnowledgeResults,setCopilotKnowledgeResults]=useState<CoreSpiritCopilotKnowledgeHit[]>([]);
+  const [copilotKnowledgeVersion,setCopilotKnowledgeVersion]=useState('');
+  const [copilotKnowledgeBusy,setCopilotKnowledgeBusy]=useState(false);
+  const [copilotKnowledgeError,setCopilotKnowledgeError]=useState('');
+  const [copilotDraftHistory,setCopilotDraftHistory]=useState<CoreSpiritCopilotDraftHistoryItem[]>([]);
+  const [copilotDraftHistoryBusy,setCopilotDraftHistoryBusy]=useState(false);
+  const [copilotDraftHistoryError,setCopilotDraftHistoryError]=useState('');
+  const [copilotSavedDraft,setCopilotSavedDraft]=useState<CoreSpiritCopilotSavedDraftDetail|null>(null);
+  const [copilotSavedDraftBusy,setCopilotSavedDraftBusy]=useState(false);
   const [modelReleaseHash,setModelReleaseHash]=useState('');
   const [modelReleaseReason,setModelReleaseReason]=useState('Reviewed out-of-sample validation, provenance, and temporal-safety results.');
   const [modelReleaseInfo,setModelReleaseInfo]=useState<ModelReleaseInfo|null>(null);
@@ -630,6 +645,47 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     }
   };
 
+  const searchCopilotKnowledge=async()=>{
+    setCopilotKnowledgeBusy(true);setCopilotKnowledgeError('');
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to search the CoreScript knowledge base.');
+      const params=new URLSearchParams({q:copilotKnowledgeQuery.trim(),limit:'10'});
+      const response=await fetch('/api/corespirit/copilot/knowledge?'+params.toString(),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+      const body=await response.json().catch(()=>null) as {success?:boolean;error?:string;data?:{knowledgeVersion?:string;results?:CoreSpiritCopilotKnowledgeHit[]}}|null;
+      if(!response.ok||!body?.success)throw new Error(body?.error||'CoreScript knowledge search failed.');
+      setCopilotKnowledgeResults(Array.isArray(body.data?.results)?body.data.results:[]);
+      setCopilotKnowledgeVersion(String(body.data?.knowledgeVersion||''));
+    }catch(error){setCopilotKnowledgeError(error instanceof Error?error.message:String(error));}
+    finally{setCopilotKnowledgeBusy(false);}
+  };
+
+  const loadCopilotDraftHistory=async()=>{
+    setCopilotDraftHistoryBusy(true);setCopilotDraftHistoryError('');
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to load your saved Copilot artifacts.');
+      const response=await fetch('/api/corespirit/copilot/drafts?limit=20',{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+      const body=await response.json().catch(()=>null) as {success?:boolean;error?:string;data?:CoreSpiritCopilotDraftHistoryItem[]}|null;
+      if(!response.ok||!body?.success)throw new Error(body?.error||'Could not load Copilot artifact history.');
+      setCopilotDraftHistory(Array.isArray(body.data)?body.data:[]);
+    }catch(error){setCopilotDraftHistoryError(error instanceof Error?error.message:String(error));}
+    finally{setCopilotDraftHistoryBusy(false);}
+  };
+
+  const loadCopilotSavedDraft=async(id:string)=>{
+    setCopilotSavedDraftBusy(true);setCopilotDraftHistoryError('');
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to open a saved Copilot artifact.');
+      const response=await fetch('/api/corespirit/copilot/drafts/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+      const body=await response.json().catch(()=>null) as {success?:boolean;error?:string;data?:CoreSpiritCopilotSavedDraftDetail}|null;
+      if(!response.ok||!body?.success||!body.data)throw new Error(body?.error||'Could not load that saved artifact.');
+      setCopilotSavedDraft(body.data);
+    }catch(error){setCopilotDraftHistoryError(error instanceof Error?error.message:String(error));}
+    finally{setCopilotSavedDraftBusy(false);}
+  };
+
   const generateCopilotDraft=async()=>{
     const modeDefaults:Partial<Record<CopilotMode,string>>={
       'explain-error':'Explain current compiler errors and warnings, prioritizing root causes and source locations.',
@@ -651,7 +707,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     const generationRequest=++copilotGenerationRef.current;
     const requestedSource=source;
     const requestedEditorVersion=editorModel.getVersion();
-    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);setCopilotDraft(null);setCopilotStreamPreview('');copilotStreamPhaseRef.current=null;copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;copilotReplayGateRef.current=null;
+    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);setCopilotDraft(null);setCopilotReport(null);setCopilotStreamPreview('');copilotStreamPhaseRef.current=null;copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;copilotReplayGateRef.current=null;
     try{
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
@@ -688,6 +744,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       setCopilotSummary(payload.summary||'Copilot task completed. Review the findings before acting.');
       setCopilotAssumptions(payload.assumptions||[]);
       if(payload.analysisOnly){
+        setCopilotReport({summary:payload.summary||'Analysis complete.',assumptions:payload.assumptions||[],tests:payload.tests||[],backtestScenarios:payload.backtestScenarios||[],artifact:payload.draftArtifact,safetyReview:payload.safetyReview,diagnostics:payload.validation?.diagnostics||[]});
         // Reports, generated tests and documentation are read-only Copilot
         // outputs. Never replace the editor or grant a replay/run gate.
         copilotSourceRef.current=null;
@@ -704,6 +761,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         return;
       }
       // Source is staged for review. Streaming output and this candidate do not mutate the editor.
+      setCopilotReport(null);
       setCopilotDraft({
         payload,
         baseSource:requestedSource,
