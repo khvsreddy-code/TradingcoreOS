@@ -6,7 +6,7 @@ import {
   validateCoreSpiritSandboxArchitecture,
 } from './services/coreSpirit/capabilitySandbox.ts';
 import { detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
-import { parseCoreSpiritAiInvocationRequest } from './services/coreSpirit/aiInvocation.ts';
+import { buildCoreSpiritAiInvocationResult, parseCoreSpiritAiInvocationRequest, validateCoreSpiritAiInvocationResult } from './services/coreSpirit/aiInvocation.ts';
 
 const source = `
 requires ai.invoke, market.tick
@@ -23,7 +23,33 @@ const validRequest = parseCoreSpiritAiInvocationRequest({
   outputTokenLimit: 128,
 });
 assert.equal(validRequest.outputTokenLimit, 128);
+
 assert.equal(validRequest.context.close, 100);
+
+const resultIdentity = {
+  modelVersion: 'test-model-v1',
+  artifactHash: 'a'.repeat(64),
+  sourceHash: 'b'.repeat(64),
+  inputFingerprint: 'c'.repeat(64),
+};
+const builtResult = buildCoreSpiritAiInvocationResult({
+  status: 'ready',
+  result: 'advisory only',
+  summary: 'A bounded test result.',
+  ...resultIdentity,
+  createdAt: new Date(1_000).toISOString(),
+});
+assert.equal(validateCoreSpiritAiInvocationResult(builtResult, resultIdentity, 2_000)?.status, 'ready',
+  'a correctly fingerprinted AI result should be visible while fresh');
+assert.equal(validateCoreSpiritAiInvocationResult(builtResult, resultIdentity, Date.parse(builtResult.expiresAt))?.status, 'stale',
+  'a ready result must become stale at its freshness boundary');
+assert.equal(validateCoreSpiritAiInvocationResult({ ...builtResult, result: 'tampered' }, resultIdentity, 2_000), null,
+  'result text tampering must fail its output hash');
+assert.equal(validateCoreSpiritAiInvocationResult({ ...builtResult, executable: true }, resultIdentity, 2_000), null,
+  'an AI response must never be upgraded into an executable artifact');
+assert.equal(validateCoreSpiritAiInvocationResult(builtResult, { ...resultIdentity, artifactHash: 'd'.repeat(64) }, 2_000), null,
+  'results for another compiled artifact must not be surfaced');
+
 assert.throws(() => parseCoreSpiritAiInvocationRequest({
   source, artifactHash: 'a'.repeat(64), prompt: 'api_key=supersecretvalue', context: {},
 }), /credentials or secret values/);
