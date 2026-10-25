@@ -214,4 +214,103 @@ export function getCoreSpiritAuthoringProfileForLevel(level: CoreSpiritAuthoring
   return authoringProfile(level);
 }
 
+
+
+/**
+ * Progressive diagnostics are projections of the same compiled source, not
+ * level-specific languages. A selected editor level is only a UI preference;
+ * requiredLevel is inferred from source and remains authoritative metadata.
+ */
+export const CORE_SPIRIT_DEBUG_VIEWS = Object.freeze([
+  'guided', 'signal-context', 'feature-inspection', 'execution-trace',
+] as const);
+export type CoreSpiritDebugView = typeof CORE_SPIRIT_DEBUG_VIEWS[number];
+
+export type CoreSpiritDebugProfile = Readonly<{
+  view: CoreSpiritDebugView;
+  label: string;
+  panels: readonly ('explanation' | 'signals' | 'bar-context' | 'features' | 'lookback' | 'leakage' | 'events' | 'capabilities' | 'execution-trace')[];
+}>;
+
+const DEBUG_PROFILES: Readonly<Record<CoreSpiritDebugView, CoreSpiritDebugProfile>> = Object.freeze({
+  guided: Object.freeze({
+    view:'guided', label:'Guided explanation',
+    panels:Object.freeze(['explanation'] as const),
+  }),
+  'signal-context': Object.freeze({
+    view:'signal-context', label:'Signal and bar context',
+    panels:Object.freeze(['explanation','signals','bar-context'] as const),
+  }),
+  'feature-inspection': Object.freeze({
+    view:'feature-inspection', label:'Quant feature inspection',
+    panels:Object.freeze(['explanation','signals','bar-context','features','lookback','leakage'] as const),
+  }),
+  'execution-trace': Object.freeze({
+    view:'execution-trace', label:'System execution trace',
+    panels:Object.freeze(['explanation','signals','bar-context','features','lookback','leakage','events','capabilities','execution-trace'] as const),
+  }),
+});
+
+export function getCoreSpiritDebugProfile(view: CoreSpiritDebugView): CoreSpiritDebugProfile {
+  return DEBUG_PROFILES[view];
+}
+
+export type CoreSpiritAuthoringExperience = Readonly<{
+  language: 'CoreScript';
+  languageVersion: 1;
+  selectedLevel: CoreSpiritAuthoringLevel;
+  requiredLevel: CoreSpiritAuthoringLevel;
+  selectedProfile: CoreSpiritAuthoringProfile;
+  requiredProfile: CoreSpiritAuthoringProfile;
+  selectedViewMeetsSourceRequirements: boolean;
+  sourceAnalysisValid: boolean;
+  diagnostics: readonly string[];
+  reasons: readonly string[];
+  recommendedDebugView: CoreSpiritDebugView;
+  debugProfile: CoreSpiritDebugProfile;
+  progression: readonly CoreSpiritAuthoringLevel[];
+  notice: string;
+}>;
+
+/**
+ * Build the editor-facing view model for any level using one unchanged source.
+ * This is presentation guidance only: compiler capability checks and the host
+ * sandbox remain responsible for authorization and live execution.
+ */
+export function buildCoreSpiritAuthoringExperience(
+  source: string,
+  selectedLevel: CoreSpiritAuthoringLevel = 'beginner',
+  debugView?: CoreSpiritDebugView,
+): CoreSpiritAuthoringExperience {
+  const analysis = analyzeCoreSpiritAuthoringSource(source);
+  const selectedRank = CORE_SPIRIT_AUTHORING_LEVELS.indexOf(selectedLevel);
+  const requiredRank = CORE_SPIRIT_AUTHORING_LEVELS.indexOf(analysis.level);
+  const recommendedDebugView: CoreSpiritDebugView =
+    analysis.level === 'system' ? 'execution-trace' :
+    analysis.level === 'quant' ? 'feature-inspection' :
+    analysis.level === 'trader' ? 'signal-context' : 'guided';
+  const meetsRequirements = selectedRank >= requiredRank;
+  const notice = !analysis.syntaxValid
+    ? 'Fix the source diagnostics before trusting the inferred authoring level.'
+    : meetsRequirements
+      ? 'This view supports the capabilities inferred from the current CoreScript source.'
+      : `This source requires the ${analysis.level} authoring surface. Switch views to inspect its full workflow; the source language and compiler do not change.`;
+  return Object.freeze({
+    language:'CoreScript',
+    languageVersion:1,
+    selectedLevel,
+    requiredLevel:analysis.level,
+    selectedProfile:authoringProfile(selectedLevel),
+    requiredProfile:authoringProfile(analysis.level),
+    selectedViewMeetsSourceRequirements:meetsRequirements,
+    sourceAnalysisValid:analysis.syntaxValid,
+    diagnostics:analysis.diagnostics,
+    reasons:analysis.reasons,
+    recommendedDebugView,
+    debugProfile:getCoreSpiritDebugProfile(debugView ?? recommendedDebugView),
+    progression:Object.freeze([...CORE_SPIRIT_AUTHORING_LEVELS.slice(Math.max(0, selectedRank + 1))]),
+    notice,
+  });
+}
+
 export { CORE_SPIRIT_AUTHORING_LEVELS };
