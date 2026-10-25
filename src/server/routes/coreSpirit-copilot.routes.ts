@@ -191,7 +191,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       let artifactForResponse:Record<string,unknown>={...draftArtifact,persisted:false};
       try{
         const saved=await CoreSpiritCopilotDraftRepository.create(userId,{artifact:draftArtifact as unknown as Record<string,unknown>,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diagnostics,safetyReview});
-        artifactForResponse={...draftArtifact,id:saved.id,persisted:true,createdAt:saved.createdAt};
+        artifactForResponse={...draftArtifact,id:saved.id,persisted:true,persistedAt:saved.createdAt};
       }catch{artifactForResponse={...draftArtifact,persisted:false};}
       res.setHeader('Cache-Control','no-store');
       finishCopilotResponse(res,stream,{success:true,analysisOnly:true,source:currentSource,summary:generated.summary,assumptions:generated.assumptions,tests:generated.tests,backtestScenarios:generated.backtestScenarios,diff:buildCoreSpiritReviewPatch(currentSource,currentSource),draftArtifact:artifactForResponse,knowledge:{version:CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,hits:knowledgeHits.map(hit=>({id:hit.id,title:hit.title,sourcePath:hit.sourcePath}))},safetyReview,validation:{valid:false,analysisOnly:true,artifactHash:null,diagnostics},nextStep:'Analysis only: source was preserved and nothing was compiled for execution, replayed, or run.'});
