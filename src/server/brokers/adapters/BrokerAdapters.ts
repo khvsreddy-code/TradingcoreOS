@@ -127,7 +127,9 @@ export class FyersAdapter extends BaseBroker {
       signal: options.signal || timeoutSignal(timeoutMs),
       timeoutMs,
       category: resolvedCategory,
-      priority: resolvedCategory === 'transactions' ? 'interactive' : 'normal',
+      // This adapter is used by interactive account/order surfaces; speculative
+      // history and F&O warm-up use the explicit background priority elsewhere.
+      priority: 'interactive',
     });
   }
 
