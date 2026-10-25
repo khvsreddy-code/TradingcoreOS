@@ -79,6 +79,8 @@ export function buildCoreSpiritResearchPlan(
   for(let i=0;i<lines.length;i+=1){
     const raw=lines[i];
     const line=raw.trim();
+    // Comments are not model/backtest declarations and must not change inferred authoring level.
+    if (!line || line.startsWith('//')) continue;
     const indent=raw.match(/^[ \t]*/)?.[0].replace(/\t/g,'  ').length??0;
 
     const modelMatch=line.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*(?::|\{)\s*$/i);
