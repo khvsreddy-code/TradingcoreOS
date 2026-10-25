@@ -6,12 +6,16 @@ type BrokerLimit = {
   maxPerMinute: number;
 };
 
+export type BrokerRequestPriority = 'interactive' | 'normal' | 'background';
+
 type QueueState = {
   nextAvailableAt: number;
   timestamps: number[];
   tail: Promise<void>;
   dayKey: string;
   dailyCount: number;
+  priorityTimestamps: Record<BrokerRequestPriority, number[]>;
+  priorityDailyCount: Record<BrokerRequestPriority, number>;
 };
 
 export type BrokerRequestGatePolicy = Readonly<{
@@ -20,6 +24,7 @@ export type BrokerRequestGatePolicy = Readonly<{
   minIntervalMs?: number;
   maxPerMinute?: number;
   maxPerDay?: number;
+  priority?: BrokerRequestPriority;
 }>;
 
 function indiaDayKey(now = Date.now()): string {
@@ -43,7 +48,11 @@ const queues = new Map<string, QueueState>();
 function getState(key: string): QueueState {
   let state = queues.get(key);
   if (!state) {
-    state = { nextAvailableAt: 0, timestamps: [], tail: Promise.resolve(), dayKey: indiaDayKey(), dailyCount: 0 };
+    state = {
+      nextAvailableAt: 0, timestamps: [], tail: Promise.resolve(), dayKey: indiaDayKey(), dailyCount: 0,
+      priorityTimestamps: { interactive: [], normal: [], background: [] },
+      priorityDailyCount: { interactive: 0, normal: 0, background: 0 },
+    };
     queues.set(key, state);
   }
   return state;
@@ -126,6 +135,7 @@ export async function withBrokerRequestGate<T>(
   const budgetName = policy.budgetKey ? `${broker}:${policy.budgetKey}` : broker;
   const key = budgetName + ':' + identity;
   const localState = getState(key);
+  const priority = policy.priority || 'normal';
   const limit: BrokerLimit & { maxPerDay?: number } = {
     ...LIMITS[broker],
     ...(policy.minIntervalMs != null ? { minIntervalMs: Math.max(0, Math.floor(policy.minIntervalMs)) } : {}),
@@ -169,10 +179,13 @@ export async function withBrokerRequestGate<T>(
         const countKey = 'tco:broker:minute:' + budgetName + ':' + identityHash + ':' + window;
         const dayKey = indiaDayKey(now);
         const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
+        const nonInteractiveMinuteKey = `tco:broker:priority-minute:noninteractive:${budgetName}:${identityHash}:${window}`;
+        const backgroundMinuteKey = `tco:broker:priority-minute:background:${budgetName}:${identityHash}:${window}`;
+        const nonInteractiveDayKey = `tco:broker:priority-day:noninteractive:${budgetName}:${identityHash}:${dayKey}`;
+        const backgroundDayKey = `tco:broker:priority-day:background:${budgetName}:${identityHash}:${dayKey}`;
 
-        // The per-identity Redis admission lock serializes this read/check/
-        // increment sequence. Check both counters before consuming either so
-        // a request denied by one quota doesn't unnecessarily burn the other.
+        // The per-identity Redis lock serializes aggregate and priority checks.
+        // Interactive calls can use the entire safe budget; speculative work is capped.
         if (limit.maxPerDay != null) {
           const currentDayCount = Number(await distributed.get<string | number>(dayCountKey, effectiveSignal) || 0);
           if (currentDayCount >= limit.maxPerDay) {
@@ -183,11 +196,43 @@ export async function withBrokerRequestGate<T>(
         if (currentMinuteCount >= limit.maxPerMinute) {
           throw Object.assign(new Error('Broker request rate budget exhausted'), { status:429, brokerCode:429, code:'BROKER_RATE_BUDGET_EXHAUSTED' });
         }
+        if (priority !== 'interactive') {
+          const nonInteractiveCount = Number(await distributed.get<string | number>(nonInteractiveMinuteKey, effectiveSignal) || 0);
+          if (nonInteractiveCount >= Math.max(1, Math.floor(limit.maxPerMinute * 0.7))) {
+            throw Object.assign(new Error('Broker non-interactive request reserve exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+          }
+          if (priority === 'background') {
+            const backgroundCount = Number(await distributed.get<string | number>(backgroundMinuteKey, effectiveSignal) || 0);
+            if (backgroundCount >= Math.max(1, Math.floor(limit.maxPerMinute * 0.35))) {
+              throw Object.assign(new Error('Broker background request budget exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+            }
+          }
+          if (limit.maxPerDay != null) {
+            const nonInteractiveDay = Number(await distributed.get<string | number>(nonInteractiveDayKey, effectiveSignal) || 0);
+            if (nonInteractiveDay >= Math.max(1, Math.floor(limit.maxPerDay * 0.7)) {
+              throw Object.assign(new Error('Broker non-interactive daily reserve exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+            }
+            if (priority === 'background') {
+              const backgroundDay = Number(await distributed.get<string | number>(backgroundDayKey, effectiveSignal) || 0);
+              if (backgroundDay >= Math.max(1, Math.floor(limit.maxPerDay * 0.35))) {
+                throw Object.assign(new Error('Broker background daily budget exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+              }
+            }
+          }
+        }
 
         if (limit.maxPerDay != null) {
           await distributed.incrementWindow(dayCountKey, 48 * 60 * 60 * 1000, effectiveSignal);
+          if (priority !== 'interactive') {
+            await distributed.incrementWindow(nonInteractiveDayKey, 48 * 60 * 60 * 1000, effectiveSignal);
+            if (priority === 'background') await distributed.incrementWindow(backgroundDayKey, 48 * 60 * 60 * 1000, effectiveSignal);
+          }
         }
         await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
+        if (priority !== 'interactive') {
+          await distributed.incrementWindow(nonInteractiveMinuteKey, 61_000, effectiveSignal);
+          if (priority === 'background') await distributed.incrementWindow(backgroundMinuteKey, 61_000, effectiveSignal);
+        }
 
         const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
         const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
@@ -204,11 +249,33 @@ export async function withBrokerRequestGate<T>(
     if (localState.dayKey !== currentDayKey) {
       localState.dayKey = currentDayKey;
       localState.dailyCount = 0;
+      localState.priorityDailyCount = { interactive: 0, normal: 0, background: 0 };
     }
     if (limit.maxPerDay != null && localState.dailyCount >= limit.maxPerDay) {
       throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
     }
     localState.timestamps = localState.timestamps.filter((ts) => now - ts < 60_000);
+    for (const p of ['interactive', 'normal', 'background'] as const) {
+      localState.priorityTimestamps[p] = localState.priorityTimestamps[p].filter(ts => now - ts < 60_000);
+    }
+    if (priority !== 'interactive') {
+      const nonInteractiveCount = localState.priorityTimestamps.normal.length + localState.priorityTimestamps.background.length;
+      if (nonInteractiveCount >= Math.max(1, Math.floor(limit.maxPerMinute * 0.7))) {
+        throw Object.assign(new Error('Broker non-interactive request reserve exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+      }
+      if (priority === 'background' && localState.priorityTimestamps.background.length >= Math.max(1, Math.floor(limit.maxPerMinute * 0.35))) {
+        throw Object.assign(new Error('Broker background request budget exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+      }
+      if (limit.maxPerDay != null) {
+        const nonInteractiveDay = localState.priorityDailyCount.normal + localState.priorityDailyCount.background;
+        if (nonInteractiveDay >= Math.max(1, Math.floor(limit.maxPerDay * 0.7))) {
+          throw Object.assign(new Error('Broker non-interactive daily reserve exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+        }
+        if (priority === 'background' && localState.priorityDailyCount.background >= Math.max(1, Math.floor(limit.maxPerDay * 0.35))) {
+          throw Object.assign(new Error('Broker background daily budget exhausted'), { status:429, brokerCode:429, code:'BROKER_PRIORITY_BUDGET_EXHAUSTED' });
+        }
+      }
+    }
     const oldest = localState.timestamps[0];
     const minuteWait = localState.timestamps.length >= limit.maxPerMinute && oldest
       ? 60_000 - (now - oldest) + 25
@@ -226,6 +293,8 @@ export async function withBrokerRequestGate<T>(
       throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
     }
     if (limit.maxPerDay != null) localState.dailyCount += 1;
+    localState.priorityTimestamps[priority].push(startedAt);
+    localState.priorityDailyCount[priority] += 1;
     localState.timestamps.push(startedAt);
     localState.nextAvailableAt = startedAt + limit.minIntervalMs;
 
