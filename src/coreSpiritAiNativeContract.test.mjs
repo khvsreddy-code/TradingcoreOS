@@ -60,6 +60,10 @@ assert.match(applyBlock, /previewCoreSpiritArtifactOffThread/, 'apply path retai
 assert.match(editor, /Suggested tests · not executed/, 'generated tests are clearly presented as unexecuted suggestions');
 assert.match(editor, /Private draft history/, 'user can browse saved Copilot versions');
 assert.match(editor, /Documentation and standard-library search/, 'user can search versioned CoreScript knowledge');
+assert.match(editor, /ASYNC AI INVOCATION/, 'the editor exposes the host-side async invocation harness');
+assert.match(editor, /Compile & submit async AI job/, 'AI work requires an explicit user submit action');
+assert.match(editor, /\/api\/jobs\//, 'the UI inspects asynchronous jobs off the execution path');
+assert.match(editor, /Host API preview, not a native language builtin yet/, 'the UI does not misrepresent the missing native request/result expression bridge');
 
 assert.match(languagePolicy, /'ai\.invoke'/, 'ai.invoke is a recognized declared capability');
 assert.match(sandbox, /'ai-invoke'/, 'sandbox has a distinct AI invocation permission');
