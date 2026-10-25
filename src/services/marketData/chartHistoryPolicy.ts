@@ -2,22 +2,22 @@
  * The default server dataset is the merged 5,000-bar window. Chart pages remain
  * viewport-driven; the server's tvdatafeed source cannot page to arbitrary ends.
  */
-export const HISTORICAL_DATASET_MAX_BARS = 5_000;
+export const HISTORICAL_DATASET_MAX_BARS = 2_000;
 export const HISTORICAL_RECENT_FYERS_SESSIONS = 3;
 
 export const INITIAL_HISTORY_CANDLES: Record<string, number> = {
-  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000,
-  '15m': 5000, '30m': 5000, '60m': 5000, '1H': 5000,
-  '1D': 5000, '1day': 5000, day: 5000,
+  '1m': 2000, '3m': 2000, '5m': 2000, '10m': 2000,
+  '15m': 2000, '30m': 2000, '45m': 2000, '60m': 2000, '1H': 2000,
+  '1D': 2000, '1day': 2000, day: 2000,
 };
 
 export const HISTORY_PAGE_CANDLES: Record<string, number> = {
-  '1m': 1000, '3m': 1000, '5m': 1000, '10m': 1000, '15m': 1000, '30m': 1000, '60m': 1000, '1H': 1000, '1D': 1000, '1day': 1000, day: 1000,
+  '1m': 1000, '3m': 1000, '5m': 1000, '10m': 1000, '15m': 1000, '30m': 1000, '45m': 1000, '60m': 1000, '1H': 1000, '1D': 1000, '1day': 1000, day: 1000,
 };
 
 export const HISTORY_WARM_TARGET_CANDLES: Record<string, number> = {
   // No eager 5k background history burst: older data is demand-loaded as needed.
-  '1m': 500, '3m': 500, '5m': 500, '10m': 500, '15m': 500, '30m': 500, '60m': 500, '1H': 500, '1D': 500, '1day': 500, day: 500,
+  '1m': 500, '3m': 500, '5m': 500, '10m': 500, '15m': 500, '30m': 500, '45m': 500, '60m': 500, '1H': 500, '1D': 500, '1day': 500, day: 500,
 };
 
 export const HISTORY_MAX_CANDLES = 50_000;

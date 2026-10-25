@@ -19,6 +19,7 @@ export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '5m': '5minute',
   '15m': '15minute',
   '30m': '30minute',
+  '45m': '45minute',
   '60m': '60minute',
   '120m': '120minute',
   '240m': '240minute',
@@ -36,6 +37,7 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
   '5m': 300,
   '15m': 900,
   '30m': 1800,
+  '45m': 2700,
   '60m': 3600,
   '120m': 7200,
   '240m': 14400,
@@ -535,7 +537,7 @@ export class ChartDataPlane {
     this.state.lastRecoveryAt = Date.now();
     const generation = this.liveCandle.beginHistoryLoad('recovery');
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
-    const requested = Math.max(100, Math.min(5000, initialHistoryCandles(this.timeframe)));
+    const requested = Math.max(100, Math.min(2_000, initialHistoryCandles(this.timeframe)));
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
 
     void tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requested)
@@ -719,7 +721,7 @@ export class ChartDataPlane {
   }
 
   private activeWindow(rows: HistoricalCandle[], limitOverride?: number): HistoricalCandle[] {
-    const limit = Math.max(initialHistoryCandles(this.timeframe), Math.min(5000, Math.floor(Number(limitOverride) || initialHistoryCandles(this.timeframe))));
+    const limit = Math.max(initialHistoryCandles(this.timeframe), Math.min(2_000, Math.floor(Number(limitOverride) || initialHistoryCandles(this.timeframe))));
     return rows.length > limit ? rows.slice(-limit) : rows;
   }
 
@@ -748,7 +750,7 @@ export class ChartDataPlane {
   private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds'; source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number> }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
     const startedAt = globalThis.performance?.now?.() ?? Date.now();
     const previousRevision = this.state.revision;
-    const candlesForCache = columnarHistoryToCandles(columns, Math.min(5000, requestedLimit));
+    const candlesForCache = columnarHistoryToCandles(columns, Math.min(2_000, requestedLimit));
     if (!candlesForCache.length) return [];
     const retainedForCache = candlesForCache.slice(-MAX_HISTORY_CANDLES);
 
@@ -801,7 +803,7 @@ export class ChartDataPlane {
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride))
-      ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride))))
+      ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride))))
       : baseLimit;
     const residentCount = () => Math.max(
       historyStore.get(this.brokerId, this.instrumentKey, interval)?.length ?? 0,
@@ -850,7 +852,8 @@ export class ChartDataPlane {
     }
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
-    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    await historyStore.hydrate(this.brokerId, this.instrumentKey, interval);
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
       const active = this.activeWindow(fresh, requestedLimit);
@@ -918,8 +921,9 @@ export class ChartDataPlane {
     if (this.state.historyPromise) return this.state.historyPromise;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
-    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
     const initialLimit = requestedLimit;
+    await historyStore.hydrate(this.brokerId, this.instrumentKey, interval);
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
