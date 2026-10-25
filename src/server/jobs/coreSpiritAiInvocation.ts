@@ -142,6 +142,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
 
   const activeOwner = await redis.get<string>(expectedLockKey, AbortSignal.timeout(900)).catch(() => null);
   if (activeOwner !== payload.lockOwner) {
+    await releaseLease(); // Compare-and-delete is safe if another invocation owns the key.
     return unavailable(payload, 'invocation-lease-expired', 'The invocation lease expired before the worker started. Submit a fresh job.', 'stale');
   }
 
