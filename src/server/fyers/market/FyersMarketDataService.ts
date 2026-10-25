@@ -52,7 +52,7 @@ export class FyersMarketDataService {
       range_to: rangeTo,
       oi_flag: options.oi ? 1 : undefined,
       cont_flag: options.continuous ? 1 : undefined,
-    }, options.signal, API_LATENCY_BUDGET_MS.history);
+    }, options.signal, API_LATENCY_BUDGET_MS.history, 'interactive');
   }
 
   quotes(symbols: string[], signal?: AbortSignal): Promise<unknown> {
