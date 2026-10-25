@@ -134,7 +134,9 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
     for (const item of watch) byKey.set(item.key, item);
     if (selectedItem) byKey.set(selectedItem.key, selectedItem);
     return [...byKey.values()];
-  }, [watch, selectedItem?.key]);
+  }, [watch, selectedItem]);
+  const watchItemsRef = useRef(watchItems);
+  watchItemsRef.current = watchItems;
   const watchKeys = watchItems.map(item => item.key).join('\u001f');
 
   // Fetch news for all visible watchlist symbols with a small concurrency budget.
@@ -142,7 +144,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItems.filter(item =>
+    const pending = watchItemsRef.current.filter(item =>
       !Object.prototype.hasOwnProperty.call(newsByKeyRef.current, item.key)
       && !newsInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -184,7 +186,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItems.filter(item =>
+    const pending = watchItemsRef.current.filter(item =>
       !Object.prototype.hasOwnProperty.call(technicalByKeyRef.current, item.key)
       && !technicalInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -223,7 +225,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       controller.abort();
       for (const item of pending) technicalInFlightRef.current.delete(item.key);
     };
-  }, [watchKeys]);
+  }, [watchKeys, broker]);
 
   const refreshNews = (item: WatchlistDockItem) => {
     const key = item.key;
