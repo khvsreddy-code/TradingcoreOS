@@ -161,6 +161,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
       },
       thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},
       maxOutputTokens:4096,
+      abortSignal:AbortSignal.timeout(45_000),
     };
     let generatedRaw='';
     if(stream){
