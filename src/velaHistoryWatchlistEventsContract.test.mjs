@@ -10,8 +10,11 @@ const dataPlane = read('src/services/marketData/chartDataPlane.ts');
 const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const callback = read('src/pages/BrokerCallbackPage.tsx');
 const adapter = read('src/server/brokers/adapters/BrokerAdapters.ts');
+const velaWorkspace = read('vendor/vela/src/workspace/VelaWorkspace.ts');
 
 assert.match(terminal, /bars:2_000/);
+assert.match(velaWorkspace, /historyTargetUpgrade/);
+assert.match(velaWorkspace, /visibleRange: historyTargetUpgrade \? \('ALL' as const\)/, 'persisted short-history view should reset only when its target is upgraded');
 assert.match(terminal, /timeframes:\[[^\]]*'45'/);
 assert.match(provider, /supportedTimeframes:\s*\[[^\]]*'45'/);
 assert.match(provider, /const maxPages = Math\.min\(8/);

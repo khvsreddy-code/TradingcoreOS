@@ -1736,9 +1736,24 @@ export class VelaWorkspace {
             }
             if (this.cellsById.has(id)) continue;
             const pooled = this.pool.get(id);
+            const configuredSeed = { ...seedDefaults(this.opts), ...(this.opts.cells?.[id] ?? {}) };
+            const configuredBars = Number(configuredSeed.bars);
+            const pooledBars = Number(pooled?.bars);
+            // A persisted Vela document wins over new options by default. When the
+            // host deliberately raises its initial history target, migrate older
+            // saved cell targets once instead of continuing to request 500 bars.
+            const historyTargetUpgrade = Boolean(pooled
+                && Number.isFinite(configuredBars) && configuredBars > 0
+                && (!Number.isFinite(pooledBars) || pooledBars < configuredBars));
             const seed: CellBoot = pooled
-                ? { ...pooled, visibleRange: pooled.viewport ?? undefined }
-                : { ...seedDefaults(this.opts), ...(this.opts.cells?.[id] ?? {}) };
+                ? {
+                    ...pooled,
+                    ...(historyTargetUpgrade ? { bars: configuredBars } : {}),
+                    // A migrated target should show the newly available full dataset,
+                    // not a viewport snapshot saved when only the shorter range existed.
+                    visibleRange: historyTargetUpgrade ? ('ALL' as const) : (pooled.viewport ?? undefined),
+                }
+                : configuredSeed;
             this.pool.delete(id); // the slot is live again — its pooled state is consumed
             const cell = new ChartCell(id, this.gridEl, seed, {
                 feed: this.feed,
