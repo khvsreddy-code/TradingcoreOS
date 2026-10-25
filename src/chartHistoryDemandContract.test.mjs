@@ -16,6 +16,8 @@ const values = [...policy.matchAll(/'[^']+':\s*([0-9_]+)/g)].map(m => Number(m[1
 if (!values.length || Math.min(...values) < 240 || Math.max(...values) > 5000) throw new Error('History policy values are outside the expected bounded range');
 if (/25_000/.test(dataPlane) || /20_000/.test(dataPlane) || /15_000/.test(dataPlane)) throw new Error('Legacy eager history page sizes remain in chartDataPlane');
 if (!/initialHistoryCandles/.test(dataPlane) || !/historyPageCandles/.test(dataPlane)) throw new Error('Staged history policy is not wired into data plane');
+const historyStore = fs.readFileSync(path.join(root, 'src/services/marketData/HistoryStore.ts'), 'utf8');
+if (!/PERSISTED_HISTORY_CANDLE_LIMIT\s*=\s*2_000/.test(historyStore) || !/historyStore\.hydrate\(/.test(dataPlane)) throw new Error('Persistent 2,000-candle history cache is not wired into chart loading');
 if (!/historyStore\.getBefore/.test(dataPlane)) throw new Error('Warm/cache older history path missing');
 if (!/loadOlderHistory\('visible'/.test(dataPlane) && !/loadOlderHistory\(priority/.test(dataPlane)) throw new Error('Visible older-history priority missing');
 if (!/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm page priority missing');
@@ -25,6 +27,6 @@ if (!/shouldLoadOlderHistory\(/.test(interaction)) throw new Error('Visible-rang
 if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Active-chart warm request missing from chart runtime');
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial chart request must provide a bounded limit');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
-if (!/req\.query\.limit/.test(route) || !/Math\.min\(5000/.test(route)) throw new Error('Server history route must validate a bounded limit');
+if (!/req\.query\.limit/.test(route) || !/Math\.min\(2_000/.test(route)) throw new Error('Server history route must validate the 2,000-candle initial limit');
 if (!/requestedLimit/.test(serverAdapters)) throw new Error('Server broker adapter must honor bounded initial history');
 console.log('TRADINGCORE_V104_DEMAND_DRIVEN_HISTORY_CONTRACT_OK');

@@ -50,9 +50,9 @@ function toFyersSymbol(symbol: string): string {
 }
 
 const fyersResolution: Record<string,string> = {
-  '1minute':'1','3minute':'3','5minute':'5','15minute':'15','30minute':'30','60minute':'60','day':'D'
+  '1minute':'1','3minute':'3','5minute':'5','10minute':'10','15minute':'15','30minute':'30','45minute':'45','60minute':'60','day':'D'
 };
-const intradayIntervals = new Set(['1minute','3minute','5minute','15minute','30minute','60minute']);
+const intradayIntervals = new Set(['1minute','3minute','5minute','10minute','15minute','30minute','45minute','60minute']);
 
 function indiaDate(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
@@ -291,8 +291,8 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   if (secondsRequest && !capabilities.secondData) {
     return res.status(403).json({ success:false, error:'Seconds-level historical data requires a verified FYERS Prime entitlement.', code:'FYERS_SECONDS_DATA_REQUIRES_PRIME', plan:capabilities.plan });
   }
-  const requestedLimit = Number(req.query.limit || 10_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(30_000, Math.floor(requestedLimit))) : 10_000;
+  const requestedLimit = Number(req.query.limit || 2_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(2_000, Math.floor(requestedLimit))) : 2_000;
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {
