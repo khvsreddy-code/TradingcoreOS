@@ -2,6 +2,7 @@ import type { BackgroundJobMessage } from './queue.js';
 import { BackgroundJobRepository } from '../storage/BackgroundJobRepository.js';
 import { parseProductionPredictionInput, runProductionPrediction } from './productionPrediction.js';
 import { runCoreSpiritModelTraining } from './coreSpiritModelTraining.js';
+import { runCoreSpiritAiInvocation } from './coreSpiritAiInvocation.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 
 export async function processBackgroundJob(message: BackgroundJobMessage, deliveryCount: number): Promise<void> {
@@ -26,6 +27,12 @@ export async function processBackgroundJob(message: BackgroundJobMessage, delive
         }
         throw error;
       }
+    }
+
+    if (message.kind === 'corespirit_ai_invoke') {
+      const result = await runCoreSpiritAiInvocation(message.userId, message.payload);
+      await BackgroundJobRepository.markSucceeded(message.jobId, result);
+      return;
     }
 
     if (message.kind === 'production_prediction') {
