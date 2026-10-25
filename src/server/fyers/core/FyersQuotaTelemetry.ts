@@ -66,12 +66,12 @@ export function recordFyersQuotaDenial(category: FyersApiCategory, plan: FyersAp
   const value = getEntry(category, plan, path);
   value.minuteDenials += 1;
   value.dayDenials += 1;
-  const label = status === 503 ? 'coordination-unavailable' : 'local-quota-denied';
+  const label = status === 503 ? 'coordination-unavailable-503' : `local-gate-${status}`;
   value.statuses[label] = (value.statuses[label] || 0) + 1;
 }
 export function recordFyersQuotaResponse(category: FyersApiCategory, plan: FyersApiPlan, path: string, status: number): void {
   const value = getEntry(category, plan, path);
-  const label = status === 0 ? 'network-error' : status >= 200 && status < 300 ? '2xx' : status === 429 ? '429' : status >= 500 ? '5xx' : status >= 400 ? '4xx' : 'other';
+  const label = status === 0 ? 'network-error' : `http-${Math.trunc(status)}`;
   value.statuses[label] = (value.statuses[label] || 0) + 1;
 }
 export function getFyersQuotaTelemetry() {
