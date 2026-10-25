@@ -29,6 +29,8 @@ A reusable strategy-output evaluator lives in `src/services/coreSpirit/outOfSamp
 
 Research evaluation should make train/validation/test windows and feature availability times explicit. Prediction accuracy is not tradability evidence: turnover, transaction costs/slippage, drawdown and stability should be considered where the evaluation backend computes those results. The Copilot knowledge index deliberately does not invent results or mark missing measurements as passes.
 
+A separate read-only feature-quality monitor now lives in `src/services/coreSpirit/modelDrift.ts`. It pins reports to the model artifact and feature-schema hashes, compares a confirmed historical baseline with a later observation window using baseline-derived PSI bins, reports missing/non-finite values, excludes developing/unconfirmed/forecast rows from drift scoring, and returns `insufficient-evidence` when sample requirements are not met. Critical thresholds produce blockers in the report, but the monitor does not train, promote, or route trades. It is a pure monitoring primitive; a production scheduler, durable telemetry store, alert delivery, and model-promotion policy integration must be wired separately before describing it as live drift monitoring.
+
 ### 3. Asynchronous generative AI invocation
 
 CoreScript now recognizes `requires ai.invoke` as a declared, system-level capability. The `POST /invoke` host API:
