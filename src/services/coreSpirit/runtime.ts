@@ -609,7 +609,9 @@ export class CoreSpiritRuntime {
       this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, {
         reuseValues: this.executionTier === 'optimized',
         resetValues: !canIncremental,
-        dirtyInstructions: canIncremental ? this.realtimeDirtyInstructions : undefined,
+        dirtyInstructions: canIncremental && dirtyPlan && dirtyPlan.instructions.length > 0
+          ? this.realtimeDirtyInstructions
+          : undefined,
       });
     }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }

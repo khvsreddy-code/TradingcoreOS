@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { CoreSpiritExecutionVM } from './executionVM.ts';
 import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
@@ -432,3 +433,9 @@ assert.equal(runBranch(1),5);
 assert.equal(runBranch(0,new Set([0])),9,
   'a changed branch predicate must force a safe complete execution');
 console.log('CORESPIRIT_DIRTY_CONTROL_FLOW_FALLBACK_OK');
+
+const runtimeSource = readFileSync(new URL('./runtime.ts', import.meta.url), 'utf8');
+assert.match(runtimeSource,
+  /dirtyInstructions:\s*canIncremental\s*&&\s*dirtyPlan\s*&&\s*dirtyPlan\.instructions\.length > 0\s*\?/,
+  'missing or empty dirty graph plans must trigger a full safe run instead of silently reusing stale series registers');
+console.log('CORESPIRIT_RUNTIME_DIRTY_PLAN_FALLBACK_CONTRACT_OK');
