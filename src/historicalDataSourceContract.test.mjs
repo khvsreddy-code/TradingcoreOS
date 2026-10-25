@@ -7,6 +7,7 @@ const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 const policy = read('src/services/marketData/chartHistoryPolicy.ts');
 const service = read('src/server/marketData/HistoricalDataService.ts');
 const route = read('src/server/routes/fyers-history.routes.ts');
+const legacyRoute = read('src/server/routes/broker-market-data.routes.ts');
 const canonical = read('src/server/marketData/canonicalHistoricalData.ts');
 const adapter = read('src/services/brokers/BaseBrokerAdapter.ts');
 const serverAdapter = read('src/server/brokers/adapters/BrokerAdapters.ts');
@@ -53,6 +54,10 @@ assert.match(route, /historyCompleteness:\s*loaded\.metadata\.historyCompletenes
 assert.doesNotMatch(route, /liveSeed:\s*true/);
 assert.doesNotMatch(route, /open:\s*ltp[\s\S]{0,100}close:\s*ltp/);
 assert.match(route, /Math\.min\(2_000/);
+assert.match(legacyRoute, /datasetComplete: false/);
+assert.match(legacyRoute, /providerPageLimit: 2_000/);
+assert.match(legacyRoute, /paginationSupported: false/);
+
 assert.match(runtime, /export type HistoricalProviderErrorCode/);
 assert.match(runtime, /'authentication'[\s\S]*'rate_limited'[\s\S]*'timeout'[\s\S]*'no_data'[\s\S]*'unsupported'[\s\S]*'invalid_dataset'/);
 assert.match(runtime, /market\.history\.error/);
