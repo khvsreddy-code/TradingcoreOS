@@ -129,7 +129,32 @@ function realtimeServiceConfigChanged(previousSha, currentSha) {
   return JSON.stringify(readConfig(previousSha)) !== JSON.stringify(readConfig(currentSha));
 }
 
+function ensureCommitAvailable(sha) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { stdio: 'ignore' });
+    return true;
+  } catch {
+    // Vercel frequently gives the service a shallow checkout. Its previous
+    // deployment SHA can be valid on GitHub but absent locally; fetch that exact
+    // public commit before failing open and rebuilding a container unnecessarily.
+    try {
+      execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', sha], {
+        stdio: 'pipe',
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { stdio: 'ignore' });
+      console.log(`[realtime-ignore] Fetched missing Git commit ${sha.slice(0, 12)} for an accurate dependency diff.`);
+      return true;
+    } catch (error) {
+      console.warn(`[realtime-ignore] Could not fetch commit ${sha.slice(0, 12)}; the gateway will rebuild safely.`, error instanceof Error ? error.message : '');
+      return false;
+    }
+  }
+}
+
 export function runRealtimeIgnoreCommand(env = process.env) {
+  console.log('[realtime-ignore] Evaluating whether this commit changes the realtime gateway image.');
   if (env.TCO_REALTIME_FORCE_BUILD === '1') {
     console.log('[realtime-ignore] Forced rebuild requested; rebuilding the realtime image.');
     return 1;
@@ -168,10 +193,11 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   }
 
   try {
-    // Ensure both commits exist locally before trusting a path-only diff. A supplied
-    // previous SHA that is absent from the shallow checkout still fails open.
-    execFileSync('git', ['cat-file', '-e', `${previousSha}^{commit}`], { stdio: 'ignore' });
-    execFileSync('git', ['cat-file', '-e', `${currentSha}^{commit}`], { stdio: 'ignore' });
+    // The current checkout is authoritative; previous deployment commits may need
+    // a one-commit fetch because Vercel's default source clone can be shallow.
+    if (!ensureCommitAvailable(currentSha) || !ensureCommitAvailable(previousSha)) {
+      return 1;
+    }
     const changed = readChangedPaths(previousSha, currentSha);
     const relevant = changed.filter(isRealtimeRuntimePath);
 
