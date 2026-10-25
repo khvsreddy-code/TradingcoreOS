@@ -79,6 +79,15 @@ const SAFETY_DOCS: readonly KnowledgeDocument[] = [
     keywords: ['out of sample','oos','accuracy','turnover','transaction cost','slippage','drawdown','stability','economics','pnl','evaluation'],
   },
   {
+    id: 'feature-quality-and-drift',
+    title: 'Monitor model feature quality and distribution drift',
+    body: 'The read-only monitor in src/services/coreSpirit/modelDrift.ts pins a report to model-artifact and feature-schema SHA-256 hashes, learns PSI histogram edges from the confirmed historical baseline only, excludes developing, forecast and unconfirmed observations from the observed drift sample, and reports missing/non-finite values. Too-small samples return insufficient-evidence, not healthy. The monitor does not train or promote models, and it is not a live alerting scheduler; do not claim that drift is monitored in production until telemetry ingestion, durable history and alert delivery are wired.',
+    category: 'model monitoring and safety',
+    sourcePath: 'src/services/coreSpirit/modelDrift.ts',
+    kind: 'model-lifecycle',
+    keywords: ['drift','feature quality','PSI','population stability index','missing values','non-finite','distribution','monitoring','model monitoring','insufficient evidence','schema hash','baseline'],
+  },
+  {
     id: 'ai-draft-and-apply',
     title: 'AI-generated source is an untrusted draft',
     body: 'Copilot output is a draft, not executable authority. Review the structured diff, inputs, tests, diagnostics, required capabilities and the provenance fingerprint. Applying a candidate is explicit and can be blocked if the editor version or chart context changed. Compilation, executable-artifact integrity, sandbox capability validation and read-only replay are independent gates.',
