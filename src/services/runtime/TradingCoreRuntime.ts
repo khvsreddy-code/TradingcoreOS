@@ -236,9 +236,13 @@ export class TradingCoreRuntime {
     const key = `${brokerId}:${symbol}:${timeframe}:initial-progressive-v15:${requestedLimit}`;
     await historyStore.hydrate(brokerId, symbol, timeframe);
     const storeCached = historyStore.get(brokerId, symbol, timeframe);
-    if (storeCached?.length) return storeCached.slice(-requestedLimit);
+    if (storeCached?.length >= requestedLimit) return storeCached.slice(-requestedLimit);
     const cached = this.historyCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return historyStore.set(brokerId, symbol, timeframe, cached.data).slice(-requestedLimit);
+    if (cached && cached.expiresAt > Date.now() && cached.data.length >= requestedLimit) {
+      return historyStore.set(brokerId, symbol, timeframe, cached.data).slice(-requestedLimit);
+    }
+    // A smaller cache is still useful for first paint, but it must not satisfy a
+    // request for a larger candle window; continue to the broker for the missing bars.
 
     // Do not silently convert a broker switch into an empty history result.
     // If the active broker changed while the request was in flight, retry once
@@ -313,7 +317,9 @@ export class TradingCoreRuntime {
     if (broker.getHistoricalDataColumns) {
       try {
         const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
-        if (columns && columns.time.length > 0) return columns;
+        if (columns && columns.time.length >= requestedLimit) return columns;
+        // Some adapters return a partial column snapshot. Fall through to row history
+        // so a short response cannot masquerade as the complete requested window.
       } catch (error) {
         if ((error as { name?: string })?.name === 'AbortError' || signal?.aborted) throw error;
         coreEventBus.emit('market.history.error', {

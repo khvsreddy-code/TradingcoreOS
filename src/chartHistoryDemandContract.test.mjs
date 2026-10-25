@@ -37,6 +37,8 @@ if (!/supportedTimeframes:\s*\[[^\]]*'45'/.test(velaProvider)) throw new Error('
 if (!/const maxPages = Math\.min\(8/.test(velaProvider) || !/await plane\.loadOlderHistory\('warm'/.test(velaProvider)) throw new Error('Vela initial history must continue paginating until the target window is reached');
 if (!/residentCount >= requestedLimit/.test(dataPlane) || !/fresh\.length >= requestedLimit/.test(dataPlane)) throw new Error('A partial cache must not short-circuit a larger history request');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
+if (!/storeCached\?\.length >= requestedLimit/.test(runtime) || !/columns\.time\.length >= requestedLimit/.test(runtime)) throw new Error('A short cached dataset must not satisfy a larger history request');
+if (!/plane\.ensureReadyHistory\(requested\)/.test(velaProvider)) throw new Error('Vela must fetch the complete target window behind its first-paint batch');
 if (!/req\.query\.limit/.test(route) || !/Math\.min\(2_000/.test(route)) throw new Error('Server history route must validate the 2,000-candle initial limit');
 if (!/requestedLimit/.test(serverAdapters)) throw new Error('Server broker adapter must honor bounded initial history');
 console.log('TRADINGCORE_V104_DEMAND_DRIVEN_HISTORY_CONTRACT_OK');

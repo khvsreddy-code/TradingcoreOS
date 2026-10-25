@@ -469,10 +469,10 @@ export class TcoVelaDataProvider implements DataProvider {
     const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
-    // Start/attach to the single-flight, then inspect the cache immediately.
-    // ensureReadyHistory installs fresh/stale HistoryStore rows synchronously before
-    // its first network await, so real candles can paint without waiting for refresh.
-    const historyPromise = plane.ensureReadyHistory(firstPaintBars)
+    // Paint from the current cache immediately, but request the FULL target in the
+    // background. ensureReadyHistory paints any short cache and continues fetching
+    // rather than treating it as complete merely because it contains a few sessions.
+    const historyPromise = plane.ensureReadyHistory(requested)
       .then(historicalToVelaBars)
       .catch(() => [] as OHLCV[]);
 
