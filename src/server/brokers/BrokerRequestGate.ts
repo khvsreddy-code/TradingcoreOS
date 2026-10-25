@@ -250,7 +250,9 @@ export async function withBrokerRequestGate<T>(
           if (priority === 'background') await distributed.incrementWindow(backgroundMinuteKey, 61_000, effectiveSignal);
         }
 
-        await distributed.set(lastKey, String(admittedAt), { px: 61_000 }, effectiveSignal);
+        // Start spacing from the end of quota admission, not before the Redis
+        // counter round-trips; the provider call begins immediately after release.
+        await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, effectiveSignal);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') throw error;
         const details = error && typeof error === 'object' ? error as Record<string, unknown> : {};
