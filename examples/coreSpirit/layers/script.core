@@ -1,7 +1,0 @@
-// CoreSpirit Script: chart-native indicator + signal
-fast = ema(close, 20)
-slow = ema(close, 50)
-long = crossover(fast, slow)
-plot(fast)
-plot(slow)
-signal(long, "LONG")
