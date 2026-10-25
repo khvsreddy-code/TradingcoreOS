@@ -835,41 +835,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     }
   };
 
-  const save = async () => {
-    localStorage.setItem(versionedStorageKey('editor'), source);
-    setCloudStatus('loading');
-    try {
-      const result = await saveEditorScript(source, lastCompile || undefined);
-      setCloudScriptId(result.script.id);
-      setCloudStatus('saved');
-      setDiagnostics([{ severity: 'info', message: `Saved CoreSpirit v${result.version.version} to cloud.` }]);
-    } catch (error: unknown) {
-      setCloudStatus('error');
-      setDiagnostics([{ severity: 'info', message: `Saved locally. Cloud save unavailable: ${error instanceof Error ? error.message : String(error)}` }]);
-    }
-  };
-
-  return <WorkspaceModuleShell active="/corespirit" onNavigate={onNavigate} onBackToLanding={onBackToLanding} onBroker={onBroker}>
-    <ModuleHeader eyebrow="CoreSpirit IDE" title="CoreSpirit Coder" description="A CoreSpirit-first script workspace for TradingCoreOS, with a small language surface that can express indicators, models, drawings, multi-symbol data and realtime automation." action={<div className="flex flex-wrap gap-2"><button onClick={()=>onNavigate('/corespirit')} className="premium-button"><BookOpen className="w-4 h-4"/> Script Docs</button><button onClick={()=>setUseMonaco(v=>!v)} className="premium-button"><Code2 className="w-4 h-4"/>{useMonaco && monacoStatus==='ready' ? 'Classic Editor' : 'Monaco Editor'}</button><button onClick={save} className="premium-button"><Save className="w-4 h-4"/> Save</button><button onClick={compile} className="premium-button premium-button-primary"><Play className="w-4 h-4"/> Compile</button><button onClick={runOnChart} className="premium-button"><Zap className="w-4 h-4"/> Run on chart</button></div>} />
-    <main aria-label="CoreSpirit research workspace" className="grid min-h-[calc(100vh-170px)] gap-4 p-4 md:p-6 xl:grid-cols-[1fr_300px]">
-      <Panel title="SCRIPT EDITOR" subtitle="Compile, review diagnostics, and run the validated artifact on the active Vela chart." className="min-h-[650px] overflow-hidden">
-        <div className="flex h-[610px] overflow-hidden rounded-lg border border-[var(--tco-border)] bg-[var(--tco-code-bg)] font-mono text-[12px]">
-          <div className="w-12 shrink-0 select-none overflow-hidden border-r border-[var(--tco-border-soft)] bg-[var(--tco-surface)] py-3 text-right text-[var(--tco-slate)]">{lines.map(n => <div key={n} className="h-[20px] pr-3 leading-[20px]">{n}</div>)}</div>
-          <div className="relative min-w-0 flex-1 overflow-hidden">
-            <div ref={monacoRef} className={`absolute inset-0 z-30 ${useMonaco && monacoStatus !== 'fallback' ? 'block' : 'hidden'}`} />
-            <pre ref={highlightRef} aria-hidden className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 leading-[20px] text-[var(--tco-code-text)]">{highlighted.map((line,i)=><div key={i} className="h-[20px]">{line}</div>)}</pre>
-            <textarea
-              ref={editorRef}
-              value={source}
-              onChange={e => setEditorSource(e.target.value,{completionPrefix:completionState.prefix,cursor:e.target.selectionStart,showCompletions:true})}
-              onKeyDown={e => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void save(); return; }
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void runOnChart(); return; }
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); const snap=editorModel.undo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); const snap=editorModel.redo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
-                if (showCompletions && e.key === 'ArrowDown') { e.preventDefault(); setCompletionIndex(i=>Math.min(i+1,Math.max(0,completionItems.length-1))); return; }
-                if (showCompletions && e.key === 'ArrowUp') { e.preventDefault(); setCompletionIndex(i=>Math.max(0,i-1)); return; }
-                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(next.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); retu  const applyCopilotDraft=async()=>{
+  const applyCopilotDraft=async()=>{
     const draft=copilotDraft;
     if(!draft)return;
     const payload=draft.payload;
@@ -970,7 +936,42 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       setCopilotError(error instanceof Error?error.message:String(error));
     }
   };
-rn; }
+
+  const save = async () => {
+    localStorage.setItem(versionedStorageKey('editor'), source);
+    setCloudStatus('loading');
+    try {
+      const result = await saveEditorScript(source, lastCompile || undefined);
+      setCloudScriptId(result.script.id);
+      setCloudStatus('saved');
+      setDiagnostics([{ severity: 'info', message: `Saved CoreSpirit v${result.version.version} to cloud.` }]);
+    } catch (error: unknown) {
+      setCloudStatus('error');
+      setDiagnostics([{ severity: 'info', message: `Saved locally. Cloud save unavailable: ${error instanceof Error ? error.message : String(error)}` }]);
+    }
+  };
+
+  return <WorkspaceModuleShell active="/corespirit" onNavigate={onNavigate} onBackToLanding={onBackToLanding} onBroker={onBroker}>
+    <ModuleHeader eyebrow="CoreSpirit IDE" title="CoreSpirit Coder" description="A CoreSpirit-first script workspace for TradingCoreOS, with a small language surface that can express indicators, models, drawings, multi-symbol data and realtime automation." action={<div className="flex flex-wrap gap-2"><button onClick={()=>onNavigate('/corespirit')} className="premium-button"><BookOpen className="w-4 h-4"/> Script Docs</button><button onClick={()=>setUseMonaco(v=>!v)} className="premium-button"><Code2 className="w-4 h-4"/>{useMonaco && monacoStatus==='ready' ? 'Classic Editor' : 'Monaco Editor'}</button><button onClick={save} className="premium-button"><Save className="w-4 h-4"/> Save</button><button onClick={compile} className="premium-button premium-button-primary"><Play className="w-4 h-4"/> Compile</button><button onClick={runOnChart} className="premium-button"><Zap className="w-4 h-4"/> Run on chart</button></div>} />
+    <main aria-label="CoreSpirit research workspace" className="grid min-h-[calc(100vh-170px)] gap-4 p-4 md:p-6 xl:grid-cols-[1fr_300px]">
+      <Panel title="SCRIPT EDITOR" subtitle="Compile, review diagnostics, and run the validated artifact on the active Vela chart." className="min-h-[650px] overflow-hidden">
+        <div className="flex h-[610px] overflow-hidden rounded-lg border border-[var(--tco-border)] bg-[var(--tco-code-bg)] font-mono text-[12px]">
+          <div className="w-12 shrink-0 select-none overflow-hidden border-r border-[var(--tco-border-soft)] bg-[var(--tco-surface)] py-3 text-right text-[var(--tco-slate)]">{lines.map(n => <div key={n} className="h-[20px] pr-3 leading-[20px]">{n}</div>)}</div>
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <div ref={monacoRef} className={`absolute inset-0 z-30 ${useMonaco && monacoStatus !== 'fallback' ? 'block' : 'hidden'}`} />
+            <pre ref={highlightRef} aria-hidden className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 leading-[20px] text-[var(--tco-code-text)]">{highlighted.map((line,i)=><div key={i} className="h-[20px]">{line}</div>)}</pre>
+            <textarea
+              ref={editorRef}
+              value={source}
+              onChange={e => setEditorSource(e.target.value,{completionPrefix:completionState.prefix,cursor:e.target.selectionStart,showCompletions:true})}
+              onKeyDown={e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void save(); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void runOnChart(); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); const snap=editorModel.undo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); const snap=editorModel.redo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
+                if (showCompletions && e.key === 'ArrowDown') { e.preventDefault(); setCompletionIndex(i=>Math.min(i+1,Math.max(0,completionItems.length-1))); return; }
+                if (showCompletions && e.key === 'ArrowUp') { e.preventDefault(); setCompletionIndex(i=>Math.max(0,i-1)); return; }
+                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(next.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); return; }
                 if (e.key === 'Escape') setShowCompletions(false);
               }}
               onKeyUp={e => { setCursor(e.currentTarget.selectionStart); if (/[A-Za-z_.]/.test(e.key) || e.key === 'Backspace') { setShowCompletions(true); setCompletionIndex(0); } }}
