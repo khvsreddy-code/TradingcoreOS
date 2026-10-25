@@ -180,7 +180,7 @@ export function monitorCoreSpiritFeatureDrift(input: {
     const baselineValid = baselineRaw.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
     const observedValid = observedRaw.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
     const missingRate = observedEligible.length ? observedRaw.filter(value => value === null || value === undefined).length / observedEligible.length : 1;
-    const invalidRate = observedEligible.length ? observedRaw.filter(value => typeof value !== 'number' || !Number.isFinite(value)).length / observedEligible.length : 1;
+    const invalidRate = observedEligible.length ? observedRaw.filter(value => value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))).length / observedEligible.length : 1;
     const enoughData = baselineEligible.length >= options.minimumBaselineRows &&
       observedEligible.length >= options.minimumObservedRows &&
       baselineValid.length >= options.minimumBaselineRows * 0.8 &&
