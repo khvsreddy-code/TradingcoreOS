@@ -6,6 +6,7 @@ import {
   validateCoreSpiritSandboxArchitecture,
 } from './services/coreSpirit/capabilitySandbox.ts';
 import { detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
+import { parseCoreSpiritAiInvocationRequest } from './services/coreSpirit/aiInvocation.ts';
 
 const source = `
 requires ai.invoke, market.tick
@@ -13,6 +14,28 @@ requires ai.invoke, market.tick
 on market.tick:
     signal "AI_REQUEST_PENDING"
 `;
+
+const validRequest = parseCoreSpiritAiInvocationRequest({
+  source,
+  artifactHash: 'a'.repeat(64),
+  prompt: 'Summarize this already-available, causal feature context.',
+  context: { close: 100, features: [0.1, 0.2] },
+  outputTokenLimit: 128,
+});
+assert.equal(validRequest.outputTokenLimit, 128);
+assert.equal(validRequest.context.close, 100);
+assert.throws(() => parseCoreSpiritAiInvocationRequest({
+  source, artifactHash: 'a'.repeat(64), prompt: 'api_key=supersecretvalue', context: {},
+}), /credentials or secret values/);
+assert.throws(() => parseCoreSpiritAiInvocationRequest({
+  source, artifactHash: 'a'.repeat(64), prompt: 'bounded request', context: { api_key: 'supersecretvalue' },
+}), /credentials or secret fields/);
+assert.throws(() => parseCoreSpiritAiInvocationRequest({
+  source, artifactHash: 'a'.repeat(64), prompt: 'bounded request', context: {}, outputTokenLimit: 2048,
+}), /outputTokenLimit/);
+assert.throws(() => parseCoreSpiritAiInvocationRequest({
+  source, artifactHash: 'not-a-compiler-hash', prompt: 'bounded request', context: {},
+}), /64-character compiler artifact hash/);
 
 const compiled = compileCoreSpirit(source, 'ai-invoke-capability-contract', { layer: 'automation' });
 const errors = compiled.diagnostics.filter(item => item.severity === 'error');
