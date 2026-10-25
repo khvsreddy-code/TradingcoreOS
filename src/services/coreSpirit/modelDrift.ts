@@ -204,9 +204,11 @@ export function monitorCoreSpiritFeatureDrift(input: {
     });
   });
 
+  const critical = features.some(feature => feature.status === 'critical');
   const insufficient = blockers.some(message => message.includes('too few')) ||
     features.some(feature => feature.status === 'insufficient-evidence');
-  const status = insufficient ? 'insufficient-evidence' : blockers.length ? 'critical' : warnings.length ? 'warning' : 'healthy';
+  // Never hide a measured critical feature failure behind an unrelated thin sample.
+  const status = critical || (blockers.length > 0 && !insufficient) ? 'critical' : insufficient ? 'insufficient-evidence' : warnings.length ? 'warning' : 'healthy';
   return Object.freeze({
     protocol: 'corespirit-feature-drift-v1' as const,
     status,
