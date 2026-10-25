@@ -25,6 +25,7 @@ export type CoreSpiritAuthoringLevelFacts = Readonly<{
   systemEvent?: boolean;
   automation?: boolean;
   orderIntent?: boolean;
+  aiInvoke?: boolean;
 }>;
 
 const CORE_SPIRIT_AUTHORING_LEVEL_RANK: Readonly<Record<CoreSpiritAuthoringLevel, number>> = Object.freeze({
@@ -50,7 +51,7 @@ export function inferCoreSpiritRequiredLevel(input: CoreSpiritAuthoringLevelFact
   let level = input.baseLevel ?? 'beginner';
   if (input.strategy || input.multiSymbol || input.multiTimeframe || input.orderIntent) level = higherAuthoringLevel(level, 'trader');
   if (input.model || input.research || input.matrix || input.tensor) level = higherAuthoringLevel(level, 'quant');
-  if (input.systemEvent || input.automation) level = higherAuthoringLevel(level, 'system');
+  if (input.systemEvent || input.automation || input.aiInvoke) level = higherAuthoringLevel(level, 'system');
   return level;
 }
 
