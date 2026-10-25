@@ -5,6 +5,7 @@ import { assertFyersQuoteBatch, DEFAULT_FYERS_CAPABILITIES, type FyersCapabiliti
 type QuoteCacheEntry = { expiresAt: number; value: unknown };
 const QUOTE_CACHE_TTL_MS = 1_500;
 const QUOTE_CACHE_MAX_ENTRIES = 256;
+const QUOTE_IN_FLIGHT_MAX_ENTRIES = 512;
 const quoteResponseCache = new Map<string, QuoteCacheEntry>();
 const quoteRequestsInFlight = new Map<string, Promise<unknown>>();
 
@@ -75,17 +76,21 @@ export class FyersMarketDataService {
       sharedRequest = this.client.dataGet('/quotes', {
         symbols: uniqueSymbols.join(','),
       }, undefined, API_LATENCY_BUDGET_MS.quote, 'interactive');
-      quoteRequestsInFlight.set(key, sharedRequest);
-      void sharedRequest.then(
-        value => {
-          quoteResponseCache.set(key, { expiresAt: Date.now() + QUOTE_CACHE_TTL_MS, value });
-          trimQuoteCache();
-          if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
-        },
-        () => {
-          if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
-        },
-      );
+      // Bound the in-flight registry under unusual multi-user bursts; every
+      // untracked request still passes through the distributed FYERS quota gate.
+      if (quoteRequestsInFlight.size < QUOTE_IN_FLIGHT_MAX_ENTRIES) {
+        quoteRequestsInFlight.set(key, sharedRequest);
+        void sharedRequest.then(
+          value => {
+            quoteResponseCache.set(key, { expiresAt: Date.now() + QUOTE_CACHE_TTL_MS, value });
+            trimQuoteCache();
+            if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
+          },
+          () => {
+            if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
+          },
+        );
+      }
     }
     return withCallerAbort(sharedRequest, signal);
   }
