@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+const copilotRoute = read('./server/routes/coreSpirit-copilot.routes.ts');
+const aiWorker = read('./server/jobs/coreSpiritAiInvocation.ts');
+const aiContract = read('./services/coreSpirit/aiInvocation.ts');
+const draftHelper = read('./services/coreSpirit/copilotDraft.ts');
+const draftRepository = read('./server/storage/CoreSpiritCopilotDraftRepository.ts');
+const migration = read('../supabase/migrations/20261025090000_corespirit_copilot_drafts.sql');
+const editor = read('./pages/CoreSpiritEditorPage.tsx');
+const languagePolicy = read('./services/coreSpirit/coreScriptLanguagePolicy.ts');
+const sandbox = read('./services/coreSpirit/capabilitySandbox.ts');
+
+assert.match(copilotRoute, /post\('\/generate\/stream'/, 'authenticated Copilot SSE route is registered');
+assert.match(copilotRoute, /generateContentStream/, 'streaming uses the provider streaming API');
+assert.match(copilotRoute, /repairAttempts=1/, 'compile-guided repair has a fixed one-attempt cap');
+assert.match(copilotRoute, /searchCoreSpiritCopilotKnowledge/, 'Copilot context and search use the versioned knowledge index');
+assert.match(copilotRoute, /CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION/, 'knowledge version is tied to Copilot artifact provenance');
+assert.match(copilotRoute, /buildCoreSpiritReviewPatch/, 'source changes return a review-only diff');
+assert.match(copilotRoute, /post\('\/invoke'/, 'asynchronous invocation host API is registered');
+assert.match(copilotRoute, /required\.includes\('ai\.invoke'\)/, 'request JSON cannot self-grant ai.invoke');
+assert.match(copilotRoute, /incrementWindow\('tco:corespirit:ai-invoke:minute:/, 'distributed per-minute budget is enforced');
+assert.match(copilotRoute, /incrementWindow\('tco:corespirit:ai-invoke:hour:/, 'distributed per-hour budget is enforced');
+assert.match(copilotRoute, /acquireLock\(lockKey,lockOwner/, 'one active job per user is coordinated through Redis');
+assert.match(copilotRoute, /enqueueBackgroundJob\(userId,'corespirit_ai_invoke'/, 'remote invocation is enqueued off the candle path');
+assert.match(copilotRoute, /get\('\/knowledge'/, 'authenticated searchable knowledge endpoint is exposed');
+assert.match(copilotRoute, /get\('\/drafts'/, 'private draft history is exposed');
+
+assert.match(aiContract, /maxSourceBytes: 64 \* 1024/, 'source input has a byte bound');
+assert.match(aiContract, /maxContextBytes: 16 \* 1024/, 'context input has a byte bound');
+assert.match(aiContract, /providerTimeoutMs: 20_000/, 'provider timeout is explicit');
+assert.match(aiContract, /maxOutputTokens: 1_024/, 'model output is bounded');
+assert.match(aiContract, /createCoreSpiritAiInputFingerprint/, 'cache identity includes canonical request identity');
+assert.match(aiContract, /executable: false/, 'AI result contract is inert data');
+assert.match(aiContract, /mayCreateOrderIntent: false/, 'AI result cannot directly create an order intent');
+assert.match(aiWorker, /compileCoreSpirit\(input\.source/, 'worker re-compiles input source independently');
+assert.match(aiWorker, /validateExecutableArtifact/, 'worker revalidates artifact integrity');
+assert.match(aiWorker, /AbortSignal\.timeout\(CORE_SPIRIT_AI_INVOKE_LIMITS\.providerTimeoutMs\)/, 'remote model call has a timeout');
+assert.match(aiWorker, /finally\s*\{\s*await redis\.releaseLock/, 'the invocation lease is released after work');
+assert.match(aiWorker, /advisory text data/, 'worker documentation constrains output to inert advisory data');
+assert.match(aiWorker, /automaticContinuation: false/, 'provider continuation is disabled');
+assert.match(draftHelper, /knowledgeHitIds/, 'draft fingerprint identity includes the matched knowledge entries');
+assert.match(draftHelper, /baseSourceHash/, 'draft fingerprint is tied to the exact base source');
+assert.match(draftHelper, /compiledArtifactHash/, 'draft provenance records the independent compiler artifact hash where valid');
+assert.match(draftRepository, /\.eq\('user_id', userId\)/, 'artifact reads are scoped to the authenticated user');
+assert.match(migration, /enable row level security/i, 'draft table has RLS enabled');
+assert.match(migration, /grant all on public\.corespirit_copilot_drafts to service_role/i, 'only the server service role receives table writes');
+
+const generateStart = editor.indexOf('const generateCopilotDraft=async()=>{');
+const applyStart = editor.indexOf('const applyCopilotDraft=async()=>{');
+assert.ok(generateStart >= 0 && applyStart > generateStart, 'editor has separate generate and explicit-apply flows');
+const generateBlock = editor.slice(generateStart, applyStart);
+const applyBlock = editor.slice(applyStart);
+assert.doesNotMatch(generateBlock, /setEditorSource\(payload\.source\)/, 'generation must not overwrite the editor');
+assert.match(generateBlock, /setCopilotDraft\(/, 'generation stages an untrusted review candidate');
+assert.match(applyBlock, /Apply reviewed draft|setEditorSource\(payload\.source\)/, 'editor source mutation belongs to the explicit apply flow');
+assert.match(applyBlock, /baseEditorVersion/, 'apply rejects a stale editor snapshot');
+assert.match(applyBlock, /previewCoreSpiritArtifactOffThread/, 'apply path retains isolated replay validation');
+assert.match(editor, /Suggested tests · not executed/, 'generated tests are clearly presented as unexecuted suggestions');
+assert.match(editor, /Private draft history/, 'user can browse saved Copilot versions');
+assert.match(editor, /Documentation and standard-library search/, 'user can search versioned CoreScript knowledge');
+
+assert.match(languagePolicy, /'ai\.invoke'/, 'ai.invoke is a recognized declared capability');
+assert.match(sandbox, /'ai-invoke'/, 'sandbox has a distinct AI invocation permission');
+assert.match(sandbox, /ai\.invoke must remain outside synchronous chart\/replay\/backtest/, 'architecture guard prevents hot-path grants');
+console.log('CORESPIRIT_AI_NATIVE_CONTRACT_OK');
