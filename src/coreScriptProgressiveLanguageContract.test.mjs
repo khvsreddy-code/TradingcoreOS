@@ -139,6 +139,23 @@ assert.ok(!beginnerProfile.showIr);
 assert.ok(quantProfile.showIr);
 assert.ok(systemProfile.showCapabilities);
 
+
+const inferredCases = [
+  ['beginner', beginner, beginnerIr],
+  ['trader', trader, traderIr],
+  ['quant', quant, quantIr],
+  ['system', system, systemIr],
+];
+for (const [expectedLevel, source, compiledIr] of inferredCases) {
+  const editorAnalysis = buildCoreSpiritAuthoringExperience(source, 'beginner');
+  assert.equal(editorAnalysis.requiredLevel, expectedLevel,
+    'editor/source inference should agree for the ' + expectedLevel + ' example');
+  assert.equal(compiledIr?.authoringLevel, editorAnalysis.requiredLevel,
+    'compiler metadata and editor inference must share one source-required level');
+  assert.equal(compiledIr?.languagePolicy?.level, editorAnalysis.requiredLevel,
+    'CoreScript language policy must expose the same source-required level');
+}
+
 console.log('CORESCRIPT_PROGRESSIVE_UNIFIED_LANGUAGE_CONTRACT_OK');
 
 
