@@ -15,7 +15,7 @@ const runtime = read('src/services/runtime/TradingCoreRuntime.ts');
 
 const initialBlock = policy.match(/export const INITIAL_HISTORY_CANDLES:[\s\S]*?\n};/)?.[0] || '';
 const policyValues = [...initialBlock.matchAll(/'[^']+':\s*([0-9_]+)/g)].map((match) => Number(match[1].replace(/_/g, '')));
-assert.ok(policyValues.length > 0 && policyValues.every((value) => value === 2000), 'initial and warm policy should use the shared 5,000-bar window');
+assert.ok(policyValues.length > 0 && policyValues.every((value) => value === 2000), 'initial chart window should use the shared 2,000-bar limit');
 assert.match(policy, /HISTORICAL_DATASET_MAX_BARS\s*=\s*2_000/);
 assert.match(service, /HISTORICAL_RECENT_SESSIONS\s*=\s*3/);
 assert.match(service, /refreshed = await \(inflight\.get\(key\) \|\| this\.refresh\(/, 'existing refresh work must be awaited before assigning its CacheRecord');

@@ -3,6 +3,7 @@ import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, More
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsBundle, type TradingCoreNewsItem } from '../../services/news/newsService';
 import type { InstrumentSearchSegment, SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../services/marketData/watchlistTechnicals';
+import { historyStore } from '../../services/marketData/HistoryStore';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
 
@@ -195,7 +196,11 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       while (active && cursor < pending.length) {
         const item = pending[cursor++]!;
         try {
-          const candles = await tradingCoreRuntime.getHistoricalData(item.key, '5minute', controller.signal, 2_000);
+          await historyStore.hydrate(String(broker || 'unknown').toLowerCase(), item.key, '5minute');
+          const savedCandles = historyStore.getStale(String(broker || 'unknown').toLowerCase(), item.key, '5minute');
+          const candles = savedCandles?.length
+            ? savedCandles.slice(-2_000)
+            : await tradingCoreRuntime.getHistoricalData(item.key, '5minute', controller.signal, 2_000);
           if (active) {
             const summary = buildWatchlistTechnicalSummary(candles);
             technicalByKeyRef.current[item.key] = summary;
@@ -278,7 +283,8 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
               <small className={technicalByKey[item.key] ? `tct-wl-tech tct-wl-tech-${technicalByKey[item.key]!.trend.toLowerCase()}` : 'tct-wl-tech'}>
                 {technicalByKey[item.key]
                   ? `${technicalByKey[item.key]!.trend.toUpperCase()} · RSI ${technicalByKey[item.key]!.rsi14.toFixed(1)} · EMA20 ${formatPrice(technicalByKey[item.key]!.ema20)}`
-                  : technicalLoadingByKey[item.key] ? 'Calculating technicals…' : 'Technicals pending'}
+                  : technicalLoadingByKey[item.key] ? 'Calculating technicals…'
+                    : Object.prototype.hasOwnProperty.call(technicalByKey, item.key) ? 'Technicals unavailable' : 'Technicals pending'}
               </small>
               <small className="tct-wl-news">
                 {newsByKey[item.key]?.items[0]?.title || (newsLoadingByKey[item.key] ? 'Fetching news…' : newsByKey[item.key] ? 'No recent news' : 'News pending')}
