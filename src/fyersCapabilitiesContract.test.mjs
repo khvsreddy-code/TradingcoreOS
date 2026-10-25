@@ -66,6 +66,7 @@ const streamRoute = read('./server/routes/broker-market-data.routes.ts');
 const streamTransport = read('./server/marketData/FyersMarketDataTransport.ts');
 const apiClient = read('./server/fyers/core/FyersApiClient.ts');
 const requestGate = read('./server/brokers/BrokerRequestGate.ts');
+const server = read('../server.ts');
 const historyRoute = read('./server/routes/fyers-history.routes.ts');
 const historyDataRoute = read('./server/routes/broker-market-data.routes.ts');
 const canonicalHistory = read('./server/marketData/canonicalHistoricalData.ts');
@@ -98,6 +99,8 @@ assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where
 assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy history endpoint must gate seconds data by server-resolved plan');
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
 assert.match(historyDataRoute, /fetchFyersHistoryTarget\(session\.token, symbol, interval, limit, capabilities, session\.userId\)/, 'legacy history must pass the resolved plan and stable user ID');
+assert.match(legacyHistoryRoute, /rateLimitIdentity: string/, 'legacy history helper APIs require an explicit stable identity');
+assert.doesNotMatch(legacyHistoryRoute, /rateLimitIdentity\s*=\s*accessToken/, 'legacy history must never fall back to rotating access-token quota identity');
 assert.match(canonicalHistory, /client!\.dataGet<any>\('\/history'/, 'canonical history requests must use the capability-aware Data API client');
 assert.match(canonicalHistory, /fallbackQuoteSnapshot\(client!/, 'only initial empty history may fetch a quote snapshot');
 assert.match(brokerAdapter,/assertFyersQuoteBatch\(symbols, capabilities\)/,'legacy adapter quotes must share the capability boundary');
@@ -116,6 +119,10 @@ assert.doesNotMatch(brokerAdapter,/rateLimitIdentity\s*=\s*accessToken/,'no lega
 assert.match(streamRoute,/capabilities, session\.userId\)/,'legacy history requests must pass authenticated user identity');
 
 assert.match(requestGate,/process\.env\.NODE_ENV === 'production'/,'production always requires distributed quota coordination');
+assert.match(requestGate,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true'/,'the explicit production safety flag must require shared coordination');
+assert.match(server,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true'/,'readiness recognizes the explicit fail-closed coordination setting');
+assert.match(server,/checks\.coordination && checks\.coordinationReachable/,'readiness must fail when shared Redis is missing or unreachable');
+assert.match(server,/coordinationReachable = checks\.coordinationRequired \? await sharedRedisHealthy\(\)/,'readiness performs a real Redis health check when coordination is required');
 assert.match(requestGate,/BROKER_COORDINATION_UNAVAILABLE/,'configured Redis outages must fail closed as 503 responses');
 assert.match(requestGate,/BROKER_COORDINATION_LOCK_TIMEOUT/,'shared quota lock waits are bounded');
 assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention storm cannot hold a request indefinitely');
