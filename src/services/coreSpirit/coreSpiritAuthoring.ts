@@ -86,7 +86,7 @@ export function detectCoreSpiritAuthoringLevel(source:string): CoreSpiritAuthori
     hasResearch: /\b(?:research|backtest|evaluate|optimi[sz]e|experiment|trainingData)\b/i.test(text),
     hasMatrix: /\bmatrix(?:<|\s*\()/i.test(text),
     hasTensor: /\btensor(?:<|\s*\()/i.test(text),
-    hasMultiSymbol: /\bmarket\s*\(/i.test(text) && (text.match(/\bmarket\s*\(/gi)?.length ?? 0) > 1),
+    hasMultiSymbol: /\bmarket\s*\(/i.test(text) && (text.match(/\bmarket\s*\(/gi)?.length ?? 0) > 1,
     hasMultiTimeframe: /\.timeframe\s*\(|\btimeframe\s*\(/i.test(text),
     hasSystemEvent: /\bon\s+(?:market\.tick|order\.fill|position\.update)\b/i.test(text),
     hasAutomation: /\b(?:automate\s+|automation\.)/i.test(text),

@@ -79,7 +79,7 @@ for (const path of [
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'keep native chart settings enabled');
 assert.match(nativeRenderer, /btn\.addEventListener\('pointerdown', \(event\) => event\.stopPropagation\(\)\)/, 'native settings gear must not bubble into chart gestures');
 assert.match(nativeRenderer, /this\.openSettingsDialog\(\)/, 'native gear must open the real Vela settings dialog');
-assert.match(symbols, /'Options'/, 'keep TCO's explicit Options market filter');
+assert.match(symbols, /'Options'/, "keep TCO's explicit Options market filter");
 assert.match(symbols, /queryTokens = q\.match/, 'search compact derivatives by separate query tokens');
 assert.match(provider, /Options:\s*\['NSE_FO', 'BSE_FO'\]/, 'Options search must use the FYERS derivatives masters');
 
