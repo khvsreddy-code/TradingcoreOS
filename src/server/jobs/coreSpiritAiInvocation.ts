@@ -73,6 +73,12 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
   const userHash = coreSpiritCopilotSha256(ownerUserId).slice(0, 32);
   const expectedLockKey = 'tco:corespirit:ai-invoke:active:' + userHash;
   const expectedCacheKey = 'tco:corespirit:ai-invoke:cache:' + userHash + ':' + payload.inputFingerprint;
+  const redis = getSharedRedis();
+  const releaseLease = async (): Promise<void> => {
+    if (!redis.configured || payload.lockKey !== expectedLockKey || typeof payload.lockOwner !== 'string' ||
+        typeof payload.invocationId !== 'string' || payload.lockOwner !== payload.invocationId) return;
+    await releaseLease();
+  };
   const expectedFingerprint = createCoreSpiritAiInputFingerprint({
     source: input.source,
     artifactHash: input.artifactHash,
@@ -89,10 +95,11 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
     payload.modelVersion !== expectedModelVersion ||
     payload.inputFingerprint !== expectedFingerprint
   ) {
+    await releaseLease();
     return unavailable(payload, 'job-integrity-failed', 'The queued AI job failed its input, model-version or cache-key integrity check.');
   }
 
-  const redis = getSharedRedis();
+
   if (!redis.configured) return unavailable(payload, 'coordination-unavailable', 'Distributed AI budget and concurrency controls are unavailable.');
 
   // Recompile and re-authorize in the worker. Never trust the enqueue request alone.
@@ -101,10 +108,12 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
   const compileErrors = compiled.diagnostics.filter(item => item.severity === 'error');
   if (!compiled.artifact || !validateExecutableArtifact(compiled.artifact) ||
       compiled.artifact.abi?.artifactHash !== input.artifactHash || !compiled.ir || compileErrors.length) {
+    await releaseLease();
     return unavailable(payload, 'artifact-revalidation-failed', 'The CoreScript artifact changed or no longer passes independent compiler integrity validation.');
   }
   const required = ir?.requiredCapabilities ?? [];
   if (!required.includes('ai.invoke')) {
+    await releaseLease();
     return unavailable(payload, 'capability-revalidation-failed', 'The current source does not declare ai.invoke.');
   }
   const sandbox = createCoreSpiritSandbox({ layer: 'automation', target: 'server' });
@@ -113,6 +122,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
     ...validateCoreScriptCapabilitiesAgainstSandbox(sandbox, required),
   ];
   if (sandboxErrors.length) {
+    await releaseLease();
     return unavailable(payload, 'sandbox-denied', 'The server automation sandbox denied the AI invocation.');
   }
 
@@ -123,7 +133,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
       const createdAt = Date.parse(cached.createdAt);
       if (cached.status === 'ready' && cached.inputFingerprint === expectedFingerprint &&
           Number.isFinite(createdAt) && Date.now() - createdAt < CORE_SPIRIT_AI_INVOKE_LIMITS.resultFreshnessMs) {
-        await redis.releaseLock(expectedLockKey, payload.lockOwner, AbortSignal.timeout(900)).catch(() => false);
+        await releaseLease();
         return { ...cached, cacheHit: true };
       }
     } catch { /* A corrupted cache entry is discarded below. */ }
@@ -137,7 +147,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
 
   const apiKey = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
   if (!apiKey) {
-    await redis.releaseLock(expectedLockKey, payload.lockOwner, AbortSignal.timeout(900)).catch(() => false);
+    await releaseLease();
     return unavailable(payload, 'provider-unconfigured', 'The AI provider is not configured on the server.');
   }
 
