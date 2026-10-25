@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
+import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
 import { TradingKillSwitchRepository } from '../trading/TradingKillSwitchRepository.js';
@@ -59,39 +60,40 @@ function isDefiniteOrderRejection(status: number): boolean {
 }
 
 tradingRoutes.get('/:brokerId/profile', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.getProfile(req.accessToken); res.json({ success: true, data }); }
+  try { const data = await req.brokerAdapter.getProfile(req.accessToken, req.tradingCoreUserId!); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
 });
 
 tradingRoutes.get('/:brokerId/funds', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.getFunds(req.accessToken); res.json({ success: true, data }); }
+  try { const data = await req.brokerAdapter.getFunds(req.accessToken, req.tradingCoreUserId!); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
 });
 
 tradingRoutes.get('/:brokerId/holdings', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.getHoldings(req.accessToken); res.json({ success: true, data }); }
+  try { const data = await req.brokerAdapter.getHoldings(req.accessToken, req.tradingCoreUserId!); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
 });
 
 tradingRoutes.get('/:brokerId/positions', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.getPositions(req.accessToken); res.json({ success: true, data }); }
+  try { const data = await req.brokerAdapter.getPositions(req.accessToken, req.tradingCoreUserId!); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
 });
 
 tradingRoutes.get('/:brokerId/orders', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.getOrders(req.accessToken); res.json({ success: true, data }); }
+  try { const data = await req.brokerAdapter.getOrders(req.accessToken, req.tradingCoreUserId!); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
 });
 
 tradingRoutes.get('/:brokerId/trades', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { res.json({ success: true, data: await req.brokerAdapter.getTrades(req.accessToken) }); }
+  try { res.json({ success: true, data: await req.brokerAdapter.getTrades(req.accessToken, req.tradingCoreUserId!) }); }
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load trades') }); }
 });
 
 tradingRoutes.get('/:brokerId/portfolio-snapshot', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   const adapter = req.brokerAdapter;
   const token = req.accessToken;
-  const tasks = { funds: () => adapter.getFunds(token), holdings: () => adapter.getHoldings(token), positions: () => adapter.getPositions(token), orders: () => adapter.getOrders(token), trades: () => adapter.getTrades(token) };
+  const userId = req.tradingCoreUserId!;
+  const tasks = { funds: () => adapter.getFunds(token, userId), holdings: () => adapter.getHoldings(token, userId), positions: () => adapter.getPositions(token, userId), orders: () => adapter.getOrders(token, userId), trades: () => adapter.getTrades(token, userId) };
   const entries = Object.entries(tasks);
   const results = await Promise.allSettled(entries.map(([, task]) => task()));
   const data: Record<string, unknown> = {};
@@ -104,7 +106,9 @@ tradingRoutes.get('/:brokerId/market-data', injectBrokerSession, async (req: Bro
   if (!instrumentKeys.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, no-transform');
   try {
-    res.json({ success: true, data: await req.brokerAdapter.getMarketQuotes(req.accessToken, instrumentKeys) });
+    const userId = req.tradingCoreUserId!;
+    const capabilities = req.params.brokerId.toLowerCase() === 'fyers' ? resolveFyersCapabilities(userId) : undefined;
+    res.json({ success: true, data: await req.brokerAdapter.getMarketQuotes(req.accessToken, instrumentKeys, capabilities, userId) });
   } catch (err: unknown) {
     const status = getErrorStatus(err) === 504 ? 504 : 502;
     res.status(status).json({ success: false, error: getErrorMessage(err, 'Unable to load market quotes') });
@@ -117,7 +121,11 @@ tradingRoutes.get('/:brokerId/historical', injectBrokerSession, async (req: Brok
   const requestedLimit = Number(req.query.limit ?? 2_000);
   const limit = Number.isFinite(requestedLimit) ? Math.max(100, Math.min(2_000, Math.floor(requestedLimit))) : 2_000;
   if (!instrumentKey || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
-  try { res.json({ success: true, data: await req.brokerAdapter.getHistoricalData(req.accessToken, instrumentKey, interval, limit) }); }
+  try {
+    const userId = req.tradingCoreUserId!;
+    const capabilities = req.params.brokerId.toLowerCase() === 'fyers' ? resolveFyersCapabilities(userId) : undefined;
+    res.json({ success: true, data: await req.brokerAdapter.getHistoricalData(req.accessToken, instrumentKey, interval, limit, capabilities, userId) });
+  }
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load historical data') }); }
 });
 
@@ -156,7 +164,11 @@ tradingRoutes.get('/:brokerId/market-stream', injectBrokerSession, (req: BrokerS
 tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   const instrumentKey = String(req.query.instrument_key || ''); const expiryDate = String(req.query.expiry_date || '');
   if (!instrumentKey || !expiryDate) { res.status(400).json({ success: false, error: 'instrument_key and expiry_date are required' }); return; }
-  try { res.json({ success: true, data: await req.brokerAdapter.getOptionChain(req.accessToken, instrumentKey, expiryDate) }); }
+  try {
+    const userId = req.tradingCoreUserId!;
+    const capabilities = req.params.brokerId.toLowerCase() === 'fyers' ? resolveFyersCapabilities(userId) : undefined;
+    res.json({ success: true, data: await req.brokerAdapter.getOptionChain(req.accessToken, instrumentKey, expiryDate, capabilities, userId) });
+  }
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load option chain') }); }
 });
 
@@ -424,7 +436,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
 tradingRoutes.put('/:brokerId/order/:orderId', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   try {
     if (!isRecord(req.body)) { res.status(400).json({ success: false, error: 'Order update payload must be a JSON object' }); return; }
-    const data = await req.brokerAdapter.modifyOrder(req.accessToken, req.params.orderId, req.body as BrokerOrderPayload); res.json({ success: true, data });
+    const data = await req.brokerAdapter.modifyOrder(req.accessToken, req.params.orderId, req.body as BrokerOrderPayload, req.tradingCoreUserId!); res.json({ success: true, data });
   }
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Broker rejected order update') }); }
 });
@@ -444,7 +456,7 @@ tradingRoutes.delete('/:brokerId/order/:orderId', injectBrokerSession, async (re
     }
   }
   try {
-    const data = await req.brokerAdapter.cancelOrder(req.accessToken, orderId);
+    const data = await req.brokerAdapter.cancelOrder(req.accessToken, orderId, userId);
     res.json({ success: true, data });
   } catch (err: unknown) {
     if (brokerId === 'fyers') {
