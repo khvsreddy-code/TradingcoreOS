@@ -273,9 +273,9 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [copilotDraftHistoryError,setCopilotDraftHistoryError]=useState('');
   const [copilotSavedDraft,setCopilotSavedDraft]=useState<CoreSpiritCopilotSavedDraftDetail|null>(null);
   const [copilotSavedDraftBusy,setCopilotSavedDraftBusy]=useState(false);
-  const [aiInvocationSource,setAiInvocationSource]=useState('requires ai.invoke, market.tick\\n\\non market.tick:\\n    signal "AI_REQUEST_PENDING"\\n');
+  const [aiInvocationSource,setAiInvocationSource]=useState('requires ai.invoke, market.tick\n\non market.tick:\n    signal "AI_REQUEST_PENDING"\n');
   const [aiInvocationPrompt,setAiInvocationPrompt]=useState('Review the supplied context, describe what it does and does not support, and state uncertainty explicitly.');
-  const [aiInvocationContext,setAiInvocationContext]=useState('{\\n  "symbol": "NIFTY",\\n  "timeframe": "5m",\\n  "features": {}\\n}');
+  const [aiInvocationContext,setAiInvocationContext]=useState('{\n  "symbol": "NIFTY",\n  "timeframe": "5m",\n  "features": {}\n}');
   const [aiInvocationOutputTokens,setAiInvocationOutputTokens]=useState(512);
   const [aiInvocationStatus,setAiInvocationStatus]=useState<'idle'|'compiling'|'queued'|'running'|'ready'|'unavailable'|'stale'|'error'>('idle');
   const [aiInvocationJobId,setAiInvocationJobId]=useState('');
