@@ -56,12 +56,14 @@ assert.equal(short.metrics.annualizedReturn, null, 'annualization must not guess
 assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(observations, {
   ...split, trainingEnd: split.validationStart,
 }, { transactionCostBps: 5, slippageBps: 2 }), /strictly before/);
-assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(observations.map((row, index) =>
-  index === 0 ? { ...row, outcomeAvailableAt: row.timestamp + 1_500 } : row), split,
-), { transactionCostBps: 5, slippageBps: 2 }), /overlapping/);
-assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(observations.map((row, index) =>
-  index === 2 ? { ...row, phase: 'developing' } : row), split,
-), { transactionCostBps: 5, slippageBps: 2 }), /unconfirmed/);
+assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(
+  observations.map((row, index) => index === 0 ? { ...row, outcomeAvailableAt: row.timestamp + 1_500 } : row),
+  split, { transactionCostBps: 5, slippageBps: 2 },
+), /overlapping/);
+assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(
+  observations.map((row, index) => index === 2 ? { ...row, phase: 'developing' } : row),
+  split, { transactionCostBps: 5, slippageBps: 2 },
+), /unconfirmed/);
 assert.throws(() => evaluateCoreSpiritOutOfSampleEconomics(observations, split, {
   transactionCostBps: 1_001, slippageBps: 2,
 }), /basis points/);
