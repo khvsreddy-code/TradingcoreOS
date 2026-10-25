@@ -267,7 +267,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [compilePending,setCompilePending]=useState(false);
   const [copilotPrompt,setCopilotPrompt]=useState('');
   const [copilotMode,setCopilotMode]=useState<CopilotMode>('generate');
-  const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'needs-fixes'|'blocked'|'error'>('idle');
+  const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'draft-ready'|'needs-fixes'|'blocked'|'error'|'analysis-complete'>('idle');
   const [copilotSummary,setCopilotSummary]=useState('');
   const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
   const [copilotArtifactHash,setCopilotArtifactHash]=useState<string|null>(null);
@@ -701,81 +701,18 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         setCopilotStatus('analysis-complete');
         return;
       }
-      copilotSourceRef.current=payload.source;
-      copilotValidationPassRef.current=payload.validation?.valid===true;
-      copilotServerArtifactHashRef.current=payload.validation?.artifactHash??null;
-      copilotValidationDiagnosticsRef.current=(payload.validation?.diagnostics||[]).map(d=>({
-        severity:d.severity==='warning'?'warning' as const:'error' as const,
-        message:d.message,line:d.line,start:d.start,end:d.end,code:d.code,
-      }));
-      setCopilotStatus('validating');
-      setEditorSource(payload.source);
-
-      // The AI can only supply source. Compile and validate it against the
-      // chart sandbox first, then replay that artifact in a dedicated worker.
-      const compiled=await compileSource(payload.source);
-      const compiledValid=Boolean(
-        compiled?.artifact&&compiled.ir&&
-        !compiled.diagnostics.some(item=>item.severity==='error')&&
-        copilotValidationPassRef.current===true&&
-        Boolean(copilotServerArtifactHashRef.current)&&
-        compiled.artifact.abi?.artifactHash===copilotServerArtifactHashRef.current,
-      );
-      if(!compiledValid||!compiled?.artifact){
-        setCopilotStatus('needs-fixes');
-        return;
-      }
-
-      const replayTarget=coreSpiritChartRegistry.getActive();
-      if(!replayTarget||replayTarget.chartId!==target?.chartId||replayTarget.symbol!==target?.symbol||replayTarget.timeframe!==target?.timeframe){
-        copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
-        setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the active chart changed after generation. Select the original chart and generate/revalidate the draft again.`);
-        return;
-      }
-      const recentBars=Array.from(replayTarget.getBars?.()??[]).slice(-3000);
-      if(!recentBars.length){
-        copilotReplayPassRef.current=false;
-        setCopilotSummary(prev=>`${prev}\n\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
-        setCopilotStatus('blocked');
-        return;
-      }
-
-      const replayContext={
-        chartId:replayTarget.chartId,
-        symbol:replayTarget.symbol,
-        timeframe:replayTarget.timeframe,
-        barsProcessed:recentBars.length,
-        datasetSignature:replayDatasetSignature(recentBars),
-      };
-      setCopilotStatus('replaying');
-      setCopilotSummary(prev=>`${prev}\n\nChecking the compiled artifact against the latest ${recentBars.length.toLocaleString()} chart bars in an isolated read-only replay…`);
-      try{
-        const replay=await previewCoreSpiritArtifactOffThread(compiled.artifact,recentBars,{
-          symbol:replayTarget?.symbol,
-          timeframe:replayTarget?.timeframe,
-          sourceId:'corespirit-copilot-preflight',
-        });
-        if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
-        const replayDiagnostics=replay.diagnostics.length
-          ? `\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
-          : '';
-        const activeAfterReplay=coreSpiritChartRegistry.getActive();
-        const latestBars=Array.from(activeAfterReplay?.getBars?.()??[]).slice(-3000);
-        const replayContextStillCurrent=Boolean(activeAfterReplay&&activeAfterReplay.chartId===replayContext.chartId&&
-          activeAfterReplay.symbol===replayContext.symbol&&activeAfterReplay.timeframe===replayContext.timeframe&&
-          latestBars.length===replayContext.barsProcessed&&replayDatasetSignature(latestBars)===replayContext.datasetSignature);
-        const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum)&&replayContextStillCurrent;
-        copilotReplayPassRef.current=replayPassed;
-        copilotReplayGateRef.current=replayPassed?{source:payload.source,artifactHash:compiled.artifact.abi?.artifactHash??'',...replayContext}:null;
-        setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed for this artifact and chart-history boundary.':replayContextStillCurrent?'\nRun is blocked until replay diagnostics are resolved and the draft passes again.':'\nThe active chart or its history changed during replay. Run is blocked; replay the current chart context again.'}`);
-        setCopilotStatus(replayPassed?'ready':replayContextStillCurrent?'needs-fixes':'blocked');
-      }catch(replayError){
-        if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
-        copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;
-        setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
-        // A missing replay result is not evidence of correctness: fail closed.
-        setCopilotStatus('blocked');
-      }
+      // Source is staged for review. Streaming output and this candidate do not mutate the editor.
+      setCopilotDraft({
+        payload,
+        baseSource:requestedSource,
+        baseEditorVersion:requestedEditorVersion,
+        target:{chartId:target?.chartId??null,symbol:target?.symbol??null,timeframe:target?.timeframe??null},
+      });
+      setCopilotStatus('draft-ready');
+      setCopilotSummary(payload.summary||'Draft generated. Review the diff, tests and diagnostics before applying.');
+      setCopilotAssumptions(payload.assumptions||[]);
+      setCopilotArtifactHash(payload.draftArtifact?.artifactHash?String(payload.draftArtifact.artifactHash):null);
+      return;
     }catch(error){
       if(generationRequest!==copilotGenerationRef.current)return;
       setCopilotStatus('error');
@@ -817,7 +754,108 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
                 if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); const snap=editorModel.redo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
                 if (showCompletions && e.key === 'ArrowDown') { e.preventDefault(); setCompletionIndex(i=>Math.min(i+1,Math.max(0,completionItems.length-1))); return; }
                 if (showCompletions && e.key === 'ArrowUp') { e.preventDefault(); setCompletionIndex(i=>Math.max(0,i-1)); return; }
-                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(next.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); return; }
+                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(next.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); retu  const applyCopilotDraft=async()=>{
+    const draft=copilotDraft;
+    if(!draft)return;
+    const payload=draft.payload;
+    const generationRequest=++copilotGenerationRef.current;
+    if(payload.analysisOnly){setCopilotError('Analysis-only reports cannot be applied as source.');return;}
+    if(editorModel.getSource()!==draft.baseSource||editorModel.getVersion()!==draft.baseEditorVersion){
+      setCopilotDraft(null);
+      setCopilotStatus('needs-fixes');
+      setCopilotError('The editor changed after this draft was generated. The candidate was discarded to prevent overwriting your edits; generate a fresh draft.');
+      return;
+    }
+    const target=coreSpiritChartRegistry.getActive();
+    if((target?.chartId??null)!==draft.target.chartId||(target?.symbol??null)!==draft.target.symbol||(target?.timeframe??null)!==draft.target.timeframe){
+      setCopilotDraft(null);setCopilotStatus('blocked');
+      setCopilotError('The active chart or timeframe changed after generation. The source was not applied; generate/review a draft for the selected context.');
+      return;
+    }
+    setCopilotDraft(null);setCopilotError('');setCopilotStreamPreview('');
+    try{
+        copilotSourceRef.current=payload.source;
+        copilotValidationPassRef.current=payload.validation?.valid===true;
+        copilotServerArtifactHashRef.current=payload.validation?.artifactHash??null;
+        copilotValidationDiagnosticsRef.current=(payload.validation?.diagnostics||[]).map(d=>({
+          severity:d.severity==='warning'?'warning' as const:'error' as const,
+          message:d.message,line:d.line,start:d.start,end:d.end,code:d.code,
+        }));
+        setCopilotStatus('validating');
+        setEditorSource(payload.source);
+  
+        // The AI can only supply source. Compile and validate it against the
+        // chart sandbox first, then replay that artifact in a dedicated worker.
+        const compiled=await compileSource(payload.source);
+        const compiledValid=Boolean(
+          compiled?.artifact&&compiled.ir&&
+          !compiled.diagnostics.some(item=>item.severity==='error')&&
+          copilotValidationPassRef.current===true&&
+          Boolean(copilotServerArtifactHashRef.current)&&
+          compiled.artifact.abi?.artifactHash===copilotServerArtifactHashRef.current,
+        );
+        if(!compiledValid||!compiled?.artifact){
+          setCopilotStatus('needs-fixes');
+          return;
+        }
+  
+        const replayTarget=coreSpiritChartRegistry.getActive();
+        if(!replayTarget||replayTarget.chartId!==target?.chartId||replayTarget.symbol!==target?.symbol||replayTarget.timeframe!==target?.timeframe){
+          copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
+          setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the active chart changed after generation. Select the original chart and generate/revalidate the draft again.`);
+          return;
+        }
+        const recentBars=Array.from(replayTarget.getBars?.()??[]).slice(-3000);
+        if(!recentBars.length){
+          copilotReplayPassRef.current=false;
+          setCopilotSummary(prev=>`${prev}\n\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
+          setCopilotStatus('blocked');
+          return;
+        }
+  
+        const replayContext={
+          chartId:replayTarget.chartId,
+          symbol:replayTarget.symbol,
+          timeframe:replayTarget.timeframe,
+          barsProcessed:recentBars.length,
+          datasetSignature:replayDatasetSignature(recentBars),
+        };
+        setCopilotStatus('replaying');
+        setCopilotSummary(prev=>`${prev}\n\nChecking the compiled artifact against the latest ${recentBars.length.toLocaleString()} chart bars in an isolated read-only replay…`);
+        try{
+          const replay=await previewCoreSpiritArtifactOffThread(compiled.artifact,recentBars,{
+            symbol:replayTarget?.symbol,
+            timeframe:replayTarget?.timeframe,
+            sourceId:'corespirit-copilot-preflight',
+          });
+          if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
+          const replayDiagnostics=replay.diagnostics.length
+            ? `\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
+            : '';
+          const activeAfterReplay=coreSpiritChartRegistry.getActive();
+          const latestBars=Array.from(activeAfterReplay?.getBars?.()??[]).slice(-3000);
+          const replayContextStillCurrent=Boolean(activeAfterReplay&&activeAfterReplay.chartId===replayContext.chartId&&
+            activeAfterReplay.symbol===replayContext.symbol&&activeAfterReplay.timeframe===replayContext.timeframe&&
+            latestBars.length===replayContext.barsProcessed&&replayDatasetSignature(latestBars)===replayContext.datasetSignature);
+          const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum)&&replayContextStillCurrent;
+          copilotReplayPassRef.current=replayPassed;
+          copilotReplayGateRef.current=replayPassed?{source:payload.source,artifactHash:compiled.artifact.abi?.artifactHash??'',...replayContext}:null;
+          setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed for this artifact and chart-history boundary.':replayContextStillCurrent?'\nRun is blocked until replay diagnostics are resolved and the draft passes again.':'\nThe active chart or its history changed during replay. Run is blocked; replay the current chart context again.'}`);
+          setCopilotStatus(replayPassed?'ready':replayContextStillCurrent?'needs-fixes':'blocked');
+        }catch(replayError){
+          if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
+          copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;
+          setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
+          // A missing replay result is not evidence of correctness: fail closed.
+          setCopilotStatus('blocked');
+        }
+    }catch(error){
+      if(generationRequest!==copilotGenerationRef.current)return;
+      setCopilotStatus('error');
+      setCopilotError(error instanceof Error?error.message:String(error));
+    }
+  };
+rn; }
                 if (e.key === 'Escape') setShowCompletions(false);
               }}
               onKeyUp={e => { setCursor(e.currentTarget.selectionStart); if (/[A-Za-z_.]/.test(e.key) || e.key === 'Backspace') { setShowCompletions(true); setCompletionIndex(0); } }}
