@@ -80,6 +80,10 @@ assert.match(quoteRoute, /for \(let start = 0; start < symbols\.length; start \+
 assert.match(quoteRoute, /maxSymbolsPerRequest = capabilities\.plan === 'prime' \? 5_000 : 200/, 'one public request must have a bounded total symbol budget');
 assert.doesNotMatch(quoteRoute, /symbols\.length\s*>\s*50/, 'route code must not duplicate the old fixed quote limit');
 assert.match(quoteService, /assertFyersQuoteBatch/, 'the service layer must enforce capability limits too');
+assert.match(quoteService, /QUOTE_CACHE_TTL_MS = 1_500/, 'recent quote responses are reused briefly to reduce duplicate reads');
+assert.match(quoteService, /quoteRequestsInFlight/, 'identical concurrent quote batches share one upstream request');
+assert.match(quoteService, /QUOTE_IN_FLIGHT_MAX_ENTRIES = 512/, 'quote deduplication remains bounded during multi-user bursts');
+assert.match(quoteService, /withCallerAbort\(sharedRequest, signal\)/, 'one caller abort cannot cancel a shared in-flight request for other consumers');
 assert.match(streamRoute, /capabilities\.maxStreamSymbols/);
 assert.match(streamRoute, /post\('\/:brokerId\/market-stream'/, 'large Prime stream subscriptions need a POST transport');
 assert.match(streamTransport, /checkSubscriptionCapacity/, 'active subscriptions must be capped as a union, not only per request');
@@ -112,6 +116,8 @@ assert.match(requestGate,/BROKER_COORDINATION_LOCK_TIMEOUT/,'shared quota lock w
 assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention storm cannot hold a request indefinitely');
 assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'transactions'/,'order book reads consume the transaction quota');
 assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'transactions'/,'trade book reads consume the transaction quota');
+assert.match(brokerAdapter,/fyersFetch\('\/orders', accessToken, \{\}, rateLimitIdentity, 'transactions'\)/,'legacy order-book calls consume transaction quota');
+assert.match(brokerAdapter,/fyersFetch\('\/tradebook', accessToken, \{\}, rateLimitIdentity, 'transactions'\)/,'legacy trade-book calls consume transaction quota');
 assert.match(accountService,/API_LATENCY_BUDGET_MS\.order, 'transactions'/,'margin requests are classified under transaction APIs');
 assert.match(legacyHistoryRoute,/datasetComplete: false/,'legacy history responses do not imply full dataset completeness');
 assert.match(legacyHistoryRoute,/providerPageLimit: 2_000/,'legacy history responses disclose the provider request ceiling');
