@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { BackgroundJobRepository } from '../storage/BackgroundJobRepository.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
+import { validateCoreSpiritAiInvocationResult } from '../../services/coreSpirit/aiInvocation.js';
 
 export const backgroundJobRoutes = Router();
 backgroundJobRoutes.use(requireUser);
@@ -44,7 +45,6 @@ backgroundJobRoutes.get('/:jobId', async (req: AuthenticatedRequest, res: Respon
     res.setHeader('Cache-Control', 'no-store');
     let visibleResult = job.result;
     if (job.kind === 'corespirit_ai_invoke') {
-      const { validateCoreSpiritAiInvocationResult } = await import('../../services/coreSpirit/aiInvocation.js');
       const payload = job.payload && typeof job.payload === 'object' ? job.payload : {};
       const validated = validateCoreSpiritAiInvocationResult(job.result, {
         artifactHash: typeof payload.artifactHash === 'string' ? payload.artifactHash : undefined,
