@@ -343,7 +343,6 @@ export class CoreSpiritOptimizedExecutionVM {
       // Any failed run leaves a partial register file. Mark it invalid until a
       // full/dirty execution finishes successfully, so the next tick falls back.
       if (ownsLease && lease) lease.hasValidValues = false;
-      if (options.resetValues === true) values.clear();
       const dirty = canReuseDirtyValues && requestedDirty
         ? expandDirtyInstructionSet(instructions, requestedDirty)
         : undefined;
@@ -355,7 +354,6 @@ export class CoreSpiritOptimizedExecutionVM {
       while (pc < plan.instructions.length) {
         if (++steps > host.maxStepsPerBar) throw new Error('execution step limit exceeded');
         if ((steps & 1023) === 0) host.throwIfAborted();
-        const ins = plan.instructions[pc]!;
         const instructionPc = pc;
         const computational = isComputationalInstruction(instructions[instructionPc]!);
         if (dirty && computational && !dirty.has(instructionPc) && isSafeToSkipDirty(instructions[instructionPc]!)) {
