@@ -2,6 +2,40 @@ import { FyersApiClient } from '../core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS } from '../../latency/budgets.js';
 import { assertFyersQuoteBatch, DEFAULT_FYERS_CAPABILITIES, type FyersCapabilities } from '../core/FyersCapabilities.js';
 
+type QuoteCacheEntry = { expiresAt: number; value: unknown };
+const QUOTE_CACHE_TTL_MS = 1_500;
+const QUOTE_CACHE_MAX_ENTRIES = 256;
+const quoteResponseCache = new Map<string, QuoteCacheEntry>();
+const quoteRequestsInFlight = new Map<string, Promise<unknown>>();
+
+function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    const abort = () => {
+      cleanup();
+      reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      value => { cleanup(); resolve(value); },
+      error => { cleanup(); reject(error); },
+    );
+  });
+}
+
+function trimQuoteCache(now = Date.now()): void {
+  for (const [key, entry] of quoteResponseCache) {
+    if (entry.expiresAt <= now) quoteResponseCache.delete(key);
+  }
+  while (quoteResponseCache.size > QUOTE_CACHE_MAX_ENTRIES) {
+    const oldest = quoteResponseCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    quoteResponseCache.delete(oldest);
+  }
+}
+
 export class FyersMarketDataService {
   constructor(
     private readonly client: FyersApiClient,
@@ -20,12 +54,40 @@ export class FyersMarketDataService {
     }, options.signal, API_LATENCY_BUDGET_MS.history);
   }
 
-  quotes(symbols: string[], signal?: AbortSignal) {
+  quotes(symbols: string[], signal?: AbortSignal): Promise<unknown> {
     // The capability boundary is enforced here too, so another route/caller
     // cannot accidentally bypass the plan's provider batch limit.
     const uniqueSymbols = [...new Set(symbols.map(symbol => String(symbol || '').trim()).filter(Boolean))];
     assertFyersQuoteBatch(uniqueSymbols, this.capabilities);
-    return this.client.dataGet('/quotes', { symbols: uniqueSymbols.join(',') }, signal, API_LATENCY_BUDGET_MS.quote, 'interactive');
+
+    const key = `${this.client.quotaIdentity}|quotes|${uniqueSymbols.join(',')}`;
+    const now = Date.now();
+    trimQuoteCache(now);
+    const cached = quoteResponseCache.get(key);
+    if (cached && cached.expiresAt > now) {
+      return withCallerAbort(Promise.resolve(cached.value), signal);
+    }
+
+    let sharedRequest = quoteRequestsInFlight.get(key);
+    if (!sharedRequest) {
+      // Shared work uses its own bounded client timeout. One disconnected HTTP
+      // caller must not cancel the upstream request for all other consumers.
+      sharedRequest = this.client.dataGet('/quotes', {
+        symbols: uniqueSymbols.join(','),
+      }, undefined, API_LATENCY_BUDGET_MS.quote, 'interactive');
+      quoteRequestsInFlight.set(key, sharedRequest);
+      void sharedRequest.then(
+        value => {
+          quoteResponseCache.set(key, { expiresAt: Date.now() + QUOTE_CACHE_TTL_MS, value });
+          trimQuoteCache();
+          if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
+        },
+        () => {
+          if (quoteRequestsInFlight.get(key) === sharedRequest) quoteRequestsInFlight.delete(key);
+        },
+      );
+    }
+    return withCallerAbort(sharedRequest, signal);
   }
 
   depth(symbol: string, signal?: AbortSignal) {
