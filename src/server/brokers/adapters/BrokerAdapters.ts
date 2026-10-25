@@ -61,7 +61,10 @@ export class FyersAdapter extends BaseBroker {
           throw error;
         }
       }, timeoutSignal(12_000), {
-        budgetKey: 'user-info',
+        // OAuth token exchange consumes the combined FYERS account/API pool too;
+        // its observability category remains user-info, but its admission bucket
+        // must match the shared User Info + Transaction budget in FyersApiClient.
+        budgetKey: 'account',
         minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
         maxPerMinute: budget.requestsPerMinute,
         maxPerDay: budget.requestsPerDay,
