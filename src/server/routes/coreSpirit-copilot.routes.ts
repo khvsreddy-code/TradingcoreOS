@@ -1,4 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { enqueueBackgroundJob } from '../jobs/queue.js';
+import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
+import { parseCoreSpiritAiInvocationRequest, createCoreSpiritAiInputFingerprint, CORE_SPIRIT_AI_INVOKE_LIMITS } from '../../services/coreSpirit/aiInvocation.js';
+import type { CoreScriptRequiredCapability } from '../../services/coreSpirit/coreScriptLanguagePolicy.js';
 import { buildCoreSpiritCopilotDraftArtifact, buildCoreSpiritReviewPatch, type CoreSpiritGeneratedBacktestScenario } from '../../services/coreSpirit/copilotDraft.js';
 import { Router, type Response } from 'express';
 import { requireUser } from '../auth/requireUser.js';
@@ -246,3 +251,75 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
 
 coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCopilotGenerate(req,res,false);});
 coreSpiritCopilotRoutes.post('/generate/stream',copilotRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCopilotGenerate(req,res,true);});
+
+const aiInvokeRateLimit=createRateLimiter({windowMs:60_000,max:12,name:'corespirit-ai-invoke',key:req=>(req as AuthenticatedRequest).tradingCoreUserId||req.ip||'unknown'});
+
+async function handleCoreSpiritAiInvoke(req:AuthenticatedRequest,res:Response):Promise<void>{
+  const userId=req.tradingCoreUserId;
+  if(!userId){fail(res,401,'Sign in to request a CoreSpirit AI job.');return;}
+  let input;
+  try{input=parseCoreSpiritAiInvocationRequest(req.body);}catch(error){fail(res,400,error instanceof Error?error.message:'Invalid AI invocation request.');return;}
+  const redis=getSharedRedis();
+  if(!redis.configured){fail(res,503,'The asynchronous AI lane is unavailable because distributed budget/concurrency controls are not configured.');return;}
+  const apiKey=String(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY||'').trim();
+  if(!apiKey){fail(res,503,'CoreSpirit AI invocation is not configured on the server.');return;}
+  try{
+    const compiled=compileCoreSpirit(input.source,'corespirit-ai-invoke',{layer:'automation'});
+    const ir=compiled.ir as unknown as {requiredCapabilities?:readonly CoreScriptRequiredCapability[]}|undefined;
+    const compilerErrors=compiled.diagnostics.filter(item=>item.severity==='error');
+    if(!compiled.artifact||!validateExecutableArtifact(compiled.artifact)||!compiled.ir||compilerErrors.length){
+      res.status(422).json({success:false,error:'The AI invocation source did not pass independent CoreScript compilation and artifact integrity checks.',diagnostics:compilerErrors.slice(0,40)});return;
+    }
+    if(compiled.artifact.abi?.artifactHash!==input.artifactHash){
+      fail(res,409,'The submitted artifact hash does not match the server-compiled source. Recompile the current source before requesting AI.');return;
+    }
+    const required=ir?.requiredCapabilities??[];
+    if(!required.includes('ai.invoke')){
+      fail(res,403,'This CoreScript artifact does not declare the explicit ai.invoke capability.');return;
+    }
+    const sandbox=createCoreSpiritSandbox({layer:'automation',target:'server'});
+    const capabilityErrors=validateCoreScriptCapabilitiesAgainstSandbox(sandbox,required);
+    const architectureErrors=validateCoreSpiritSandboxArchitecture();
+    if(capabilityErrors.length||architectureErrors.length){
+      res.status(403).json({success:false,error:'The server automation sandbox denied this AI invocation.',diagnostics:[...architectureErrors,...capabilityErrors].slice(0,20)});return;
+    }
+    const modelVersion=String(process.env.CORESPIRIT_AI_INVOKE_MODEL||process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.8-flash').trim();
+    const inputFingerprint=createCoreSpiritAiInputFingerprint({source:input.source,artifactHash:input.artifactHash,prompt:input.prompt,context:input.context,modelVersion,outputTokenLimit:input.outputTokenLimit});
+    const userHash=coreSpiritCopilotSha256(userId).slice(0,32);
+    const cacheKey='tco:corespirit:ai-invoke:cache:'+userHash+':'+inputFingerprint;
+    const cachedRaw=await redis.get<string>(cacheKey,AbortSignal.timeout(900));
+    if(cachedRaw){
+      try{
+        const cached=JSON.parse(cachedRaw) as Record<string,unknown>;
+        const createdAt=typeof cached.createdAt==='string'?Date.parse(cached.createdAt):NaN;
+        if(cached.status==='ready'&&cached.inputFingerprint===inputFingerprint&&Number.isFinite(createdAt)&&Date.now()-createdAt<CORE_SPIRIT_AI_INVOKE_LIMITS.resultFreshnessMs){
+          res.setHeader('Cache-Control','no-store');res.json({success:true,cached:true,result:{...cached,cacheHit:true}});return;
+        }
+      }catch{}
+      await redis.del(cacheKey,AbortSignal.timeout(900)).catch(()=>undefined);
+    }
+    const minuteCount=await redis.incrementWindow('tco:corespirit:ai-invoke:minute:'+userHash,60_000,AbortSignal.timeout(900));
+    const hourCount=await redis.incrementWindow('tco:corespirit:ai-invoke:hour:'+userHash,60*60_000,AbortSignal.timeout(900));
+    if(minuteCount>CORE_SPIRIT_AI_INVOKE_LIMITS.maxJobsPerMinute||hourCount>CORE_SPIRIT_AI_INVOKE_LIMITS.maxJobsPerHour){
+      res.status(429).json({success:false,error:'CoreSpirit AI invocation budget reached. Use fewer jobs and try after the budget window resets.',budgets:{perMinute:CORE_SPIRIT_AI_INVOKE_LIMITS.maxJobsPerMinute,perHour:CORE_SPIRIT_AI_INVOKE_LIMITS.maxJobsPerHour}});return;
+    }
+    const invocationId=randomUUID();
+    const lockKey='tco:corespirit:ai-invoke:active:'+userHash;
+    const lockOwner=invocationId;
+    const acquired=await redis.acquireLock(lockKey,lockOwner,CORE_SPIRIT_AI_INVOKE_LIMITS.concurrencyLeaseMs,AbortSignal.timeout(900));
+    if(!acquired){res.status(429).json({success:false,error:'One CoreSpirit AI job is already queued or running for this user. Wait for its result before starting another.'});return;}
+    const jobPayload={invocationId,source:input.source,sourceHash:coreSpiritCopilotSha256(input.source),artifactHash:input.artifactHash,prompt:input.prompt,context:input.context,contextHash:coreSpiritCopilotSha256(input.context),inputFingerprint,modelVersion,outputTokenLimit:input.outputTokenLimit,createdAt:new Date().toISOString(),lockKey,lockOwner,cacheKey};
+    try{
+      const queued=await enqueueBackgroundJob(userId,'corespirit_ai_invoke',jobPayload);
+      res.status(202).setHeader('Cache-Control','no-store').json({success:true,data:{jobId:queued.job.id,status:queued.job.status,invocationId,inputFingerprint,artifactHash:input.artifactHash,modelVersion,cacheHit:false,advisoryOnly:true,executable:false,mayCreateOrderIntent:false}});
+    }catch(error){
+      await redis.releaseLock(lockKey,lockOwner,AbortSignal.timeout(900)).catch(()=>false);
+      res.status(503).json({success:false,error:error instanceof Error?error.message:'Unable to enqueue asynchronous CoreSpirit AI job.'});
+    }
+  }catch(error){
+    res.status(503).json({success:false,error:error instanceof Error?error.message:'Distributed AI invocation controls are unavailable.'});
+  }
+}
+
+coreSpiritCopilotRoutes.post('/invoke',aiInvokeRateLimit,(req:AuthenticatedRequest,res:Response)=>{void handleCoreSpiritAiInvoke(req,res);});
+
