@@ -115,7 +115,7 @@ function realtimeServiceConfigChanged(previousSha, currentSha) {
     const raw = execFileSync('git', ['show', `${sha}:vercel.json`], { encoding: 'utf8' });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') throw new Error('vercel.json is not an object');
-    const service = parsed.services?.['realtimegateway-live'];
+    const service = parsed.services?.['realtimegateway'];
     if (!service) return null;
     // ignoreCommand only controls whether a new build is needed. Treating that
     // policy change as an image-runtime change creates a loop: if a deployment
@@ -232,7 +232,7 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     }
 
     if (changed.includes('vercel.json') && realtimeServiceConfigChanged(previousSha, currentSha)) {
-      relevant.push('vercel.json (realtimegateway-live service configuration)');
+      relevant.push('vercel.json (realtimegateway service configuration)');
     }
 
     if (relevant.length) {
