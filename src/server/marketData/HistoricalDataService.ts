@@ -128,8 +128,8 @@ export function getBoundedHistoryPageRange(
 ): BoundedHistoryPageRange {
   const targetBars = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
   const normalizedTimeframe = String(timeframe || '').trim().toLowerCase();
-  const seconds = /^(\\d+)s$/.exec(normalizedTimeframe);
-  const minutes = /^(\\d+)minute$/.exec(normalizedTimeframe);
+  const seconds = /^(\d+)s$/.exec(normalizedTimeframe);
+  const minutes = /^(\d+)minute$/.exec(normalizedTimeframe);
   const daily = ['day','1day','daily','d','1d'].includes(normalizedTimeframe);
   const weekly = ['week','1week','weekly','w','1w'].includes(normalizedTimeframe);
   const monthly = ['month','1month','monthly','m','1mth'].includes(normalizedTimeframe);
