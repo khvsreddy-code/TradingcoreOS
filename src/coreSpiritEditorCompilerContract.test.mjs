@@ -84,3 +84,13 @@ assert.match(editor,/LEVEL_STARTERS/,
 assert.match(editor,/validateCoreScriptCapabilitiesAgainstSandbox/,
   'the selected authoring view must not replace host capability enforcement');
 console.log('CORESPIRIT_FOUR_LEVEL_EDITOR_GUIDANCE_OK');
+
+assert.match(editor,/initialCapital = 100000/,
+  'trader starter must set explicit initial capital for backtest assumptions');
+assert.match(editor,/commission = 0\\.05/,
+  'trader starter must include transaction commission');
+assert.match(editor,/slippage = 2/,
+  'trader starter must include an explicit slippage assumption');
+assert.match(editor,/processOrdersOnClose = true/,
+  'trader starter must make order-processing timing explicit');
+console.log('CORESPIRIT_TRADER_STARTER_EXECUTION_ASSUMPTIONS_OK');
