@@ -77,7 +77,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
   const releaseLease = async (): Promise<void> => {
     if (!redis.configured || payload.lockKey !== expectedLockKey || typeof payload.lockOwner !== 'string' ||
         typeof payload.invocationId !== 'string' || payload.lockOwner !== payload.invocationId) return;
-    await releaseLease();
+    await redis.releaseLock(expectedLockKey, payload.lockOwner, AbortSignal.timeout(900)).catch(() => false);
   };
   const expectedFingerprint = createCoreSpiritAiInputFingerprint({
     source: input.source,
