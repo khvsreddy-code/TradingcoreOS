@@ -14,6 +14,11 @@ import { sha256HexSync } from '../services/coreSpirit/artifactIdentity';
 import { loadEditorScript, saveEditorScript, saveExecutionRun } from '../services/coreSpirit/cloudPersistence';
 import { versionedStorageKey } from '../services/coreSpirit/storageSchema';
 import { normalizeCoreSpiritSource } from '../services/coreSpirit/syntax';
+import {
+  CORE_SPIRIT_AUTHORING_LEVELS,
+  getCoreSpiritAuthoringProfileForLevel,
+  type CoreSpiritAuthoringLevel,
+} from '../services/coreSpirit/coreSpiritAuthoring';
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -40,6 +45,19 @@ const EXAMPLES: Array<[string, string]> = [
   ['Levels', `indicator("Range Levels")\n\nhi = highest(high, 20)\nlo = lowest(low, 20)\nplot(hi, name = "20-bar High")\nplot(lo, name = "20-bar Low")`],
   ['Interactive UI', `let panel = ui.panel("Market Structure")\npanel.number("ATR", atr(14))\npanel.button("Recalculate", recalibrate)\npanel.toggle("Show Liquidity", true, toggle_liquidity)\npanel.slider("Sensitivity", 1, 10, 5, set_sensitivity)`],
 ];
+const LEVEL_STARTERS: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
+  beginner: "let fast = ta.ema(close, 9)\nlet slow = ta.ema(close, 21)\n\nwhen fast > slow\n    show signal(\"BUY\")\n\nshow line(fast)\nshow line(slow)\n",
+  trader: "data nifty = market(\"NSE:NIFTY50\", \"5m\")\ndata bank = market(\"NSE:BANKNIFTY\", \"5m\")\n\nlet trend = ta.ema(nifty.close, 50)\nlet strength = ta.rsi(nifty.close, 14)\nlet relative = nifty.close / bank.close\n\nwhen trend > trend[1]\nand strength > 55\nand relative > relative[20]\n    signal(\"LONG\")\n",
+  quant: "let returns = log(close / close[1])\nlet z = stats.zscore(returns, 100)\nlet beta = stats.beta(returns, market(\"NSE:NIFTY50\").returns, 252)\n\nmodel alpha {\n    inputs: returns, z, beta\n    predict: forward_return(20)\n}\n\nlet prediction: prediction<float> = alpha.predict()\nlet confidence: probability = alpha.probability()\n\nshow line(prediction)\nwhen confidence > 0.70\n    signal(\"LONG\")\n",
+  system: "requires execution.route\nrequires risk.evaluate\nrequires automation\n\non signal(\"LONG\") {\n    if (risk.allowed()) {\n        automation.notify(\"High-confidence bullish regime\", \"ops\")\n        automation.route(\"execution.long\")\n    }\n}\n",
+});
+
+const LEVEL_GUIDANCE: Readonly<Record<CoreSpiritAuthoringLevel, string>> = Object.freeze({
+  beginner: 'Start with common indicators, readable conditions, editable source and clear syntax/compile diagnostics.',
+  trader: 'Inspect symbol/timeframe context and signals. Before comparing results, review warm-up, bar confirmation, commission and slippage assumptions.',
+  quant: 'Inspect typed features, model inputs, lookback windows, and causality/repaint diagnostics. Keep training and holdout periods separate and review leakage warnings.',
+  system: 'Review event triggers, declared capabilities, risk gates and execution traces. This view never grants permissions; compiler, sandbox and host policy remain authoritative.',
+});
 
 type CopilotMode = 'generate'|'explain-error'|'fix'|'optimize'|'convert-to-quant'|'generate-tests'|'generate-backtest'|'generate-features'|'generate-model'|'generate-docs'|'explain-lookback'|'find-lookahead'|'find-repainting'|'find-unused-computation';
 const COPILOT_MODE_OPTIONS:ReadonlyArray<{value:CopilotMode;label:string}> = [
@@ -138,6 +156,14 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const monacoAdapterRef = useRef<CoreSpiritMonacoAdapter | null>(null);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [runtimeInspector, setRuntimeInspector] = useState<CoreSpiritIdeRuntimeSnapshot>(() => ideBridge.getSnapshot());
+  const [authoringLens, setAuthoringLens] = useState<CoreSpiritAuthoringLevel>(() => {
+    const saved = localStorage.getItem('tradingcore:corespirit:authoring-lens:v1');
+    return (CORE_SPIRIT_AUTHORING_LEVELS as readonly string[]).includes(saved ?? '')
+      ? saved as CoreSpiritAuthoringLevel
+      : 'beginner';
+  });
+  const authoringProfile = useMemo(() => getCoreSpiritAuthoringProfileForLevel(authoringLens), [authoringLens]);
+  const compiledRequiredLevel = lastCompile?.ir?.authoringLevel;
   const [selectedExplanation, setSelectedExplanation] = useState<string | null>(null);
   const [debugBarInput, setDebugBarInput] = useState('0');
   const [sourceInspection, setSourceInspection] = useState<CoreSpiritSourceInspection>(() => ({
@@ -244,6 +270,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const completionItems = completionState.completions.slice(0, 12);
   const lineHeight = 20;
   useEffect(() => ideBridge.subscribe(setRuntimeInspector), [ideBridge]);
+  useEffect(() => { localStorage.setItem('tradingcore:corespirit:authoring-lens:v1', authoringLens); }, [authoringLens]);
   useEffect(() => { if (!selectedExplanation && runtimeInspector.latestExplanation) setSelectedExplanation(runtimeInspector.latestExplanation.signalId); }, [runtimeInspector.latestExplanation?.signalId]);
   useEffect(() => {
     const onChartDebug = (event: Event) => {
@@ -687,6 +714,39 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       </Panel>
 
       <div className="space-y-4">
+
+        <Panel title="FOUR LEVELS · ONE CORE SCRIPT" subtitle="Change the guidance view without changing CoreScript, its compiler, runtime, or permissions.">
+          <div className="space-y-3">
+            <label className="block text-[9px] uppercase tracking-wider text-[var(--tco-dim)]">Authoring view
+              <select value={authoringLens} onChange={event=>setAuthoringLens(event.target.value as CoreSpiritAuthoringLevel)} className="mt-1 w-full rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] text-[var(--tco-text-2)]">
+                {CORE_SPIRIT_AUTHORING_LEVELS.map(level=><option key={level} value={level}>{getCoreSpiritAuthoringProfileForLevel(level).label}</option>)}
+              </select>
+            </label>
+            <div className="rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold text-white">{authoringProfile.label}</span>
+                <span className="text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">UI lens only</span>
+              </div>
+              <p className="mt-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">{authoringProfile.description}</p>
+              <p className="mt-2 text-[9px] leading-4 text-[var(--tco-dim)]">{LEVEL_GUIDANCE[authoringLens]}</p>
+              <div className="mt-2 text-[8px] leading-4 text-[var(--tco-dim)]">Building blocks: {authoringProfile.features.slice(0, 9).join(' · ')}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Compiler-required level</span>
+                <span className="text-[10px] font-bold text-[#60a5fa]">{compiledRequiredLevel ? getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label : compilePending ? 'ANALYZING…' : 'Not confirmed'}</span>
+              </div>
+              {!compiledRequiredLevel && <p className="mt-1 text-[9px] leading-4 text-[var(--tco-dim)]">The current source must compile before its required level is confirmed. The selected view is not treated as proof of the program's requirements.</p>}
+              {compiledRequiredLevel && CORE_SPIRIT_AUTHORING_LEVELS.indexOf(compiledRequiredLevel) > CORE_SPIRIT_AUTHORING_LEVELS.indexOf(authoringLens) && <p className="mt-2 text-[9px] leading-4 text-[#fbbf24]">This source uses {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}-level concepts. Switch views for more relevant guidance; the view does not rewrite the program or lower its requirements.</p>}
+              {compiledRequiredLevel && <div className="mt-2 text-[8px] leading-4 text-[var(--tco-dim)]">Required host capabilities: {(lastCompile?.ir?.requiredCapabilities ?? []).length ? (lastCompile?.ir?.requiredCapabilities ?? []).join(' · ') : 'None declared by this compiled program.'}</div>}
+            </div>
+            <button onClick={()=>{ if(window.confirm('Replace the current source with the '+authoringProfile.label+' starter? The current editor contents will be replaced only after confirmation.')) { setEditorSource(LEVEL_STARTERS[authoringLens]); setRunStatus('Loaded the '+authoringProfile.label+' starter. Review it and compile.'); } }} className="premium-button w-full justify-center"><BookOpen className="h-4 w-4"/>Replace editor with {authoringProfile.label} starter</button>
+            {authoringLens==='beginner' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Start with the first diagnostic and common indicators. The source remains visible and editable—no hidden conversion into another language.</div>}
+            {authoringLens==='trader' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Market context: {runtimeInspector.target ? runtimeInspector.target.symbol + ' · ' + runtimeInspector.target.timeframe : 'Open a chart to inspect symbol/timeframe context.'} · signal explanations: {runtimeInspector.explanations.length}.</div>}
+            {authoringLens==='quant' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Lookback: {sourceInspection.maxLookback} bars · causality/repaint diagnostics: {sourceInspection.diagnostics.filter(d=>/CAUSALITY|REPAINT|LOOKAHEAD/i.test(String(d.code??''))).length}. Review source windows and holdout assumptions before accepting model results.</div>}
+            {authoringLens==='system' && <div className="rounded border border-[var(--tco-border)] p-2 text-[9px] leading-4 text-[var(--tco-code-muted)]">Event triggers: {lastCompile?.ir?.tradingNativePlan?.eventTriggers.length ?? 0} · automation preview: {runtimeInspector.automationPreview.execution}. Compiler capability checks and host risk controls remain mandatory.</div>}
+          </div>
+        </Panel>
         <Panel title="CORESPIRIT COPILOT" subtitle="AI drafts code; the CoreScript compiler decides whether it is valid">
           <div className="space-y-3">
             <label className="block text-[9px] uppercase tracking-wider text-[var(--tco-dim)]">Copilot task
