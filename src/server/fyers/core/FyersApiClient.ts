@@ -37,6 +37,17 @@ function retryDelay(response: Response): number | undefined {
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
 function isRetryableStatus(status: number): boolean { return status === 429 || status >= 500; }
+function isRetryableNetworkError(error: unknown): boolean {
+  if (!(error instanceof TypeError)) return false;
+  const detail = error as TypeError & { cause?: unknown };
+  const cause = detail.cause && typeof detail.cause === 'object'
+    ? detail.cause as { code?: unknown; message?: unknown }
+    : undefined;
+  const diagnostic = `${detail.message || ''} ${String(cause?.code || '')} ${String(cause?.message || '')}`;
+  // Retry only fetch/network transport failures. Abort and broker-gate errors are
+  // handled before this predicate; programmer/input errors are never retried.
+  return /fetch failed|failed to fetch|network|socket|econnreset|etimedout|eai_again|ehostunreach|und_err/i.test(diagnostic);
+}
 function backoff(attempt: number, retryAfterMs?: number): number {
   const exponential = Math.min(15_000, 500 * 2 ** attempt);
   const jitter = Math.floor(Math.random() * Math.max(1, exponential * 0.25));
@@ -209,7 +220,9 @@ export class FyersApiClient {
             throw error;
           }
           lastError = error;
-          if (!retrySafe || !isRetryableStatus(Number(detail.status || 0)) || attempt === 2) throw error;
+          const retryableStatus = isRetryableStatus(Number(detail.status || 0));
+          const retryableNetworkError = isRetryableNetworkError(error);
+          if (!retrySafe || (!retryableStatus && !retryableNetworkError) || attempt === 2) throw error;
           await sleep(backoff(attempt, Number(detail.retryAfterMs) || undefined), deadlineSignal);
         }
       }
@@ -225,8 +238,13 @@ export class FyersApiClient {
     signal: AbortSignal,
   ) {
     const budget = resolveFyersAdmissionBudget(this.capabilities, category);
+    // FYERS publishes one Data API quota and one combined Transaction/User Info
+    // quota. Keep category-level telemetry, but share the admission pool for
+    // account reads and transaction calls so they cannot each consume the full
+    // documented account/API ceiling independently.
+    const budgetKey = category === 'data' ? 'data' : 'account';
     return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, {
-      budgetKey: category,
+      budgetKey,
       minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
       maxPerMinute: budget.requestsPerMinute,
       maxPerDay: budget.requestsPerDay,
