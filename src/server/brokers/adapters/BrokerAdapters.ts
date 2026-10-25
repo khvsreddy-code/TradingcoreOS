@@ -300,23 +300,25 @@ export class FyersAdapter extends BaseBroker {
       rangeEnd = rangeStart - 1;
     }
 
-    const payloads = await Promise.all(ranges.map(range => client.dataGet<any>(
-      '/history',
-      {
-        symbol: instrumentKey,
-        resolution,
-        date_format: '0',
-        range_from: String(range.from),
-        range_to: String(range.to),
-        cont_flag: '1',
-      },
-      timeoutSignal(API_LATENCY_BUDGET_MS.history),
-      API_LATENCY_BUDGET_MS.history,
-      'interactive',
-    )));
-
+    // Walk newest-to-oldest sequentially. Promise.all would queue every range
+    // at once, letting older history sit ahead of later interactive API traffic
+    // and causing each queued request's timeout to expire before it is admitted.
     const byTimestamp = new Map<number, { timestamp: string; open: number; high: number; low: number; close: number; volume: number }>();
-    for (const payload of payloads) {
+    for (const range of ranges) {
+      const payload = await client.dataGet<any>(
+        '/history',
+        {
+          symbol: instrumentKey,
+          resolution,
+          date_format: '0',
+          range_from: String(range.from),
+          range_to: String(range.to),
+          cont_flag: '1',
+        },
+        timeoutSignal(API_LATENCY_BUDGET_MS.history),
+        API_LATENCY_BUDGET_MS.history,
+        'interactive',
+      );
       for (const candle of Array.isArray(payload?.candles) ? payload.candles : []) {
         const timestampMs = Number(candle?.[0]) * 1000;
         const open = Number(candle?.[1]), high = Number(candle?.[2]);
@@ -332,6 +334,9 @@ export class FyersAdapter extends BaseBroker {
           open, high, low, close, volume,
         });
       }
+      // Ranges are ordered newest first. Once the requested candle target is
+      // met, older pages add no value to this response and would consume quota.
+      if (byTimestamp.size >= requestedLimit) break;
     }
     return [...byTimestamp.entries()]
       .sort((a, b) => a[0] - b[0])
