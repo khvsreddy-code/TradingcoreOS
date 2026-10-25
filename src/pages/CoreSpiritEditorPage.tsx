@@ -137,6 +137,70 @@ function replayGateMatches(gate:CopilotReplayGate,source:string,artifactHash:str
   return bars.length===gate.barsProcessed&&replayDatasetSignature(bars)===gate.datasetSignature;
 }
 
+type CoreSpiritCopilotDraftPayload = {
+  success?: boolean;
+  error?: string;
+  source: string;
+  summary?: string;
+  assumptions?: string[];
+  tests?: string[];
+  backtestScenarios?: Array<{ name: string; setup: string; expected: string }>;
+  diff?: string;
+  draftArtifact?: Record<string, unknown>;
+  repairAttempts?: number;
+  safetyReview?: Record<string, unknown>;
+  analysisOnly?: boolean;
+  validation?: { valid?: boolean; analysisOnly?: boolean; artifactHash?: string | null; diagnostics?: Array<{ severity: string; message: string; line?: number; column?: number; start?: number; end?: number; code?: string }> };
+};
+type CoreSpiritCopilotDraftReview = {
+  payload: CoreSpiritCopilotDraftPayload;
+  baseSource: string;
+  baseEditorVersion: number;
+  target: { chartId: string | null; symbol: string | null; timeframe: string | null };
+};
+
+async function readCoreSpiritCopilotResponse(
+  response: Response,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+): Promise<CoreSpiritCopilotDraftPayload | null> {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    return await response.json().catch(() => null) as CoreSpiritCopilotDraftPayload | null;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Streaming response body is unavailable.');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let completed: CoreSpiritCopilotDraftPayload | null = null;
+  const consumeFrame = (frame: string) => {
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return;
+    let data: Record<string, unknown>;
+    try { data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>; }
+    catch { throw new Error('CoreSpirit Copilot sent an invalid streaming event.'); }
+    if (eventName === 'error') throw new Error(typeof data.error === 'string' ? data.error : 'CoreSpirit Copilot stream failed.');
+    if (eventName === 'complete') completed = data as unknown as CoreSpiritCopilotDraftPayload;
+    onEvent(eventName, data);
+  };
+  while (true) {
+    const result = await reader.read();
+    buffer += decoder.decode(result.value, { stream: !result.done });
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary >= 0) {
+      consumeFrame(buffer.slice(0, boundary).replace(/\r$/, ''));
+      buffer = buffer.slice(boundary + 2);
+      boundary = buffer.indexOf('\n\n');
+    }
+    if (result.done) break;
+  }
+  if (buffer.trim()) consumeFrame(buffer);
+  return completed;
+}
 function lineCount(source: string) { return Math.max(1, source.split('\n').length); }
 
 function escapeHtml(value: string) { return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -208,6 +272,8 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
   const [copilotArtifactHash,setCopilotArtifactHash]=useState<string|null>(null);
   const [copilotError,setCopilotError]=useState('');
+  const [copilotDraft,setCopilotDraft]=useState<CoreSpiritCopilotDraftReview|null>(null);
+  const [copilotStreamPreview,setCopilotStreamPreview]=useState('');
   const [modelReleaseHash,setModelReleaseHash]=useState('');
   const [modelReleaseReason,setModelReleaseReason]=useState('Reviewed out-of-sample validation, provenance, and temporal-safety results.');
   const [modelReleaseInfo,setModelReleaseInfo]=useState<ModelReleaseInfo|null>(null);
@@ -589,16 +655,21 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
       const target=coreSpiritChartRegistry.getActive();
-      const response=await fetch('/api/corespirit/copilot/generate',{
+      setCopilotDraft(null);
+      setCopilotStreamPreview('');
+      const response=await fetch('/api/corespirit/copilot/generate/stream',{
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},
-        body:JSON.stringify({prompt,mode:copilotMode,currentSource:source,symbol:target?.symbol,timeframe:target?.timeframe}),
+        body:JSON.stringify({prompt,mode:copilotMode,currentSource:source,symbol:target?.symbol,timeframe:target?.timeframe,repairOnCompileError:true}),
         cache:'no-store',
       });
-      const payload=await response.json().catch(()=>null) as {
-        success?:boolean;error?:string;source?:string;summary?:string;assumptions?:string[];
-        analysisOnly?:boolean;validation?:{valid?:boolean;analysisOnly?:boolean;artifactHash?:string|null;diagnostics?:Array<{severity:string;message:string;line?:number;column?:number;start?:number;end?:number;code?:string}>};
-      }|null;
+      const payload=await readCoreSpiritCopilotResponse(response,(event,data)=>{
+        if(event==='status'&&typeof data.message==='string')setCopilotSummary(String(data.message));
+        if(event==='delta'&&typeof data.text==='string'){
+          const phase=String(data.phase||'generate');
+          setCopilotStreamPreview(previous=>((phase==='repair'?'[repair pass]\n':'')+previous+String(data.text)).slice(-12000));
+        }
+      });
       if(generationRequest!==copilotGenerationRef.current)return;
       if(!response.ok||!payload?.success||typeof payload.source!=='string')throw new Error(payload?.error||'CoreSpirit Copilot request failed.');
       if(editorModel.getSource()!==requestedSource||editorModel.getVersion()!==requestedEditorVersion){
