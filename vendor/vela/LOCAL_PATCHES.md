@@ -1,7 +1,7 @@
-# TradingCoreOS overlay on Vela 0.8.5
+# TradingCoreOS overlay on Vela 0.9.0
 
-The upstream source baseline is Vela tag `v0.8.5`, commit
-`596cbbdeba15406cfb72465afd07f8c60c6b1852`. Do not identify a TCO-local edit as an
+The upstream source baseline is Vela tag `v0.9.0`, commit
+`aecb13847dff3c1a50a2f3433e9804d26fc581ed`. Do not identify a TCO-local edit as an
 upstream change just because it lives under `vendor/vela/src`.
 
 ## Patch groups
@@ -29,7 +29,7 @@ repository root:
 
 ```sh
 git clone https://github.com/LuxAlgo/Vela.git /tmp/vela-upstream
-git -C /tmp/vela-upstream checkout 596cbbdeba15406cfb72465afd07f8c60c6b1852
+git -C /tmp/vela-upstream checkout aecb13847dff3c1a50a2f3433e9804d26fc581ed
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --write
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --check
 ```
@@ -54,4 +54,4 @@ release cannot be promoted. No source files are replaced by the generator.
   surface for existing imports. New registry integrations should import the specific
   native Vela capability directly when that is the actual dependency.
 - Keep `vendor/vela/NOTICE` and the visible Vela attribution behavior intact. This
-  file's upstream blob matches the notice pinned by Vela 0.8.5.
+  file's upstream blob matches the notice pinned by Vela 0.9.0.

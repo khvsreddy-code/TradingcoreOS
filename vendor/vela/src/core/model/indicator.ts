@@ -47,6 +47,11 @@ export interface IndicatorModel {
      * `indicator(..., shorttitle=)`.
      */
     shorttitle?: string;
+    /** What the chart SHOWS for {@link title}, in its language (a native indicator's
+     *  translatable name). Absent ⇒ {@link title}. */
+    displayTitle?: MessageLike;
+    /** What the chart shows for {@link shorttitle}. Absent ⇒ {@link shorttitle}. */
+    displayShorttitle?: MessageLike;
     overlay: boolean;
     paneHint: PaneHint;
     /**

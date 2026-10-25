@@ -1,3 +1,6 @@
+import { msg } from '../i18n/message';
+import { textOf } from '../i18n/text';
+import type { MessageLike, Translator } from '../i18n/types';
 import { Drawing, type DrawingTypeKey, type SerializedDrawing } from './Drawing';
 import type { DrawingStyle } from './style';
 import { DEFAULT_DRAWING_COLOR } from './style';
@@ -28,7 +31,8 @@ export interface DrawingTypeMeta {
     type: DrawingTypeKey;
     /** Toolbar group id (e.g. `'lines'`, `'shapes'`, `'annotations'`). */
     group: string;
-    label: string;
+    /** The tool's name (toolbar, settings, object tree); a message reads in the chart's language. */
+    label: MessageLike;
     /** Inline SVG markup for the toolbar button — no DOM, renderer paints it. */
     icon: string;
     defaultStyle: DrawingStyle;
@@ -38,7 +42,7 @@ export interface DrawingTypeMeta {
     coversSeries?: boolean;
     /** One short sentence prompting the placement gesture, shown by the renderer at the
      *  bottom of the chart while the tool is armed and no placement has started yet. */
-    placementHint?: string;
+    placementHint?: MessageLike;
     /** Build an instance from a (partial) serialized record. Serves create + deserialize. */
     create(init: Partial<SerializedDrawing> & { paneId: string }): Drawing;
 }
@@ -51,7 +55,30 @@ export function registerDrawingType(meta: DrawingTypeMeta): void {
     REGISTRY.set(meta.type, meta);
 }
 
-export function getDrawingType(type: string): DrawingTypeMeta | undefined {
+/** A registered type as the read APIs hand it out: its label and hint as plain text. */
+export type ResolvedDrawingTypeMeta = DrawingTypeMeta & { label: string; placementHint?: string };
+
+function resolved(meta: DrawingTypeMeta, i18n: Translator | undefined): ResolvedDrawingTypeMeta {
+    if (typeof meta.label === 'string' && (meta.placementHint === undefined || typeof meta.placementHint === 'string')) return meta as ResolvedDrawingTypeMeta;
+    const out: ResolvedDrawingTypeMeta = { ...meta, label: textOf(i18n, meta.label), placementHint: undefined };
+    if (meta.placementHint !== undefined) out.placementHint = textOf(i18n, meta.placementHint);
+    else delete out.placementHint;
+    return out;
+}
+
+/** A registered drawing type, its label and hint in `i18n`'s language (English without one). */
+export function getDrawingType(type: string, i18n?: Translator): ResolvedDrawingTypeMeta | undefined {
+    const meta = REGISTRY.get(type);
+    return meta ? resolved(meta, i18n) : undefined;
+}
+
+/** Every registered drawing type, labels in `i18n`'s language (English without one). */
+export function drawingTypes(i18n?: Translator): ResolvedDrawingTypeMeta[] {
+    return [...REGISTRY.values()].map((meta) => resolved(meta, i18n));
+}
+
+/** A registered type exactly as registered, its label still a message. */
+export function drawingTypeEntry(type: string): DrawingTypeMeta | undefined {
     const registered = REGISTRY.get(type);
     if (registered) return registered;
     const family = drawingFamilyForType(type as DrawingTypeKey);
@@ -59,7 +86,8 @@ export function getDrawingType(type: string): DrawingTypeMeta | undefined {
     return lazyDrawingTypes(family).find((meta) => meta.type === type);
 }
 
-export function drawingTypes(): DrawingTypeMeta[] {
+/** Every registered type exactly as registered. */
+export function drawingTypeEntries(): DrawingTypeMeta[] {
     return [...REGISTRY.values()];
 }
 
@@ -112,7 +140,7 @@ const HLINE_ICON = svg24('<line x1="3" y1="12" x2="21" y2="12"/>');
 registerDrawingType({
     type: 'trendline',
     group: 'lines',
-    label: 'Trend Line',
+    label: msg('drawing.trendline.label', 'Trend Line'),
     icon: LINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new TrendLine(init),
@@ -121,7 +149,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'hline',
     group: 'lines',
-    label: 'Horizontal Line',
+    label: msg('drawing.hline.label', 'Horizontal Line'),
     icon: HLINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'dashed' },
     create: (init) => new HorizontalLine(init),
@@ -134,7 +162,7 @@ const TEXT_ICON = svg24('<path d="M5 6h14M12 6v13"/>');
 registerDrawingType({
     type: 'ray',
     group: 'lines',
-    label: 'Ray',
+    label: msg('drawing.ray.label', 'Ray'),
     icon: RAY_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new Ray(init),
@@ -155,7 +183,7 @@ const TRENDANGLE_ICON =
 registerDrawingType({
     type: 'extendedline',
     group: 'lines',
-    label: 'Extended Line',
+    label: msg('drawing.extendedline.label', 'Extended Line'),
     icon: EXTLINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new ExtendedLine(init),
@@ -164,7 +192,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'vline',
     group: 'lines',
-    label: 'Vertical Line',
+    label: msg('drawing.vline.label', 'Vertical Line'),
     icon: VLINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new VerticalLine(init),
@@ -173,7 +201,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'hray',
     group: 'lines',
-    label: 'Horizontal Ray',
+    label: msg('drawing.hray.label', 'Horizontal Ray'),
     icon: HRAY_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new HorizontalRay(init),
@@ -182,7 +210,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'crossline',
     group: 'lines',
-    label: 'Cross Line',
+    label: msg('drawing.crossline.label', 'Cross Line'),
     icon: CROSSLINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new CrossLine(init),
@@ -191,7 +219,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'infoline',
     group: 'lines',
-    label: 'Info Line',
+    label: msg('drawing.infoline.label', 'Info Line'),
     icon: INFOLINE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new InfoLine(init),
@@ -200,7 +228,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'trendangle',
     group: 'lines',
-    label: 'Trend Angle',
+    label: msg('drawing.trendangle.label', 'Trend Angle'),
     icon: TRENDANGLE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new TrendAngle(init),
@@ -209,7 +237,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'box',
     group: 'shapes',
-    label: 'Rectangle',
+    label: msg('drawing.box.label', 'Rectangle'),
     icon: BOX_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}26` },
     create: (init) => new Box(init),
@@ -218,7 +246,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'text',
     group: 'annotations',
-    label: 'Text',
+    label: msg('drawing.text.label', 'Text'),
     icon: TEXT_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new TextLabel(init),
@@ -230,7 +258,7 @@ const CALLOUT_ICON =
 registerDrawingType({
     type: 'callout',
     group: 'annotations',
-    label: 'Callout',
+    label: msg('drawing.callout.label', 'Callout'),
     icon: CALLOUT_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Callout(init),
@@ -245,7 +273,7 @@ const SIGNPOST_ICON = svg24('<path d="M12 11.5V21"/><rect x="5" y="4" width="14"
 registerDrawingType({
     type: 'note',
     group: 'annotations',
-    label: 'Note',
+    label: msg('drawing.note.label', 'Note'),
     icon: NOTE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Note(init),
@@ -254,7 +282,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'pricenote',
     group: 'annotations',
-    label: 'Price Note',
+    label: msg('drawing.pricenote.label', 'Price Note'),
     icon: PRICE_NOTE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new PriceNote(init),
@@ -263,7 +291,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'comment',
     group: 'annotations',
-    label: 'Comment',
+    label: msg('drawing.comment.label', 'Comment'),
     icon: COMMENT_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Comment(init),
@@ -272,7 +300,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'pricelabel',
     group: 'annotations',
-    label: 'Price Label',
+    label: msg('drawing.pricelabel.label', 'Price Label'),
     icon: PRICE_LABEL_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new PriceLabel(init),
@@ -281,7 +309,7 @@ registerDrawingType({
 registerDrawingType({
     type: 'signpost',
     group: 'annotations',
-    label: 'Signpost',
+    label: msg('drawing.signpost.label', 'Signpost'),
     icon: SIGNPOST_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Signpost(init),

@@ -11,6 +11,15 @@ import {
     type ColorFieldShape,
 } from './controller';
 import { COLOR_CSS, COLOR_STYLE_ID } from './styles';
+import { msg } from '../../../core/i18n/message';
+import { textOf } from '../../../core/i18n/text';
+import type { Translator } from '../../../core/i18n/types';
+import { kitTranslator } from '../../kit-text';
+
+const TEXT = {
+    opacity: msg('ui.colorPicker.opacity', 'Opacity'),
+    opacityPercent: msg('ui.colorPicker.opacityPercent', 'Opacity (%)'),
+};
 
 const PALETTE = buildPalette();
 const CHECKER = transparencyChecker(10);
@@ -37,6 +46,8 @@ export type ColorCommit = 'live' | 'release';
 
 export interface ColorPickerOptions {
     commit?: ColorCommit;
+    /** The translator of the picker's labels (default: the kit build's, else English). */
+    i18n?: Translator | null;
 }
 
 /**
@@ -46,6 +57,7 @@ export interface ColorPickerOptions {
  */
 export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: string) => void, options: ColorPickerOptions = {}): HTMLElement {
     const commit: ColorCommit = options.commit ?? 'live';
+    const i18n = options.i18n ?? kitTranslator();
     const parsed = splitColor(color);
     let curHex = parsed.hex6;
     let curAlpha = parsed.alpha;
@@ -113,7 +125,7 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     };
 
     const opLabel = document.createElement('div');
-    opLabel.textContent = 'Opacity';
+    opLabel.textContent = textOf(i18n, TEXT.opacity);
     opLabel.style.cssText = `font:11px ${theme.fontFamily};color:var(--vela-fg-muted);`;
     const opRow = document.createElement('div');
     opRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
@@ -188,6 +200,8 @@ export interface ColorFieldOpts {
     popover?: Pick<PopoverOptions, 'host' | 'position' | 'boundary' | 'zIndex' | 'gap' | 'align'>;
     /** Opacity-drag commit policy of the popover picker (default `'live'`) — see {@link ColorCommit}. */
     commit?: ColorCommit;
+    /** The translator of the picker's labels (default: the kit build's, else English). */
+    i18n?: Translator | null;
 }
 
 /** Closed-state swatch shape. `circle` is the settings-dialog preview (a square chip
@@ -209,6 +223,7 @@ export class ColorField {
     private readonly theme: VelaTheme;
     private readonly popoverOpts: ColorFieldOpts['popover'];
     private readonly commit: ColorCommit | undefined;
+    private readonly i18n: Translator | null;
 
     constructor(opts: ColorFieldOpts) {
         injectStyles(COLOR_STYLE_ID, COLOR_CSS, document);
@@ -217,6 +232,7 @@ export class ColorField {
         this.onVal = opts.onVal;
         this.popoverOpts = opts.popover;
         this.commit = opts.commit;
+        this.i18n = opts.i18n ?? kitTranslator();
 
         const trigger = document.createElement('button');
         trigger.type = 'button';
@@ -268,7 +284,7 @@ export class ColorField {
                     this.onVal(val);
                     this.paint();
                 },
-                { commit: this.commit },
+                { commit: this.commit, i18n: this.i18n },
             ),
         });
         pop.show();
