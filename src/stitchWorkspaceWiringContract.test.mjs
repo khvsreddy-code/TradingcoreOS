@@ -8,6 +8,7 @@ const app = read('./App.tsx');
 const moduleShell = read('./components/workspace/WorkspaceModuleShell.tsx');
 const workspaceShell = read('./appShells/TradingWorkspaceShell.tsx');
 const news = read('./pages/MarketNewsPage.tsx');
+const newsRoute = read('./server/routes/news.routes.ts');
 const dashboard = read('./pages/DashboardPage.tsx');
 const css = read('./index.css');
 
@@ -30,6 +31,9 @@ assert.match(news, /onClick=\{\(\) => choosePreset\(preset\.query\)\}/, 'topic p
 assert.match(news, /onClick=\{refresh\}/, 'refresh and retry controls trigger a request');
 assert.match(news, /target="_blank" rel="noopener noreferrer"/, 'article links open the attributed publisher safely');
 assert.match(news, /safeExternalUrl/, 'article URLs are limited to HTTP and HTTPS');
+assert.match(news, /queryMode === 'topic'/, 'topic filter uses its own backend request mode');
+assert.match(newsRoute, /getTopicNews\(topic\)/, 'backend routes topic filters through a separate topic-search path');
+assert.match(newsRoute, /TOPIC:/, 'topic cache keys cannot collide with symbol RSS cache keys');
 assert.match(dashboard, /onNavigate\('\/news'\)/, 'dashboard links to the full Market News desk');
 assert.match(css, /\.tco-stitch-topbar/, 'shared responsive Stitch navigation skin is installed');
 assert.match(css, /@media \(max-width: 760px\)/, 'workspace chrome has a mobile layout');

@@ -19,11 +19,10 @@ type NewsPayload = {
 };
 
 const PRESETS = [
-  { label: 'Global markets', query: 'financial markets' },
-  { label: 'NIFTY 50', query: 'NIFTY50' },
-  { label: 'Banking', query: 'BANKNIFTY' },
-  { label: 'Commodities', query: 'commodities' },
-  { label: 'Technology', query: 'technology stocks' },
+  { label: 'All Signals', query: 'financial markets', mode: 'market' as const },
+  { label: 'Macro & RBI', query: 'RBI India monetary policy', mode: 'topic' as const },
+  { label: 'Derivatives OI', query: 'NIFTY options open interest', mode: 'topic' as const },
+  { label: 'Earnings', query: 'India corporate earnings results', mode: 'topic' as const },
 ];
 
 function safeExternalUrl(value: string): string | null {
@@ -59,6 +58,7 @@ export function MarketNewsPage({ onNavigate, onBackToLanding, onBroker }: {
 }) {
   const [draft, setDraft] = useState('financial markets');
   const [query, setQuery] = useState('financial markets');
+  const [queryMode, setQueryMode] = useState<'market' | 'topic'>('market');
   const [refreshKey, setRefreshKey] = useState(0);
   const [items, setItems] = useState<NewsItem[]>([]);
   const [provider, setProvider] = useState('News provider');
@@ -73,7 +73,10 @@ export function MarketNewsPage({ onNavigate, onBackToLanding, onBroker }: {
     setError('');
     // Clear old query results so they cannot be mistaken for results for the new query.
     setItems([]);
-    const params = new URLSearchParams({ symbol: query.slice(0, 80) || 'financial markets' });
+    const safeQuery = query.slice(0, 120) || 'financial markets';
+    const params = queryMode === 'topic'
+      ? new URLSearchParams({ topic: safeQuery })
+      : new URLSearchParams({ symbol: safeQuery });
     void fetch(`/api/news?${params.toString()}`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -95,19 +98,21 @@ export function MarketNewsPage({ onNavigate, onBackToLanding, onBroker }: {
       setError(reason instanceof Error ? reason.message : 'Market news is temporarily unavailable.');
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; controller.abort(); };
-  }, [query, refreshKey]);
+  }, [query, queryMode, refreshKey]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const next = draft.trim().slice(0, 80) || 'financial markets';
+    const next = draft.trim().slice(0, 120) || 'financial markets';
     setDraft(next);
-    if (next === query) setRefreshKey(value => value + 1);
+    setQueryMode('topic');
+    if (next === query && queryMode === 'topic') setRefreshKey(value => value + 1);
     else setQuery(next);
   };
-  const choosePreset = (value: string) => {
-    setDraft(value);
-    if (value === query) setRefreshKey(value => value + 1);
-    else setQuery(value);
+  const choosePreset = (preset: typeof PRESETS[number]) => {
+    setDraft(preset.query);
+    setQueryMode(preset.mode);
+    if (preset.query === query && preset.mode === queryMode) setRefreshKey(value => value + 1);
+    else setQuery(preset.query);
   };
   const refresh = () => setRefreshKey(value => value + 1);
 
@@ -154,11 +159,14 @@ export function MarketNewsPage({ onNavigate, onBackToLanding, onBroker }: {
             <button type="submit" disabled={loading} className="premium-button premium-button-primary disabled:opacity-50"><Search className="h-4 w-4"/> Search</button>
           </form>
           <div className="mt-3 flex flex-wrap gap-2" aria-label="News presets">
-            {PRESETS.map(preset => (
-              <button type="button" key={preset.query} onClick={() => choosePreset(preset.query)} aria-pressed={query === preset.query} className={`rounded-lg border px-3 py-2 text-[10px] font-semibold transition ${query === preset.query ? 'border-[var(--tco-accent)]/45 bg-[var(--tco-accent)]/10 text-[var(--tco-accent)]' : 'border-[var(--tco-border)] bg-[var(--tco-surface)] text-[var(--tco-muted)] hover:text-[var(--tco-text)]'}`}>
-                {preset.label}
-              </button>
-            ))}
+            {PRESETS.map(preset => {
+              const selected = query === preset.query && queryMode === preset.mode;
+              return (
+                <button type="button" key={preset.label} onClick={() => choosePreset(preset)} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-[10px] font-semibold transition ${selected ? 'border-[var(--tco-accent)]/45 bg-[var(--tco-accent)]/10 text-[var(--tco-accent)]' : 'border-[var(--tco-border)] bg-[var(--tco-surface)] text-[var(--tco-muted)] hover:text-[var(--tco-text)]'}`}>
+                  {preset.label}
+                </button>
+              );
+            })}
           </div>
         </section>
 

@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 type JsonRecord = Record<string, unknown>;
 type NewsItem = { id: string; title: string; source: string; url: string; publishedAt: string; snippet?: string };
-type NewsBundle = { provider: 'Yahoo Finance RSS' | 'GDELT fallback'; items: NewsItem[] };
+type NewsBundle = { provider: 'Yahoo Finance RSS' | 'GDELT fallback' | 'GDELT topic search'; items: NewsItem[] };
 
 const router = Router();
 const cache = new Map<string, { expiresAt: number; bundle: NewsBundle }>();
@@ -107,6 +107,27 @@ async function fetchGdelt(rawSymbol: string): Promise<NewsItem[]> {
   }).filter((item: NewsItem) => item.title && /^https?:\/\//i.test(item.url));
 }
 
+async function getTopicNews(rawTopic: string): Promise<NewsBundle> {
+  const topic = String(rawTopic || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
+  if (!topic) throw new Error('A topic is required for topic-based news search.');
+  // Keep topic results separate from symbol RSS caches so one preset cannot
+  // accidentally return another preset's cached market headlines.
+  const key = `TOPIC:${topic.toUpperCase()}`;
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.bundle;
+  const pending = inflight.get(key);
+  if (pending) return pending;
+  const promise = fetchGdelt(topic).then(items => ({
+    provider: 'GDELT topic search' as const,
+    items,
+  })).then(bundle => {
+    cache.set(key, { bundle, expiresAt: Date.now() + NEWS_CACHE_TTL_MS });
+    return bundle;
+  }).finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
+}
+
 async function getNews(symbol: string): Promise<NewsBundle> {
   const key = String(symbol || 'financial markets').trim().toUpperCase();
   const cached = cache.get(key);
@@ -129,13 +150,14 @@ async function getNews(symbol: string): Promise<NewsBundle> {
 }
 
 router.get('/news', async (req, res) => {
-  const symbol = String(req.query.symbol || req.query.q || 'financial markets');
+  const topic = String(req.query.topic || '').trim().slice(0, 120);
+  const symbol = String(req.query.symbol || req.query.q || 'financial markets').slice(0, 120);
   try {
-    const bundle = await getNews(symbol);
-    res.json({ success: true, provider: bundle.provider, symbol, items: bundle.items, fetchedAt: new Date().toISOString() });
+    const bundle = topic ? await getTopicNews(topic) : await getNews(symbol);
+    res.json({ success: true, provider: bundle.provider, symbol: topic ? undefined : symbol, topic: topic || undefined, items: bundle.items, fetchedAt: new Date().toISOString() });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'News unavailable';
-    res.status(502).json({ success: false, provider: 'Yahoo Finance RSS', symbol, items: [], error: message });
+    res.status(502).json({ success: false, provider: topic ? 'GDELT topic search' : 'Yahoo Finance RSS', symbol: topic ? undefined : symbol, topic: topic || undefined, items: [], error: message });
   }
 });
 
