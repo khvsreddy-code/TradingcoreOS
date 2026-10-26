@@ -11,6 +11,7 @@ const contracts = [
   ['stitch-workspace-wiring', ['src/stitchWorkspaceWiringContract.test.mjs', false]],
   ['yahoo-delayed-fallback', ['src/yahooDelayedFallbackContract.test.mjs', false]],
   ['shared-broker-coordination', ['src/sharedBrokerCoordinationContract.test.mjs', false]],
+  ['corespirit-right-dock', ['src/corespiritDockContract.test.mjs', false]],
   ['market-latency-trace', ['src/services/core/performance/marketLatencyTrace.test.ts', true]],
   ['chart-data-flow-observability', ['src/chartDataFlowObservabilityContract.test.mjs', false]],
   ['chart-candle-event-canonicalization', ['src/services/marketData/chartCandleEvents.test.ts', true]],

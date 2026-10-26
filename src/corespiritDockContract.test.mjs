@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const live = read('./LiveTradingWorkspace.tsx');
+const dock = read('./components/corespirit/CoreSpiritDock.tsx');
+const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
+const contributions = read('../vendor/vela/src/widget/contributions.ts');
+
+assert.match(live, /CoreSpiritDock/, 'live terminal mounts the CoreSpirit dock');
+assert.match(live, /aria-label=\{coreSpiritDockOpen \? 'Close CoreSpirit Terminal' : 'Open CoreSpirit Terminal'\}/, 'right-side CoreSpirit control is accessible and toggleable');
+assert.match(live, /corespirit-rail-flame/, 'right-side button uses the custom fire-and-cogwheel icon');
+assert.match(live, /activeCell\.addExternalIndicator\(/, 'Add to Chart uses Vela external-indicator lifecycle on the active chart');
+assert.match(live, /localStorage\.setItem\(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource\)/, 'added script is saved for the next chart mount');
+assert.match(dock, /compileCoreSpiritSourceOffThread/, 'CoreSpirit source compiles through its worker pipeline');
+assert.match(dock, /saveUserIndicatorDraft/, 'Save creates a versioned cloud draft');
+assert.match(dock, /\.from\('corespirit_script_versions'\)/, 'version history is read from the script version table');
+assert.match(dock, /onClick=\{\(\) => void rename\(\)\}/, 'rename button is wired');
+assert.match(dock, /publishUserIndicator/, 'Publish uses the existing publication service');
+assert.match(dock, /onAddToChart\(cleanName, source\)/, 'Add to Chart calls the active-chart callback');
+assert.match(dock, /Add to chart/, 'dock provides the advertised Add to Chart action');
+assert.match(cell, /addExternalIndicator\(entry: ExternalIndicatorEntry\)/, 'Vela external-indicator entry point remains available');
+assert.match(contributions, /export interface ExternalIndicatorEntry/, 'dock uses Vela public external-indicator entry type');
+for (const label of ['Compile', 'Save', 'Publish', 'Add to chart', 'Rename']) assert.ok(dock.includes(label), label + ' action visible');
+console.log('CORESPIRIT_DOCK_CONTRACT_OK');

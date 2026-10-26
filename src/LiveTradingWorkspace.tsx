@@ -1,5 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { CoreSpiritDock } from './components/corespirit/CoreSpiritDock';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -131,6 +132,7 @@ const browserRuntimeMetrics = useRef({
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [coreSpiritDockOpen, setCoreSpiritDockOpen] = useState(false);
   const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>({ phase: 'loading' });
   const [workspaceMountAttempt, setWorkspaceMountAttempt] = useState(0);
   const [chartStatus, setChartStatus] = useState<ChartStatusView>({
@@ -736,6 +738,49 @@ const browserRuntimeMetrics = useRef({
               ) : null}
             </div>
           </div>
+        )}
+        {workspaceLoadState.phase === 'ready' && (
+          <button
+            type="button"
+            onClick={() => setCoreSpiritDockOpen(value => !value)}
+            aria-label={coreSpiritDockOpen ? 'Close CoreSpirit Terminal' : 'Open CoreSpirit Terminal'}
+            aria-expanded={coreSpiritDockOpen}
+            title="CoreSpirit Script Terminal"
+            className="pointer-events-auto absolute right-2 top-1/2 z-[120] flex h-14 w-11 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-xl border border-[#334155] bg-[#0b101a]/95 text-orange-300 shadow-xl backdrop-blur-md transition hover:border-orange-400/70 hover:bg-[#111a29] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+          >
+            <svg width="27" height="27" viewBox="0 0 32 32" aria-hidden="true">
+              <defs><linearGradient id="corespirit-rail-flame" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#ef4444"/><stop offset="1" stopColor="#fbbf24"/></linearGradient></defs>
+              <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="url(#corespirit-rail-flame)" strokeWidth="2" strokeLinejoin="round"/>
+              <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#101827" stroke="#67e8f9" strokeWidth="1.3" strokeLinejoin="round"/>
+              <circle cx="16" cy="17" r="3.2" fill="none" stroke="#a5f3fc" strokeWidth="1.4"/>
+              <circle cx="16" cy="17" r="1" fill="#f8fafc"/>
+            </svg>
+            <span className="text-[8px] font-bold tracking-wide">CORE</span>
+          </button>
+        )}
+        {coreSpiritDockOpen && (
+          <CoreSpiritDock
+            onClose={() => setCoreSpiritDockOpen(false)}
+            onAddToChart={async (scriptName, scriptSource) => {
+              const workspace = workspaceRef.current;
+              if (!workspace) throw new Error('The Vela chart is not ready yet.');
+              const activeCell = workspace.active;
+              const before = activeCell.indicatorCount;
+              activeCell.addExternalIndicator({
+                name: scriptName,
+                script: scriptSource,
+                language: 'corespirit',
+                category: 'CoreSpirit',
+              });
+              if (activeCell.indicatorCount <= before) {
+                throw new Error('Vela could not attach this script to the active chart. Check compiler diagnostics.');
+              }
+              try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
+              window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', {
+                detail: { name: scriptName, source: scriptSource },
+              }));
+            }}
+          />
         )}
         <FyersConnectionPrompt floating onConnect={() => setBrokerStatusOpen(true)} />
         {brokerStatusOpen && (

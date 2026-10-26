@@ -134,7 +134,7 @@ assert.match(requestGate,/process\.env\.NODE_ENV === 'production'/,'production a
 assert.match(requestGate,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true'/,'the explicit production safety flag must require shared coordination');
 assert.match(server,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true'/,'readiness recognizes the explicit fail-closed coordination setting');
 assert.match(server,/checks\.coordination && checks\.coordinationReachable/,'readiness must fail when shared Redis is missing or unreachable');
-assert.match(server,/coordinationReachable = checks\.coordinationRequired \? await sharedRedisHealthy\(\)/,'readiness performs a real Redis health check when coordination is required');
+assert.match(server,/coordinationReachable = checks\.coordinationRequired \? await sharedBrokerCoordinationHealthy\(\)/,'readiness checks the configured shared Redis or Supabase Postgres coordinator');
 assert.match(requestGate,/BROKER_COORDINATION_UNAVAILABLE/,'configured Redis outages must fail closed as 503 responses');
 assert.match(requestGate,/BROKER_COORDINATION_LOCK_TIMEOUT/,'shared quota lock waits are bounded');
 assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention storm cannot hold a request indefinitely');
