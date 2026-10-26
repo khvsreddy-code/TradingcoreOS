@@ -26,7 +26,7 @@ swingHigh = rollingHigh[1]
 swingLow = rollingLow[1]
 
 // The prior rolling extremes act as confirmed, causal structure levels.
-if showStructureLevels {
+if showStructureLevels == true {
     plot(swingHigh, "#F23645", 1, 0, "Swing High")
     plot(swingLow, "#089981", 1, 0, "Swing Low")
 }
@@ -35,16 +35,16 @@ bullishBreak = crossover(close, swingHigh)
 bearishBreak = crossunder(close, swingLow)
 let structureBias: state<int> = 0
 
-if showStructureBreaks and bullishBreak and structureBias < 0 {
+if showStructureBreaks == true and bullishBreak and structureBias < 0 {
     label("CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showStructureBreaks and bullishBreak and structureBias >= 0 {
+if showStructureBreaks == true and bullishBreak and structureBias >= 0 {
     label("BOS ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showStructureBreaks and bearishBreak and structureBias > 0 {
+if showStructureBreaks == true and bearishBreak and structureBias > 0 {
     label("CHoCH ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
-if showStructureBreaks and bearishBreak and structureBias <= 0 {
+if showStructureBreaks == true and bearishBreak and structureBias <= 0 {
     label("BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
 if bullishBreak {
@@ -57,10 +57,10 @@ if bearishBreak {
 // Three-candle imbalance: the current low/high does not overlap two bars back.
 bullishFvg = low > high[2] and close > open
 bearishFvg = high < low[2] and close < open
-if showFairValueGaps and bullishFvg {
+if showFairValueGaps == true and bullishFvg {
     zone(time[2], time, low, high[2], "#00FF68", "#00FF68", 0.12)
 }
-if showFairValueGaps and bearishFvg {
+if showFairValueGaps == true and bearishFvg {
     zone(time[2], time, low[2], high, "#FF0008", "#FF0008", 0.12)
 }
 `;
