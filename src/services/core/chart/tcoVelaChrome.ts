@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CoreSpiritDock } from '../../../components/corespirit/CoreSpiritDock';
+import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
 import {
   registerLegendAction,
   registerLegendCallout,
@@ -602,24 +603,7 @@ const coreSpiritLiveEditorState: StatePersistenceHandler = {
 };
 registerStatePersistence(coreSpiritLiveEditorState);
 
-const CORESPIRIT_STARTER = `indicator("CoreSpirit Trend") {
-    overlay: true
-    input length = int(20, min: 1)
-}
-
-fast = ema(close, length)
-slow = ema(close, length * 2)
-
-plot fast
-plot slow
-
-if fast crossesAbove slow {
-    signal "BUY"
-}
-
-if fast crossesBelow slow {
-    signal "SELL"
-}`;
+const CORESPIRIT_STARTER = CORESPIRIT_LUXALGO_SMC_SOURCE;
 
 const workspaceFramePanel: SidePanelDescriptor = {
   id:'tco.workspace-frame', title:'Workspace', icon:'layout', order:1, width:360, resizable:true, minWidth:320, maxWidth:480,
