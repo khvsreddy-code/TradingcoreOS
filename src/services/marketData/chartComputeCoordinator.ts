@@ -24,6 +24,7 @@ import { isIncrementalIndicatorSupported } from './incrementalIndicatorEngine';
 import { buildIndicatorComputationSignature } from '../coreSpirit/indicatorSettingsSchema';
 import { selectIndicatorComputeBounds } from './chartComputeWindow';
 import { invalidationModeForCandleChange, type CandleDatasetChange } from './chartCandleEvents';
+import { marketLatencyTrace } from '../core/performance/marketLatencyTrace';
 
 export type IndicatorWorkerResult = { id: string; kind: string; data: any[]; incremental?: boolean; incrementalMode?: 'update'|'reset'; updateCost?: string };
 type AnalyticsRequest = { requestId: number; market: CanonicalMarketDataPacket; spot: number };
@@ -433,7 +434,8 @@ export class ChartComputeCoordinator {
         ...(primed ? { bar: packet } : { market: packet }),
       };
       const transfer = packetTransferables(packet);
-      return this.indicatorQueue.run(payload, incrementalKey, transfer, { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false })
+      const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
+      const computation = this.indicatorQueue.run(payload, incrementalKey, transfer, { priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false })
         .then(result => {
           this.assertCurrentRevision(datasetKey, scopeKey, revision);
           if (result.resetRequired) {
@@ -457,6 +459,10 @@ export class ChartComputeCoordinator {
           this.incrementalPrimed.delete(primeKey);
           return runIndicatorFallback(compatibilityCandles, normalized.configs);
         });
+      return computation.then(results => {
+        marketLatencyTrace.record(datasetKey, revision, 'compute', computeStartedAt, globalThis.performance?.now?.() ?? Date.now());
+        return results;
+      });
     }
 
     const bounds = selectIndicatorComputeBounds(market.length, options.range);
@@ -470,6 +476,7 @@ export class ChartComputeCoordinator {
     const inflight = this.indicatorInflight.get(key);
     if (inflight) return inflight.then(result => remapIndicatorResults(result, normalized.ids, active));
 
+    const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const packet = createCanonicalMarketDataPacket(market, bounds.startIndex, bounds.endIndex);
     const payload: Omit<IndicatorRequest, 'requestId'> = {
       market: packet,
@@ -498,7 +505,10 @@ export class ChartComputeCoordinator {
       })
       .finally(() => this.indicatorInflight.delete(key));
     this.indicatorInflight.set(key, promise);
-    return promise.then(result => remapIndicatorResults(result, normalized.ids, active));
+    return promise.then(result => {
+      marketLatencyTrace.record(datasetKey, revision, 'compute', computeStartedAt, globalThis.performance?.now?.() ?? Date.now());
+      return remapIndicatorResults(result, normalized.ids, active);
+    });
   }
 
   clear(): void {

@@ -1,4 +1,5 @@
 import type { CandleMutationKind } from './chartCandleEvents';
+import { marketLatencyTrace, type MarketLatencySample } from '../core/performance/marketLatencyTrace';
 
 export type ChartPerformanceSnapshot = {
   key: string;
@@ -48,6 +49,8 @@ export type ChartPerformanceSnapshot = {
   estimatedHistoryBytes: number;
   computeCoalescedTicks: number;
   stageMs: Readonly<{ transport:number; normalization:number; ingestion:number; compute:number; patch:number; renderer:number; frame:number }>;
+  /** Bounded sampled stages sharing a dataset timeline key and revision. */
+  latencyTrace: readonly MarketLatencySample[];
 };
 
 type MutableMetrics = {
@@ -102,6 +105,8 @@ type MutableMetrics = {
 };
 
 const SAMPLE_CAPACITY = 256;
+const LATENCY_TRACE_SAMPLES_PER_KEY = 64;
+const LATENCY_TRACE_MAX_KEYS = 32;
 
 function now(): number {
   return globalThis.performance?.now?.() ?? Date.now();
@@ -119,6 +124,27 @@ function sampleP95(samples: Float64Array, count: number, cursor: number): number
 
 class ChartPerformanceTelemetry {
   private readonly metrics = new Map<string, MutableMetrics>();
+  private readonly latencyTraceByKey = new Map<string, MarketLatencySample[]>();
+
+  recordLatencyTraceSample(sample: MarketLatencySample): void {
+    const key = String(sample.timelineKey || '').trim();
+    if (!key) return;
+    let samples = this.latencyTraceByKey.get(key);
+    if (!samples) samples = [];
+    samples.push(sample);
+    if (samples.length > LATENCY_TRACE_SAMPLES_PER_KEY) samples.splice(0, samples.length - LATENCY_TRACE_SAMPLES_PER_KEY);
+    this.latencyTraceByKey.delete(key);
+    this.latencyTraceByKey.set(key, samples);
+    while (this.latencyTraceByKey.size > LATENCY_TRACE_MAX_KEYS) {
+      const oldest = this.latencyTraceByKey.keys().next().value;
+      if (oldest == null) break;
+      this.latencyTraceByKey.delete(oldest);
+    }
+  }
+
+  private latencyTraceSnapshot(key: string): readonly MarketLatencySample[] {
+    return Object.freeze((this.latencyTraceByKey.get(String(key || '').trim()) || []).slice());
+  }
 
   private entry(key: string): MutableMetrics {
     let value = this.metrics.get(key);
@@ -340,14 +366,22 @@ class ChartPerformanceTelemetry {
       estimatedHistoryBytes: m.estimatedHistoryBytes,
       computeCoalescedTicks: m.computeCoalescedTicks,
       stageMs: Object.freeze({ ...m.stageMs }),
+      latencyTrace: this.latencyTraceSnapshot(key),
     };
   }
 
   keys(): readonly string[] { return Object.freeze([...this.metrics.keys()]); }
 
   reset(key?: string): void {
-    if (key == null) this.metrics.clear(); else this.metrics.delete(key);
+    if (key == null) {
+      this.metrics.clear();
+      this.latencyTraceByKey.clear();
+    } else {
+      this.metrics.delete(key);
+      this.latencyTraceByKey.delete(key);
+    }
   }
 }
 
 export const chartPerformanceTelemetry = new ChartPerformanceTelemetry();
+marketLatencyTrace.setSink(sample => chartPerformanceTelemetry.recordLatencyTraceSample(sample));

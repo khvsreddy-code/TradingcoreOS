@@ -8,6 +8,7 @@ const contracts = [
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
   ['chart-history-normalization', ['src/services/marketData/chartHistoryNormalization.test.ts', true]],
+  ['market-latency-trace', ['src/services/core/performance/marketLatencyTrace.test.ts', true]],
   ['chart-candle-event-canonicalization', ['src/services/marketData/chartCandleEvents.test.ts', true]],
   ['chart-compute-revision-fence', ['src/chartComputeRevisionContract.test.mjs', false]],
   ['indicator-dependency-invalidation', ['src/services/marketData/indicatorDependencyInvalidation.test.ts', true]],
