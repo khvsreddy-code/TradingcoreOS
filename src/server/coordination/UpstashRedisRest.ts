@@ -138,10 +138,11 @@ export function sharedRedisConfigured(): boolean {
   return getSharedRedis().configured;
 }
 
-export async function sharedRedisHealthy(): Promise<boolean> {
+export async function sharedRedisHealthy(signal?: AbortSignal): Promise<boolean> {
   if (!sharedRedisConfigured()) return false;
   try {
-    return await getSharedRedis().ping(AbortSignal.timeout(1_200));
+    const timeoutSignal = AbortSignal.timeout(1_200);
+    return await getSharedRedis().ping(signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal);
   } catch {
     return false;
   }
