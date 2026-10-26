@@ -201,6 +201,8 @@ export async function withBrokerRequestGate<T>(
         if (error instanceof Error && error.name === 'AbortError') throw error;
         const details = error && typeof error === 'object' ? error as Record<string, unknown> : {};
         if (typeof details.code === 'string' && details.code.startsWith('BROKER_')) throw error;
+        const reason = error instanceof Error ? error.message : String(error || 'unknown error');
+        console.warn('[broker-coordination] Postgres admission failed:', reason.replace(/[\r\n\t]+/g, ' ').slice(0, 240));
         throw Object.assign(new Error('Shared Supabase Postgres coordination is unavailable; broker request was not admitted.'), {
           status:503, code:'BROKER_COORDINATION_UNAVAILABLE', cause:error,
         });
