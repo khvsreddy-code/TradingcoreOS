@@ -9,6 +9,7 @@ import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgo
 
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const DEFAULT_SOURCE = CORESPIRIT_LUXALGO_SMC_SOURCE;
+const DEFAULT_SCRIPT_NAME = 'Smart Money Concepts [CoreSpirit]';
 type AuthoringLevel = 'beginner' | 'trader' | 'quant' | 'system';
 type ScriptVersion = { id: string; version: number; source: string; compile_status: string; created_at: string };
 
@@ -54,8 +55,15 @@ export type CoreSpiritDockProps = {
 export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange }: CoreSpiritDockProps) {
   const [source, setSource] = useState(() => localSource() || DEFAULT_SOURCE);
   const [name, setName] = useState(() => {
-    try { return localStorage.getItem('tradingcore:corespirit:editor-name') || 'CoreSpirit Trend'; }
-    catch { return 'CoreSpirit Trend'; }
+    try {
+      const savedName = localStorage.getItem('tradingcore:corespirit:editor-name') || '';
+      const savedSource = localStorage.getItem(versionedStorageKey('editor'))
+        || localStorage.getItem('tradingcore:corespirit:editor')
+        || localStorage.getItem(LIVE_SOURCE_KEY)
+        || '';
+      return savedName && !(savedName === 'CoreSpirit Trend' && isLegacyTrendStarter(savedSource))
+        ? savedName : DEFAULT_SCRIPT_NAME;
+    } catch { return DEFAULT_SCRIPT_NAME; }
   });
   const [nameDraft, setNameDraft] = useState(name);
   const [level, setLevel] = useState<AuthoringLevel>('trader');
@@ -103,16 +111,24 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         const script = await loadEditorScript();
         if (!script || cancelled) return;
         setScriptId(script.id);
-        setName(script.name || 'CoreSpirit Trend');
-        setNameDraft(script.name || 'CoreSpirit Trend');
-        // Keep the active local draft if one exists; otherwise hydrate the latest cloud source.
+        const cloudSource = script.source || DEFAULT_SOURCE;
+        const migrateCloudStarter = isLegacyTrendStarter(cloudSource);
+        const cloudName = migrateCloudStarter ? DEFAULT_SCRIPT_NAME : (script.name || DEFAULT_SCRIPT_NAME);
+        setName(cloudName);
+        setNameDraft(cloudName);
+        // Keep a custom local draft if one exists. Migrate only the known generated
+        // trend-cross sample; never replace another locally authored script.
         if (!localSource()) {
-          setSource(script.source || DEFAULT_SOURCE);
+          const hydratedSource = migrateCloudStarter ? DEFAULT_SOURCE : cloudSource;
+          setSource(hydratedSource);
+          if (migrateCloudStarter) persistLocalSource(hydratedSource, DEFAULT_SCRIPT_NAME, script.id);
         }
         const user = await getSupabaseClient().auth.getUser();
         if (user.error || !user.data.user || cancelled) return;
         await refreshVersions(script.id, user.data.user.id);
-        if (!cancelled) setStatus(`Loaded ${script.name || 'CoreSpirit Trend'} from your CoreSpirit library.`);
+        if (!cancelled) setStatus(migrateCloudStarter
+          ? 'Migrated the generated starter to Smart Money Concepts [CoreSpirit]. Compile it, then Add to Chart.'
+          : `Loaded ${cloudName} from your CoreSpirit library.`);
       } catch {
         if (!cancelled) setStatus('Local editor ready. Sign in and save to enable cloud versions.');
       }
