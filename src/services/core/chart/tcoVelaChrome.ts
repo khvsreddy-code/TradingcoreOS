@@ -1545,14 +1545,17 @@ const bookmarksPanel: SidePanelDescriptor = {
     };
 
     let quoteSourceMode: 'fyers' | 'yahoo' | null = null;
+    let quoteSymbolsSignature = '';
     const quoteSubscribe = (): void => {
       const symbols = watchlist.map((item) => item.symbol);
       if (!symbols.length) return;
       const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
-      if (quoteSourceMode === nextMode && quoteStop) return;
+      const symbolsSignature = symbols.join(',');
+      if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && quoteStop) return;
       quoteStop?.();
       quoteStop = undefined;
       quoteSourceMode = nextMode;
+      quoteSymbolsSignature = symbolsSignature;
       if (nextMode === 'yahoo') {
         let cancelled = false;
         let inFlight = false;
@@ -2001,7 +2004,16 @@ const bookmarksPanel: SidePanelDescriptor = {
     refresh();
     // Refresh the stale marker while the market is quiet or closed; otherwise an old
     // quote can remain visually LIVE simply because no later tick arrived to repaint it.
-    const freshnessTimer = window.setInterval(updateRows, 5000);
+    const freshnessTimer = window.setInterval(() => {
+      const expectedMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
+      if (expectedMode !== quoteSourceMode) {
+        quoteSubscribe();
+        // Recompute technicals after an expiry or reauthorization changes the history source.
+        technicalBySymbol.clear();
+        void warmWatchlistEnrichment();
+      }
+      updateRows();
+    }, 5000);
     const enrichmentTimer = window.setInterval(() => void warmWatchlistEnrichment(), 30_000);
 
     return {
