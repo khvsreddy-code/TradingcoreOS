@@ -27,7 +27,7 @@ assert.match(workspaceShell, /route === '\/news' && <MarketNewsPage/, 'Market Ne
 assert.match(news, /fetch\(\`\/api\/news\?\${params\.toString\(\)}\`/, 'news page uses the existing backend news API');
 assert.match(news, /setQuery\(next\)/, 'search submits a new query');
 assert.match(news, /setItems\(\[\]\)/, 'never shows previous-query headlines under a new query');
-assert.match(news, /onClick=\{\(\) => choosePreset\(preset\.query\)\}/, 'topic preset chips work');
+assert.match(news, /onClick=\{\(\) => choosePreset\(preset\)\}/, 'topic preset chips work');
 assert.match(news, /onClick=\{refresh\}/, 'refresh and retry controls trigger a request');
 assert.match(news, /target="_blank" rel="noopener noreferrer"/, 'article links open the attributed publisher safely');
 assert.match(news, /safeExternalUrl/, 'article URLs are limited to HTTP and HTTPS');
