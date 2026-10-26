@@ -17,6 +17,13 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../marketData/watchlistTechnicals';
+import {
+  hasValidFyersSession,
+  loadYahooBars,
+  loadYahooQuoteTicks,
+  yahooHistoricalCandles,
+  YAHOO_FALLBACK_POLL_MS,
+} from '../../marketData/yahooFallback';
 import { historyStore } from '../../marketData/HistoryStore';
 import type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
@@ -1470,8 +1477,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       high?: number;
       low?: number;
       receivedAt: number;
+      source: 'fyers' | 'yahoo';
     };
-    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; receivedAt?: number; stale: boolean };
+    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; receivedAt?: number; stale: boolean; source?: 'fyers' | 'yahoo' };
     const quotes = new Map<string, Quote>();
     let quoteStop: (() => void) | undefined;
 
@@ -1523,10 +1531,12 @@ const bookmarksPanel: SidePanelDescriptor = {
         percent = (change / (ltp - change)) * 100;
       }
       const hasFreshTimestamp = receivedAt !== undefined && Number.isFinite(receivedAt);
+      const source: 'fyers' | 'yahoo' | undefined = cachedIsNewest ? cached?.source : parsedSnapshotTime !== undefined ? 'fyers' : cached?.source;
       return {
         ltp,
         change,
         changePercent: percent,
+        ...(source ? { source } : {}),
         high: asFinite(cachedIsNewest ? cached?.high : snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
         low: asFinite(cachedIsNewest ? cached?.low : snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
         ...(hasFreshTimestamp ? { receivedAt } : {}),
@@ -1534,11 +1544,57 @@ const bookmarksPanel: SidePanelDescriptor = {
       };
     };
 
+    let quoteSourceMode: 'fyers' | 'yahoo' | null = null;
     const quoteSubscribe = (): void => {
-      quoteStop?.();
-      quoteStop = undefined;
       const symbols = watchlist.map((item) => item.symbol);
       if (!symbols.length) return;
+      const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
+      if (quoteSourceMode === nextMode && quoteStop) return;
+      quoteStop?.();
+      quoteStop = undefined;
+      quoteSourceMode = nextMode;
+      if (nextMode === 'yahoo') {
+        let cancelled = false;
+        let inFlight = false;
+        const poll = async () => {
+          if (cancelled || inFlight) return;
+          inFlight = true;
+          try {
+            const ticks = await loadYahooQuoteTicks(symbols);
+            if (cancelled) return;
+            for (const [symbol, tick] of ticks) {
+              const ltp = asFinite(tick.ltp, tick.close);
+              if (ltp === undefined) continue;
+              const previousClose = asFinite(tick.close);
+              const change = asFinite(tick.change);
+              const changePercent = asFinite(tick.changePercent);
+              quotes.set(symbol.toUpperCase(), {
+                ltp,
+                change,
+                changePercent,
+                previousClose,
+                high: asFinite(tick.high),
+                low: asFinite(tick.low),
+                receivedAt: Date.now(),
+                source: 'yahoo',
+              });
+            }
+            if (sortMode === 'price' || sortMode === 'change') buildRows();
+            else {
+              for (const symbol of ticks.keys()) updateRows(symbol.toUpperCase());
+              updateDetails();
+            }
+          } catch {
+            // Keep the last Yahoo quote, clearly aged by the regular staleness pass.
+          } finally {
+            inFlight = false;
+          }
+        };
+        void poll();
+        const timer = window.setInterval(() => void poll(), YAHOO_FALLBACK_POLL_MS);
+        quoteStop = () => { cancelled = true; window.clearInterval(timer); };
+        return;
+      }
       quoteStop = tradingCoreRuntime.subscribeMarketData(symbols, (event) => {
         if (event.type !== 'tick' || !event.tick) return;
         const tick = event.tick as unknown as Record<string, unknown>;
@@ -1561,6 +1617,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           high: asFinite(tick.dayHigh, tick.high, daily?.high),
           low: asFinite(tick.dayLow, tick.low, daily?.low),
           receivedAt: Date.now(),
+          source: 'fyers',
         });
         // Keep live price/change sorts stable while the feed updates, without rebuilding
         // every DOM row on the default custom-order path.
@@ -1590,9 +1647,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       const { ltp, change, changePercent, high, low } = quote;
       detailTitle.textContent = ticker || 'Active instrument';
       detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${(tradingCoreRuntime.getMarketSnapshot(current) as any)?.exchange || (tradingCoreRuntime.getMarketSnapshot(current) as any)?.venue || 'Active chart'}`;
-      liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.stale ? 'STALE' : 'LIVE';
-      liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.stale ? 'Stale quote' : 'Live quote');
-      liveBadge.style.color = ltp === undefined ? 'var(--vela-fg-muted)' : quote.stale ? '#fbbf24' : '#34d399';
+      liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.source === 'yahoo' ? 'YAHOO DELAYED' : quote.stale ? 'STALE' : 'LIVE';
+      liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'Stale quote' : 'Live quote');
+      liveBadge.style.color = ltp === undefined ? 'var(--vela-fg-muted)' : quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : '#34d399';
       const setMetric = (key: string, value: string, tone?: string) => {
         const element = metricRefs.get(key);
         if (!element) return;
@@ -1608,10 +1665,14 @@ const bookmarksPanel: SidePanelDescriptor = {
       setMetric('low', fmt(low));
       detailHint.textContent = ltp !== undefined
         ? quote.stale
-          ? 'STALE QUOTE · The last received price is older than 15 seconds. Recheck the live feed before acting.'
-          : high !== undefined && low !== undefined
-            ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
-            : 'Live broker quote · waiting for complete day-range fields from the market feed.'
+          ? quote.source === 'yahoo'
+            ? 'YAHOO DELAYED · Prices are delayed and only refreshed by periodic Yahoo Finance checks. Do not treat them as live execution data.'
+            : 'STALE QUOTE · The last received price is older than 15 seconds. Recheck the live feed before acting.'
+          : quote.source === 'yahoo'
+            ? 'YAHOO DELAYED · Day range and change are sourced from Yahoo Finance; execution still requires a valid broker session.'
+            : high !== undefined && low !== undefined
+              ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
+              : 'Live broker quote · waiting for complete day-range fields from the market feed.'
         : 'Waiting for a market quote for this instrument. No sample price is shown.';
 
       const technical = technicalBySymbol.get(current.toUpperCase())?.summary;
@@ -1700,14 +1761,14 @@ const bookmarksPanel: SidePanelDescriptor = {
         const changeParts: string[] = [];
         if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
         if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.stale ? 'stale' : 'live';
+        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
         ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
-        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
-        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.stale ? 'stale quote' : 'live quote'}`}`);
-        ref.value.style.color = quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
+        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote — checked every 4 seconds; not real-time' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
+        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'stale quote' : 'live quote'}`}`);
+        ref.value.style.color = quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
         ref.change.textContent = quote.ltp === undefined
           ? 'WAITING FOR QUOTE'
-          : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
+          : `${quote.source === 'yahoo' ? 'YAHOO DELAYED · ' : quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
         const changeTone = absolute !== undefined ? absolute : pct;
         ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
         updateEnrichmentRow(item, ref);
@@ -1741,14 +1802,14 @@ const bookmarksPanel: SidePanelDescriptor = {
         const changeParts: string[] = [];
         if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
         if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.stale ? 'stale' : 'live';
+        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
         ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
-        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
-        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.stale ? 'stale quote' : 'live quote'}`}`);
-        ref.value.style.color = quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
+        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote — checked every 4 seconds; not real-time' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
+        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'stale quote' : 'live quote'}`}`);
+        ref.value.style.color = quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
         ref.change.textContent = quote.ltp === undefined
           ? 'WAITING FOR QUOTE'
-          : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
+          : `${quote.source === 'yahoo' ? 'YAHOO DELAYED · ' : quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
         const changeTone = absolute !== undefined ? absolute : pct;
         ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
         updateEnrichmentRow(item, ref);
@@ -1859,6 +1920,15 @@ const bookmarksPanel: SidePanelDescriptor = {
         const technicalTask = !cachedTechnical || cachedTechnical.expiresAt <= now
           ? (async () => {
               try {
+                if (!hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+                  const yahooBars = await loadYahooBars(item.symbol, '5', 2_000, undefined, AbortSignal.timeout(12_000));
+                  const yahooCandles = yahooHistoricalCandles(yahooBars);
+                  technicalBySymbol.set(item.symbol, {
+                    summary: buildWatchlistTechnicalSummary(yahooCandles),
+                    expiresAt: Date.now() + (yahooCandles.length >= 50 ? 120_000 : 30_000),
+                  });
+                  return;
+                }
                 const brokerId = String(tradingCoreRuntime.getPrimaryBrokerId() || 'fyers').toLowerCase();
                 await historyStore.hydrate(brokerId, item.symbol, '5minute');
                 let candles = historyStore.get(brokerId, item.symbol, '5minute');

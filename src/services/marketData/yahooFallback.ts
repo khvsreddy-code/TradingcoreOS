@@ -63,12 +63,17 @@ type YahooPayload = {
 };
 
 function normalizeTimeframe(value: string): string {
-  const normalized = String(value || '5').trim().toUpperCase();
-  if (normalized === '1M' || normalized === '1MIN') return '1';
-  if (normalized === 'D' || normalized === '1D' || normalized === 'DAY') return 'D';
-  if (normalized === 'W' || normalized === '1W' || normalized === 'WEEK') return 'W';
-  if (normalized === 'M' || normalized === '1MTH' || normalized === 'MONTH') return 'M';
-  return normalized.replace(/MIN$/, '').replace(/M$/, '');
+  const raw = String(value || '5').trim();
+  const upper = raw.toUpperCase();
+  if (['D', '1D', 'DAY', 'DAILY'].includes(upper)) return 'D';
+  if (['W', '1W', 'WEEK', 'WEEKLY'].includes(upper)) return 'W';
+  if (['M', '1M', '1MTH', 'MONTH', 'MONTHLY'].includes(upper)) return 'M';
+  // Vela uses lowercase m / min for minutes and uppercase M for months.
+  if (/^\d+MIN$/i.test(raw)) return upper.replace(/MIN$/, '');
+  if (/^\d+m$/.test(raw)) return raw.slice(0, -1);
+  if (/^\d+$/.test(raw)) return raw;
+  if (/^\d+M$/.test(raw)) return raw;
+  return upper.replace(/MIN$/, '').replace(/M$/, '');
 }
 
 function rangeQuery(range?: BarRange): string {
@@ -151,28 +156,37 @@ export async function loadYahooLatestBar(
 }
 
 export async function loadYahooQuoteTicks(symbols: readonly string[], signal?: AbortSignal): Promise<Map<string, NormalizedMarketTick>> {
-  const safeSymbols = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 10);
-  if (!safeSymbols.length) return new Map();
-  const payload = await request<YahooPayload>(`/api/market-data/yahoo/quotes?symbols=${encodeURIComponent(safeSymbols.join(','))}`, signal);
+  const uniqueSymbols = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 50);
   const result = new Map<string, NormalizedMarketTick>();
-  for (const item of payload.items || []) {
-    if (!item.success || !item.quote || !Number.isFinite(Number(item.quote.ltp))) continue;
-    const quote = item.quote;
-    const tick: NormalizedMarketTick = {
-      instrumentKey: item.symbol,
-      ltp: Number(quote.ltp),
-      close: Number(quote.ltp),
-      open: undefined,
-      high: quote.dayHigh == null ? undefined : Number(quote.dayHigh),
-      low: quote.dayLow == null ? undefined : Number(quote.dayLow),
-      volume: quote.volume == null ? undefined : Math.max(0, Number(quote.volume)),
-      change: quote.change == null ? undefined : Number(quote.change),
-      changePercent: quote.changePercent == null ? undefined : Number(quote.changePercent),
-      lastTradeTimestamp: quote.timestamp || item.sourceUpdatedAt || undefined,
-      receivedAtEpoch: item.fetchedAt ? Date.parse(item.fetchedAt) : Date.now(),
-      timestamp: item.fetchedAt ? Date.parse(item.fetchedAt) : Date.now(),
-    };
-    result.set(item.symbol, tick);
+  if (!uniqueSymbols.length) return result;
+  // The authenticated server endpoint intentionally caps one batch at 10 symbols.
+  // Chunk larger watchlists rather than silently leaving their tail without quotes.
+  for (let start = 0; start < uniqueSymbols.length; start += 10) {
+    const batch = uniqueSymbols.slice(start, start + 10);
+    const payload = await request<YahooPayload>(
+      `/api/market-data/yahoo/quotes?symbols=${encodeURIComponent(batch.join(','))}`,
+      signal,
+    );
+    for (const item of payload.items || []) {
+      if (!item.success || !item.quote || !Number.isFinite(Number(item.quote.ltp))) continue;
+      const quote = item.quote;
+      const fetchedAt = item.fetchedAt ? Date.parse(item.fetchedAt) : Date.now();
+      const tick: NormalizedMarketTick = {
+        instrumentKey: item.symbol,
+        ltp: Number(quote.ltp),
+        close: Number(quote.ltp),
+        open: undefined,
+        high: quote.dayHigh == null ? undefined : Number(quote.dayHigh),
+        low: quote.dayLow == null ? undefined : Number(quote.dayLow),
+        volume: quote.volume == null ? undefined : Math.max(0, Number(quote.volume)),
+        change: quote.change == null ? undefined : Number(quote.change),
+        changePercent: quote.changePercent == null ? undefined : Number(quote.changePercent),
+        lastTradeTimestamp: quote.timestamp || item.sourceUpdatedAt || undefined,
+        receivedAtEpoch: Number.isFinite(fetchedAt) ? fetchedAt : Date.now(),
+        timestamp: Number.isFinite(fetchedAt) ? fetchedAt : Date.now(),
+      };
+      result.set(item.symbol, tick);
+    }
   }
   return result;
 }
