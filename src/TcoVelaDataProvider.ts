@@ -962,7 +962,6 @@ export class TcoVelaDataProvider implements DataProvider {
 
     const startYahoo = () => {
       if (cancelled || stopYahoo) return;
-      timelineKey = `yahoo:${symbol}:${tcoTimeframe}`;
       stopYahoo = startYahooFallbackPolling(symbol, tcoTimeframe, (bar: OHLCV) => {
         if (cancelled) return;
         const nextKey = `${bar.time}|${bar.open}|${bar.high}|${bar.low}|${bar.close}|${bar.volume ?? ''}`;
