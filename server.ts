@@ -134,8 +134,13 @@ app.get('/api/health/live', (_req, res) => {
 
 app.get('/api/health/ready', async (req, res) => {
   const checks = healthChecks();
-  checks.realtimeGateway = await realtimeGatewayReady(req);
-  checks.coordinationReachable = checks.coordinationRequired ? await sharedBrokerCoordinationHealthy() : checks.coordination;
+  const signal = (req as TradingCoreRequest).tradingCoreAbortSignal;
+  const [gatewayReachable, coordinationReachable] = await Promise.all([
+    realtimeGatewayReady(req),
+    checks.coordinationRequired ? sharedBrokerCoordinationHealthy(signal) : Promise.resolve(checks.coordination),
+  ]);
+  checks.realtimeGateway = gatewayReachable;
+  checks.coordinationReachable = coordinationReachable;
   const ready = checks.database &&
     checks.encryption &&
     checks.fyers &&
@@ -144,8 +149,15 @@ app.get('/api/health/ready', async (req, res) => {
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', checks, timestamp: new Date().toISOString() });
 });
 
-app.get('/api/health/diagnostics', (_req, res) => {
+app.get('/api/health/diagnostics', async (req, res) => {
   const checks = healthChecks();
+  const signal = (req as TradingCoreRequest).tradingCoreAbortSignal;
+  const [gatewayReachable, coordinationReachable] = await Promise.all([
+    realtimeGatewayReady(req),
+    checks.coordinationRequired ? sharedBrokerCoordinationHealthy(signal) : Promise.resolve(checks.coordination),
+  ]);
+  checks.realtimeGateway = gatewayReachable;
+  checks.coordinationReachable = coordinationReachable;
   res.status(200).json({
     system: 'TradingCore OS', version: '0.5.0', checks, metrics: getRequestMetrics(),
     fyersQuota: getFyersQuotaTelemetry(),
@@ -153,9 +165,11 @@ app.get('/api/health/diagnostics', (_req, res) => {
   });
 });
 
-app.get('/api/health', async (_req, res) => {
+app.get('/api/health', async (req, res) => {
   const checks = healthChecks();
-  checks.coordinationReachable = checks.coordinationRequired ? await sharedBrokerCoordinationHealthy() : checks.coordination;
+  checks.coordinationReachable = checks.coordinationRequired
+    ? await sharedBrokerCoordinationHealthy((req as TradingCoreRequest).tradingCoreAbortSignal)
+    : checks.coordination;
   const ready = checks.database &&
     checks.encryption &&
     checks.fyers &&
