@@ -263,6 +263,8 @@ export interface SymbolPickerOptions {
     iconFor?: (d: SymbolDescriptor) => string | undefined;
     /** Optional remote/provider search. The existing indexed results remain visible while it runs. */
     search?: (query: string, limit: number, market: string) => Promise<SymbolDescriptor[]>;
+    /** Translator provided by the active Vela workspace. */
+    i18n?: Translator | null;
 }
 
 const TEXT = {
@@ -273,13 +275,14 @@ const TEXT = {
     showContracts: msg('widget.symbolPicker.showContracts', 'Show contracts'),
 };
 
-type SymbolTab = 'all' | 'stocks' | 'etfs' | 'crypto' | 'futures' | 'forex' | 'commodities';
+type SymbolTab = 'all' | 'stocks' | 'etfs' | 'options' | 'crypto' | 'futures' | 'forex' | 'commodities';
 
 /** The type tabs, keyed by id; the label is display text only. */
 const TABS: ReadonlyArray<{ id: SymbolTab; label: MessageDescriptor }> = [
     { id: 'all', label: msg('widget.symbolPicker.tab.all', 'All') },
     { id: 'stocks', label: msg('widget.symbolPicker.tab.stocks', 'Stocks') },
     { id: 'etfs', label: msg('widget.symbolPicker.tab.etfs', 'ETFs') },
+    { id: 'options', label: msg('widget.symbolPicker.tab.options', 'Options') },
     { id: 'crypto', label: msg('widget.symbolPicker.tab.crypto', 'Crypto') },
     { id: 'futures', label: msg('widget.symbolPicker.tab.futures', 'Futures') },
     { id: 'forex', label: msg('widget.symbolPicker.tab.forex', 'Forex') },
@@ -291,6 +294,7 @@ const TAB_TYPES: Readonly<Record<Exclude<SymbolTab, 'all'>, readonly string[]>> 
     crypto: ['crypto'],
     stocks: ['stock'],
     etfs: ['etf'],
+    options: ['option', 'options'],
     futures: ['futures', 'root'],
     forex: ['forex'],
     commodities: ['commodity'],
@@ -340,7 +344,7 @@ export class SymbolPicker {
         this.tabs.className = 'vela-sp-tabs';
         const head = doc.createElement('div');
         head.className = 'vela-sp-head';
-        for (const t of ['All', 'Stocks', 'ETFs', 'Options', 'Crypto', 'Futures', 'Forex', 'Commodities']) {
+        for (const tab of TABS) {
             const b = doc.createElement('button');
             b.className = 'vela-sp-tab';
             b.dataset.tab = tab.id;

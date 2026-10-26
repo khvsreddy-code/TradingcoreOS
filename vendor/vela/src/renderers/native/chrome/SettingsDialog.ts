@@ -20,7 +20,7 @@ import {
     type SettingsValueRow,
 } from '../../../chart-types/registry';
 import { iconAt } from '../../../core/icons';
-import { normalizeTimezone } from '../../../core/timezones';
+import { normalizeTimezone, TIMEZONES, tzMenuLabel } from '../../../core/timezones';
 import { closeOpenPopovers } from '../../../ui/components/popover';
 import { closeWidthPopover } from '../../../ui/components/glyph-select';
 import { Dialog } from '../../../ui/components/dialog';

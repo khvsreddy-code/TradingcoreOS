@@ -14,6 +14,13 @@ import type { MessageLike, Translator } from '../core/i18n/types';
 import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 
+const TEXT = {
+    gridSize: msg('widget.layoutPicker.gridSize', '{cols} columns × {rows} rows'),
+    layout: msg('widget.layoutPicker.layout', 'Layout'),
+    sync: msg('widget.layoutPicker.sync', 'Sync'),
+    gridHint: msg('widget.layoutPicker.gridHint', 'Choose a layout by columns and rows.'),
+} as const;
+
 const STYLE_ID = 'vela-widget-layout-picker-v16';
 // One monochrome selection language across the panel: lit cells and sync ON
 // switches both speak --vela-selected-*.
