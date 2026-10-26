@@ -42,7 +42,7 @@ function parseScalarParameters(value: unknown): Record<string, string | number |
           typeof item === 'number' && Number.isFinite(item))) {
       throw new Error('Training parameters must be simple finite JSON scalar values.');
     }
-    result[key] = item;
+    result[key] = item as string | number | boolean | null;
   }
   return result;
 }
@@ -382,7 +382,7 @@ export async function runChunkedCoreSpiritModelTraining(
     }
     const meanValidationConfidence = validationConfidenceSum / validationSamples;
     const safety = featureGraph.researchSafety;
-    const validationProtocol = boundaryGap > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1';
+    const validationProtocol: ModelProvenance['validationResults']['protocol'] = boundaryGap > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1';
     const validationResults = {
       protocol: validationProtocol,
       trainingSampleCount: trainingCount,

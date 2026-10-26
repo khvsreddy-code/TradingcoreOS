@@ -1756,7 +1756,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       updateDetails();
     };
 
-    filterInput.addEventListener('input', updateRows);
+    filterInput.addEventListener('input', () => updateRows());
 
     const buildRows = (): void => {
       const current = String(ctx.symbol || '').toUpperCase();
@@ -2252,7 +2252,7 @@ const orderBookPanel: SidePanelDescriptor = {
 
     const render = () => {
       ladder.textContent = '';
-      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol) as Record<string,unknown> | undefined;
+      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol) as unknown as Record<string,unknown> | undefined;
       const ltp=Number(tick?.ltp??tick?.lastPrice??tick?.close);
       const rawReceived=Number(tick?.receivedAtEpoch??tick?.lastReceivedAt);
       let receivedAt=Number.isFinite(rawReceived)&&rawReceived>0
@@ -2709,7 +2709,7 @@ const newsMarksAttachment: WidgetAttachment = {
         if (currentGeneration !== generation) return;
         const now = Date.now();
         const marks: TimelineMark[] = bundle.items
-          .map(item => {
+          .map((item): TimelineMark | null => {
             const publishedAt = parseNewsTimestamp(item.publishedAt);
             const url = String(item.url || '');
             if (!Number.isFinite(publishedAt) || publishedAt <= 0

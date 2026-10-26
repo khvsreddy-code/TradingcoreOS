@@ -183,7 +183,6 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
         },
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         maxOutputTokens: input.outputTokenLimit,
-        automaticContinuation: false,
         abortSignal: AbortSignal.timeout(CORE_SPIRIT_AI_INVOKE_LIMITS.providerTimeoutMs),
       },
     });
