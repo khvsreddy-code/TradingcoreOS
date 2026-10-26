@@ -14,7 +14,8 @@ type FyersLikeConnection = Readonly<{
 /** A FYERS token without a future expiry is not treated as an authenticated live session. */
 export function hasValidFyersSession(connections: readonly FyersLikeConnection[], now = Date.now()): boolean {
   return connections.some(connection => {
-    if (String(connection.brokerId || '').toLowerCase() !== 'fyers' || connection.status !== 'Connected') return false;
+    if (String(connection.brokerId || '').toLowerCase() !== 'fyers') return false;
+    if (connection.status !== 'Connected' && connection.status !== 'Read Only') return false;
     const expiresAt = Date.parse(String(connection.tokenExpiry || ''));
     return Number.isFinite(expiresAt) && expiresAt > now + 5_000;
   });

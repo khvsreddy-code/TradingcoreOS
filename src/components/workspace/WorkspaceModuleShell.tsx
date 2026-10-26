@@ -42,11 +42,12 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
       if (cancelled) return;
       const refresh = () => setBrokerState({
         active: loaded.getPrimaryBrokerInfo(),
-        count: loaded.getAllConnections().filter(connection =>
-          (connection.status === 'Connected' || connection.status === 'Read Only') &&
-          Number.isFinite(Date.parse(String(connection.tokenExpiry || ''))) &&
-          Date.parse(String(connection.tokenExpiry || '')) > Date.now() + 5_000,
-        ).length,
+        count: loaded.getAllConnections().filter(connection => {
+          if (connection.status !== 'Connected' && connection.status !== 'Read Only') return false;
+          const expiresAt = Date.parse(String(connection.tokenExpiry || ''));
+          if (Number.isFinite(expiresAt)) return expiresAt > Date.now() + 5_000;
+          return String(connection.brokerId || '').toLowerCase() !== 'fyers';
+        }).length,
       });
       refresh();
       disposers = [

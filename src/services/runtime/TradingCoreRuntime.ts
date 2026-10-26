@@ -74,11 +74,12 @@ export class TradingCoreRuntime {
   private constructor() {}
   public static getInstance(): TradingCoreRuntime { if (!TradingCoreRuntime.instance) TradingCoreRuntime.instance = new TradingCoreRuntime(); return TradingCoreRuntime.instance; }
   public hasConnectedBroker(): boolean {
-    return this.brokerMgr.getAllConnections().some(connection =>
-      (connection.status === 'Connected' || connection.status === 'Read Only') &&
-      Number.isFinite(Date.parse(String(connection.tokenExpiry || ''))) &&
-      Date.parse(String(connection.tokenExpiry || '')) > Date.now() + 5_000,
-    );
+    return this.brokerMgr.getAllConnections().some(connection => {
+      if (connection.status !== 'Connected' && connection.status !== 'Read Only') return false;
+      const expiresAt = Date.parse(String(connection.tokenExpiry || ''));
+      if (Number.isFinite(expiresAt)) return expiresAt > Date.now() + 5_000;
+      return String(connection.brokerId || '').toLowerCase() !== 'fyers';
+    });
   }
   public getPrimaryBroker(): BrokerAdapter | null { return this.brokerMgr.getPrimaryBroker(); }
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null { return this.brokerMgr.getPrimaryBrokerInfo(); }

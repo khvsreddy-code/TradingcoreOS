@@ -113,7 +113,8 @@ export class BrokerManager {
   private sessionUsable(info: BrokerConnectionInfo, now = Date.now()): boolean {
     if (info.status !== 'Connected' && info.status !== 'Read Only') return false;
     const expiresAt = Date.parse(String(info.tokenExpiry || ''));
-    return Number.isFinite(expiresAt) && expiresAt > now + 5_000;
+    if (Number.isFinite(expiresAt)) return expiresAt > now + 5_000;
+    return String(info.brokerId || '').toLowerCase() !== 'fyers';
   }
 
   private refreshSessionExpiryState(now = Date.now()): void {
@@ -150,7 +151,9 @@ export class BrokerManager {
         const brokerId = adapter.id.toLowerCase();
         const tokenExpiry = typeof session.expiresAt === 'string' ? session.expiresAt : '';
         const expiryMs = Date.parse(tokenExpiry);
-        const valid = Number.isFinite(expiryMs) && expiryMs > now + 5_000;
+        const valid = Number.isFinite(expiryMs)
+          ? expiryMs > now + 5_000
+          : brokerId !== 'fyers';
         if (!valid) {
           // Keep the expired FYERS record visible so the user can reauthorize it,
           // but do not mark the adapter authenticated or select it for live routing.
