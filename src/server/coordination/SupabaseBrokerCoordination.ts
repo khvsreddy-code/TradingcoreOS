@@ -17,6 +17,11 @@ let clientKey = '';
 let clientMode: CoordinationMode | '' = '';
 let clientSharedSecret = '';
 
+function boundedAbortSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+
 /**
  * Prefer an isolated coordination-only project when configured. Its public API
  * key can call only the two secret-checked RPC wrappers; it cannot read the
@@ -70,14 +75,21 @@ export async function supabaseBrokerCoordinationHealthy(signal?: AbortSignal): P
   const configured = getCoordinationCredentialsAndClient();
   if (!configured) return false;
   const { credentials, client: db } = configured;
+  const probeSignal = boundedAbortSignal(signal, 2_500);
   try {
     const response = credentials.mode === 'shared-secret'
       ? await db.rpc('broker_coordination_health_secure', {
           p_shared_secret: credentials.sharedSecret,
-        }).abortSignal(signal || AbortSignal.timeout(1_500))
-      : await db.rpc('broker_coordination_health').abortSignal(signal || AbortSignal.timeout(1_500));
-    return !response.error && response.data === true;
-  } catch {
+        }).abortSignal(probeSignal)
+      : await db.rpc('broker_coordination_health').abortSignal(probeSignal);
+    if (response.error) {
+      console.warn('[broker-coordination] Supabase readiness probe failed:', String(response.error.message || 'unknown error').replace(/[\r\n\t]+/g, ' ').slice(0, 220));
+      return false;
+    }
+    return response.data === true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || 'unknown error');
+    console.warn('[broker-coordination] Supabase readiness probe failed:', message.replace(/[\r\n\t]+/g, ' ').slice(0, 220));
     return false;
   }
 }
@@ -100,8 +112,12 @@ export async function admitSupabaseBrokerRequest(input: AdmissionInput, signal?:
         p_shared_secret: credentials.sharedSecret,
       })
     : db.rpc('admit_broker_request', params);
-  const { data, error } = await request.abortSignal(signal || AbortSignal.timeout(2_000));
-  if (error) throw new Error('Shared Postgres broker admission failed: ' + error.message);
+  const requestSignal = boundedAbortSignal(signal, 4_000);
+  const { data, error } = await request.abortSignal(requestSignal);
+  if (error) {
+    const message = String(error.message || 'unknown error').replace(/[\r\n\t]+/g, ' ').slice(0, 220);
+    throw new Error('Shared Postgres broker admission failed: ' + message);
+  }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Shared Postgres broker admission returned an invalid response.');
   const result = data as AdmissionRpcResult;
   if (typeof result.admitted !== 'boolean' || typeof result.code !== 'string') throw new Error('Shared Postgres broker admission response is incomplete.');
