@@ -31,7 +31,7 @@ assert.match(provider, /function publishChartDataSourceStatus/, 'Yahoo load stat
 assert.match(provider, /catch \(error\) \{\s*const fallbackBars = await loadYahooBarsForChart/, 'broker restoration failures fall back to Yahoo before Vela receives empty history');
 assert.match(provider, /startYahooFallbackPolling\(symbol, tcoTimeframe/, 'live bar subscriptions poll the Yahoo latest-bar endpoint');
 assert.match(provider, /globalThis\.setInterval\(syncBroker, YAHOO_FALLBACK_POLL_MS\)/, 'provider rechecks expiry while chart is open');
-assert.match(provider, /return loadYahooColumns\(symbol, tcoTimeframe/, 'columnar chart loads can start without FYERS');
+assert.match(provider, /return loadYahooColumnsForChart\(symbol, tcoTimeframe/, 'columnar chart loads can start without FYERS');
 assert.match(provider, /loadYahooBarsForChart\(symbol, tcoTimeframe/, 'history and older-range requests route to Yahoo without FYERS');
 assert.match(provider, /if \(!history\.length\)[\s\S]{0,700}loadYahooBarsForChart\(symbol, tcoTimeframe/, 'broker history errors fall back to Yahoo even when a FYERS session looks connected');
 assert.match(provider, /if \(lastError\)[\s\S]{0,500}loadYahooBarsForChart\(symbol, tcoTimeframe/, 'history-range errors fall back instead of leaving Vela blank');
