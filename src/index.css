@@ -670,7 +670,7 @@ html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="bg-[#3
 .tco-stitch-panel > div:first-child { border-color: rgba(255,255,255,.065) !important; }
 .tco-stitch-shell input:not([type=checkbox]):not([type=radio]),.tco-stitch-shell select,.tco-stitch-shell textarea { border-color: rgba(255,255,255,.12); }
 .tco-stitch-shell button:focus-visible,.tco-stitch-shell a:focus-visible,.tco-stitch-shell input:focus-visible,.tco-stitch-shell select:focus-visible,.tco-stitch-shell textarea:focus-visible { outline: 2px solid rgba(0,242,254,.7); outline-offset: 2px; }
-@media (max-width: 1440px) { .tco-stitch-nav-label { display: none; } .tco-stitch-nav-item { min-width: 36px; padding: 0 9px; } }
+@media (max-width: 1260px) { .tco-stitch-nav-label { display: none; } .tco-stitch-nav-item { min-width: 36px; padding: 0 9px; } }
 @media (max-width: 1100px) { .tco-stitch-brand-name { display: none; } .tco-stitch-broker-pill { max-width: 100px; } .tco-stitch-broker-pill span:nth-child(2) { max-width: 42px; } }
 @media (max-width: 760px) {
   .tco-stitch-topbar { height: 60px; } .tco-stitch-topbar-inner { gap: 7px; padding: 0 8px; }
@@ -685,3 +685,20 @@ html[data-tco-theme="white"] .tco-stitch-topbar { background: rgba(255,255,255,.
 html[data-tco-theme="white"] .tco-stitch-brand { color: #102027; }
 html[data-tco-theme="white"] .tco-stitch-broker-pill,html[data-tco-theme="white"] .tco-stitch-icon-link,html[data-tco-theme="white"] .tco-stitch-icon-button { background: rgba(16,32,39,.035); border-color: rgba(16,32,39,.11); color: #536271; }
 html[data-tco-theme="white"] .tco-stitch-panel { background: #fff !important; box-shadow: 0 10px 28px rgba(30,60,68,.07) !important; border-color: rgba(16,32,39,.12) !important; }
+
+.tco-stitch-news-hero {
+  background:
+    radial-gradient(ellipse at 88% -20%, rgba(0,242,254,.11), transparent 32rem),
+    radial-gradient(ellipse at 10% 130%, rgba(121,40,202,.08), transparent 25rem),
+    linear-gradient(145deg, rgba(16,19,27,.96), rgba(8,10,15,.96));
+}
+html[data-tco-theme="white"] .tco-stitch-shell {
+  --tco-accent: #007b86;
+  --tco-accent-soft: #00646d;
+  --tco-accent-bright: #004a50;
+  --tco-accent-rgb: 0 123 134;
+  background: #f3f7f8;
+}
+html[data-tco-theme="white"] .tco-stitch-news-hero {
+  background: linear-gradient(145deg, #ffffff, #edf6f7);
+}
