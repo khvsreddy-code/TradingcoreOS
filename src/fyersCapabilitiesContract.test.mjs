@@ -152,7 +152,7 @@ assert.match(requestGate,/tco:broker:priority-minute:background/,'background req
 assert.match(apiClient,/retry-after/,'Retry-After header support exists');
 assert.match(apiClient,/recordFyersQuotaAttempt/,'every upstream HTTP attempt is counted');
 assert.match(apiClient,/recordFyersQuotaDenial/,'local quota denials are observable');
-assert.match(quotaTelemetry,/scope: 'process-local; admission authority is shared Redis'/,'telemetry states its process-local scope and does not misrepresent itself as global');
+assert.match(quotaTelemetry,/scope: 'process-local telemetry; admission authority is ' \+ coordinationAuthorityLabel\(\)/,'telemetry remains process-local while identifying the configured shared admission backend');
 assert.match(quotaTelemetry,/`http-\$\{Math\.trunc\(status\)\}`/,'quota telemetry records the exact provider HTTP status instead of only broad status classes');
 assert.match(quotaTelemetry,/`local-gate-\$\{status\}`/,'quota telemetry preserves local gate denial status codes separately from provider responses');
 assert.match(accountRoute,/new FyersApiClient\(EncryptionService\.decrypt\(s\.accessTokenEncrypted\),undefined,capabilities,userId\)/,'account endpoints use stable authenticated identity and server-resolved capabilities');
