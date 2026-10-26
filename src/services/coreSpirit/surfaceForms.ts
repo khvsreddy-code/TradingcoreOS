@@ -651,6 +651,8 @@ export function normalizeCoreSpiritSource(source: string): string {
         (activeIndicatorWrapper.kind === 'indicator' || activeIndicatorWrapper.kind === 'strategy')) {
       if (indicatorInnerBraceDepth > 0) {
         indicatorInnerBraceDepth -= 1;
+        out.push(raw);
+        continue;
       } else {
         wrappers.pop();
         continue;
