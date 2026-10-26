@@ -34,5 +34,6 @@ assert.match(dashboard, /onNavigate\('\/news'\)/, 'dashboard links to the full M
 assert.match(css, /\.tco-stitch-topbar/, 'shared responsive Stitch navigation skin is installed');
 assert.match(css, /@media \(max-width: 760px\)/, 'workspace chrome has a mobile layout');
 assert.match(moduleShell, /aria-current=\{active === path \? 'page' : undefined\}/, 'active navigation state is exposed accessibly');
+assert.match(read('./pages/CoreSpiritDocsPage.tsx'), /WorkspaceModuleShell active="\/corespirit\/docs"/, 'docs route marks Docs as active');
 
 console.log('STITCH_WORKSPACE_WIRING_CONTRACT_OK');
