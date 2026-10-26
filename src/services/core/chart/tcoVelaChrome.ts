@@ -984,6 +984,78 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   },
 };
 
+const workspaceFrameAction:WidgetActionDescriptor={
+  id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'sliders',iconOnly:true,align:'right',order:19,mobile:'menu',
+  run(ctx){ctx.togglePanel('tco.workspace-frame');},
+};
+
+type TcoWorkspaceSaveState = 'saving' | 'saved' | 'local' | 'error';
+function updateTcoWorkspaceSaveIndicator(state:TcoWorkspaceSaveState,message?:string):void {
+  if(typeof document==='undefined') return;
+  const labels:Record<TcoWorkspaceSaveState,string> = {
+    saving:'Saving workspace…',
+    saved:'Workspace saved and synced',
+    local:'Workspace saved locally; cloud sync pending',
+    error:'Workspace save needs attention',
+  };
+  const label=labels[state]??'Save workspace';
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-action-id="tco.save-workspace"]')) {
+    button.dataset.tcoSaveState=state;
+    button.title=message ? label+' — '+message : label;
+    button.setAttribute('aria-label',label);
+  }
+}
+if(typeof window!=='undefined') {
+  window.addEventListener('tco:workspace-autosave-status',(event:Event)=>{
+    const detail=(event as CustomEvent<{state?:string;message?:string}>).detail;
+    if(detail?.state==='saving'||detail?.state==='saved'||detail?.state==='local'||detail?.state==='error')
+      updateTcoWorkspaceSaveIndicator(detail.state,detail.message);
+  });
+}
+
+const saveWorkspaceAction: WidgetActionDescriptor = {
+  id:'tco.save-workspace', target:'topbar', label:'Save', icon:'save', iconOnly:true, align:'right', order:18.5, mobile:'menu',
+  run(ctx) {
+    const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
+    if(!api?.workspace?.saveNow) { updateTcoWorkspaceSaveIndicator('error','The live workspace is not ready yet');ctx.toast('The live workspace is not ready to save yet','error');return; }
+    updateTcoWorkspaceSaveIndicator('saving','Manual save requested');
+    void (async()=>{
+      let defaultWorkspaceSynced=true;
+      try { await Promise.resolve(api.workspace!.saveNow!()); } catch { defaultWorkspaceSynced=false; }
+      const named=await persistActiveTcoVelaSavedWorkspace();
+      if(named) {
+        const synced=defaultWorkspaceSynced&&named.synced;
+        updateTcoWorkspaceSaveIndicator(synced?'saved':'local',synced?'Saved “'+named.name+'”':'Saved “'+named.name+'”; cloud sync will retry');
+        ctx.toast(synced
+          ? 'Saved “'+named.name+'” to your account'
+          : 'Saved “'+named.name+'” locally; cloud sync will retry when available','success');
+        return;
+      }
+      const appearanceSynced=await persistCurrentTcoVelaAppearance();
+      const synced=defaultWorkspaceSynced&&appearanceSynced;
+      updateTcoWorkspaceSaveIndicator(synced?'saved':'local',synced?'Workspace synced':'Workspace saved locally; account sync will retry');
+      ctx.toast(synced
+        ? 'Workspace saved to your account'
+        : 'Workspace saved on this device; account sync resumes when available','success');
+    })().catch((error:unknown)=>{
+      updateTcoWorkspaceSaveIndicator('error',error instanceof Error?error.message:'Cloud sync failed');
+      ctx.toast('Workspace saved locally; cloud sync failed'+(error instanceof Error?': '+error.message:''),'error');
+    });
+  },
+};
+
+const coreSpiritCodeAction: WidgetActionDescriptor = {
+  id: 'tco.corespirit-code',
+  target: 'topbar',
+  label: 'Code',
+  icon: 'indicators',
+  iconOnly: true,
+  align: 'right',
+  order: 3.5,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.corespirit-code'); },
+};
+
 const bookmarksPanel: SidePanelDescriptor = {
   id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 320, resizable: true, minWidth: 260, maxWidth: 460,
   mount(ctx, body, header) {
