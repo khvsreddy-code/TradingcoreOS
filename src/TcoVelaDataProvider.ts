@@ -8,6 +8,13 @@ import type { MarketFeedStatus } from './types/market';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { tradingApi, readTradingApiJson } from './services/http/tradingApi';
+import {
+  hasValidFyersSession,
+  loadYahooBars,
+  loadYahooColumns,
+  loadYahooLatestBar,
+  YAHOO_FALLBACK_POLL_MS,
+} from './services/marketData/yahooFallback';
 
 const FALLBACK_SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -258,6 +265,41 @@ function recordVelaRenderUpdate(
   else globalThis.setTimeout(record, 16);
 }
 
+function isFyersMarketSessionReady(): boolean {
+  return hasValidFyersSession(tradingCoreRuntime.getAllConnections());
+}
+
+function startYahooFallbackPolling(
+  symbol: string,
+  timeframe: string,
+  onBar: (bar: OHLCV) => void,
+): () => void {
+  let active = true;
+  let inFlight = false;
+  let lastFingerprint = '';
+  const controller = new AbortController();
+  const poll = async () => {
+    if (!active || inFlight || isFyersMarketSessionReady()) return;
+    inFlight = true;
+    try {
+      const latest = await loadYahooLatestBar(symbol, timeframe, controller.signal);
+      if (!active || controller.signal.aborted || !latest.bar) return;
+      const bar = latest.bar;
+      const fingerprint = `${bar.time}|${bar.open}|${bar.high}|${bar.low}|${bar.close}|${bar.volume ?? ''}`;
+      if (fingerprint === lastFingerprint) return;
+      lastFingerprint = fingerprint;
+      onBar(bar);
+    } catch {
+      // Leave the last valid bars on screen during a transient provider outage.
+    } finally {
+      inFlight = false;
+    }
+  };
+  void poll();
+  const timer = globalThis.setInterval(() => { void poll(); }, YAHOO_FALLBACK_POLL_MS);
+  return () => { active = false; controller.abort(); globalThis.clearInterval(timer); };
+}
+
 async function activeBrokerId(): Promise<string> {
   const existing = tradingCoreRuntime.getPrimaryBrokerId();
   if (existing) return existing;
@@ -436,6 +478,9 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
+    if (!isFyersMarketSessionReady()) {
+      return loadYahooColumns(symbol, tcoTimeframe, requested, range);
+    }
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
 
@@ -472,12 +517,18 @@ export class TcoVelaDataProvider implements DataProvider {
     if (opts?.signal?.aborted) return [];
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
+    const abort = () => Boolean(opts?.signal?.aborted);
+    if (!isFyersMarketSessionReady()) {
+      const yahooBars = await loadYahooBars(symbol, tcoTimeframe, requested, range, opts?.signal);
+      if (abort()) return [];
+      if (yahooBars.length) onBatch(yahooBars);
+      return yahooBars;
+    }
     const brokerId = await activeBrokerId();
     if (opts?.signal?.aborted) return [];
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
-    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
     const firstPaintBars = Math.min(requested, 300);
-    const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
     // Hydrate the disk cache before the target-sized request starts so reloads can
@@ -568,7 +619,8 @@ export class TcoVelaDataProvider implements DataProvider {
   async loadRange(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(2, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const requested = Math.max(2, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
+    if (!isFyersMarketSessionReady()) return loadYahooBars(symbol, tcoTimeframe, requested, range);
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     await plane.ensureReadyHistory(5000);
@@ -589,6 +641,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
+    if (!isFyersMarketSessionReady()) return loadYahooBars(symbol, tcoTimeframe, requested, range);
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
@@ -650,6 +703,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
     let attachedBrokerId: string | undefined;
+    let stopYahoo: (() => void) | undefined;
     let performanceKey = '';
     let cancelled = false;
     let fingerprint = '';
@@ -757,7 +811,9 @@ export class TcoVelaDataProvider implements DataProvider {
     };
 
     const attach = (brokerId: string) => {
-      if (cancelled || attachedBrokerId === brokerId) return;
+      if (cancelled || (attachedBrokerId === brokerId && !stopYahoo)) return;
+      stopYahoo?.();
+      stopYahoo = undefined;
       detach();
       attachedBrokerId = brokerId;
       performanceKey = tcoVelaPerformanceKey(brokerId, symbol, tcoTimeframe);
@@ -778,22 +834,48 @@ export class TcoVelaDataProvider implements DataProvider {
       schedule();
     };
 
+    const startYahoo = () => {
+      if (cancelled || stopYahoo) return;
+      timelineKey = `yahoo:${symbol}:${tcoTimeframe}`;
+      stopYahoo = startYahooFallbackPolling(symbol, tcoTimeframe, (bar: OHLCV) => {
+        if (cancelled) return;
+        const nextKey = `${bar.time}|${bar.open}|${bar.high}|${bar.low}|${bar.close}|${bar.volume ?? ''}`;
+        if (nextKey === fingerprint) return;
+        fingerprint = nextKey;
+        onBar({
+          time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+          volume: Number.isFinite(Number(bar.volume)) ? Number(bar.volume) : undefined,
+          timeUnit: 'milliseconds', sequence: Date.now(), timelineKey,
+        });
+      });
+    };
     const syncBroker = () => {
       if (cancelled) return;
-      const brokerId = activeBrokerIdSync();
-      if (brokerId) attach(brokerId);
-      else detach();
+      if (isFyersMarketSessionReady()) {
+        stopYahoo?.();
+        stopYahoo = undefined;
+        const brokerId = activeBrokerIdSync();
+        if (brokerId) attach(brokerId);
+        else detach();
+      } else {
+        stopYahoo?.();
+        stopYahoo = undefined;
+        if (plane || attachedBrokerId) detach();
+        startYahoo();
+      }
     };
     const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
     const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
-    const brokerId = activeBrokerIdSync();
-    if (brokerId) attach(brokerId);
-    else void activeBrokerId().then(attach).catch(() => undefined);
+    const sessionCheckTimer = globalThis.setInterval(syncBroker, YAHOO_FALLBACK_POLL_MS);
+    syncBroker();
 
     return () => {
       cancelled = true;
       offBrokerConnected();
       offBrokerDisconnected();
+      globalThis.clearInterval(sessionCheckTimer);
+      stopYahoo?.();
+      stopYahoo = undefined;
       detach();
     };
   }
@@ -804,6 +886,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
     let attachedBrokerId: string | undefined;
+    let stopYahoo: (() => void) | undefined;
     let performanceKey = '';
     let cancelled = false;
     let fingerprint = '';
@@ -863,7 +946,9 @@ export class TcoVelaDataProvider implements DataProvider {
     };
 
     const attach = (brokerId: string) => {
-      if (cancelled || attachedBrokerId === brokerId) return;
+      if (cancelled || (attachedBrokerId === brokerId && !stopYahoo)) return;
+      stopYahoo?.();
+      stopYahoo = undefined;
       detach();
       attachedBrokerId = brokerId;
       performanceKey = tcoVelaPerformanceKey(brokerId, symbol, tcoTimeframe);
@@ -875,22 +960,44 @@ export class TcoVelaDataProvider implements DataProvider {
       schedule();
     };
 
+    const startYahoo = () => {
+      if (cancelled || stopYahoo) return;
+      timelineKey = `yahoo:${symbol}:${tcoTimeframe}`;
+      stopYahoo = startYahooFallbackPolling(symbol, tcoTimeframe, (bar: OHLCV) => {
+        if (cancelled) return;
+        const nextKey = `${bar.time}|${bar.open}|${bar.high}|${bar.low}|${bar.close}|${bar.volume ?? ''}`;
+        if (nextKey === fingerprint) return;
+        fingerprint = nextKey;
+        onBar(bar);
+      });
+    };
     const syncBroker = () => {
       if (cancelled) return;
-      const brokerId = activeBrokerIdSync();
-      if (brokerId) attach(brokerId);
-      else detach();
+      if (isFyersMarketSessionReady()) {
+        stopYahoo?.();
+        stopYahoo = undefined;
+        const brokerId = activeBrokerIdSync();
+        if (brokerId) attach(brokerId);
+        else detach();
+      } else {
+        stopYahoo?.();
+        stopYahoo = undefined;
+        if (plane || attachedBrokerId) detach();
+        startYahoo();
+      }
     };
     const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
     const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
-    const brokerId = activeBrokerIdSync();
-    if (brokerId) attach(brokerId);
-    else void activeBrokerId().then(attach).catch(() => undefined);
+    const sessionCheckTimer = globalThis.setInterval(syncBroker, YAHOO_FALLBACK_POLL_MS);
+    syncBroker();
 
     return () => {
       cancelled = true;
       offBrokerConnected();
       offBrokerDisconnected();
+      globalThis.clearInterval(sessionCheckTimer);
+      stopYahoo?.();
+      stopYahoo = undefined;
       detach();
     };
   }
@@ -921,6 +1028,7 @@ export function prewarmTcoVelaHistory(
   if (!uniqueSymbols.length || !uniqueTimeframes.length) return;
 
   const run = () => {
+    if (!isFyersMarketSessionReady()) return;
     const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
     if (!brokerId) return;
     const requested = Math.max(200, Math.min(5000, Math.floor(Number(limit) || 1200)));

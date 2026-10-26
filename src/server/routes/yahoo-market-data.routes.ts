@@ -291,9 +291,23 @@ function safeError(error: unknown): string {
 router.get('/chart', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const value = await loadYahooBundle(req.query.symbol, req.query.interval, req.query.limit || 2_000, 'chart');
+    const toEpochMs = (raw: unknown): number => {
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+      const parsed = Date.parse(String(raw ?? ''));
+      return Number.isFinite(parsed) ? parsed : Number.NaN;
+    };
+    const fromRaw = String(req.query.from ?? '').trim();
+    const toRaw = String(req.query.to ?? '').trim();
+    const fromMs = fromRaw ? toEpochMs(fromRaw) : Number.NEGATIVE_INFINITY;
+    const toMs = toRaw ? toEpochMs(toRaw) : Number.POSITIVE_INFINITY;
+    const bars = value.bars.filter(bar => {
+      const time = Date.parse(bar.timestamp);
+      return time >= fromMs && time <= toMs;
+    });
     const stale = Date.now() - Date.parse(value.fetchedAt) > CACHE_TTL_MS;
     res.setHeader('Cache-Control', 'private, max-age=4');
-    res.json({ success: true, provider: 'Yahoo Finance', delayed: true, stale, updateIntervalMs: CACHE_TTL_MS, ...value });
+    res.json({ success: true, provider: 'Yahoo Finance', delayed: true, stale, updateIntervalMs: CACHE_TTL_MS, ...value, bars, returned: bars.length });
   } catch (error: unknown) {
     res.status(422).json({ success: false, provider: 'Yahoo Finance', delayed: true, error: safeError(error), bars: [], quote: null });
   }

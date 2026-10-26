@@ -23,6 +23,8 @@ assert.match(provider, /if \(!isFyersMarketSessionReady\(\)\) \{\s*return loadYa
 assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'object history/range uses Yahoo when FYERS is invalid');
 assert.match(provider, /startYahooFallbackPolling\(symbol, tcoTimeframe/, 'live bar subscriptions poll the Yahoo latest-bar endpoint');
 assert.match(provider, /globalThis\.setInterval\(syncBroker, YAHOO_FALLBACK_POLL_MS\)/, 'provider rechecks expiry while chart is open');
+assert.match(provider, /return loadYahooColumns\(symbol, tcoTimeframe/, 'columnar chart loads can start without FYERS');
+assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'history and older-range requests route to Yahoo without FYERS');
 assert.match(brokerManager, /status: 'Authentication Required'/, 'expired FYERS remains visible as requiring reauthorization');
 assert.match(brokerManager, /private refreshSessionExpiryState/, 'broker connection state is refreshed against token expiry');
 assert.match(runtime, /Date\.parse\(String\(connection\.tokenExpiry \|\| ''\)\) > Date\.now\(\) \+ 5_000/, 'expired tokens do not count as connected');
