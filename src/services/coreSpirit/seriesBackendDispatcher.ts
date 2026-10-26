@@ -182,6 +182,20 @@ export function selectCoreSpiritSeriesBackend(
   return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };
 }
 
+function notifyBackendExecution(
+  context: CoreSpiritSeriesDispatchContext,
+  event: Readonly<{
+    requested: CoreSpiritSeriesBackend;
+    selected: CoreSpiritSeriesBackend;
+    executed: CoreSpiritSeriesBackend;
+    reason: string;
+    elapsedMs: number;
+    fallbackReason?: string;
+  }>,
+): void {
+  try { context.onBackendExecution?.(event); } catch { /* telemetry must never interrupt calculations */ }
+}
+
 export function executeCoreSpiritSeriesFusionGroupDispatched(
   group: CoreSpiritSeriesFusionGroup,
   input: CoreSpiritFusedSeriesInput,

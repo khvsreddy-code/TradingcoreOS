@@ -17,8 +17,8 @@ import { normalizeCoreSpiritSource } from '../services/coreSpirit/syntax';
 import {
   CORE_SPIRIT_AUTHORING_LEVELS,
   getCoreSpiritAuthoringProfileForLevel,
-  type CoreSpiritAuthoringLevel,
 } from '../services/coreSpirit/coreSpiritAuthoring';
+import type { CoreSpiritAuthoringLevel } from '../services/coreSpirit/coreSpiritExecutionModel';
 
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {

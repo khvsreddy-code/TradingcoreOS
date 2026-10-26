@@ -5,7 +5,6 @@ import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChart
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { FyersConnectionPrompt } from './components/brokers/FyersConnectionPrompt';
-import { dismissFyersPromptForToday, fyersPromptDismissedToday } from './components/brokers/FyersConnectionPrompt';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
@@ -117,6 +116,17 @@ function readCoreSpiritManifest() {
 }
 
 export function LiveTradingWorkspace() {
+const browserRuntimeMetrics = {
+      longTaskCount: 0,
+      totalLongTaskMs: 0,
+      worstLongTaskMs: 0,
+      lastLongTaskAt: 0,
+      longTaskDurations: [] as number[],
+      webglContextLossCount: 0,
+      webglContextRestoreCount: 0,
+      heapSamples: [] as Array<{ capturedAt: number; usedBytes: number }>,
+    };
+
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
@@ -146,7 +156,6 @@ export function LiveTradingWorkspace() {
   // category + instrument + interval, not the dynamic detail string or transient phase.
   // Persist it across status refreshes and reloads; a new day/instrument/interval can notify again.
   const chartStatusDismissKey = `${localDayKey}|${chartStatus.symbol.toUpperCase()}|${chartStatus.timeframe}|${statusCategory}`;
-  const fyersReminderDismissedToday = fyersPromptDismissedToday();
   useEffect(() => {
     if (!host.current) return;
 
@@ -160,17 +169,7 @@ export function LiveTradingWorkspace() {
     let chartStatusGeneration = 0;
     let cancelled = false;
     const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
-    const browserRuntimeMetrics = {
-      longTaskCount: 0,
-      totalLongTaskMs: 0,
-      worstLongTaskMs: 0,
-      lastLongTaskAt: 0,
-      longTaskDurations: [] as number[],
-      webglContextLossCount: 0,
-      webglContextRestoreCount: 0,
-      heapSamples: [] as Array<{ capturedAt: number; usedBytes: number }>,
-    };
-    let longTaskObserver: PerformanceObserver | undefined;
+        let longTaskObserver: PerformanceObserver | undefined;
     const pushBrowserError = (type: 'error' | 'unhandledrejection', message: string) => {
       browserErrors.push({ type, message: String(message).slice(0, 500), time: Date.now() });
       if (browserErrors.length > 50) browserErrors.shift();
@@ -665,12 +664,10 @@ export function LiveTradingWorkspace() {
         {workspaceLoadState.phase === 'ready'
           && (chartStatus.tone === 'warn' || chartStatus.tone === 'error')
           && dismissedChartStatusKey !== chartStatusDismissKey
-          && !(chartStatus.title.includes('broker authentication') && fyersReminderDismissedToday) && (
+          && (
           <div
             className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md ${
-              chartStatus.tone === 'good'
-                ? 'border-emerald-800/70 bg-[#041b13]/90 text-emerald-200'
-                : chartStatus.tone === 'error'
+              chartStatus.tone === 'error'
                   ? 'border-red-800/70 bg-[#240b0d]/95 text-red-200'
                   : chartStatus.tone === 'warn'
                     ? 'border-amber-800/70 bg-[#211708]/95 text-amber-100'
@@ -687,7 +684,6 @@ export function LiveTradingWorkspace() {
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => {
                 setDismissedChartStatusKey(chartStatusDismissKey);
-                dismissFyersPromptForToday();
                 try { localStorage.setItem('tradingcore:chart-status-dismissed:v1', chartStatusDismissKey); } catch {}
               }}
               className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/70 transition-colors hover:bg-white/10 hover:text-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-400"
@@ -696,8 +692,7 @@ export function LiveTradingWorkspace() {
             </button>
             <div className="relative flex items-start gap-2">
               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                chartStatus.tone === 'good' ? 'bg-emerald-400'
-                  : chartStatus.tone === 'error' ? 'bg-red-400'
+                chartStatus.tone === 'error' ? 'bg-red-400'
                     : chartStatus.tone === 'warn' ? 'bg-amber-400'
                       : 'bg-sky-400'
               }`} aria-hidden="true" />
