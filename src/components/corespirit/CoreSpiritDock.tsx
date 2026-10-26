@@ -5,35 +5,31 @@ import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
+import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
 
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
-const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
-    overlay: true
-    input length: int = 20 min=1
-}
-
-fast = ema(close, length)
-slow = ema(close, length * 2)
-
-plot fast
-plot slow
-
-if fast crossesAbove slow {
-    signal "BUY"
-}
-
-if fast crossesBelow slow {
-    signal "SELL"
-}`;
+const DEFAULT_SOURCE = CORESPIRIT_LUXALGO_SMC_SOURCE;
 type AuthoringLevel = 'beginner' | 'trader' | 'quant' | 'system';
 type ScriptVersion = { id: string; version: number; source: string; compile_status: string; created_at: string };
 
+function isLegacyTrendStarter(source: string): boolean {
+  return source.includes('indicator("CoreSpirit Trend")')
+    && source.includes('fast = ema(close, length)')
+    && source.includes('slow = ema(close, length * 2)')
+    && source.includes('plot fast')
+    && source.includes('plot slow')
+    && source.includes('signal "BUY"')
+    && source.includes('signal "SELL"');
+}
 function localSource(): string {
   try {
-    return localStorage.getItem(versionedStorageKey('editor'))
+    const saved = localStorage.getItem(versionedStorageKey('editor'))
       || localStorage.getItem('tradingcore:corespirit:editor')
       || localStorage.getItem(LIVE_SOURCE_KEY)
       || '';
+    // Migrate only the known generated sample, not custom user scripts. This makes
+    // the converted SMC script appear for users who still have the old default draft.
+    return saved && !isLegacyTrendStarter(saved) ? saved : '';
   } catch { return ''; }
 }
 function persistLocalSource(source: string, name: string, scriptId?: string | null): void {
