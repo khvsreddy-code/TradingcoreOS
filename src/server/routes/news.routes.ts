@@ -37,8 +37,11 @@ function yahooSymbolsFor(raw: string): string {
   if (parts.length === 2) {
     const [exchange, rawTicker] = parts;
     const ticker = String(rawTicker || '').replace(/-(EQ|INDEX)$/i, '').trim();
-    // Yahoo doesn't provide a ticker-equivalent feed for option contracts; use broad indices.
-    if (/(CE|PE|FUT|FUTURES?)$/i.test(ticker) || !/^[A-Z0-9.^=-]{1,24}$/.test(ticker)) return '^NSEI,^NSEBANK,^BSESN';
+    // Yahoo doesn't provide contract-level F&O news; use a market-wide RSS feed for derivatives.
+    // Require a strike/boundary so an ordinary equity like RELIANCE is not mistaken for an option.
+    const optionContract = /(?:\d{4,}(?:CE|PE)|(?:^|[-_:])(?:CE|PE)(?:[-_.]?\d{3,})?$)/i.test(ticker);
+    const futureContract = /(?:\d{2,}FUT(?:URES?)?|(?:^|[-_:])FUT(?:URES?)(?:[-_.]?\d{2,})?)$/i.test(ticker);
+    if (optionContract || futureContract || !/^[A-Z0-9.^=-]{1,24}$/.test(ticker)) return '^NSEI,^NSEBANK,^BSESN';
     if (exchange === 'NSE') return `${ticker}.NS`;
     if (exchange === 'BSE') return `${ticker}.BO`;
   }

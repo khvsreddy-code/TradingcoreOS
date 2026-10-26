@@ -81,8 +81,11 @@ function canonicalYahooSymbol(raw: unknown): { canonical: string; yahoo: string 
   const fixed = INDEX_SYMBOLS[value];
   if (fixed) return { canonical: value, yahoo: fixed };
   // Yahoo Finance does not provide a reliable per-contract NSE/BSE F&O tape.
-  // Never silently substitute the underlying for an option/future chart.
-  if (/(?:CE|PE|FUT|FUTURES?)(?:[-.]?\d{2,})?$/i.test(value) || /(?:^|[-_:])(?:CE|PE)\b/i.test(value)) return null;
+  // Use digit/boundary-aware checks so ordinary equities such as RELIANCE (ending in "CE")
+  // are not accidentally classified as option contracts.
+  const optionContract = /(?:\d{4,}(?:CE|PE)|(?:^|[-_:])(?:CE|PE)(?:[-_.]?\d{3,})?$)/i.test(value);
+  const futureContract = /(?:\d{2,}FUT(?:URES?)?|(?:^|[-_:])FUT(?:URES?)(?:[-_.]?\d{2,})?)$/i.test(value);
+  if (optionContract || futureContract) return null;
   const match = /^(NSE|BSE):([A-Z0-9&_.-]+?)(?:-(EQ|BE|BZ|SM|ST|INDEX))?$/.exec(value);
   if (!match) return null;
   const exchange = match[1]!;
