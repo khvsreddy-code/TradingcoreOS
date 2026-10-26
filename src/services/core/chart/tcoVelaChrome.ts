@@ -1552,8 +1552,10 @@ const bookmarksPanel: SidePanelDescriptor = {
       const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
       const symbolsSignature = symbols.join(',');
       if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && quoteStop) return;
+      const sourceChanged = quoteSourceMode !== null && quoteSourceMode !== nextMode;
       quoteStop?.();
       quoteStop = undefined;
+      if (sourceChanged) quotes.clear();
       quoteSourceMode = nextMode;
       quoteSymbolsSignature = symbolsSignature;
       if (nextMode === 'yahoo') {
