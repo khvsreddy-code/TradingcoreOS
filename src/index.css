@@ -715,3 +715,58 @@ html[data-tco-theme="white"] .tco-stitch-shell {
 html[data-tco-theme="white"] .tco-stitch-news-hero {
   background: linear-gradient(145deg, #ffffff, #edf6f7);
 }
+
+/* Daily FYERS session reminder with an explicit Yahoo delayed-data path. */
+.tco-fyers-prompt {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr) auto;
+  align-items: start;
+  gap: 12px;
+  margin: 12px 16px;
+  padding: 14px 38px 14px 14px;
+  border: 1px solid rgba(0,242,254,.25);
+  border-radius: 12px;
+  color: #dce9ef;
+  background: linear-gradient(110deg, rgba(0,242,254,.075), rgba(13,18,28,.97) 55%);
+  box-shadow: 0 12px 32px rgba(0,0,0,.22);
+}
+.tco-fyers-prompt-floating {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  z-index: 150;
+  width: min(920px, calc(100vw - 28px));
+  margin: 0;
+  transform: translateX(-50%);
+}
+.tco-fyers-prompt-icon {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border-radius: 9px; color: #00f2fe; background: rgba(0,242,254,.10); border: 1px solid rgba(0,242,254,.2);
+}
+.tco-fyers-prompt-copy { min-width: 0; }
+.tco-fyers-prompt-title { font-size: 12px; line-height: 1.4; font-weight: 800; color: #e8fbff; }
+.tco-fyers-prompt-copy p { margin-top: 4px; color: #9eafbf; font-size: 10px; line-height: 1.6; }
+.tco-fyers-prompt-caption { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 8px; color: #6f8797; font-size: 9px; }
+.tco-fyers-prompt-caption span { display: inline-flex; align-items: center; gap: 5px; }
+.tco-fyers-prompt-actions { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 165px; }
+.tco-fyers-prompt-primary,.tco-fyers-prompt-secondary {
+  min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 7px; padding: 0 10px; font-size: 10px; font-weight: 700;
+}
+.tco-fyers-prompt-primary { color: #041216; background: #00f2fe; border: 1px solid rgba(0,242,254,.5); }
+.tco-fyers-prompt-secondary { color: #b3c3d0; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.10); }
+.tco-fyers-prompt-primary:hover { background: #74f7ff; }
+.tco-fyers-prompt-secondary:hover { color: #e2e2eb; border-color: rgba(0,242,254,.3); }
+.tco-fyers-prompt-close { position: absolute; top: 7px; right: 7px; width: 24px; height: 24px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#718398; }
+.tco-fyers-prompt-close:hover { color:#e2e2eb; background:rgba(255,255,255,.07); }
+html[data-tco-theme="white"] .tco-fyers-prompt { color:#12242b; background:linear-gradient(110deg,#e5fbfd,#fff 60%); border-color:rgba(0,123,134,.24); }
+html[data-tco-theme="white"] .tco-fyers-prompt-title { color:#102027; }
+html[data-tco-theme="white"] .tco-fyers-prompt-copy p { color:#4b626d; }
+@media (max-width: 760px) {
+  .tco-fyers-prompt { grid-template-columns: 30px minmax(0,1fr); gap: 9px; margin: 10px; padding: 12px 32px 12px 11px; }
+  .tco-fyers-prompt-floating { top: 66px; width: calc(100vw - 16px); }
+  .tco-fyers-prompt-icon { width:30px;height:30px; }
+  .tco-fyers-prompt-actions { grid-column: 1 / -1; display:grid; grid-template-columns:1fr 1fr; min-width:0; }
+  .tco-fyers-prompt-caption { gap:5px 9px; }
+}

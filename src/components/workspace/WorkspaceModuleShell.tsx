@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { loadTradingCoreRuntime, type TradingCoreRuntimeApi } from '../../services/runtime/tradingCoreRuntimeLoader';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { FyersConnectionPrompt } from '../brokers/FyersConnectionPrompt';
 import type { WorkspaceRoute } from './WorkspaceModuleShellTypes';
 export type { WorkspaceRoute } from './WorkspaceModuleShellTypes';
 
@@ -41,7 +42,11 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
       if (cancelled) return;
       const refresh = () => setBrokerState({
         active: loaded.getPrimaryBrokerInfo(),
-        count: loaded.getAllConnections().length,
+        count: loaded.getAllConnections().filter(connection =>
+          (connection.status === 'Connected' || connection.status === 'Read Only') &&
+          Number.isFinite(Date.parse(String(connection.tokenExpiry || ''))) &&
+          Date.parse(String(connection.tokenExpiry || '')) > Date.now() + 5_000,
+        ).length,
       });
       refresh();
       disposers = [
@@ -117,6 +122,7 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
           </div>
         </div>
       </header>
+      <FyersConnectionPrompt onConnect={() => onBroker?.()} />
       <div id="workspace-content" tabIndex={-1}>{children}</div>
     </div>
   );

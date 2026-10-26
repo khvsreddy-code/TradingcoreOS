@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, ArrowDownRight, ArrowUpRight, BookOpen, Code2, ExternalLink,
   LineChart, Newspaper, RefreshCw, TrendingDown, TrendingUp,
