@@ -5,6 +5,7 @@ import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChart
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { FyersConnectionPrompt } from './components/brokers/FyersConnectionPrompt';
+import { hasValidFyersSession } from './services/marketData/yahooFallback';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
@@ -39,7 +40,7 @@ function chartStatusView(snapshot: TcoVelaChartStatusSnapshot, now = Date.now())
   const instrument = snapshot.symbol || 'Active instrument';
   const timeframe = snapshot.timeframe || '—';
   const context = `${instrument} · ${timeframe}`;
-  if (!snapshot.brokerConnected) {
+  if (!hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
     return { phase: 'history-ready', tone: 'neutral', title: 'Yahoo Finance · delayed data', detail: `${context} · delayed bars and quotes are checked every 4 seconds. Connect FYERS for live broker data and options.`, symbol: instrument, timeframe };
   }
   if (snapshot.error) {
@@ -116,7 +117,7 @@ function readCoreSpiritManifest() {
 }
 
 export function LiveTradingWorkspace() {
-const browserRuntimeMetrics = {
+const browserRuntimeMetrics = useRef({
       longTaskCount: 0,
       totalLongTaskMs: 0,
       worstLongTaskMs: 0,
@@ -125,7 +126,7 @@ const browserRuntimeMetrics = {
       webglContextLossCount: 0,
       webglContextRestoreCount: 0,
       heapSamples: [] as Array<{ capturedAt: number; usedBytes: number }>,
-    };
+    }).current;
 
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);

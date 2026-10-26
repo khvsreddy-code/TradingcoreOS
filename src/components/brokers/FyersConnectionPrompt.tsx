@@ -109,7 +109,7 @@ export function FyersConnectionPrompt({
         </p>
         <div className="tco-fyers-prompt-caption">
           <span><Clock3 className="h-3 w-3" /> Yahoo fallback · 4-second refresh checks</span>
-          <span><CheckCircle2 className="h-3 w-3" /> Order execution stays disabled without a valid broker session</span>
+          <span><CheckCircle2 className="h-3 w-3" /> Yahoo data is for charting/research; live orders still require broker authorization and risk checks</span>
         </div>
       </div>
       <div className="tco-fyers-prompt-actions">

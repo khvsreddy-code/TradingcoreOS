@@ -54,6 +54,8 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
         loaded.on('BROKER_CONNECTED', refresh),
         loaded.on('BROKER_DISCONNECTED', refresh),
       ];
+      const expiryTimer = globalThis.setInterval(refresh, 15_000);
+      disposers.push(() => globalThis.clearInterval(expiryTimer));
     }).catch(() => undefined);
     return () => {
       cancelled = true;
