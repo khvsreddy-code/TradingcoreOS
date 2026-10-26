@@ -12,6 +12,14 @@ export type CoreEventMap = {
   'execution.fill': { source: string; fill: Record<string, unknown>; time: number; sequence?: number };
   'market.calculation': { symbol: string; timeframe: string; mode: 'tick' | 'bar'; timestamp: number; barIndex: number; isBarClose: boolean; values: Record<string, number | null>; sequence?: number };
   'market.history.loaded': { symbol: string; timeframe: string; count: number; timestamp: number; sequence?: number };
+  'market.history.error': {
+    symbol: string;
+    timeframe: string;
+    brokerId?: string;
+    diagnostic: Readonly<{ code: string; message: string; occurredAt: number; fallbackAttempted: boolean }>;
+    timestamp: number;
+    sequence?: number;
+  };
   'market.status': { brokerId?: string; status: CoreMarketStatus; timestamp: number; sequence?: number };
   'market.error': { brokerId?: string; message: string; timestamp: number; sequence?: number };
   'replay.started': { sessionId: string; symbol: string; timeframe: string; startTime: number; endTime: number; sequence?: number };

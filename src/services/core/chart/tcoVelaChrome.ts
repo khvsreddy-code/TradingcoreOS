@@ -933,7 +933,6 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   resizable: true,
   minWidth: 380,
   maxWidth: 760,
-  maximizable: true,
   mount(ctx, body, header) {
     header.setTitle('CoreSpirit Studio');
     const root = panelRoot(body);

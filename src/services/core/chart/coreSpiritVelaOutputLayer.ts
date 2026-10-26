@@ -508,7 +508,7 @@ export function paintCoreSpiritVelaOutputLayer(
     else if (obj.kind === 'footprint') drawFootprint(ctx, args, obj);
     else if (obj.kind === 'customVisual') drawCustomVisual(ctx, args, obj);
   }
-  drawBands(ctx, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
+  drawBands(ctx, args, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
   for (const label of data.labels) drawLabel(ctx, args, label as unknown as Record<string, any>);
   drawTables(ctx, args, data.tables as readonly Record<string, any>[]);
   ctx.restore();
