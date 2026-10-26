@@ -10,7 +10,7 @@ function budgetFor(path: string): number {
   if (/\/order(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.order;
   if (/\/historical(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.history;
   if (/^\/api\/jobs(?:$|[?\/])/.test(path)) return 4_000;
-  if (/^\/api\/health(?:$|[?\/])/.test(path)) return 1_500;
+  if (/^\/api\/health(?:$|[?\/])/.test(path)) return 5_000;
   return 12_000;
 }
 
