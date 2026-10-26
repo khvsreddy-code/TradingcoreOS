@@ -27,10 +27,11 @@ export type CoreSpiritSurfaceCapability =
   | 'risk.evaluate'
   | 'execution.route'
   | 'webhooks'
-  | 'automation';
+  | 'automation'
+  | 'ai.invoke';
 
 export const CORE_SPIRIT_SURFACE_CAPABILITIES = Object.freeze([
-  'market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks','automation',
+  'market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks','automation','ai.invoke',
 ] as const);
 
 function normalizeSurfaceCapability(value:string):CoreSpiritSurfaceCapability|undefined {
@@ -42,6 +43,7 @@ function normalizeSurfaceCapability(value:string):CoreSpiritSurfaceCapability|un
   if(normalized==='risk')return 'risk.evaluate';
   if(normalized==='execution-routing')return 'execution.route';
   if(normalized==='automation')return 'automation';
+  if(normalized==='ai.invoke')return 'ai.invoke';
   return undefined;
 }
 

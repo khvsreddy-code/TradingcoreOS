@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const provider = read('./TcoVelaDataProvider.ts');
+const yahoo = read('./services/marketData/yahooFallback.ts');
+const route = read('./server/routes/yahoo-market-data.routes.ts');
+const app = read('./App.tsx');
+const brokerManager = read('./services/brokers/BrokerManager.ts');
+const runtime = read('./services/runtime/TradingCoreRuntime.ts');
+const prompt = read('./components/brokers/FyersConnectionPrompt.tsx');
+const shell = read('./components/workspace/WorkspaceModuleShell.tsx');
+const dashboard = read('./pages/DashboardPage.tsx');
+const news = read('./server/routes/news.routes.ts');
+const live = read('./LiveTradingWorkspace.tsx');
+
+assert.match(yahoo, /YAHOO_FALLBACK_POLL_MS = 4_000/, 'fallback request cadence is 4 seconds');
+assert.match(route, /router\.get\('\/chart'/, 'authenticated Yahoo historical endpoint exists');
+assert.match(route, /router\.get\('\/quote'/, 'authenticated Yahoo latest-bar endpoint exists');
+assert.match(route, /router\.get\('\/quotes'/, 'Yahoo multi-quote endpoint exists');
+assert.match(route, /Cache-Control', 'private, max-age=4'/, 'Yahoo responses use a four-second cache policy');
+assert.match(provider, /if \(!isFyersMarketSessionReady\(\)\) \{\s*return loadYahooColumns/, 'columnar history uses Yahoo when FYERS is invalid');
+assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'object history/range uses Yahoo when FYERS is invalid');
+assert.match(provider, /startYahooFallbackPolling\(symbol, tcoTimeframe/, 'live bar subscriptions poll the Yahoo latest-bar endpoint');
+assert.match(provider, /globalThis\.setInterval\(syncBroker, YAHOO_FALLBACK_POLL_MS\)/, 'provider rechecks expiry while chart is open');
+assert.match(brokerManager, /status: 'Authentication Required'/, 'expired FYERS remains visible as requiring reauthorization');
+assert.match(brokerManager, /private refreshSessionExpiryState/, 'broker connection state is refreshed against token expiry');
+assert.match(runtime, /Date\.parse\(String\(connection\.tokenExpiry \|\| ''\)\) > Date\.now\(\) \+ 5_000/, 'expired tokens do not count as connected');
+assert.match(app, /workspacePath === '\/live'\s*\? <LiveTradingShell \/>/, 'live charts can open without forcing broker onboarding');
+assert.match(prompt, /Continue with delayed data/, 'users can explicitly bypass FYERS connection');
+assert.match(prompt, /expired daily|expire daily|expire/, 'prompt explains daily token expiry');
+assert.match(prompt, /DAILY_DISMISS_KEY_PREFIX/, 'prompt dismissal is persisted per local day');
+assert.match(shell, /FyersConnectionPrompt onConnect/, 'daily prompt is available across workspace pages');
+assert.match(dashboard, /loadYahooQuoteTicks/, 'dashboard index quotes use Yahoo fallback');
+assert.match(dashboard, /YAHOO DELAYED/, 'dashboard labels Yahoo quotes as delayed');
+assert.match(news, /fetchYahooFinanceRss/, 'news uses Yahoo Finance RSS independently of FYERS');
+assert.match(live, /Yahoo Finance · delayed data/, 'live terminal explicitly labels fallback mode');
+
+console.log('YAHOO_DELAYED_FALLBACK_CONTRACT_OK');

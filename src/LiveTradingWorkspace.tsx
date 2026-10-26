@@ -100,7 +100,7 @@ const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
-function readCoreSpiritManifest() {
+async function readCoreSpiritManifest(): Promise<Array<{ name: string; script: string; language: string; enabled: boolean; category: string }>> {
   try {
     const source = localStorage.getItem(CORESPIRIT_LIVE_SOURCE_KEY)?.trim();
     if (!source) return [];
