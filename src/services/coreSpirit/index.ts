@@ -99,7 +99,39 @@ export * from './reactiveEngine';
 
 export * from './executionPlanner';
 export * from './backendRegistry';
-export * from './numericalKernels';
+export {
+  CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH,
+  CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION,
+  CORE_SPIRIT_NUMERICAL_KERNEL_OPERATIONS,
+  rollingMean,
+  rollingSum,
+  rollingVariance,
+  rollingStd,
+  rollingMin,
+  rollingMax,
+  ema,
+  rma,
+  wma,
+  atr,
+  rsi,
+  linearRegression,
+  covariance,
+  correlation,
+  zScore,
+  dotProduct,
+  matrixMultiply,
+  matrixDecomposition,
+  logSumExp,
+  softmax,
+  executeCoreSpiritNumericalKernel,
+} from './numericalKernels';
+export type {
+  CoreSpiritNumericalKernelOperation,
+  CoreSpiritNumericMatrix,
+  CoreSpiritLinearRegressionResult,
+  CoreSpiritLuDecomposition,
+  CoreSpiritNumericalKernelResult,
+} from './numericalKernels';
 export * from './incrementalStatefulKernel';
 export * from './velaOutputAdapter';
 export * from './wasmBackend';

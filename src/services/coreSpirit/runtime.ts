@@ -609,7 +609,7 @@ export class CoreSpiritRuntime {
       this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, {
         reuseValues: this.executionTier === 'optimized',
         resetValues: !canIncremental,
-        dirtyInstructions: canIncremental && dirtyPlan && dirtyPlan.instructions.length > 0
+        dirtyInstructions: canIncremental && dirtyPlan && dirtyPlan.instructions.size > 0
           ? this.realtimeDirtyInstructions
           : undefined,
       });

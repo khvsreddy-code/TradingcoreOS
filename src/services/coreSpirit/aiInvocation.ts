@@ -156,7 +156,8 @@ export function validateCoreSpiritAiInvocationResult(
   if (status !== 'ready' && status !== 'unavailable' && status !== 'stale') return null;
   const createdAtMs = typeof createdAt === 'string' ? Date.parse(createdAt) : NaN;
   const expiresAtMs = typeof expiresAt === 'string' ? Date.parse(expiresAt) : NaN;
-  if (typeof summary !== 'string' || summary.length > 2_000 ||
+  if (typeof createdAt !== 'string' || typeof expiresAt !== 'string' ||
+      typeof summary !== 'string' || summary.length > 2_000 ||
       typeof modelVersion !== 'string' || !modelVersion || modelVersion.length > 200 ||
       typeof artifactHash !== 'string' || !/^[a-f0-9]{64}$/.test(artifactHash) ||
       typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash) ||

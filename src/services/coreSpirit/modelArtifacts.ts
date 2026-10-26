@@ -150,7 +150,7 @@ export type ModelInference<TFeatures, TPrediction> = {
 
 export type ModelInferenceFactory<TWeights, TFeatures, TPrediction> = (
   artifact: ModelArtifact<TWeights>,
-) => ModelInference<TFeatures, TPrediction>;
+) => ModelInference<TFeatures, TPrediction> | Promise<ModelInference<TFeatures, TPrediction>>;
 
 const encoder = new TextEncoder();
 
@@ -686,7 +686,7 @@ export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
        artifact.contract.releaseStatus === 'revoked' || artifact.contract.releaseStatus === 'retired')) {
     throw new Error('Production inference requires an audited approved release status for this hash-pinned model artifact.');
   }
-  const inference = createInference(artifact);
+  const inference = await createInference(artifact);
   return Object.freeze({
     artifactHash: artifact.hash,
     artifactName: artifact.name,

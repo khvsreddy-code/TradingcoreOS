@@ -117,10 +117,15 @@ export class CoreSpiritWasmBackend {
     }catch(error){this.recordLoadFailure(error);throw error;}
   }
   private warmKernel(name:string):void{
-    const expected:Readonly<Record<string,readonly number[]>>={
-      rollingMean:[Number.NaN,1.5,2.5,3.5],rollingSum:[Number.NaN,3,5,7],rollingVariance:[Number.NaN,.25,.25,.25],
-      rollingMin:[Number.NaN,1,2,3],rollingMax:[Number.NaN,2,3,4],rollingStd:[Number.NaN,.5,.5,.5]
-    }[name];
+    const expectedByKernel: Readonly<Record<string, readonly number[]>> = {
+      rollingMean: [Number.NaN, 1.5, 2.5, 3.5],
+      rollingSum: [Number.NaN, 3, 5, 7],
+      rollingVariance: [Number.NaN, .25, .25, .25],
+      rollingMin: [Number.NaN, 1, 2, 3],
+      rollingMax: [Number.NaN, 2, 3, 4],
+      rollingStd: [Number.NaN, .5, .5, .5],
+    };
+    const expected: readonly number[] | undefined = expectedByKernel[name];
     if(!expected)throw new Error(`No numerical reference warm-up registered for WASM kernel '${name}'`);
     const input=Float64Array.from([1,2,3,4]),output=new Float64Array(4);
     this.executeRequest({kernel:name,inputs:[input],outputs:[output],params:[2,0]});
