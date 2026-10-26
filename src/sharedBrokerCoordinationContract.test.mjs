@@ -16,8 +16,8 @@ assert.match(adapter, /rpc\('broker_coordination_health_secure'/, 'readiness sup
 assert.match(adapter, /rpc\('admit_broker_request_secure'/, 'shared admission works through the isolated secret-checked RPC');
 assert.match(adapter, /TCO_BROKER_COORDINATION_SUPABASE_URL/, 'isolated coordination credentials are selected without changing the app database');
 assert.match(secureMigration, /broker_coordination_credentials/, 'isolated coordination uses a hash-only credential table');
-assert.match(secureMigration, /pg_catalog\\.sha256/, 'coordination credential is validated by SHA-256');
-assert.match(secureMigration, /grant execute on function public\\.admit_broker_request_secure[\\s\\S]*to anon, authenticated/i, 'anon can call only the secret-checked admission wrapper');
+assert.match(secureMigration, /pg_catalog\.sha256/, 'coordination credential is validated by SHA-256');
+assert.match(secureMigration, /grant execute on function public\.admit_broker_request_secure[\s\S]*to anon, authenticated/i, 'anon can call only the secret-checked admission wrapper');
 assert.match(selector, /sharedBrokerCoordinationBackend/, 'one selector defines Redis versus Postgres');
 assert.match(migration, /pg_advisory_xact_lock/, 'database admission is serialized across Vercel instances');
 assert.match(migration, /Asia\/Kolkata/, 'daily budgets roll over on the Indian trading day');
