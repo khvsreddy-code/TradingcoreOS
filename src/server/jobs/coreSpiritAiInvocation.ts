@@ -6,6 +6,7 @@ import {
   createCoreSpiritAiInputFingerprint,
   CORE_SPIRIT_AI_INVOKE_LIMITS,
   parseCoreSpiritAiInvocationRequest,
+  validateCoreSpiritAiInvocationResult,
   type CoreSpiritAiInvocationJobPayload,
   type CoreSpiritAiInvocationResult,
 } from '../../services/coreSpirit/aiInvocation.js';
@@ -130,11 +131,17 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
   if (cachedRaw) {
     try {
       const cached = JSON.parse(cachedRaw) as CoreSpiritAiInvocationResult;
-      const createdAt = Date.parse(cached.createdAt);
-      if (cached.status === 'ready' && cached.inputFingerprint === expectedFingerprint &&
-          Number.isFinite(createdAt) && Date.now() - createdAt < CORE_SPIRIT_AI_INVOKE_LIMITS.resultFreshnessMs) {
+      // Cache storage is not an authority boundary. Revalidate output hash, exact
+      // artifact/source/model identity and the non-extendable freshness window.
+      const validatedCached = validateCoreSpiritAiInvocationResult(cached, {
+        artifactHash: input.artifactHash,
+        sourceHash,
+        inputFingerprint: expectedFingerprint,
+        modelVersion: payload.modelVersion,
+      });
+      if (validatedCached?.status === 'ready') {
         await releaseLease();
-        return { ...cached, cacheHit: true };
+        return { ...validatedCached, cacheHit: true };
       }
     } catch { /* A corrupted cache entry is discarded below. */ }
     await redis.del(expectedCacheKey, AbortSignal.timeout(900)).catch(() => undefined);
