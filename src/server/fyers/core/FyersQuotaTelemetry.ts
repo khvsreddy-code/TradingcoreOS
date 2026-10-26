@@ -74,9 +74,19 @@ export function recordFyersQuotaResponse(category: FyersApiCategory, plan: Fyers
   const label = status === 0 ? 'network-error' : `http-${Math.trunc(status)}`;
   value.statuses[label] = (value.statuses[label] || 0) + 1;
 }
+function coordinationAuthorityLabel(): string {
+  const redisConfigured = Boolean((process.env.UPSTASH_REDIS_REST_URL || process.env.TRADINGCORE_REDIS_REST_URL) &&
+    (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.TRADINGCORE_REDIS_REST_TOKEN));
+  if (process.env.TRADINGCORE_DISTRIBUTED_COORDINATION !== 'false' && redisConfigured) return 'shared Redis';
+  if (process.env.TCO_BROKER_COORDINATION_SUPABASE_URL && process.env.TCO_BROKER_COORDINATION_SUPABASE_KEY &&
+      process.env.TCO_BROKER_COORDINATION_SHARED_SECRET) return 'isolated shared Supabase Postgres';
+  if (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)) return 'shared Supabase Postgres';
+  return 'unavailable';
+}
+
 export function getFyersQuotaTelemetry() {
   return {
-    scope: 'process-local; admission authority is shared Redis',
+    scope: 'process-local telemetry; admission authority is ' + coordinationAuthorityLabel(),
     observedAt: new Date().toISOString(),
     entries: [...entries.values()].map(value => ({
       category: value.category,
