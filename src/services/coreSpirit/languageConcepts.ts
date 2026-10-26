@@ -210,14 +210,14 @@ export function parseCoreSpiritInputDeclaration(line:string,start:number,end:num
   // Backward compatibility for drafts written by the original editor template:
   // input length = int(20, min: 1). Parse the constructor as a typed literal and
   // promote its named arguments into the canonical input metadata attributes.
-  const legacyConstructor=scanned.base.match(/^(int|integer|float|number|bool|boolean|string)\\s*\\(([\\s\\S]*)\\)$/i);
+  const legacyConstructor=scanned.base.match(/^(int|integer|float|number|bool|boolean|string)\s*\(([\s\S]*)\)$/i);
   if(legacyConstructor){
     const args=splitSurfaceCallArguments(legacyConstructor[2]??'');
     if(!args.length)throw new Error('CoreSpirit typed input constructor requires a default literal.');
     if(!declaredType)declaredType=legacyConstructor[1]!.toLowerCase();
     scanned.base=args[0]!;
     for(const argument of args.slice(1)){
-      const attr=argument.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s*(?:=|:)\\s*(.+)$/);
+      const attr=argument.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|:)\s*(.+)$/);
       if(!attr||!KNOWN_INPUT_ATTRIBUTES.has(attr[1]!))throw new Error('Unsupported CoreSpirit typed input argument: '+argument);
       scanned.attrs[attr[1]!]=attr[2]!.trim();
     }
