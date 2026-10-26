@@ -224,6 +224,11 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     orderintent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
   };
   if (direct[normalized]) return direct[normalized];
+  // State storage is a runtime/transaction concern; its declared semantic value
+  // is the underlying scalar type. The structural type system still retains
+  // state<T> so := assignments remain state-only at the compiler boundary.
+  const state = normalized.match(/^state<(.+)>$/i);
+  if (state) return semanticTypeForDeclaredName(state[1]!);
   const shaped = normalized.match(/^(array|vector|matrix|tensor|dataset|distribution)<(.+)>$/i);
   if (shaped) {
     const container = shaped[1]!.toLowerCase() as 'array'|'vector'|'matrix'|'tensor'|'dataset'|'distribution';
