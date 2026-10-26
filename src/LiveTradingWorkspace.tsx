@@ -770,6 +770,7 @@ const browserRuntimeMetrics = useRef({
                 name: scriptName,
                 script: scriptSource,
                 language: 'corespirit',
+                category: 'CoreSpirit',
               });
               if (activeCell.indicatorCount <= before) {
                 throw new Error('Vela could not attach this script to the active chart. Check compiler diagnostics.');

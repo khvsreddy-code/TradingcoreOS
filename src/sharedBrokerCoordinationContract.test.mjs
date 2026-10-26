@@ -14,6 +14,6 @@ assert.match(adapter, /rpc\('broker_coordination_health'/, 'readiness probes the
 assert.match(selector, /sharedBrokerCoordinationBackend/, 'one selector defines Redis versus Postgres');
 assert.match(migration, /pg_advisory_xact_lock/, 'database admission is serialized across Vercel instances');
 assert.match(migration, /Asia\/Kolkata/, 'daily budgets roll over on the Indian trading day');
-assert.match(migration, /REVOKE ALL ON FUNCTION public\.admit_broker_request[\s\S]*GRANT EXECUTE ON FUNCTION public\.admit_broker_request[\s\S]*TO service_role/, 'only service_role can execute broker admission');
+assert.match(migration, /revoke all on function public\.admit_broker_request[\s\S]*grant execute on function public\.admit_broker_request[\s\S]*to service_role/i, 'only service_role can execute broker admission');
 assert.match(server, /sharedBrokerCoordinationHealthy/, 'readiness checks the selected shared backend');
 console.log('SHARED_BROKER_COORDINATION_CONTRACT_OK');
