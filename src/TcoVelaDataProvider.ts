@@ -858,9 +858,13 @@ export class TcoVelaDataProvider implements DataProvider {
         if (brokerId) attach(brokerId);
         else detach();
       } else {
-        stopYahoo?.();
-        stopYahoo = undefined;
-        if (plane || attachedBrokerId) detach();
+        // Keep the running Yahoo poll alive while still disconnected; restarting it on
+        // every session check can abort a slow request before it returns any bars.
+        if (plane || attachedBrokerId) {
+          stopYahoo?.();
+          stopYahoo = undefined;
+          detach();
+        }
         startYahoo();
       }
     };
@@ -979,9 +983,13 @@ export class TcoVelaDataProvider implements DataProvider {
         if (brokerId) attach(brokerId);
         else detach();
       } else {
-        stopYahoo?.();
-        stopYahoo = undefined;
-        if (plane || attachedBrokerId) detach();
+        // Keep the running Yahoo poll alive while still disconnected; restarting it on
+        // every session check can abort a slow request before it returns any bars.
+        if (plane || attachedBrokerId) {
+          stopYahoo?.();
+          stopYahoo = undefined;
+          detach();
+        }
         startYahoo();
       }
     };
