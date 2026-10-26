@@ -16,6 +16,7 @@ assert.match(route, /AbortSignal\.timeout\(30_000\)/, 'chat provider work has a 
 assert.match(route, /searchCoreSpiritCopilotKnowledge\(rawMessage, 6\)/, 'platform answers can use versioned CoreSpirit knowledge');
 assert.match(route, /mayCreateOrderIntent: false/, 'assistant output is explicitly non-executable and cannot create order intent');
 assert.match(route, /do not place, modify, or cancel orders/, 'system instruction makes the assistant read-only');
+assert.doesNotMatch(route.slice(route.lastIndexOf('async function handleCoreSpiritChartAssistantStream')), /setHeader\('Cache-Control', 'no-store'\);\s*finishCopilotResponse/, 'stream does not mutate headers after flushing them');
 
 assert.match(assistant, /\/api\/corespirit\/copilot\/chat\/stream/, 'chart assistant calls the authenticated stream endpoint');
 assert.match(assistant, /getSupabaseClient\(\)\.auth\.getSession\(\)/, 'frontend supplies the authenticated session token');

@@ -571,7 +571,6 @@ async function handleCoreSpiritChartAssistantStream(req: AuthenticatedRequest, r
       res.end();
       return;
     }
-    res.setHeader('Cache-Control', 'no-store');
     finishCopilotResponse(res, true, {
       success: true,
       answer: answer.trim(),
