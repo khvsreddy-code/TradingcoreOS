@@ -11,6 +11,7 @@ const PortfolioPage = lazy(() => import('../pages/PortfolioPage').then((m) => ({
 const ProfilePage = lazy(() => import('../pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const CoreSpiritDocsPage = lazy(() => import('../pages/CoreSpiritDocsPage').then((m) => ({ default: m.CoreSpiritDocsPage })));
 const CoreSpiritEditorPage = lazy(() => import('../pages/CoreSpiritEditorPage').then((m) => ({ default: m.CoreSpiritEditorPage })));
+const MarketNewsPage = lazy(() => import('../pages/MarketNewsPage').then((m) => ({ default: m.MarketNewsPage })));
 
 type Props = {
   route: WorkspaceRoute;
@@ -29,6 +30,7 @@ const ROUTE_LOADING_COPY: Readonly<Record<WorkspaceRoute, { message: string; sub
   '/profile': { message: 'Loading profile…', submessage: 'Preparing account preferences' },
   '/corespirit': { message: 'Loading CoreSpirit IDE…', submessage: 'Loading the editor, compiler diagnostics and runtime inspector' },
   '/corespirit/docs': { message: 'Loading CoreSpirit documentation…', submessage: 'Preparing language, runtime and research references' },
+  '/news': { message: 'Loading Market News…', submessage: 'Fetching attributed headlines from the existing news feed' },
 };
 
 function fallback(route: WorkspaceRoute) {
@@ -54,6 +56,7 @@ export function TradingWorkspaceShell({ route, onNavigate, onBroker }: Props) {
       {route === '/profile' && <ProfilePage {...common} />}
       {route === '/corespirit/docs' && <CoreSpiritDocsPage {...common} />}
       {route === '/corespirit' && <CoreSpiritEditorPage {...common} />}
+      {route === '/news' && <MarketNewsPage {...common} />}
     </Suspense>
   );
 }

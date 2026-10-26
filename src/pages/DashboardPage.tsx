@@ -265,7 +265,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
             </div>
             : <div className="py-4 text-xs text-[var(--tco-muted)]">{newsError || 'No headlines were returned for this refresh.'}</div>}
           {newsError && newsItems.length > 0 && <div className="mt-3 text-[9px] text-amber-300">Refresh note: {newsError}</div>}
-          <div className="mt-4 flex items-center justify-between border-t border-[var(--tco-border-soft)] pt-3 text-[9px] text-[var(--tco-dim)]"><span><Newspaper className="mr-1 inline h-3 w-3"/> Headlines are attributed to their publisher.</span><button type="button" onClick={() => void refreshNews()} className="font-semibold hover:text-[var(--tco-accent)]">{newsLoading ? 'Refreshing…' : 'Refresh news'}</button></div>
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--tco-border-soft)] pt-3 text-[9px] text-[var(--tco-dim)]"><span><Newspaper className="mr-1 inline h-3 w-3"/> Headlines are attributed to their publisher.</span><div className="flex items-center gap-3"><button type="button" onClick={() => onNavigate('/news')} className="font-semibold text-[var(--tco-accent)] hover:underline">View all news</button><button type="button" onClick={() => void refreshNews()} className="font-semibold hover:text-[var(--tco-accent)]">{newsLoading ? 'Refreshing…' : 'Refresh news'}</button></div></div>
         </Panel>
         <Panel title="Scripts to explore" subtitle="Public CoreSpirit community indicators">
           {scriptsLoading ? <div className="py-4 text-xs text-[var(--tco-muted)]">Loading community scripts…</div>
