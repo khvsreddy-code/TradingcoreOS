@@ -21,6 +21,7 @@ assert.doesNotMatch(route.slice(route.lastIndexOf('async function handleCoreSpir
 assert.match(assistant, /\/api\/corespirit\/copilot\/chat\/stream/, 'chart assistant calls the authenticated stream endpoint');
 assert.match(assistant, /getSupabaseClient\(\)\.auth\.getSession\(\)/, 'frontend supplies the authenticated session token');
 assert.match(assistant, /AbortController/, 'users can stop an in-flight response and context changes cancel stale requests');
+assert.match(assistant, /requestSequenceRef/, 'late auth/stream continuations cannot overwrite a newer conversation state');
 assert.match(assistant, /aria-expanded/, 'chat launcher exposes its expanded state accessibly');
 assert.match(assistant, /maxLength=\{2_000\}/, 'frontend bounds message length');
 assert.match(assistant, /context\.symbol/, 'assistant is explicitly bound to the current chart context');

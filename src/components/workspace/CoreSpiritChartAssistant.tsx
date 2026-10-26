@@ -96,11 +96,14 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const chartIdentityRef = useRef(context.symbol + '|' + context.timeframe);
   const activeAssistantIdRef = useRef<string | null>(null);
+  const requestSequenceRef = useRef(0);
 
   useEffect(() => {
     const identity = context.symbol + '|' + context.timeframe;
     if (chartIdentityRef.current === identity) return;
     chartIdentityRef.current = identity;
+    requestSequenceRef.current += 1;
+    activeAssistantIdRef.current = null;
     abortRef.current?.abort();
     setStreaming(false);
     setError('');
@@ -132,6 +135,8 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
     const userMessage: Message = { id: makeId(), role: 'user', content: messageText };
     const assistantMessage: Message = { id: makeId(), role: 'assistant', content: '' };
     activeAssistantIdRef.current = assistantMessage.id;
+    const requestId = ++requestSequenceRef.current;
+    let requestController: AbortController | null = null;
     const history = [...messages.filter(item => item.content.trim()), userMessage]
       .slice(-10)
       .map(item => ({ role: item.role, content: item.content }));
@@ -141,7 +146,11 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
     try {
       const { data: { session }, error: sessionError } = await getSupabaseClient().auth.getSession();
       if (sessionError || !session?.access_token) throw new Error('Sign in to TradingCore before using the chart assistant.');
+      // A reset or chart switch can happen while session restoration is pending.
+      // Do not start a stale request after its UI context has been invalidated.
+      if (requestId !== requestSequenceRef.current || activeAssistantIdRef.current !== assistantMessage.id) return;
       const controller = new AbortController();
+      requestController = controller;
       abortRef.current = controller;
       const response = await fetch('/api/corespirit/copilot/chat/stream', {
         method: 'POST',
@@ -176,14 +185,18 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
         content: item.content || (stopped ? 'Response stopped.' : 'I could not complete that response.'),
       } : item));
     } finally {
-      if (activeAssistantIdRef.current === assistantMessage.id) activeAssistantIdRef.current = null;
-      setStreaming(false);
-      abortRef.current = null;
+      // A late request must not clear the spinner/controller for a newer message.
+      if (activeAssistantIdRef.current === assistantMessage.id) {
+        activeAssistantIdRef.current = null;
+        setStreaming(false);
+      }
+      if (requestController && abortRef.current === requestController) abortRef.current = null;
     }
   };
 
   const stopResponse = () => abortRef.current?.abort();
   const resetConversation = () => {
+    requestSequenceRef.current += 1;
     abortRef.current?.abort();
     setStreaming(false);
     activeAssistantIdRef.current = null;
