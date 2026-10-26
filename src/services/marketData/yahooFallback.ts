@@ -68,11 +68,11 @@ function normalizeTimeframe(value: string): string {
   if (['D', '1D', 'DAY', 'DAILY'].includes(upper)) return 'D';
   if (['W', '1W', 'WEEK', 'WEEKLY'].includes(upper)) return 'W';
   // Preserve case: Vela's lowercase m denotes minutes, uppercase M denotes months.
-  if (/^\\d+m$/.test(raw)) return raw.slice(0, -1);
-  if (/^\\d+min$/i.test(raw)) return upper.replace(/MIN$/, '');
-  if (/^\\d+$/.test(raw)) return raw;
+  if (/^\d+m$/.test(raw)) return raw.slice(0, -1);
+  if (/^\d+min$/i.test(raw)) return upper.replace(/MIN$/, '');
+  if (/^\d+$/.test(raw)) return raw;
   if (['M', '1M', '1MTH', 'MONTH', 'MONTHLY'].includes(upper) && raw === upper) return 'M';
-  if (/^\\d+M$/.test(raw) && raw === upper) return raw;
+  if (/^\d+M$/.test(raw) && raw === upper) return raw;
   return upper.replace(/MIN$/, '').replace(/M$/, '');
 }
 function rangeQuery(range?: BarRange): string {
