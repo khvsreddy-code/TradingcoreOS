@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { CoreSpiritDock } from '../../../components/corespirit/CoreSpiritDock';
 import {
   registerLegendAction,
   registerLegendCallout,
@@ -941,403 +944,44 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   minWidth: 380,
   maxWidth: 760,
   mount(ctx, body, header) {
-    header.setTitle('CoreSpirit Studio');
-    const root = panelRoot(body);
-    root.classList.add('tco-core-studio');
-    root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
-    root.style.gap = '12px';
-    const top = document.createElement('div');
-    top.style.cssText = 'display:flex;align-items:center;gap:8px;';
-    const language = document.createElement('span');
-    language.textContent = 'CORESCRIPT';
-    language.style.cssText = 'font:750 10px ui-monospace,monospace;letter-spacing:.14em;color:var(--tco-frame-accent,#a5b4fc);border:1px solid var(--vela-border);background:var(--tco-frame-accent-soft,rgba(129,140,248,.12));border-radius:6px;padding:6px 8px;';
-    const target = document.createElement('span');
-    target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler`;
-    target.style.cssText = 'margin-left:auto;max-width:66%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
-    top.append(language, target);
-    const examples = document.createElement('select');
-    examples.setAttribute('aria-label', 'CoreSpirit starter examples');
-    examples.style.cssText = 'width:100%;padding:8px 9px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif;';
-    for (const [value, label] of [['starter','Trend crossover'],['rsi','RSI recovery'],['levels','Range levels']]) {
-      const option = document.createElement('option'); option.value = value; option.textContent = label; examples.appendChild(option);
-    }
-    const editorFrame = document.createElement('div');
-    editorFrame.className = 'tco-core-editor-frame';
-    editorFrame.style.cssText = 'display:flex;min-height:280px;flex:1;overflow:hidden;border:1px solid var(--vela-border);border-radius:9px;background:var(--vela-surface-sunken);';
-    const editorHost = document.createElement('div');
-    editorHost.setAttribute('aria-label', 'CoreSpirit code editor');
-    editorHost.style.cssText = 'display:none;flex:1;min-width:0;min-height:320px;width:100%;';
-    const fallbackEditor = document.createElement('textarea');
-    fallbackEditor.spellcheck = false;
-    fallbackEditor.setAttribute('aria-label', 'CoreSpirit code editor fallback');
-    fallbackEditor.setAttribute('autocapitalize', 'off');
-    fallbackEditor.setAttribute('autocomplete', 'off');
-    fallbackEditor.setAttribute('autocorrect', 'off');
-    fallbackEditor.wrap = 'off';
-    fallbackEditor.style.cssText = 'display:block;flex:1;min-width:0;min-height:280px;resize:vertical;border:0;outline:0;padding:14px;background:var(--vela-surface-sunken);color:var(--vela-fg-bright);caret-color:var(--tco-frame-accent,#14b8a6);font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;white-space:pre;overflow:auto;';
-    const status = document.createElement('div');
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
-    status.setAttribute('aria-atomic', 'true');
-    status.className = 'tco-core-status';
-    status.style.cssText = 'min-height:34px;white-space:pre-wrap;border:1px solid var(--vela-border);border-radius:7px;padding:9px 10px;color:var(--vela-fg-muted);background:var(--vela-surface);font:10px/1.55 ui-monospace,monospace;';
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:7px;align-items:center;';
-    const compile = document.createElement('button');
-    compile.type = 'button'; compile.textContent = 'Validate';
-    compile.className = 'tco-frame-button';
-    compile.style.cssText = 'border:1px solid var(--vela-border);border-radius:7px;padding:8px 12px;background:var(--vela-surface-sunken);color:var(--vela-fg);font-size:11px;font-weight:650;cursor:pointer;';
-    const run = document.createElement('button');
-    run.type = 'button'; run.textContent = 'Compile & Run';
-    run.className = 'tco-frame-button tco-frame-button-primary';
-    run.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:8px 12px;background:var(--tco-frame-accent-soft,rgba(99,102,241,.15));color:var(--vela-fg-bright);font-size:11px;font-weight:750;cursor:pointer;';
-    const retryLoad = document.createElement('button');
-    retryLoad.type = 'button';
-    retryLoad.textContent = 'Retry loading';
-    retryLoad.className = 'tco-frame-button';
-    retryLoad.style.cssText = 'display:none;border:1px solid rgba(248,113,113,.4);border-radius:7px;padding:8px 10px;background:rgba(127,29,29,.10);color:#fca5a5;font-size:10px;cursor:pointer;';
-    retryLoad.setAttribute('aria-label', 'Retry loading CoreSpirit Studio capabilities');
-    const openFull = document.createElement('button');
-    openFull.type = 'button'; openFull.textContent = 'Full IDE ↗';
-    openFull.className = 'tco-frame-button';
-    openFull.style.cssText = 'margin-left:auto;border:1px solid var(--vela-border);border-radius:7px;padding:8px 10px;background:transparent;color:var(--vela-fg-muted);font-size:10px;cursor:pointer;';
-    compile.disabled = true;
-    run.disabled = true;
-    compile.setAttribute('aria-label', 'Validate current CoreScript');
-    run.setAttribute('aria-label', 'Compile and run CoreScript on the active Vela chart');
-    retryLoad.setAttribute('hidden', '');
-    actions.append(compile, run, retryLoad, openFull);
-    editorFrame.append(editorHost, fallbackEditor);
-    root.append(top, examples, editorFrame, status, actions);
-
-    const sourceFor = (key: string): string => {
-      if (key === 'rsi') return 'indicator("RSI Recovery")\n\nr = rsi(close, 14)\nplot(r, name = "RSI")\n\nif crossover(r, 30) {\n    signal("RSI RECOVERY")\n}';
-      if (key === 'levels') return 'indicator("Range Levels")\n\nhi = highest(high, 20)\nlo = lowest(low, 20)\nplot(hi, name = "20-bar High")\nplot(lo, name = "20-bar Low")';
-      return CORESPIRIT_STARTER;
-    };
-    let source = CORESPIRIT_STARTER;
-    try { source = localStorage.getItem(CORESPIRIT_LIVE_EDITOR_KEY) || CORESPIRIT_STARTER; } catch {}
-    fallbackEditor.value = source;
-    let editorModel: CoreSpiritEditorModelType | undefined;
-    let monacoAdapter: CoreSpiritMonacoAdapter | undefined;
-    let disposed = false;
-    let sourceSaveTimer: number | null = null;
-    const queueLiveSourceSave = () => {
-      if (sourceSaveTimer !== null) window.clearTimeout(sourceSaveTimer);
-      sourceSaveTimer = window.setTimeout(() => {
-        sourceSaveTimer = null;
-        const api = (window as Window & { __TCO_VELA__?: { workspace?: { saveNow?: () => void | Promise<void> } } }).__TCO_VELA__?.workspace;
-        if (api?.saveNow) void Promise.resolve(api.saveNow()).catch(() => undefined);
-      }, 800);
-    };
-    const syncEditor = () => {
-      target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`;
-      fallbackEditor.value = source;
-      try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, source); } catch {}
-      queueLiveSourceSave();
-    };
-    fallbackEditor.addEventListener('input', () => {
-      source = fallbackEditor.value;
-      compileGeneration += 1;
-      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-      syncEditor();
-    });
-    examples.addEventListener('change', () => {
-      source = sourceFor(examples.value);
-      compileGeneration += 1;
-      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-      monacoAdapter?.setSource(source);
-      syncEditor();
-    });
-    syncEditor();
-    let compileGeneration = 0;
-    const onLiveSourceRestored = (event: Event) => {
-      const restored = (event as CustomEvent<{ source?: unknown }>).detail?.source;
-      if (typeof restored !== 'string' || restored === source) return;
-      source = restored;
-      compileGeneration += 1;
-      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-      monacoAdapter?.setSource(source);
-      syncEditor();
-      status.textContent = 'Restored CoreSpirit source from the saved workspace';
-    };
-    window.addEventListener('tco:corespirit-live-source-restored', onLiveSourceRestored);
-    // A Run action should update the Studio's active script in place, not stack duplicates.
-    type LiveStudioHandle = ReturnType<typeof ctx.chart.indicators>[number];
-    let liveStudioHandle: LiveStudioHandle | undefined;
-    let liveStudioBoundHandleId: string | undefined;
-    let liveStudioHasRun = false;
-    let liveStudioUpdateToken = 0;
-    const bindLiveStudioHandle = (handle: LiveStudioHandle, alreadyRunning: boolean): void => {
-      if (liveStudioBoundHandleId === handle.id) return;
-      liveStudioBoundHandleId = handle.id;
-      liveStudioHandle = handle;
-      liveStudioHasRun = alreadyRunning;
-      handle.on('ready', () => {
-        if (disposed || liveStudioHandle?.id !== handle.id) return;
-        liveStudioHasRun = true;
-        status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
-        status.style.color = '#86efac';
-        ctx.toast('CoreSpirit indicator is running on the active chart', 'success');
-      });
-      handle.on('error', ({ error }) => {
-        if (disposed || liveStudioHandle?.id !== handle.id) return;
-        liveStudioUpdateToken += 1; // cancel any status poll for a superseded update
-        const hadWorkingVersion = liveStudioHasRun;
-        if (!hadWorkingVersion) {
-          try { handle.remove(); } catch {}
-          if (liveStudioHandle?.id === handle.id) liveStudioHandle = undefined;
-          liveStudioBoundHandleId = undefined;
+    // CoreSpirit lives in Vela's actual side-panel column. The chart grid therefore
+    // resizes around the editor instead of drawing a popup over live candles.
+    header.setTitle('');
+    body.style.padding = '0';
+    body.style.overflow = 'hidden';
+    const panel = body.closest('.vela-panel') as HTMLElement | null;
+    const shellHeader = panel?.querySelector('.vela-panel-header') as HTMLElement | null;
+    if (shellHeader) shellHeader.style.display = 'none';
+    const root = createRoot(body);
+    root.render(createElement(CoreSpiritDock, {
+      embedded: true,
+      onClose: () => {
+        panel?.removeAttribute('data-maximized');
+        ctx.togglePanel('tco.corespirit-code', false);
+      },
+      onFullscreenChange: (fullscreen: boolean) => {
+        panel?.toggleAttribute('data-maximized', fullscreen);
+      },
+      onAddToChart: async (scriptName: string, scriptSource: string) => {
+        const addToChart = (window as Window & {
+          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string) => Promise<void>;
+        }).__TCO_ADD_CORESPIRIT_TO_CHART__;
+        if (typeof addToChart !== 'function') {
+          throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
         }
-        status.textContent = `Vela could not compile or execute this CoreScript: ${error instanceof Error ? error.message : String(error)}`;
-        status.style.color = '#fca5a5';
-        ctx.toast(hadWorkingVersion ? 'CoreSpirit update failed' : 'CoreSpirit indicator failed and was removed', 'error');
-      });
+        await addToChart(scriptName, scriptSource);
+      },
+    }));
+    return {
+      destroy() {
+        root.unmount();
+        panel?.removeAttribute('data-maximized');
+        if (shellHeader) shellHeader.style.display = '';
+        body.style.padding = '';
+        body.style.overflow = '';
+      },
     };
-    status.textContent = 'CoreSpirit Studio is optional. Loading editor capabilities…';
-    status.style.color = '#94a3b8';
-    editorFrame.setAttribute('aria-busy', 'true');
-
-    const loadEditorCapabilities = async (): Promise<void> => {
-      if (disposed) return;
-      retryLoad.hidden = true;
-      retryLoad.removeAttribute('hidden');
-      retryLoad.style.display = 'none';
-      compile.disabled = true;
-      run.disabled = true;
-      status.textContent = 'Loading CoreScript editor and worker-backed compiler…';
-      status.style.color = '#94a3b8';
-      try {
-        // These modules are intentionally not part of the live terminal's initial
-        // dependency graph. Import them only after the user opens CoreSpirit Studio.
-        const [modelModule, monacoModule] = await Promise.all([
-          import('../../coreSpirit/editorModel'),
-          import('../../coreSpirit/monacoAdapter'),
-        ]);
-        if (disposed) return;
-        editorModel = new modelModule.CoreSpiritEditorModel(source);
-        // Existing textarea/example listeners now have the live editor model to update.
-        try {
-          const adapter = await monacoModule.mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
-            source = nextSource;
-            compileGeneration += 1;
-            editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-            fallbackEditor.value = source;
-            syncEditor();
-          });
-          if (disposed) { adapter.dispose(); return; }
-          monacoAdapter = adapter;
-          adapter.setSource(source);
-          editorHost.style.display = 'block';
-          fallbackEditor.style.display = 'none';
-          status.textContent = 'CoreScript editor ready · worker compilation on demand';
-          status.style.color = '#94a3b8';
-        } catch (error) {
-          if (disposed) return;
-          editorHost.style.display = 'none';
-          fallbackEditor.style.display = 'block';
-          status.textContent = `Monaco unavailable; accessible editor fallback active. ${error instanceof Error ? error.message : String(error)}`;
-          status.style.color = '#fbbf24';
-        }
-        compile.disabled = false;
-        run.disabled = false;
-        editorFrame.setAttribute('aria-busy', 'false');
-        syncEditor();
-      } catch (error) {
-        if (disposed) return;
-        editorHost.style.display = 'none';
-        fallbackEditor.style.display = 'block';
-        editorFrame.setAttribute('aria-busy', 'false');
-        status.textContent = `CoreSpirit editor capabilities failed to load. ${error instanceof Error ? error.message : String(error)}`;
-        status.style.color = '#fca5a5';
-        retryLoad.style.display = 'inline-flex';
-        retryLoad.hidden = false;
-      }
-    };
-
-    retryLoad.addEventListener('click', () => { void loadEditorCapabilities(); });
-    void loadEditorCapabilities();
-
-    const compileSource = async (shouldRun: boolean) => {
-      const currentSource = source.trim();
-      const activeEditorModel = editorModel;
-      if (!activeEditorModel) { status.textContent = 'CoreSpirit editor is still loading. Retry if this message persists.'; status.style.color = '#fca5a5'; return; }
-      if (!currentSource) { status.textContent = 'Enter a CoreScript indicator first.'; status.style.color = '#fca5a5'; return; }
-      const generation = ++compileGeneration;
-      compile.disabled = run.disabled = true;
-      compile.textContent = 'Compiling…';
-      run.textContent = 'Compiling…';
-      status.textContent = 'Parsing and type-checking in the CoreSpirit compiler worker…';
-      status.style.color = '#94a3b8';
-      try {
-        const { compileCoreSpiritSourceOffThread } = await import('../../coreSpirit/coreSpiritCompilerClient');
-        if (disposed || generation !== compileGeneration) return;
-        const result = await compileCoreSpiritSourceOffThread(currentSource, generation, 'tco-live-studio', { layer: 'chart' });
-        if (generation !== compileGeneration) return;
-        activeEditorModel.applyWorkerCompileResult(result, currentSource);
-        monacoAdapter?.setDiagnostics(result.diagnostics, currentSource);
-        monacoAdapter?.setSymbolInfo(result.symbols);
-        const errors = result.diagnostics.filter(d => d.severity === 'error');
-        if (errors.length || !result.artifact) {
-          status.textContent = errors.slice(0, 5).map(d => d.message).join('\n') || 'No executable artifact was produced.';
-          status.style.color = '#fca5a5';
-          return;
-        }
-        status.textContent = `Valid · ${result.artifactHash?.slice(0, 12) || 'artifact ready'} · ${result.diagnostics.length} diagnostics`;
-        status.style.color = '#86efac';
-        if (shouldRun) {
-          try {
-            const currentHandles = ctx.chart.indicators();
-            // Reuse this panel's active script (or one retained after the panel was
-            // closed/reopened) so Run behaves like a code editor, not "add duplicate".
-            let handle = liveStudioHandle && currentHandles.some((candidate) => candidate.id === liveStudioHandle?.id)
-              ? liveStudioHandle
-              : currentHandles.find((candidate) => candidate.id.startsWith('tco-corespirit-live-'));
-            if (handle) {
-              const activeHandle = handle;
-              bindLiveStudioHandle(activeHandle, true);
-              if (activeHandle.source === currentSource) {
-                status.textContent = 'Running · CoreSpirit Studio already matches the active chart script.';
-                status.style.color = '#86efac';
-              } else {
-                const updateToken = ++liveStudioUpdateToken;
-                status.textContent = 'Updating the active CoreSpirit indicator…';
-                status.style.color = '#fbbf24';
-                // Vela's updateCode() is intentionally fire-and-observe (void). The
-                // handle.source changes only after Vela has prepared the replacement.
-                activeHandle.updateCode(currentSource);
-                const updateStartedAt = Date.now();
-                const observeUpdate = (): void => {
-                  if (disposed || generation !== compileGeneration || updateToken !== liveStudioUpdateToken || liveStudioHandle?.id !== activeHandle.id) return;
-                  if (activeHandle.source === currentSource) {
-                    status.textContent = 'Updated · Vela accepted the new CoreScript and is refreshing its output.';
-                    status.style.color = '#86efac';
-                    ctx.toast('CoreSpirit indicator updated in place', 'success');
-                    return;
-                  }
-                  if (Date.now() - updateStartedAt >= 10000) {
-                    status.textContent = 'Vela is still preparing this update. The source has not yet been accepted.';
-                    status.style.color = '#fbbf24';
-                    return;
-                  }
-                  window.setTimeout(observeUpdate, 80);
-                };
-                window.setTimeout(observeUpdate, 40);
-              }
-            } else {
-              const indicatorId = `tco-corespirit-live-${generation}-${Date.now().toString(36)}`;
-              ctx.addIndicator({ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
-              handle = ctx.chart.indicators().find((candidate) => candidate.id === indicatorId);
-              if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
-              bindLiveStudioHandle(handle, false);
-              status.textContent = 'Indicator queued · waiting for Vela’s first execution…';
-              status.style.color = '#fbbf24';
-              window.setTimeout(() => {
-                if (disposed || liveStudioHasRun || liveStudioHandle?.id !== indicatorId) return;
-                status.textContent = 'Indicator is still compiling or waiting for chart data. Check the browser error panel if it does not appear.';
-                status.style.color = '#fbbf24';
-              }, 10000);
-            }
-          } catch (error) {
-            status.textContent = error instanceof Error ? error.message : String(error);
-            status.style.color = '#fca5a5';
-            ctx.toast('CoreSpirit could not add or update the indicator', 'error');
-          }
-        }
-      } catch (error) {
-        if (generation !== compileGeneration) return;
-        status.textContent = error instanceof Error ? error.message : String(error);
-        status.style.color = '#fca5a5';
-      } finally {
-        if (generation === compileGeneration) {
-          compile.disabled = run.disabled = false;
-          compile.textContent = 'Validate';
-          run.textContent = 'Compile & Run';
-        }
-      }
-    };
-    compile.addEventListener('click', () => { void compileSource(false); });
-    run.addEventListener('click', () => { void compileSource(true); });
-    openFull.addEventListener('click', () => {
-      try { localStorage.setItem(versionedStorageKey('editor'), source); localStorage.setItem('tradingcore:corespirit:editor', source); } catch {}
-      window.history.pushState({}, '', '/corespirit');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      ctx.toast('Opened the full CoreSpirit IDE', 'success');
-    });
-    return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, onChart() { target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`; }, destroy() { disposed = true; compileGeneration += 1; window.removeEventListener('tco:corespirit-live-source-restored', onLiveSourceRestored); if (sourceSaveTimer !== null) window.clearTimeout(sourceSaveTimer); void Promise.resolve((window as Window & { __TCO_VELA__?: { workspace?: { saveNow?: () => void | Promise<void> } } }).__TCO_VELA__?.workspace?.saveNow?.()).catch(() => undefined); monacoAdapter?.dispose(); monacoAdapter = undefined; } };
   },
-};
-
-const workspaceFrameAction:WidgetActionDescriptor={
-  id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'sliders',iconOnly:true,align:'right',order:19,mobile:'menu',
-  run(ctx){ctx.togglePanel('tco.workspace-frame');},
-};
-
-type TcoWorkspaceSaveState = 'saving' | 'saved' | 'local' | 'error';
-function updateTcoWorkspaceSaveIndicator(state:TcoWorkspaceSaveState,message?:string):void {
-  if(typeof document==='undefined') return;
-  const labels:Record<TcoWorkspaceSaveState,string> = {
-    saving:'Saving workspace…',
-    saved:'Workspace saved and synced',
-    local:'Workspace saved locally; cloud sync pending',
-    error:'Workspace save needs attention',
-  };
-  const label=labels[state]??'Save workspace';
-  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-action-id="tco.save-workspace"]')) {
-    button.dataset.tcoSaveState=state;
-    button.title=message ? label+' — '+message : label;
-    button.setAttribute('aria-label',label);
-  }
-}
-if(typeof window!=='undefined') {
-  window.addEventListener('tco:workspace-autosave-status',(event:Event)=>{
-    const detail=(event as CustomEvent<{state?:string;message?:string}>).detail;
-    if(detail?.state==='saving'||detail?.state==='saved'||detail?.state==='local'||detail?.state==='error')
-      updateTcoWorkspaceSaveIndicator(detail.state,detail.message);
-  });
-}
-
-const saveWorkspaceAction: WidgetActionDescriptor = {
-  id:'tco.save-workspace', target:'topbar', label:'Save', icon:'save', iconOnly:true, align:'right', order:18.5, mobile:'menu',
-  run(ctx) {
-    const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
-    if(!api?.workspace?.saveNow) { updateTcoWorkspaceSaveIndicator('error','The live workspace is not ready yet');ctx.toast('The live workspace is not ready to save yet','error');return; }
-    updateTcoWorkspaceSaveIndicator('saving','Manual save requested');
-    void (async()=>{
-      let defaultWorkspaceSynced=true;
-      try { await Promise.resolve(api.workspace!.saveNow!()); } catch { defaultWorkspaceSynced=false; }
-      const named=await persistActiveTcoVelaSavedWorkspace();
-      if(named) {
-        const synced=defaultWorkspaceSynced&&named.synced;
-        updateTcoWorkspaceSaveIndicator(synced?'saved':'local',synced?'Saved “'+named.name+'”':'Saved “'+named.name+'”; cloud sync will retry');
-        ctx.toast(synced
-          ? 'Saved “'+named.name+'” to your account'
-          : 'Saved “'+named.name+'” locally; cloud sync will retry when available','success');
-        return;
-      }
-      const appearanceSynced=await persistCurrentTcoVelaAppearance();
-      const synced=defaultWorkspaceSynced&&appearanceSynced;
-      updateTcoWorkspaceSaveIndicator(synced?'saved':'local',synced?'Workspace synced':'Workspace saved locally; account sync will retry');
-      ctx.toast(synced
-        ? 'Workspace saved to your account'
-        : 'Workspace saved on this device; account sync resumes when available','success');
-    })().catch((error:unknown)=>{
-      updateTcoWorkspaceSaveIndicator('error',error instanceof Error?error.message:'Cloud sync failed');
-      ctx.toast('Workspace saved locally; cloud sync failed'+(error instanceof Error?': '+error.message:''),'error');
-    });
-  },
-};
-
-const coreSpiritCodeAction: WidgetActionDescriptor = {
-  id: 'tco.corespirit-code',
-  target: 'topbar',
-  label: 'Code',
-  icon: 'indicators',
-  iconOnly: true,
-  align: 'right',
-  order: 3.5,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.corespirit-code'); },
 };
 
 const bookmarksPanel: SidePanelDescriptor = {
