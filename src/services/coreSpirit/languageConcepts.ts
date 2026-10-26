@@ -181,18 +181,54 @@ function normalizeInputType(type:string|undefined, defval:CoreSpiritSurfaceLiter
 const CORESPIRIT_SOURCE_DEFAULTS = new Set([
   'open','high','low','close','volume','hl2','hlc3','ohlc4','hlcc4','typical','weighted',
 ]);
+function splitSurfaceCallArguments(text:string):string[] {
+  const out:string[]=[];
+  let start=0, depth=0, quote:'"'|"'"|null=null, escaped=false;
+  for(let i=0;i<text.length;i+=1){
+    const ch=text[i]!;
+    if(quote){
+      if(escaped){escaped=false;continue;}
+      if(ch==='\\'){escaped=true;continue;}
+      if(ch===quote)quote=null;
+      continue;
+    }
+    if(ch==='"'||ch==="'"){quote=ch;continue;}
+    if(ch==='('||ch==='[')depth+=1;
+    else if(ch===')'||ch===']')depth=Math.max(0,depth-1);
+    else if(ch===','&&depth===0){out.push(text.slice(start,i).trim());start=i+1;}
+  }
+  const last=text.slice(start).trim();
+  if(last)out.push(last);
+  return out;
+}
+
 export function parseCoreSpiritInputDeclaration(line:string,start:number,end:number=start+line.length):CoreSpiritSurfaceInput|undefined {
   const match=line.trim().match(/^input\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*))?\s*=\s*(.+)$/i);
   if(!match)return undefined;
   const scanned=scanSurfaceAttributes(match[3]);
-  const declaredType=String(match[2]??'').trim().toLowerCase();
+  let declaredType=String(match[2]??'').trim().toLowerCase();
+  // Backward compatibility for drafts written by the original editor template:
+  // input length = int(20, min: 1). Parse the constructor as a typed literal and
+  // promote its named arguments into the canonical input metadata attributes.
+  const legacyConstructor=scanned.base.match(/^(int|integer|float|number|bool|boolean|string)\\s*\\(([\\s\\S]*)\\)$/i);
+  if(legacyConstructor){
+    const args=splitSurfaceCallArguments(legacyConstructor[2]??'');
+    if(!args.length)throw new Error('CoreSpirit typed input constructor requires a default literal.');
+    if(!declaredType)declaredType=legacyConstructor[1]!.toLowerCase();
+    scanned.base=args[0]!;
+    for(const argument of args.slice(1)){
+      const attr=argument.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s*(?:=|:)\\s*(.+)$/);
+      if(!attr||!KNOWN_INPUT_ATTRIBUTES.has(attr[1]!))throw new Error('Unsupported CoreSpirit typed input argument: '+argument);
+      scanned.attrs[attr[1]!]=attr[2]!.trim();
+    }
+  }
   const sourceDefault=scanned.base.trim().toLowerCase();
   // Source selectors may default to canonical OHLCV fields. Detect this before
   // literal parsing so a valid identifier is not rejected as an unquoted string.
   const implicitSource= !declaredType && CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
   const isSourceDefault=(declaredType==='source'||implicitSource)&&CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
-  const defval:CoreSpiritSurfaceLiteral=isSourceDefault?sourceDefault:parseTypedSurfaceDefault(scanned.base,match[2], 'input');
-  const type:CoreSpiritSurfaceInputType=isSourceDefault?'source':normalizeInputType(match[2],defval);
+  const defval:CoreSpiritSurfaceLiteral=isSourceDefault?sourceDefault:parseTypedSurfaceDefault(scanned.base,declaredType, 'input');
+  const type:CoreSpiritSurfaceInputType=isSourceDefault?'source':normalizeInputType(declaredType,defval);
   const attrNum=(name:string)=>scanned.attrs[name]!==undefined?Number(scanned.attrs[name]):undefined;
   const title=scanned.attrs.title ? String(parseSurfaceLiteral(scanned.attrs.title)) : prettySurfaceKey(match[1]);
   const out:CoreSpiritSurfaceInput={key:match[1],title,type,defval,start,end};
