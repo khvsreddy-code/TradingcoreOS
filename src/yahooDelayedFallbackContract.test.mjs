@@ -28,7 +28,7 @@ assert.match(provider, /return loadYahooColumns\(symbol, tcoTimeframe/, 'columna
 assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'history and older-range requests route to Yahoo without FYERS');
 assert.match(brokerManager, /status: 'Authentication Required'/, 'expired FYERS remains visible as requiring reauthorization');
 assert.match(brokerManager, /private refreshSessionExpiryState/, 'broker connection state is refreshed against token expiry');
-assert.match(runtime, /Date\.parse\(String\(connection\.tokenExpiry \|\| ''\)\) > Date\.now\(\) \+ 5_000/, 'expired tokens do not count as connected');
+assert.match(runtime, /const expiresAt = Date\\.parse\\(String\\(connection\\.tokenExpiry \\|\\| ''\\)\\);[\\s\\S]*return expiresAt > Date\\.now\\(\\) \\+ 5_000;/, 'expired FYERS sessions are rejected while the code checks expiry explicitly');
 assert.match(app, /workspacePath === '\/live'\s*\? <LiveTradingShell \/>/, 'live charts can open without forcing broker onboarding');
 assert.match(prompt, /Continue with delayed data/, 'users can explicitly bypass FYERS connection');
 assert.match(prompt, /expired daily|expire daily|expire/, 'prompt explains daily token expiry');
