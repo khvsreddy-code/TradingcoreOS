@@ -49,6 +49,20 @@ assert.equal(validateCoreSpiritAiInvocationResult({ ...builtResult, executable: 
   'an AI response must never be upgraded into an executable artifact');
 assert.equal(validateCoreSpiritAiInvocationResult(builtResult, { ...resultIdentity, artifactHash: 'd'.repeat(64) }, 2_000), null,
   'results for another compiled artifact must not be surfaced');
+assert.equal(validateCoreSpiritAiInvocationResult({
+  ...builtResult,
+  expiresAt: new Date(Date.parse(builtResult.expiresAt) + 60_000).toISOString(),
+}, resultIdentity, 2_000), null,
+  'a stored result must not be able to extend its own freshness lifetime');
+const futureResult = buildCoreSpiritAiInvocationResult({
+  status: 'ready',
+  result: 'future-dated advisory',
+  summary: 'Must not be treated as fresh.',
+  ...resultIdentity,
+  createdAt: new Date(120_000).toISOString(),
+});
+assert.equal(validateCoreSpiritAiInvocationResult(futureResult, resultIdentity, 2_000), null,
+  'future-dated AI results outside the allowed clock-skew window must be rejected');
 
 assert.throws(() => parseCoreSpiritAiInvocationRequest({
   source, artifactHash: 'a'.repeat(64), prompt: 'api_key=supersecretvalue', context: {},
