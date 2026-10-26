@@ -30,6 +30,7 @@ import {
 } from '../native-indicators/NativeIndicator';
 import { LiveSession } from './LiveSession';
 import { lazyNativeIndicatorCatalog, loadNativeIndicatorType, isLazyNativeIndicator } from '../native-indicators/lazyCatalog';
+import { nativeIndicatorDescriptors } from '../native-indicators';
 import { IndicatorHandleImpl, type IndicatorController } from './IndicatorHandleImpl';
 import { inspectModels, type SceneInspection } from './inspect';
 import { presetToRange, type VisibleRangePreset } from '../visible-range';

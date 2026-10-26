@@ -315,6 +315,8 @@ export class Statusline {
     private readout: StatuslineReadout = 'ohlc';
     /** Fit mode (multi-chart cells): one row, overflowing segments hidden — see {@link setFitMode}. */
     private fitMode = false;
+    /** Invalidates fit calculations after text/localization changes. */
+    private fitKey: string | null = null;
     private fitRO: ResizeObserver | null = null;
     /** The identity row (avatar / symbol / meta / market) and the values row (readout /
      *  eye) — one line side by side, or a two-line column once the ladder stacks them. */

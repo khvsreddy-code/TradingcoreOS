@@ -1,6 +1,8 @@
 import { msg } from '../i18n/message';
+import { textOf } from '../i18n/text';
+import type { MessageLike, Translator } from '../i18n/types';
 import type { DrawingTypeKey } from './Drawing';
-import { allDrawingTypeMetadata, drawingTypes, getDrawingType } from './registry';
+import { allDrawingTypeMetadata, drawingTypes, getDrawingType, drawingTypeEntry } from './registry';
 
 /**
  * Inert, renderer-neutral toolbar data. The core builds it from the type registry;
@@ -174,8 +176,8 @@ function toolFor(type: DrawingTypeKey): ToolSource | null {
 }
 
 /** Index registered tools by their declared registry group (registration order preserved). */
-function toolsByRegistryGroup(allowed?: ReadonlySet<DrawingTypeKey>): Map<string, ToolDefinition[]> {
-    const byGroup = new Map<string, ToolDefinition[]>();
+function toolsByRegistryGroup(allowed?: ReadonlySet<DrawingTypeKey>): Map<string, ToolSource[]> {
+    const byGroup = new Map<string, ToolSource[]>();
     for (const meta of allDrawingTypeMetadata()) {
         if (allowed && !allowed.has(meta.type)) continue;
         const tool = { type: meta.type, label: meta.label, icon: meta.icon };

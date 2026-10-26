@@ -1,4 +1,5 @@
 import type { Millis } from './time';
+import type { MessageLike } from '../i18n/types';
 import type { SeriesSpec } from './series';
 import type { Fill, Background, PriceLine } from './scene';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
