@@ -47,6 +47,14 @@ The editor also exposes an **Async AI Invocation** host-API harness. It compiles
 
 The current invocation API returns **advisory text data only**. It marks the result `executable: false` and `mayCreateOrderIntent: false`. It never compiles model output, invokes a broker, or changes account state. Order intents, risk validation and broker routing remain host-controlled.
 
+## In-chart conversational assistant
+
+The live Vela chart now exposes a ChatGPT-style CoreSpirit assistant for chart questions and platform help. It streams answers from the configured server-side Gemini provider and includes the current chart symbol/timeframe, last known price, up to 12 recent OHLCV bars, enabled indicator labels, and bounded VWAP/ATR/support/resistance context when available. It also searches the versioned CoreSpirit knowledge index for platform and language questions.
+
+The chat endpoint is authenticated, rate limited, time bounded, and read-only. Its context sanitizer accepts only explicit market/chart fields; account balances, positions, orders, broker tokens and arbitrary host objects are not forwarded. Chat history and response size are bounded. The assistant does not write to the editor, change the chart, invoke a broker, create order intent, or claim to have run a compile/backtest. Code changes should go through the separate Copilot generate/review/apply flow.
+
+This is a GoCharting-style conversational experience, not a connection to a user's ChatGPT subscription. It currently uses the existing server-side Gemini configuration. If that key is absent, the endpoint fails closed with a configuration message.
+
 ## Important runtime limit
 
 The capability and asynchronous host job boundary is implemented; the full native expression/event resolver is not yet implemented. In particular, an example such as:

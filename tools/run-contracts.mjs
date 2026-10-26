@@ -153,6 +153,7 @@ const contracts = [
   ['corespirit-artifact-cache-abi', ['src/coreSpiritArtifactCacheAbiContract.test.mjs', false]],
   ['corespirit-editor-off-thread-pipeline', ['src/coreSpiritEditorCompilerContract.test.mjs', false]],
   ['corespirit-ai-native', ['src/coreSpiritAiNativeContract.test.mjs', false]],
+  ['corespirit-chart-assistant', ['src/coreSpiritChartAssistantContract.test.mjs', false]],
   ['corescript-ai-invoke-capability', ['src/coreScriptAiInvokeCapabilityContract.test.mjs', true]],
   ['corespirit-copilot-knowledge', ['src/coreSpiritCopilotKnowledge.test.mjs', true]],
   ['corespirit-feature-drift-monitoring', ['src/services/coreSpirit/modelDrift.test.ts', true]],

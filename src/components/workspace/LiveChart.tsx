@@ -31,6 +31,7 @@ import type { createChartInteractionController } from '../../services/core/chart
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 import { getWorkspaceAppearance, subscribeWorkspaceAppearance } from '../../theme/workspaceAppearance';
+import { CoreSpiritChartAssistant } from './CoreSpiritChartAssistant';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
 
@@ -399,5 +400,30 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     return subscribeWorkspaceAppearance(applyAppearance);
   }, []);
 
-  return <Profiler id={`tco-chart-${chartDatasetKey}`} onRender={() => chartPerformanceTelemetry.recordReactCommit(chartDatasetKey)}>{chartUi}</Profiler>;
+  return <Profiler id={'tco-chart-' + chartDatasetKey} onRender={() => chartPerformanceTelemetry.recordReactCommit(chartDatasetKey)}>{chartUi}<CoreSpiritChartAssistant context={{
+    symbol: resolvedInstrumentKey,
+    timeframe,
+    lastPrice: typeof latestTick.current?.ltp === 'number' && Number.isFinite(latestTick.current.ltp)
+      ? latestTick.current.ltp
+      : (candles.current[candles.current.length - 1]?.close ?? null),
+    candleCount: candles.current.length,
+    recentBars: candles.current.slice(-12).map((bar: any) => ({
+      time: String(bar.timestamp ?? bar.time ?? ''),
+      open: typeof bar.open === 'number' && Number.isFinite(bar.open) ? bar.open : null,
+      high: typeof bar.high === 'number' && Number.isFinite(bar.high) ? bar.high : null,
+      low: typeof bar.low === 'number' && Number.isFinite(bar.low) ? bar.low : null,
+      close: typeof bar.close === 'number' && Number.isFinite(bar.close) ? bar.close : null,
+      volume: typeof bar.volume === 'number' && Number.isFinite(bar.volume) ? bar.volume : null,
+    })),
+    activeIndicators: indicators.filter(item => item.enabled).map((item: any) => String(item.name ?? item.label ?? item.id ?? 'Indicator')).slice(0, 12),
+    analytics: analytics ? {
+      bias: analytics.bias,
+      vwap: analytics.vwap,
+      atr: analytics.atr,
+      previousHigh: analytics.previousHigh,
+      previousLow: analytics.previousLow,
+      support: analytics.support.slice(0, 5).map(level => ({ price: level.price, state: level.state })),
+      resistance: analytics.resistance.slice(0, 5).map(level => ({ price: level.price, state: level.state })),
+    } : null,
+  }} /></Profiler>;
 });
