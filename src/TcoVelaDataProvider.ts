@@ -235,10 +235,20 @@ function performanceNow(): number {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
-function recordVelaRenderUpdate(key: string, patchStartedAt: number, lastPacketAt: number, callbackDurationMs: number): void {
+function recordVelaRenderUpdate(
+  key: string,
+  patchStartedAt: number,
+  lastPacketAt: number,
+  callbackDurationMs: number,
+  timelineKey?: string,
+  sequence?: number,
+): void {
   if (!key) return;
+  const patchAcceptedAt = performanceNow();
+  if (timelineKey && sequence != null) marketLatencyTrace.record(timelineKey, sequence, 'patch', patchStartedAt, patchAcceptedAt);
   const record = () => {
     const renderedAt = performanceNow();
+    if (timelineKey && sequence != null) marketLatencyTrace.record(timelineKey, sequence, 'paint', patchAcceptedAt, renderedAt);
     const tickToPatchMs = lastPacketAt > 0 ? Math.max(0, patchStartedAt - lastPacketAt) : 0;
     const tickToRenderMs = lastPacketAt > 0 ? Math.max(0, renderedAt - lastPacketAt) : 0;
     chartPerformanceTelemetry.recordRenderUpdate(key, tickToPatchMs, tickToRenderMs, callbackDurationMs);
@@ -644,8 +654,9 @@ export class TcoVelaDataProvider implements DataProvider {
     let cancelled = false;
     let fingerprint = '';
     let pendingSequence = 0;
+    let pendingTraceSequence = 0;
     let pendingHistoryReplacement = false;
-    const timelineKey = `${symbol}|${tcoTimeframe}`;
+    let timelineKey = `${symbol}|${tcoTimeframe}`;
     let scheduled = false;
     let dirty = false;
     let raf = 0;
@@ -655,7 +666,7 @@ export class TcoVelaDataProvider implements DataProvider {
       if (cancelled || !dirty || !plane) return;
       dirty = false;
       const normalizationStartedAt = performanceNow();
-      const view = marketLatencyTrace.measure(timelineKey, pendingSequence, 'canonical', () => plane!.readCanonical());
+      const view = plane!.readCanonical();
       if (!view.length) {
         chartPerformanceTelemetry.recordStage(performanceKey, 'normalization', Math.max(0, performanceNow() - normalizationStartedAt));
         return;
@@ -704,7 +715,7 @@ export class TcoVelaDataProvider implements DataProvider {
         const dispatchStartedAt = performanceNow();
         chartPerformanceTelemetry.recordStage(performanceKey, 'patch', Math.max(0, dispatchStartedAt - patchStartedAt));
         onBar(replacement);
-        recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt));
+        recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt), timelineKey, pendingTraceSequence);
         return;
       }
 
@@ -714,7 +725,7 @@ export class TcoVelaDataProvider implements DataProvider {
       const dispatchStartedAt = performanceNow();
       chartPerformanceTelemetry.recordStage(performanceKey, 'patch', Math.max(0, dispatchStartedAt - patchStartedAt));
       onBar(update);
-      recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt));
+      recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt), timelineKey, pendingTraceSequence);
     };
 
     const schedule = () => {
@@ -751,9 +762,11 @@ export class TcoVelaDataProvider implements DataProvider {
       attachedBrokerId = brokerId;
       performanceKey = tcoVelaPerformanceKey(brokerId, symbol, tcoTimeframe);
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+      timelineKey = plane.key;
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
         pendingSequence = event.snapshot.marketDataRevision;
+        pendingTraceSequence = event.change?.revision ?? event.snapshot.revision;
         if (
           event.type === 'snapshot' &&
           (event.reason === 'cache' || event.reason === 'history' || event.reason === 'older-history' || event.reason === 'recovery')

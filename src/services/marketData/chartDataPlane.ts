@@ -11,6 +11,7 @@ import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
 import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, historyWarmTarget, initialHistoryCandles, shouldLoadOlderHistory } from './chartHistoryCoordinator';
 import { marketDataGraph } from '../core/data/marketDataGraph';
 import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
+import { marketLatencyTrace } from '../core/performance/marketLatencyTrace';
 import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutationKind } from './chartCandleEvents';
 import { chartComputeCoordinator } from './chartComputeCoordinator';
 
@@ -406,6 +407,9 @@ export class ChartDataPlane {
     const ingestionStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const previousRevision = this.state.revision;
     const bar = transition.bar;
+    const traceSequence = this.state.revision + 1;
+    const canonicalStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    marketLatencyTrace.record(this.key, traceSequence, 'feed', ingressStartedAt, canonicalStartedAt);
     const canonicalPoint = {
       time: Math.floor(Date.parse(bar.timestamp) / 1000),
       open: bar.open,
@@ -416,6 +420,13 @@ export class ChartDataPlane {
     };
     if (transition.bucketChanged || this.canonicalPlane.length === 0) this.canonicalPlane.market.append(canonicalPoint);
     else this.canonicalPlane.market.updateLast(canonicalPoint);
+    marketLatencyTrace.record(
+      this.key,
+      traceSequence,
+      'canonical',
+      canonicalStartedAt,
+      globalThis.performance?.now?.() ?? Date.now(),
+    );
 
     const wasColumnar = Boolean(this.state.columns);
     this.rememberLatestTick(tick, tradeTimeMs);
