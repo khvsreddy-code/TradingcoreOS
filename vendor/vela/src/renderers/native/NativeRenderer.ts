@@ -53,7 +53,7 @@ import {
 } from '../../core/options';
 import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
-import { isLineLikeSeries, seriesShownOn, type SeriesSurface, type SeriesPoint } from '../../core/model/series';
+import { isLineLikeSeries, seriesShownOn, type SeriesSurface, type SeriesPoint, type SeriesSpec } from '../../core/model/series';
 import { InputsUI, type LegendPlotValue } from '../shared/InputsUI';
 import { PaneControls } from './chrome/PaneControls';
 import { AxisScaleButtons, type AxisScaleView } from './chrome/AxisScaleButtons';
@@ -2838,7 +2838,6 @@ export class NativeRenderer implements IChartRenderer {
                 id: pane.id,
                 kind: pane.kind,
                 order: kindOrder,
-                ...(pane.title ? { title: pane.title } : {}),
                 auto: pane.manualScale == null,
                 min: scale.min,
                 max: scale.max,
@@ -2860,8 +2859,7 @@ export class NativeRenderer implements IChartRenderer {
             // recover study pane scales by stable title first, then their saved position.
             if (!pane && saved.kind) {
                 const candidates = ordered.filter((candidate) => candidate.kind === saved.kind);
-                pane = (saved.title ? candidates.find((candidate) => candidate.title === saved.title) : undefined)
-                    ?? (Number.isInteger(saved.order) ? candidates[saved.order!] : undefined);
+                pane = Number.isInteger(saved.order) ? candidates[saved.order!] : undefined;
             }
             if (!pane) continue;
             const min = Number(saved.min);

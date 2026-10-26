@@ -33,6 +33,8 @@ export abstract class FibLevels extends FibRatios {
     declare labelSide: FibLabelSide;
     /** Tint the bands between levels. */
     declare background: boolean;
+    /** Flip retracement ratios around the anchor range. */
+    declare reverse: boolean;
 
     // The base constructor restores saved props before these defaults are needed.
     constructor(init: Partial<SerializedDrawing> & { paneId: string }) {
@@ -41,6 +43,7 @@ export abstract class FibLevels extends FibRatios {
         if (this.showPrices === undefined) this.showPrices = true;
         if (this.labelSide === undefined) this.labelSide = 'left';
         if (this.background === undefined) this.background = true;
+        if (this.reverse === undefined) this.reverse = false;
     }
     /** Per-level pixel line + price for the ENABLED levels, spanning the anchors' time range. */
     levelLines(proj: Projector): FibLevelLine[] | null {
@@ -55,7 +58,8 @@ export abstract class FibLevels extends FibRatios {
         const out: FibLevelLine[] = [];
         for (const lv of this.levels) {
             if (!lv.enabled) continue;
-            const price = a.price + lv.ratio * delta;
+            const ratio = this.reverse ? 1 - lv.ratio : lv.ratio;
+            const price = a.price + ratio * delta;
             const y = proj.yOf(price, this.paneId);
             if (y == null) continue;
             out.push({ ratio: lv.ratio, color: lv.color, label: lv.label, price, x1, x2, y });
@@ -127,7 +131,7 @@ export abstract class FibLevels extends FibRatios {
     }
 
     protected override writeProps(): Record<string, unknown> {
-        return { ...super.writeProps(), showRatios: this.showRatios, showPrices: this.showPrices, labelSide: this.labelSide, background: this.background };
+        return { ...super.writeProps(), showRatios: this.showRatios, showPrices: this.showPrices, labelSide: this.labelSide, background: this.background, reverse: this.reverse };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
@@ -136,5 +140,6 @@ export abstract class FibLevels extends FibRatios {
         if (typeof props.showPrices === 'boolean') this.showPrices = props.showPrices;
         if (props.labelSide === 'left' || props.labelSide === 'right') this.labelSide = props.labelSide;
         if (typeof props.background === 'boolean') this.background = props.background;
+        if (typeof props.reverse === 'boolean') this.reverse = props.reverse;
     }
 }
