@@ -207,7 +207,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
 
   return <WorkspaceModuleShell active="/dashboard" onNavigate={onNavigate} onBackToLanding={() => onNavigate('/dashboard')} onBroker={onBroker}>
     <main className="min-h-[calc(100vh-90px)] space-y-5 bg-[var(--tco-bg)] p-4 md:p-7">
-      <section className="overflow-hidden rounded-2xl border border-[var(--tco-border)] bg-[var(--tco-surface-2)]">
+      <section className="tco-stitch-dashboard-hero overflow-hidden rounded-2xl border border-[var(--tco-border)] bg-[var(--tco-surface-2)]">
         <div className="flex flex-col justify-between gap-5 p-5 md:flex-row md:items-end md:p-7">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-[.22em] text-[var(--tco-accent)]"><Activity size={13}/> TradingCore OS · Market Desk</div>
