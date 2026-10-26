@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Clock3, Code2, PanelRightClose, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
 import { getSupabaseClient } from '../../services/auth/supabaseClient';
 import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
@@ -30,15 +30,14 @@ type ScriptVersion = { id: string; version: number; source: string; compile_stat
 
 function localSource(): string {
   try {
-    return localStorage.getItem(LIVE_SOURCE_KEY)
-      || localStorage.getItem(versionedStorageKey('editor'))
+    return localStorage.getItem(versionedStorageKey('editor'))
       || localStorage.getItem('tradingcore:corespirit:editor')
+      || localStorage.getItem(LIVE_SOURCE_KEY)
       || '';
   } catch { return ''; }
 }
 function persistLocalSource(source: string, name: string, scriptId?: string | null): void {
   try {
-    localStorage.setItem(LIVE_SOURCE_KEY, source);
     localStorage.setItem(versionedStorageKey('editor'), source);
     localStorage.setItem('tradingcore:corespirit:editor', source);
     if (name.trim()) localStorage.setItem('tradingcore:corespirit:editor-name', name.trim());
