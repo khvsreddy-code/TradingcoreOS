@@ -36,6 +36,12 @@ assert.match(aiContract, /createCoreSpiritAiInputFingerprint/, 'cache identity i
 assert.match(aiContract, /executable: false/, 'AI result contract is inert data');
 assert.match(aiContract, /mayCreateOrderIntent: false/, 'AI result cannot directly create an order intent');
 assert.match(aiContract, /validateCoreSpiritAiInvocationResult/, 'persisted AI results must be validated before UI exposure');
+assert.match(aiContract, /expiresAtMs !== createdAtMs \+ CORE_SPIRIT_AI_INVOKE_LIMITS\.resultFreshnessMs/,
+  'stored results cannot extend their own freshness window');
+assert.match(aiContract, /createdAtMs > now \+ 30_000/,
+  'future-dated results beyond allowed clock skew must fail closed');
+assert.match(aiWorker, /validateCoreSpiritAiInvocationResult\(cached, \{/,
+  'cache hits must pass the same integrity, identity and freshness validation as persisted results');
 assert.match(backgroundJobsRoute, /validateCoreSpiritAiInvocationResult\(job\.result/, 'job polling must verify AI result integrity and provenance');
 assert.match(backgroundJobsRoute, /result-integrity-failed/, 'tampered or mismatched AI results must fail closed');
 assert.match(aiWorker, /compileCoreSpirit\(input\.source/, 'worker re-compiles input source independently');
