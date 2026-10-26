@@ -11,7 +11,7 @@ paneWeights.tooLarge = 101;
 paneWeights.notFinite = Number.POSITIVE_INFINITY;
 paneWeights.asString = '2';
 paneWeights['__proto__'] = 7;
-paneWeights.constructor = 4;
+paneWeights['constructor'] = 4;
 paneWeights.prototype = 5;
 paneWeights['x'.repeat(181)] = 2;
 

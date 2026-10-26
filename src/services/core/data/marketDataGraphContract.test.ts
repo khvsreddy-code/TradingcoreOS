@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { MarketDataGraph, createGraphResolver, timeframeSeconds } from './marketDataGraph';
 
 const graph=new MarketDataGraph({anchorSecondsUtc:13500});

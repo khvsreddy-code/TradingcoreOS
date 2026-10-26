@@ -23,6 +23,9 @@ import { Callout } from './types/Callout';
 import { PriceNote } from './types/PriceNote';
 import { Comment } from './types/Comment';
 import { Signpost } from './types/Signpost';
+import { FairValueGap } from './types/FairValueGap';
+import { OrderBlock } from './types/OrderBlock';
+import { Liquidity } from './types/Liquidity';
 import { registerAdvancedDrawingTypes as registerAdvancedChannelTypes } from './advancedRegistryChannels';
 import { registerAdvancedDrawingTypes as registerAdvancedFibonacciTypes } from './advancedRegistryFibonacci';
 import { registerAdvancedDrawingTypes as registerAdvancedPatternTypes } from './advancedRegistryPatterns';
@@ -324,17 +327,17 @@ const ADVANCED_DRAWING_TYPES: Readonly<Record<AdvancedDrawingFamily, readonly Dr
         'pitchfork','schiffpitchfork','modifiedschiffpitchfork','insidepitchfork',
         'arrow','ellipse','triangle','polyline','freehand','highlighter','circle','rotatedrect','path','arc','curve',
         'arrowmarkup','arrowmarkdown','flagmark','iconstamp',
-    ]),
+    ] as DrawingTypeKey[]),
     fibonacci: Object.freeze([
         'fibretracement','fibextension','fibextensiontrend','fibfan','fibtimezones','fibchannel','fibspeedfan','trendfibtime',
         'fibcircles','fibarcs','fibwedge','fibspiral','gannfan','gannbox','gannsquare','dedekind',
         'sonic','supersonic','goldensonic','goldensupersonic',
         'anchoredvwap','fixedrangevp','position','datepricerange','magnifier',
-    ]),
+    ] as DrawingTypeKey[]),
     patterns: Object.freeze([
         'xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection',
         'gartley','bat','butterfly','crab','shark','cypher',
-    ]),
+    ] as DrawingTypeKey[]),
 });
 
 export const ADVANCED_DRAWING_FAMILIES = Object.freeze([

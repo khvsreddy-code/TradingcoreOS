@@ -388,7 +388,7 @@ export function legendActionsProviderFor(chart: Vela, context: () => WidgetConte
         const info: LegendIndicatorInfo = { id: handle.id, title: handle.title, ...(handle.source !== undefined ? { source: handle.source } : {}) };
         return legendActions()
             .filter((d) => !d.when || d.when(info))
-            .map((d) => ({ id: d.id, icon: d.icon, tooltip: d.tooltip, run: () => d.run(context(), info) }));
+            .map((d) => ({ id: d.id, icon: d.icon, tooltip: textOf(chart.i18n, d.tooltip), run: () => d.run(context(), info) }));
     };
 }
 
