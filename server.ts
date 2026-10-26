@@ -23,7 +23,7 @@ import { coreSpiritModelRoutes } from './src/server/routes/coreSpirit-models.rou
 import { coreSpiritCopilotRoutes } from './src/server/routes/coreSpirit-copilot.routes.js';
 import { realtimeTicketRoutes } from './src/server/routes/realtime-ticket.routes.js';
 import { requestDeadline } from './src/server/middleware/requestDeadline.js';
-import { sharedRedisConfigured, sharedRedisHealthy } from './src/server/coordination/UpstashRedisRest.js';
+import { sharedBrokerCoordinationBackend, sharedBrokerCoordinationConfigured, sharedBrokerCoordinationHealthy } from './src/server/coordination/sharedBrokerCoordination.js';
 import { getFyersQuotaTelemetry } from './src/server/fyers/core/FyersQuotaTelemetry.js';
 import { requestContext, type TradingCoreRequest } from './src/server/middleware/requestContext.js';
 import { createRateLimiter } from './src/server/middleware/rateLimit.js';
@@ -93,7 +93,8 @@ function healthChecks() {
     database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
-    coordination: sharedRedisConfigured(),
+    coordination: sharedBrokerCoordinationConfigured(),
+    coordinationBackend: sharedBrokerCoordinationBackend(),
     coordinationRequired,
     coordinationReachable: false,
     realtimeGatewayRequired,
@@ -134,7 +135,7 @@ app.get('/api/health/live', (_req, res) => {
 app.get('/api/health/ready', async (req, res) => {
   const checks = healthChecks();
   checks.realtimeGateway = await realtimeGatewayReady(req);
-  checks.coordinationReachable = checks.coordinationRequired ? await sharedRedisHealthy() : checks.coordination;
+  checks.coordinationReachable = checks.coordinationRequired ? await sharedBrokerCoordinationHealthy() : checks.coordination;
   const ready = checks.database &&
     checks.encryption &&
     checks.fyers &&
@@ -154,7 +155,7 @@ app.get('/api/health/diagnostics', (_req, res) => {
 
 app.get('/api/health', async (_req, res) => {
   const checks = healthChecks();
-  checks.coordinationReachable = checks.coordinationRequired ? await sharedRedisHealthy() : checks.coordination;
+  checks.coordinationReachable = checks.coordinationRequired ? await sharedBrokerCoordinationHealthy() : checks.coordination;
   const ready = checks.database &&
     checks.encryption &&
     checks.fyers &&

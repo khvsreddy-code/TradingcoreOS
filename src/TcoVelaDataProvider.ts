@@ -545,9 +545,10 @@ export class TcoVelaDataProvider implements DataProvider {
 
     // Request the complete window after cached candles have painted. A cold ticker
     // uses one full request; a cached ticker shows saved bars while refreshing.
+    let initialHistoryError: unknown;
     const historyPromise = plane.ensureReadyHistory(requested)
       .then(historicalToVelaBars)
-      .catch(() => [] as OHLCV[]);
+      .catch((error: unknown) => { initialHistoryError = error; return [] as OHLCV[]; });
 
     const snapshot = plane.getSnapshot();
     if (snapshot.historyReady && !abort()) {
@@ -564,6 +565,18 @@ export class TcoVelaDataProvider implements DataProvider {
     const history = await historyPromise;
     // Never let a late request from an abandoned symbol/timeframe repaint the chart.
     if (abort()) return [];
+    if (!history.length) {
+      // A token can still look connected while broker admission/history fails. Try
+      // delayed Yahoo bars instead of stranding this chart with zero candles.
+      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range, opts?.signal);
+      if (abort()) return [];
+      if (fallbackBars.length) {
+        first = fallbackBars;
+        onBatch(fallbackBars);
+      } else if (!first.length && initialHistoryError instanceof Error) {
+        throw initialHistoryError;
+      }
+    }
     if (history.length) {
       const next = history.slice(-requested);
       const same = first.length === next.length && next.every((bar, index) => {
@@ -621,20 +634,24 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(2, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
     if (!isFyersMarketSessionReady()) return loadYahooBars(symbol, tcoTimeframe, requested, range);
-    const brokerId = await activeBrokerId();
-    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
-    await plane.ensureReadyHistory(5000);
-    const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
-    const current = plane.readCanonical();
-    const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
-    if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
-      await plane.loadOlderHistory('visible', { visibleBars: requested });
+    try {
+      const brokerId = await activeBrokerId();
+      const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+      await plane.ensureReadyHistory(2_000);
+      const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
+      const current = plane.readCanonical();
+      const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+      if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
+        await plane.loadOlderHistory('visible', { visibleBars: requested });
+      }
+      const loaded = plane.readCanonical();
+      if (loaded.length) return marketViewToBars(loaded, range, requested);
+      return await this.getBars(ticker, timeframe, range);
+    } catch (error) {
+      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range);
+      if (fallbackBars.length) return fallbackBars;
+      throw error;
     }
-    const loaded = plane.readCanonical();
-    if (loaded.length) return marketViewToBars(loaded, range, requested);
-    // A zero-row canonical plane is not a successful history response.
-    // Retry only through the real-history path; do not convert LTP into historical OHLC.
-    return this.getBars(ticker, timeframe, range);
   }
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
@@ -673,8 +690,13 @@ export class TcoVelaDataProvider implements DataProvider {
       lastError = error;
     }
 
-    // Never fabricate a historical candle from a quote; preserve the history error.
-    if (lastError) throw lastError;
+    // Never fabricate historical OHLC from a quote. Fall back to the delayed
+    // provider when FYERS history was rejected or unavailable.
+    if (lastError) {
+      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range);
+      if (fallbackBars.length) return fallbackBars;
+      throw lastError;
+    }
     return [];
   }
 

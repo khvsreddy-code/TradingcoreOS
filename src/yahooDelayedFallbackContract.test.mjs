@@ -26,6 +26,8 @@ assert.match(provider, /startYahooFallbackPolling\(symbol, tcoTimeframe/, 'live 
 assert.match(provider, /globalThis\.setInterval\(syncBroker, YAHOO_FALLBACK_POLL_MS\)/, 'provider rechecks expiry while chart is open');
 assert.match(provider, /return loadYahooColumns\(symbol, tcoTimeframe/, 'columnar chart loads can start without FYERS');
 assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'history and older-range requests route to Yahoo without FYERS');
+assert.match(provider, /if \(!history\.length\)[\s\S]{0,700}loadYahooBars\(symbol, tcoTimeframe/, 'broker history errors fall back to Yahoo even when a FYERS session looks connected');
+assert.match(provider, /if \(lastError\)[\s\S]{0,500}loadYahooBars\(symbol, tcoTimeframe/, 'history-range errors fall back instead of leaving Vela blank');
 assert.match(brokerManager, /status: 'Authentication Required'/, 'expired FYERS remains visible as requiring reauthorization');
 assert.match(brokerManager, /private refreshSessionExpiryState/, 'broker connection state is refreshed against token expiry');
 assert.match(runtime, /const expiresAt = Date\.parse\(String\(connection\.tokenExpiry \|\| ''\)\);[\s\S]*return expiresAt > Date\.now\(\) \+ 5_000;/, 'expired FYERS sessions are rejected while the code checks expiry explicitly');

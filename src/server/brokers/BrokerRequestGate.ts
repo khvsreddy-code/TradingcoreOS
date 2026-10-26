@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
+import { admitSupabaseBrokerRequest } from '../coordination/SupabaseBrokerCoordination.js';
+import { sharedBrokerCoordinationBackend } from '../coordination/sharedBrokerCoordination.js';
 
 type BrokerLimit = {
   minIntervalMs: number;
@@ -158,14 +160,57 @@ export async function withBrokerRequestGate<T>(
     const distributed = getSharedRedis();
     const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
     const coordinationRequired = process.env.NODE_ENV === 'production' || process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true';
-    if (coordinationRequired && (!distributedEnabled() || !distributed.configured)) {
+    const coordinationBackend = sharedBrokerCoordinationBackend();
+    if (coordinationRequired && coordinationBackend === 'missing') {
       throw Object.assign(
-        new Error('Shared Redis coordination is required before broker API calls can be admitted.'),
+        new Error('Shared Redis or Supabase Postgres coordination is required before broker API calls can be admitted.'),
         { status:503, code:'BROKER_COORDINATION_REQUIRED' },
       );
     }
 
-    if (distributedEnabled() && distributed.configured) {
+    // With Redis configured, keep using its existing atomic gate. Otherwise use the
+    // same shared Postgres row lock across every Vercel invocation; never downgrade
+    // production to process-local admission.
+    if (coordinationBackend === 'supabase-postgres') {
+      try {
+        while (true) {
+          const admission = await admitSupabaseBrokerRequest({
+            gateKey: `${budgetName}:${identityHash}`,
+            minIntervalMs: limit.minIntervalMs,
+            maxPerMinute: limit.maxPerMinute,
+            maxPerDay: limit.maxPerDay,
+            priority,
+          }, effectiveSignal);
+          if (admission.admitted) break;
+          if (admission.code === 'BROKER_RATE_SPACING' && admission.retryAfterMs > 0) {
+            await sleepWithSignal(admission.retryAfterMs, effectiveSignal);
+            continue;
+          }
+          if (admission.code === 'BROKER_RATE_BUDGET_EXHAUSTED' || admission.code === 'BROKER_PRIORITY_BUDGET_EXHAUSTED') {
+            throw Object.assign(new Error(admission.code === 'BROKER_RATE_BUDGET_EXHAUSTED'
+              ? 'Broker request rate budget exhausted.'
+              : 'Broker non-interactive request reserve exhausted.'), {
+              status:429, brokerCode:429, code:admission.code,
+            });
+          }
+          throw Object.assign(new Error('Shared broker admission did not admit the request.'), {
+            status:503, code:'BROKER_COORDINATION_UNAVAILABLE',
+          });
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        const details = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+        if (typeof details.code === 'string' && details.code.startsWith('BROKER_')) throw error;
+        throw Object.assign(new Error('Shared Supabase Postgres coordination is unavailable; broker request was not admitted.'), {
+          status:503, code:'BROKER_COORDINATION_UNAVAILABLE', cause:error,
+        });
+      }
+      localRelease();
+      localReleased = true;
+      return await task(effectiveSignal);
+    }
+
+    if (coordinationBackend === 'redis' && distributedEnabled() && distributed.configured) {
       const lockKey = 'tco:broker:admit:' + budgetName + ':' + identityHash;
       const owner = crypto.randomUUID();
       let acquired = false;
