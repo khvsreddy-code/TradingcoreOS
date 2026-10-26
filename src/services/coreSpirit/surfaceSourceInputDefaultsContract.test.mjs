@@ -4,6 +4,8 @@ import {
   parseCoreSpiritInputDeclaration,
   parseCoreSpiritDeclarationProperty,
 } from './languageConcepts.ts';
+import { normalizeCoreSpiritSource } from './syntax.ts';
+import { CoreSpiritParser } from './parser.ts';
 
 const bareSource = parseCoreSpiritInputDeclaration('input source = close');
 assert.equal(bareSource?.type, 'source');
@@ -75,5 +77,30 @@ assert.deepEqual(braceSurface.inputs?.map(input => [input.key, input.type, input
 assert.deepEqual(braceSurface.props?.map(prop => [prop.property, prop.defval]), [
   ['overlay', true],
 ]);
+
+const executableSample = normalizeCoreSpiritSource(`
+indicator("CoreSpirit Trend") {
+    overlay: true
+    input length: int = 20 min=1
+}
+
+fast = ema(close, length)
+slow = ema(close, length * 2)
+plot fast
+plot slow
+
+if fast crossesAbove slow {
+    signal "BUY"
+}
+
+if fast crossesBelow slow {
+    signal "SELL"
+}
+`);
+const parsedSample = new CoreSpiritParser(executableSample).parseDetailed();
+assert.deepEqual(parsedSample.diagnostics, [],
+  'the editor starter sample must normalize to valid CoreSpirit syntax, including nested if-block braces');
+assert.doesNotMatch(executableSample, /^\s*}\s*$/m,
+  'the indicator declaration close must not leak into the executable program');
 
 console.log('CORESPIRIT_SOURCE_INPUT_DEFAULTS_CONTRACT_OK');
