@@ -573,6 +573,9 @@ export function normalizeCoreSpiritSource(source: string): string {
   const whenBlocks: number[] = [];
   const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' }> = [];
   const modelBraceIndents: number[] = [];
+  // Track braces nested inside a brace-style indicator/strategy wrapper so an if-block
+  // closing brace cannot be mistaken for the end of the indicator declaration.
+  let indicatorInnerBraceDepth = 0;
   let researchSkipIndent: number | null = null;
 
   for (const raw of lines) {
@@ -641,6 +644,19 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
+    // Remove the declaration's own closing brace from executable source, but
+    // preserve nested control-flow braces such as if-condition blocks.
+    const activeIndicatorWrapper = wrappers[wrappers.length - 1];
+    if (trimmed === '}' && activeIndicatorWrapper &&
+        (activeIndicatorWrapper.kind === 'indicator' || activeIndicatorWrapper.kind === 'strategy')) {
+      if (indicatorInnerBraceDepth > 0) {
+        indicatorInnerBraceDepth -= 1;
+      } else {
+        wrappers.pop();
+        continue;
+      }
+    }
+
     while (wrappers.length && indent <= wrappers[wrappers.length - 1].indent) {
       wrappers.pop();
     }
@@ -657,6 +673,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     const oldIndicatorBrace = trimmed.match(/^(indicator|strategy)\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
     if (oldIndicatorBrace) {
       wrappers.push({ indent, kind: oldIndicatorBrace[1].toLowerCase() as 'indicator'|'strategy' });
+      indicatorInnerBraceDepth = 0;
       continue;
     }
 
@@ -672,6 +689,9 @@ export function normalizeCoreSpiritSource(source: string): string {
       if (prop) {
         continue;
       }
+      // Ordinary statements that open a nested block contribute a brace pair
+      // inside the wrapper; the wrapper's own brace is removed separately.
+      if (/\{\s*$/.test(trimmed)) indicatorInnerBraceDepth += 1;
     }
 
     // Dedicated WHEN concept: indentation/colon is only a source convenience.
