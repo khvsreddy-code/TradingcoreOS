@@ -13,6 +13,7 @@ const shell = read('./components/workspace/WorkspaceModuleShell.tsx');
 const dashboard = read('./pages/DashboardPage.tsx');
 const news = read('./server/routes/news.routes.ts');
 const live = read('./LiveTradingWorkspace.tsx');
+const chrome = read('./services/core/chart/tcoVelaChrome.ts');
 
 assert.match(yahoo, /YAHOO_FALLBACK_POLL_MS = 4_000/, 'fallback request cadence is 4 seconds');
 assert.match(route, /router\.get\('\/chart'/, 'authenticated Yahoo historical endpoint exists');
@@ -35,6 +36,9 @@ assert.match(prompt, /DAILY_DISMISS_KEY_PREFIX/, 'prompt dismissal is persisted 
 assert.match(shell, /FyersConnectionPrompt onConnect/, 'daily prompt is available across workspace pages');
 assert.match(dashboard, /loadYahooQuoteTicks/, 'dashboard index quotes use Yahoo fallback');
 assert.match(dashboard, /YAHOO DELAYED/, 'dashboard labels Yahoo quotes as delayed');
+assert.match(chrome, /loadYahooQuoteTicks/, 'Vela watchlist quotes fall back to Yahoo');
+assert.match(chrome, /YAHOO DELAYED/, 'Vela watchlist identifies delayed quote rows');
+assert.match(chrome, /const yahooBars = await loadYahooBars/, 'Vela watchlist technicals use Yahoo OHLCV when FYERS is not valid');
 assert.match(news, /fetchYahooFinanceRss/, 'news uses Yahoo Finance RSS independently of FYERS');
 assert.match(live, /Yahoo Finance · delayed data/, 'live terminal explicitly labels fallback mode');
 
