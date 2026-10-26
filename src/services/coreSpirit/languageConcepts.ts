@@ -208,7 +208,7 @@ export function parseCoreSpiritInputDeclaration(line:string,start:number,end:num
 }
 
 export function parseCoreSpiritDeclarationProperty(line:string,start:number,end:number=start+line.length):CoreSpiritSurfaceProp|undefined {
-  const match=line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+  const match=line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|:)\s*(.+)$/);
   if(!match)return undefined;
   const definition=CORESPIRIT_PROP_DEFINITIONS[match[1]]; if(!definition)return undefined;
   const value=parseTypedSurfaceDefault(match[2],definition.type,'property');
@@ -494,10 +494,10 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
-    const strategy = trimmed.match(/^strategy\s+(?:"([^"]+)"|'([^']+)')\s*(?::|\{)?\s*$/i);
+    const strategy = trimmed.match(/^strategy\s*(?:\(\s*(?:"([^"]+)"|'([^']+)')\s*\)|\s+(?:"([^"]+)"|'([^']+)'))\s*(?::|\{)?\s*$/i);
     if (strategy) {
       concepts.add('AUTOMATE');
-      const name = strategy[1] ?? strategy[2] ?? 'Strategy';
+      const name = strategy[1] ?? strategy[2] ?? strategy[3] ?? strategy[4] ?? 'Strategy';
       const declaration = { kind:'indicator' as const, name, role:'strategy' as const, start:offset, end:offset+raw.length };
       active.push({ kind:'indicator', declaration, indent });
       offset += raw.length + 1;
@@ -520,9 +520,9 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
-    const indicator = trimmed.match(/^indicator\s+(?:"([^"]+)"|'([^']+)')\s*(?::|\{)?\s*$/i);
+    const indicator = trimmed.match(/^indicator\s*(?:\(\s*(?:"([^"]+)"|'([^']+)')\s*\)|\s+(?:"([^"]+)"|'([^']+)'))\s*(?::|\{)?\s*$/i);
     if (indicator) {
-      const name = indicator[1] ?? indicator[2] ?? 'Indicator';
+      const name = indicator[1] ?? indicator[2] ?? indicator[3] ?? indicator[4] ?? 'Indicator';
       const declaration = {
         kind: 'indicator' as const,
         name,
