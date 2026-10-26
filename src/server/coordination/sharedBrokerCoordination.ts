@@ -11,9 +11,9 @@ export function sharedBrokerCoordinationBackend(): SharedBrokerCoordinationBacke
 export function sharedBrokerCoordinationConfigured(): boolean {
   return sharedBrokerCoordinationBackend() !== 'missing';
 }
-export async function sharedBrokerCoordinationHealthy(): Promise<boolean> {
+export async function sharedBrokerCoordinationHealthy(signal?: AbortSignal): Promise<boolean> {
   const backend = sharedBrokerCoordinationBackend();
-  if (backend === 'redis') return sharedRedisHealthy();
-  if (backend === 'supabase-postgres') return supabaseBrokerCoordinationHealthy();
+  if (backend === 'redis') return sharedRedisHealthy(signal);
+  if (backend === 'supabase-postgres') return supabaseBrokerCoordinationHealthy(signal);
   return false;
 }
