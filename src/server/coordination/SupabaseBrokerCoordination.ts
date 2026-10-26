@@ -75,21 +75,37 @@ export async function supabaseBrokerCoordinationHealthy(signal?: AbortSignal): P
   const configured = getCoordinationCredentialsAndClient();
   if (!configured) return false;
   const { credentials, client: db } = configured;
-  const probeSignal = boundedAbortSignal(signal, 2_500);
+  const healthSignal = boundedAbortSignal(signal, 2_500);
   try {
-    const response = credentials.mode === 'shared-secret'
-      ? await db.rpc('broker_coordination_health_secure', {
-          p_shared_secret: credentials.sharedSecret,
-        }).abortSignal(probeSignal)
-      : await db.rpc('broker_coordination_health').abortSignal(probeSignal);
-    if (response.error) {
-      console.warn('[broker-coordination] Supabase readiness probe failed:', String(response.error.message || 'unknown error').replace(/[\r\n\t]+/g, ' ').slice(0, 220));
+    // The health RPC only confirms the credential. It does not prove that the
+    // admission RPC, PostgREST schema cache, grants, and gate table are usable.
+    // Exercise the exact admission route with a dedicated system key and a large,
+    // isolated budget. This never shares a user's quota bucket.
+    const [health, admission] = await Promise.all([
+      (credentials.mode === 'shared-secret'
+        ? db.rpc('broker_coordination_health_secure', {
+            p_shared_secret: credentials.sharedSecret,
+          })
+        : db.rpc('broker_coordination_health')).abortSignal(healthSignal),
+      admitSupabaseBrokerRequest({
+        gateKey: 'system:coordination-readiness-probe:v1',
+        minIntervalMs: 0,
+        maxPerMinute: 1_000_000,
+        priority: 'interactive',
+      }, signal),
+    ]);
+    if (health.error) {
+      console.warn('[broker-coordination] Supabase credential readiness failed:', String(health.error.message || 'unknown error').replace(/[\\r\\n\\t]+/g, ' ').slice(0, 220));
       return false;
     }
-    return response.data === true;
+    if (health.data !== true || !admission.admitted) {
+      console.warn('[broker-coordination] Supabase admission readiness failed:', admission.code);
+      return false;
+    }
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || 'unknown error');
-    console.warn('[broker-coordination] Supabase readiness probe failed:', message.replace(/[\r\n\t]+/g, ' ').slice(0, 220));
+    console.warn('[broker-coordination] Supabase admission readiness failed:', message.replace(/[\\r\\n\\t]+/g, ' ').slice(0, 220));
     return false;
   }
 }
