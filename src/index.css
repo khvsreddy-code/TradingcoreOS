@@ -664,13 +664,26 @@ html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="bg-[#3
 .tco-stitch-icon-link:hover,.tco-stitch-icon-button:hover,.tco-stitch-icon-button.is-active { color: #00f2fe; border-color: rgba(0,242,254,.3); background: rgba(0,242,254,.07); }
 .tco-stitch-broker-button { height: 34px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid rgba(0,242,254,.24); border-radius: 8px; color: #00f2fe; background: rgba(0,242,254,.055); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .tco-stitch-broker-button:hover { background: rgba(0,242,254,.12); }
+.tco-stitch-shell .premium-button-primary {
+  color: #031216;
+  background: linear-gradient(135deg, #00f2fe, #00c9d4 72%, #0aa9b6);
+  border-color: rgba(0,242,254,.35);
+  box-shadow: 0 8px 24px rgba(0,242,254,.12), inset 0 1px rgba(255,255,255,.22);
+}
+.tco-stitch-shell .premium-button-primary:hover { box-shadow: 0 12px 30px rgba(0,242,254,.2), inset 0 1px rgba(255,255,255,.25); }
+.tco-stitch-shell .premium-button-secondary {
+  color: #c4d3df;
+  background: rgba(0,242,254,.035);
+  border-color: rgba(0,242,254,.18);
+}
+
 .tco-stitch-module-header { background: linear-gradient(180deg, rgba(16,19,27,.92), rgba(11,13,19,.92)) !important; border-color: rgba(255,255,255,.075) !important; }
 .tco-stitch-module-header h1 { letter-spacing: -.035em; }
 .tco-stitch-panel { border-radius: 13px !important; border-color: rgba(255,255,255,.085) !important; background: linear-gradient(180deg, rgba(255,255,255,.018), rgba(255,255,255,.004)), #0b0d13 !important; box-shadow: 0 14px 38px rgba(0,0,0,.18), inset 0 1px rgba(255,255,255,.018) !important; }
 .tco-stitch-panel > div:first-child { border-color: rgba(255,255,255,.065) !important; }
 .tco-stitch-shell input:not([type=checkbox]):not([type=radio]),.tco-stitch-shell select,.tco-stitch-shell textarea { border-color: rgba(255,255,255,.12); }
 .tco-stitch-shell button:focus-visible,.tco-stitch-shell a:focus-visible,.tco-stitch-shell input:focus-visible,.tco-stitch-shell select:focus-visible,.tco-stitch-shell textarea:focus-visible { outline: 2px solid rgba(0,242,254,.7); outline-offset: 2px; }
-@media (max-width: 1260px) { .tco-stitch-nav-label { display: none; } .tco-stitch-nav-item { min-width: 36px; padding: 0 9px; } }
+@media (max-width: 1440px) { .tco-stitch-nav-label { display: none; } .tco-stitch-nav-item { min-width: 36px; padding: 0 9px; } }
 @media (max-width: 1100px) { .tco-stitch-brand-name { display: none; } .tco-stitch-broker-pill { max-width: 100px; } .tco-stitch-broker-pill span:nth-child(2) { max-width: 42px; } }
 @media (max-width: 760px) {
   .tco-stitch-topbar { height: 60px; } .tco-stitch-topbar-inner { gap: 7px; padding: 0 8px; }

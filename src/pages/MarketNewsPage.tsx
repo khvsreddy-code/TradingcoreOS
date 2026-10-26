@@ -71,6 +71,8 @@ export function MarketNewsPage({ onNavigate, onBackToLanding, onBroker }: {
     let current = true;
     setLoading(true);
     setError('');
+    // Clear old query results so they cannot be mistaken for results for the new query.
+    setItems([]);
     const params = new URLSearchParams({ symbol: query.slice(0, 80) || 'financial markets' });
     void fetch(`/api/news?${params.toString()}`, {
       headers: { Accept: 'application/json' },
