@@ -58,4 +58,22 @@ assert.deepEqual(surface.inputs?.map(input => [input.key, input.type, input.defv
   ['length', 'int', 14],
 ]);
 
+const braceSurface = extractCoreSpiritSurfaceMetadata(`
+indicator("CoreSpirit Trend") {
+    overlay: true
+    input length: int = 20 min=1
+}
+
+fast = ema(close, length)
+plot fast
+`);
+assert.equal(braceSurface.declarations[0]?.name, 'CoreSpirit Trend',
+  'the brace-style indicator declaration emitted by the live editor must be recognized');
+assert.deepEqual(braceSurface.inputs?.map(input => [input.key, input.type, input.defval, input.min]), [
+  ['length', 'int', 20, 1],
+]);
+assert.deepEqual(braceSurface.props?.map(prop => [prop.property, prop.defval]), [
+  ['overlay', true],
+]);
+
 console.log('CORESPIRIT_SOURCE_INPUT_DEFAULTS_CONTRACT_OK');
