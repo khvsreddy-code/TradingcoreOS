@@ -7,6 +7,7 @@ const selector = read('./server/coordination/sharedBrokerCoordination.ts');
 const migration = read('../supabase/migrations/20261026130000_shared_broker_request_coordination.sql');
 const secureMigration = read('../supabase/migrations/20261026143000_shared_broker_coordination_secure_rpc.sql');
 const server = read('../server.ts');
+const deadline = read('./server/middleware/requestDeadline.ts');
 assert.match(gate, /Shared Redis or Supabase Postgres coordination is required/, 'production remains fail closed when no shared backend exists');
 assert.match(gate, /coordinationBackend === 'supabase-postgres'/, 'Postgres is the shared fallback when Redis is not selected');
 assert.match(gate, /admitSupabaseBrokerRequest\(/, 'broker admission uses the shared Postgres RPC');
@@ -23,4 +24,8 @@ assert.match(migration, /pg_advisory_xact_lock/, 'database admission is serializ
 assert.match(migration, /Asia\/Kolkata/, 'daily budgets roll over on the Indian trading day');
 assert.match(migration, /revoke all on function public\.admit_broker_request[\s\S]*grant execute on function public\.admit_broker_request[\s\S]*to service_role/i, 'only service_role can execute broker admission');
 assert.match(server, /sharedBrokerCoordinationHealthy/, 'readiness checks the selected shared backend');
+assert.match(server, /const \[gatewayReachable, coordinationReachable\] = await Promise\.all/, 'readiness probes gateway and shared coordination concurrently');
+assert.match(server, /checks\.coordinationReachable = coordinationReachable/, 'diagnostics report measured shared coordination health');
+assert.match(deadline, /health[\s\S]{0,100}return 5_000/, 'health endpoints have enough time for shared-service probes');
+assert.match(adapter, /AbortSignal\.any\(\[signal, timeoutSignal\]\)/, 'Postgres calls have a bounded timeout and respect request cancellation');
 console.log('SHARED_BROKER_COORDINATION_CONTRACT_OK');
