@@ -94,13 +94,13 @@ export async function admitSupabaseBrokerRequest(input: AdmissionInput, signal?:
     p_max_per_day: input.maxPerDay == null ? null : Math.max(1, Math.floor(input.maxPerDay)),
     p_priority: input.priority,
   };
-  const { data, error } = (credentials.mode === 'shared-secret'
-    ? await db.rpc('admit_broker_request_secure', {
+  const request = credentials.mode === 'shared-secret'
+    ? db.rpc('admit_broker_request_secure', {
         ...params,
         p_shared_secret: credentials.sharedSecret,
       })
-    : await db.rpc('admit_broker_request', params)
-  ).abortSignal(signal || AbortSignal.timeout(2_000));
+    : db.rpc('admit_broker_request', params);
+  const { data, error } = await request.abortSignal(signal || AbortSignal.timeout(2_000));
   if (error) throw new Error('Shared Postgres broker admission failed: ' + error.message);
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Shared Postgres broker admission returned an invalid response.');
   const result = data as AdmissionRpcResult;
