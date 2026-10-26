@@ -17,6 +17,7 @@ import { automationIntegrationRoutes, automationGatewayRoutes } from './src/serv
 import { automationSignalIngestRoutes } from './src/server/routes/automation-signal-ingest.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
+import { yahooMarketDataRoutes } from './src/server/routes/yahoo-market-data.routes.js';
 import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
 import { coreSpiritModelRoutes } from './src/server/routes/coreSpirit-models.routes.js';
 import { coreSpiritCopilotRoutes } from './src/server/routes/coreSpirit-copilot.routes.js';
@@ -192,6 +193,7 @@ app.use('/api/corespirit/copilot', coreSpiritCopilotRoutes);
 app.use('/api/corespirit/research', coreSpiritResearchHistoryRoutes);
 app.use('/api/corespirit', coreSpiritModelRoutes);
 app.use('/api/realtime/ticket', realtimeTicketRoutes);
+app.use('/api/market-data/yahoo', yahooMarketDataRoutes);
 app.use('/api', newsRoutes);
 
 app.use('/api', (req, res) => {
