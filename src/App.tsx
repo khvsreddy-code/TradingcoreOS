@@ -172,13 +172,7 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
-  const navigateWorkspace = (path: WorkspaceRoute) => {
-    if (path === '/live' && runtime && !runtime.hasConnectedBroker()) {
-      navigate('/broker');
-      return;
-    }
-    navigate(path);
-  };
+  const navigateWorkspace = (path: WorkspaceRoute) => { navigate(path); };
 
   const handleLaunchPlatform = () => {
     if (!isAuthenticated) {
@@ -244,7 +238,9 @@ function AppContent() {
         const connected = nextRuntime.hasConnectedBroker();
         setHasConnectedBroker(connected);
         setBrokerRestoreReady(true);
-        navigate(connected ? '/dashboard' : '/broker');
+        // Broker connection is optional: open the dashboard and offer delayed Yahoo data
+        // until the user authorizes FYERS, rather than trapping first-time users in onboarding.
+        navigate('/dashboard');
       } catch {
         navigate('/dashboard');
       }
@@ -289,15 +285,7 @@ function AppContent() {
       >
         <Suspense key={workspacePath} fallback={routeFallback()}>
           {workspacePath === '/live'
-            ? hasConnectedBroker
-              ? <LiveTradingShell />
-              : <BrokerConnectionRequiredPage
-                  onBack={() => navigate('/dashboard')}
-                  onBrokerConnected={() => {
-                    setHasConnectedBroker(true);
-                    navigate('/live');
-                  }}
-                />
+            ? <LiveTradingShell />
             : <TradingWorkspaceShell
                 route={workspacePath}
                 onNavigate={navigateWorkspace}

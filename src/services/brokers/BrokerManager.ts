@@ -88,17 +88,20 @@ export class BrokerManager {
   }
 
   public getPrimaryBroker(): BrokerAdapter | null {
+    this.refreshSessionExpiryState();
     if (!this.primaryBrokerId) return null;
     const info = this.connections.get(this.primaryBrokerId);
     return info ? info.adapter : null;
   }
 
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null {
+    this.refreshSessionExpiryState();
     if (!this.primaryBrokerId) return null;
     return this.connections.get(this.primaryBrokerId) || null;
   }
 
   public getAllConnections(): BrokerConnectionInfo[] {
+    this.refreshSessionExpiryState();
     return Array.from(this.connections.values());
   }
 
@@ -107,6 +110,27 @@ export class BrokerManager {
    * broker sessions. Browser storage can only nominate a primary among sessions
    * that the server has independently verified.
    */
+  private sessionUsable(info: BrokerConnectionInfo, now = Date.now()): boolean {
+    if (info.status !== 'Connected' && info.status !== 'Read Only') return false;
+    const expiresAt = Date.parse(String(info.tokenExpiry || ''));
+    return Number.isFinite(expiresAt) && expiresAt > now + 5_000;
+  }
+
+  private refreshSessionExpiryState(now = Date.now()): void {
+    for (const [key, info] of this.connections) {
+      if ((info.status === 'Connected' || info.status === 'Read Only') && !this.sessionUsable(info, now)) {
+        info.status = 'Authentication Required';
+        info.isPrimary = false;
+        if (this.primaryBrokerId === key) this.primaryBrokerId = null;
+      }
+    }
+    if (!this.primaryBrokerId || !this.connections.has(this.primaryBrokerId) || !this.sessionUsable(this.connections.get(this.primaryBrokerId)!, now)) {
+      const next = Array.from(this.connections.entries()).find(([, info]) => this.sessionUsable(info, now));
+      this.primaryBrokerId = next?.[0] ?? null;
+    }
+    this.connections.forEach((info, key) => { info.isPrimary = key === this.primaryBrokerId; });
+  }
+
   public async restoreServerConnections(): Promise<void> {
     try {
       const preferredPrimary = localStorage.getItem('tradingcore_primary_broker')?.toLowerCase() || '';
@@ -118,12 +142,35 @@ export class BrokerManager {
 
       this.connections.clear();
       this.primaryBrokerId = null;
+      const now = Date.now();
 
       for (const session of data.sessions) {
         const adapter = BrokerAdapterRegistry.getAdapter(String(session.brokerId || ''));
         if (!adapter || session.status !== 'Connected') continue;
-
         const brokerId = adapter.id.toLowerCase();
+        const tokenExpiry = typeof session.expiresAt === 'string' ? session.expiresAt : '';
+        const expiryMs = Date.parse(tokenExpiry);
+        const valid = Number.isFinite(expiryMs) && expiryMs > now + 5_000;
+        if (!valid) {
+          // Keep the expired FYERS record visible so the user can reauthorize it,
+          // but do not mark the adapter authenticated or select it for live routing.
+          if (brokerId === 'fyers') {
+            this.connections.set(brokerId, {
+              brokerId: adapter.id,
+              name: adapter.name,
+              nickname: `${adapter.name} Main`,
+              status: 'Authentication Required',
+              isPrimary: false,
+              lastSyncedAt: session.connectedAt || new Date().toISOString(),
+              tokenExpiry,
+              latencyMs: undefined,
+              permissions: ['Historical Data unavailable', 'Reauthorization required'],
+              adapter,
+            });
+          }
+          continue;
+        }
+
         adapter.markServerAuthenticated();
         this.connections.set(brokerId, {
           brokerId: adapter.id,
@@ -132,28 +179,22 @@ export class BrokerManager {
           status: 'Connected',
           isPrimary: false,
           lastSyncedAt: session.connectedAt || new Date().toISOString(),
-          tokenExpiry: session.expiresAt,
+          tokenExpiry,
           latencyMs: undefined,
           permissions: ['Read Portfolio', 'Execute Orders', 'WebSocket Stream', 'Historical Data'],
           adapter,
         });
       }
 
-      // Preserve the user's last selected broker across reloads, but only if that
-      // broker is currently authenticated. Otherwise use the first verified session.
-      if (preferredPrimary && this.connections.has(preferredPrimary)) {
+      const selectable = Array.from(this.connections.entries()).filter(([, info]) => this.sessionUsable(info, now));
+      if (preferredPrimary && selectable.some(([key]) => key === preferredPrimary)) {
         this.primaryBrokerId = preferredPrimary;
-      } else if (this.connections.size > 0) {
-        this.primaryBrokerId = Array.from(this.connections.keys())[0];
+      } else {
+        this.primaryBrokerId = selectable[0]?.[0] ?? null;
       }
-
-      if (this.primaryBrokerId) {
-        this.connections.forEach((info, key) => {
-          info.isPrimary = key === this.primaryBrokerId;
-        });
-        this.lastUsedBrokerId = this.primaryBrokerId;
-        this.saveToStorage();
-      }
+      this.lastUsedBrokerId = this.primaryBrokerId;
+      this.refreshSessionExpiryState(now);
+      this.saveToStorage();
     } catch (error) {
       console.warn('Unable to restore server-side broker connections:', error);
       throw error instanceof Error ? error : new Error('Unable to restore server-side broker connections');
@@ -161,6 +202,7 @@ export class BrokerManager {
   }
 
   public getConnectedBrokers(): BrokerAdapter[] {
+    this.refreshSessionExpiryState();
     return Array.from(this.connections.values())
       .filter((c) => c.status === 'Connected' || c.status === 'Read Only')
       .map((c) => c.adapter);

@@ -73,7 +73,13 @@ export class TradingCoreRuntime {
 
   private constructor() {}
   public static getInstance(): TradingCoreRuntime { if (!TradingCoreRuntime.instance) TradingCoreRuntime.instance = new TradingCoreRuntime(); return TradingCoreRuntime.instance; }
-  public hasConnectedBroker(): boolean { return this.brokerMgr.getAllConnections().length > 0; }
+  public hasConnectedBroker(): boolean {
+    return this.brokerMgr.getAllConnections().some(connection =>
+      (connection.status === 'Connected' || connection.status === 'Read Only') &&
+      Number.isFinite(Date.parse(String(connection.tokenExpiry || ''))) &&
+      Date.parse(String(connection.tokenExpiry || '')) > Date.now() + 5_000,
+    );
+  }
   public getPrimaryBroker(): BrokerAdapter | null { return this.brokerMgr.getPrimaryBroker(); }
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null { return this.brokerMgr.getPrimaryBrokerInfo(); }
   /** Canonical broker identity for every market-data consumer. Never let a chart/provider invent a broker key. */
@@ -98,7 +104,9 @@ export class TradingCoreRuntime {
       }
       if (lastError) throw lastError;
 
-      for (const connection of this.brokerMgr.getAllConnections()) this.engine.registerRestoredBroker(connection.adapter);
+      for (const connection of this.brokerMgr.getAllConnections()) {
+        if (connection.status === 'Connected' || connection.status === 'Read Only') this.engine.registerRestoredBroker(connection.adapter);
+      }
       const primary = this.brokerMgr.getPrimaryBrokerInfo();
       if (primary) {
         this.engine.switchActiveBroker(primary.brokerId);
