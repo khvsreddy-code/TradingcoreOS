@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Clock3, Code2, PanelRightClose, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
+import { Check, Clock3, Code2, Maximize2, Minimize2, Minus, Plus, X, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
 import { getSupabaseClient } from '../../services/auth/supabaseClient';
 import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
@@ -9,7 +9,7 @@ import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
-    input length = int(20, min: 1)
+    input length: int = 20 min=1
 }
 
 fast = ema(close, length)
@@ -49,9 +49,13 @@ function persistLocalSource(source: string, name: string, scriptId?: string | nu
 export type CoreSpiritDockProps = {
   onClose: () => void;
   onAddToChart: (name: string, source: string) => Promise<void>;
+  /** Render inside Vela's docked side-panel instead of a floating overlay. */
+  embedded?: boolean;
+  /** Updates Vela's own panel maximization state. */
+  onFullscreenChange?: (fullscreen: boolean) => void;
 };
 
-export function CoreSpiritDock({ onClose, onAddToChart }: CoreSpiritDockProps) {
+export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange }: CoreSpiritDockProps) {
   const [source, setSource] = useState(() => localSource() || DEFAULT_SOURCE);
   const [name, setName] = useState(() => {
     try { return localStorage.getItem('tradingcore:corespirit:editor-name') || 'CoreSpirit Trend'; }
@@ -62,6 +66,8 @@ export function CoreSpiritDock({ onClose, onAddToChart }: CoreSpiritDockProps) {
   const [scriptId, setScriptId] = useState<string | null>(null);
   const [versions, setVersions] = useState<ScriptVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState('');
+  const [minimized, setMinimized] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [status, setStatus] = useState('Draft is local until saved.');
   const [busy, setBusy] = useState<'compile' | 'save' | 'rename' | 'publish' | 'add' | null>(null);
   const [compileResult, setCompileResult] = useState<CoreSpiritOffThreadCompileResult | null>(null);
@@ -249,8 +255,23 @@ export function CoreSpiritDock({ onClose, onAddToChart }: CoreSpiritDockProps) {
 
   const busyText = busy === 'compile' ? 'Compiling…' : busy === 'save' ? 'Saving…' : busy === 'rename' ? 'Renaming…' : busy === 'publish' ? 'Publishing…' : busy === 'add' ? 'Adding…' : '';
 
+  const closeTerminal = () => {
+    if (fullscreen) {
+      setFullscreen(false);
+      onFullscreenChange?.(false);
+    }
+    onClose();
+  };
+  const toggleFullscreen = () => {
+    const next = !fullscreen;
+    setFullscreen(next);
+    onFullscreenChange?.(next);
+  };
+
   return (
-    <section className="absolute right-14 top-2 bottom-2 z-[125] flex w-[min(560px,calc(100vw-68px))] flex-col overflow-hidden rounded-xl border border-[#293244] bg-[#0b101a]/[0.98] text-slate-100 shadow-[0_28px_80px_rgba(0,0,0,.7)] backdrop-blur-2xl" aria-label="CoreSpirit coding terminal">
+    <section className={embedded
+      ? "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[#0b101a] text-slate-100"
+      : "absolute right-14 top-2 bottom-2 z-[125] flex w-[min(560px,calc(100vw-68px))] flex-col overflow-hidden rounded-xl border border-[#293244] bg-[#0b101a]/[0.98] text-slate-100 shadow-[0_28px_80px_rgba(0,0,0,.7)] backdrop-blur-2xl"} aria-label="CoreSpirit coding terminal">
       <header className="flex items-center justify-between gap-3 border-b border-[#293244] px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-orange-500/30 bg-orange-500/10">
@@ -267,11 +288,20 @@ export function CoreSpiritDock({ onClose, onAddToChart }: CoreSpiritDockProps) {
             <div className="mt-1 truncate text-[10px] text-slate-400">Script terminal · live chart engine</div>
           </div>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close CoreSpirit terminal" title="Close terminal" className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
-          <PanelRightClose size={16}/>
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={() => setMinimized(value => !value)} aria-label={minimized ? "Restore CoreSpirit editor" : "Minimize CoreSpirit editor"} title={minimized ? "Restore editor" : "Minimize editor"} className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+            {minimized ? <Plus size={15}/> : <Minus size={15}/>}
+          </button>
+          <button type="button" onClick={toggleFullscreen} aria-label={fullscreen ? "Restore CoreSpirit panel size" : "Fullscreen CoreSpirit editor"} title={fullscreen ? "Restore" : "Fullscreen"} className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+            {fullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
+          </button>
+          <button type="button" onClick={closeTerminal} aria-label="Close CoreSpirit terminal" title="Close terminal" className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+            <X size={16}/>
+          </button>
+        </div>
       </header>
 
+      {!minimized && (<>
       <div className="flex items-center gap-2 border-b border-[#293244] px-3 py-2">
         <label className="sr-only" htmlFor="corespirit-script-name">Script name</label>
         <input id="corespirit-script-name" value={nameDraft} onChange={event => setNameDraft(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[#303b4f] bg-[#101827] px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-sky-500" aria-label="Script name"/>
@@ -309,11 +339,12 @@ export function CoreSpiritDock({ onClose, onAddToChart }: CoreSpiritDockProps) {
       )}
       <div className="mx-3 mb-2 truncate text-[10px] text-slate-400" role="status" aria-live="polite">{busyText || status}</div>
       <footer className="flex flex-wrap gap-2 border-t border-[#293244] p-3">
-        <button type="button" onClick={() => { setBusy('compile'); void compileSource(source).then(() => setStatus('Compilation passed.')).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile</button>
+        <button type="button" onClick={() => { setBusy('compile'); setStatus('Compiling the current source with the CoreSpirit worker…'); void compileSource(source).then(() => setStatus('Compilation passed. The executable artifact is ready.')).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile</button>
         <button type="button" onClick={() => void save()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Save size={13}/> Save</button>
         <button type="button" onClick={() => void publish()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><UploadCloud size={13}/> Publish</button>
         <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-orange-400 disabled:opacity-50"><Check size={13}/> Add to chart</button>
       </footer>
+      </>)}
     </section>
   );
 }
