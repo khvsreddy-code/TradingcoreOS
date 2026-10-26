@@ -154,13 +154,18 @@ export function validateCoreSpiritAiInvocationResult(
   const createdAt = value.createdAt;
   const expiresAt = value.expiresAt;
   if (status !== 'ready' && status !== 'unavailable' && status !== 'stale') return null;
+  const createdAtMs = typeof createdAt === 'string' ? Date.parse(createdAt) : NaN;
+  const expiresAtMs = typeof expiresAt === 'string' ? Date.parse(expiresAt) : NaN;
   if (typeof summary !== 'string' || summary.length > 2_000 ||
-      typeof modelVersion !== 'string' || !modelVersion ||
+      typeof modelVersion !== 'string' || !modelVersion || modelVersion.length > 200 ||
       typeof artifactHash !== 'string' || !/^[a-f0-9]{64}$/.test(artifactHash) ||
       typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash) ||
       typeof inputFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(inputFingerprint) ||
-      typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt)) ||
-      typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt)) ||
+      !Number.isFinite(createdAtMs) || !Number.isFinite(expiresAtMs) ||
+      // A stored payload cannot extend its own lifetime by editing expiresAt.
+      expiresAtMs !== createdAtMs + CORE_SPIRIT_AI_INVOKE_LIMITS.resultFreshnessMs ||
+      // Reject clock-skewed/fabricated future results rather than treating them as fresh.
+      createdAtMs > now + 30_000 ||
       value.advisoryOnly !== true || value.executable !== false || value.mayCreateOrderIntent !== false) return null;
   for (const key of ['artifactHash', 'sourceHash', 'inputFingerprint', 'modelVersion'] as const) {
     if (expected[key] !== undefined && expected[key] !== value[key]) return null;
