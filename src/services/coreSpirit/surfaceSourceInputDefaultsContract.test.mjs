@@ -27,6 +27,13 @@ const explicitFloat = parseCoreSpiritInputDeclaration('input length: int = 14 mi
 assert.equal(explicitFloat?.type, 'int');
 assert.equal(explicitFloat?.defval, 14);
 
+const legacyConstructorInput = parseCoreSpiritInputDeclaration('input length = int(20, min: 1)');
+assert.equal(legacyConstructorInput?.type, 'int');
+assert.equal(legacyConstructorInput?.defval, 20);
+assert.equal(legacyConstructorInput?.min, 1,
+  'existing locally-saved drafts using int(default, min: value) remain compilable');
+
+
 const boolInput = parseCoreSpiritInputDeclaration('input useFilter: bool = true');
 assert.equal(boolInput?.type, 'bool');
 assert.equal(boolInput?.defval, true);
