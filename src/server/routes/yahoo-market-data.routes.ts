@@ -113,7 +113,7 @@ function resolveInterval(raw: unknown): SourceInterval | null {
           : source === 30 ? '30m'
             : source === 45 ? '45m'
               : source === 60 ? '60m'
-                : source === 90 ? '90m' : '60m';
+                : source === 90 ? '90m' : '1h';
   return {
     yahooInterval,
     requestedMinutes: minutes,
@@ -161,15 +161,29 @@ function aggregateIntraday(rows: YahooBar[], targetMinutes: number): YahooBar[] 
   return [...byBucket.values()].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
-function resultRange(interval: SourceInterval, mode: 'chart' | 'quote', limit: number): string {
-  if (mode === 'quote') return interval.kind === 'intraday' ? '1d' : '5d';
-  if (interval.kind === 'intraday') {
-    // Yahoo only exposes 1-minute bars for approximately the last 8 calendar days;
-    // other intraday intervals have a rolling ~60-day history window.
-    return interval.yahooInterval === '1m' ? '7d' : '3mo';
+type YahooRequestWindow = Readonly<{
+  range?: string;
+  period1?: number;
+  period2?: number;
+  cacheKey: string;
+}>;
+
+function resultWindow(interval: SourceInterval, mode: 'chart' | 'quote', limit: number, now = Date.now()): YahooRequestWindow {
+  if (mode === 'quote') {
+    const range = interval.kind === 'intraday' ? '1d' : '5d';
+    return { range, cacheKey: `range:${range}` };
   }
-  if (interval.kind === 'day') return limit > 2_000 ? 'max' : '10y';
-  return 'max';
+  if (interval.kind === 'intraday') {
+    // Yahoo rejects range=3mo for minute candles. Period bounds are supported for
+    // intraday history and stay within Yahoo's rolling lookback: 7d for 1m,
+    // 60d for 2m–90m, and 730d for hourly candles.
+    const days = interval.yahooInterval === '1m' ? 7 : interval.yahooInterval === '1h' ? 730 : 60;
+    const period2 = Math.floor(now / 60_000) * 60;
+    const period1 = period2 - days * 24 * 60 * 60;
+    return { period1, period2, cacheKey: `period:${days}d:${period2}` };
+  }
+  const range = interval.kind === 'day' ? (limit > MAX_CHART_BARS ? 'max' : '10y') : 'max';
+  return { range, cacheKey: `range:${range}` };
 }
 
 function parseBundle(
@@ -254,15 +268,20 @@ async function loadYahooBundle(canonicalRaw: unknown, timeframeRaw: unknown, lim
   if (!interval) throw new Error('Yahoo Finance fallback does not support this timeframe.');
   const requested = Number(limitRaw);
   const limit = Number.isFinite(requested) ? Math.max(1, Math.min(MAX_CHART_BARS, Math.floor(requested))) : MAX_CHART_BARS;
-  const range = resultRange(interval, mode, limit);
-  const cacheKey = `${mode}|${mapped.yahoo}|${interval.yahooInterval}|${interval.aggregateMinutes || 0}|${range}|${limit}`;
+  const window = resultWindow(interval, mode, limit);
+  const cacheKey = `${mode}|${mapped.yahoo}|${interval.yahooInterval}|${interval.aggregateMinutes || 0}|${window.cacheKey}|${limit}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   const pending = inflight.get(cacheKey);
   if (pending) return pending;
   const promise = (async () => {
     const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(mapped.yahoo)}`);
-    url.searchParams.set('range', range);
+    if (window.range) {
+      url.searchParams.set('range', window.range);
+    } else if (window.period1 != null && window.period2 != null) {
+      url.searchParams.set('period1', String(window.period1));
+      url.searchParams.set('period2', String(window.period2));
+    }
     url.searchParams.set('interval', interval.yahooInterval);
     url.searchParams.set('includePrePost', 'false');
     const response = await fetch(url, {

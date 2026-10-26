@@ -20,8 +20,15 @@ assert.match(route, /router\.get\('\/chart'/, 'authenticated Yahoo historical en
 assert.match(route, /router\.get\('\/quote'/, 'authenticated Yahoo latest-bar endpoint exists');
 assert.match(route, /router\.get\('\/quotes'/, 'Yahoo multi-quote endpoint exists');
 assert.match(route, /Cache-Control', 'private, max-age=4'/, 'Yahoo responses use a four-second cache policy');
+assert.match(route, /function resultWindow\(/, 'Yahoo chart requests choose a lookback that is compatible with the interval');
+assert.match(route, /url\.searchParams\.set\('period1'/, 'intraday Yahoo history uses explicit period1 bounds');
+assert.match(route, /url\.searchParams\.set\('period2'/, 'intraday Yahoo history uses explicit period2 bounds');
+assert.match(route, /const days = interval\.yahooInterval === '1m' \? 7 : interval\.yahooInterval === '1h' \? 730 : 60/, 'minute intervals stay within Yahoo intraday lookback limits');
+assert.doesNotMatch(route, /return interval\.yahooInterval === '1m' \? '7d' : '3mo'/, 'invalid 3mo + 5m Yahoo request is not reintroduced');
 assert.match(provider, /if \(!isFyersMarketSessionReady\(\)\) \{\s*return loadYahooColumns/, 'columnar history uses Yahoo when FYERS is invalid');
 assert.match(provider, /loadYahooBars\(symbol, tcoTimeframe/, 'object history/range uses Yahoo when FYERS is invalid');
+assert.match(provider, /function publishChartDataSourceStatus/, 'Yahoo load status is exposed to the chart UI');
+assert.match(provider, /catch \(error\) \{\s*const fallbackBars = await loadYahooBarsForChart/, 'broker restoration failures fall back to Yahoo before Vela receives empty history');
 assert.match(provider, /startYahooFallbackPolling\(symbol, tcoTimeframe/, 'live bar subscriptions poll the Yahoo latest-bar endpoint');
 assert.match(provider, /globalThis\.setInterval\(syncBroker, YAHOO_FALLBACK_POLL_MS\)/, 'provider rechecks expiry while chart is open');
 assert.match(provider, /return loadYahooColumns\(symbol, tcoTimeframe/, 'columnar chart loads can start without FYERS');

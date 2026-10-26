@@ -10,8 +10,7 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { tradingApi, readTradingApiJson } from './services/http/tradingApi';
 import {
   hasValidFyersSession,
-  loadYahooBars,
-  loadYahooColumns,
+  loadYahooBars as fetchYahooBars,
   loadYahooLatestBar,
   YAHOO_FALLBACK_POLL_MS,
 } from './services/marketData/yahooFallback';
@@ -265,6 +264,79 @@ function recordVelaRenderUpdate(
   else globalThis.setTimeout(record, 16);
 }
 
+type TcoChartDataSourceStatus = Readonly<{
+  source: 'yahoo';
+  phase: 'loading' | 'ready' | 'empty' | 'error';
+  symbol: string;
+  timeframe: string;
+  barCount: number;
+  error?: string;
+  updatedAt: number;
+}>;
+
+function publishChartDataSourceStatus(
+  symbol: string,
+  timeframe: string,
+  phase: TcoChartDataSourceStatus['phase'],
+  barCount = 0,
+  error?: string,
+): void {
+  if (typeof window === 'undefined') return;
+  const detail: TcoChartDataSourceStatus = {
+    source: 'yahoo',
+    phase,
+    symbol: runtimeSymbol(symbol),
+    timeframe: runtimeTimeframe(timeframe),
+    barCount,
+    ...(error ? { error: String(error).replace(/[\\r\\n\\t]+/g, ' ').slice(0, 240) } : {}),
+    updatedAt: Date.now(),
+  };
+  window.dispatchEvent(new CustomEvent('tco:chart-data-status', { detail }));
+}
+
+async function loadYahooBarsForChart(
+  symbol: string,
+  timeframe: string,
+  limit = 2_000,
+  range?: BarRange,
+  signal?: AbortSignal,
+): Promise<OHLCV[]> {
+  publishChartDataSourceStatus(symbol, timeframe, 'loading');
+  try {
+    const bars = await fetchYahooBars(symbol, timeframe, limit, range, signal);
+    publishChartDataSourceStatus(symbol, timeframe, bars.length ? 'ready' : 'empty', bars.length);
+    return bars;
+  } catch (error) {
+    publishChartDataSourceStatus(
+      symbol,
+      timeframe,
+      'error',
+      0,
+      error instanceof Error ? error.message : 'Yahoo Finance returned an unknown history error.',
+    );
+    throw error;
+  }
+}
+
+async function loadYahooColumnsForChart(
+  symbol: string,
+  timeframe: string,
+  limit = 2_000,
+  range?: BarRange,
+): Promise<ColumnarBars> {
+  const bars = await loadYahooBarsForChart(symbol, timeframe, limit, range);
+  return {
+    time: Float64Array.from(bars, bar => bar.time),
+    open: Float64Array.from(bars, bar => bar.open),
+    high: Float64Array.from(bars, bar => bar.high),
+    low: Float64Array.from(bars, bar => bar.low),
+    close: Float64Array.from(bars, bar => bar.close),
+    volume: Float64Array.from(bars, bar => Number(bar.volume) || 0),
+    length: bars.length,
+    timeUnit: 'milliseconds',
+  };
+}
+
 function isFyersMarketSessionReady(): boolean {
   return hasValidFyersSession(tradingCoreRuntime.getAllConnections());
 }
@@ -479,9 +551,16 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
     if (!isFyersMarketSessionReady()) {
-      return loadYahooColumns(symbol, tcoTimeframe, requested, range);
+      return loadYahooColumnsForChart(symbol, tcoTimeframe, requested, range);
     }
-    const brokerId = await activeBrokerId();
+    let brokerId: string;
+    try {
+      brokerId = await activeBrokerId();
+    } catch (error) {
+      const fallback = await loadYahooColumnsForChart(symbol, tcoTimeframe, requested, range);
+      if (fallback.length) return fallback;
+      throw error;
+    }
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
 
     // HOT path: a recently viewed symbol already lives in the shared canonical plane.
@@ -520,12 +599,21 @@ export class TcoVelaDataProvider implements DataProvider {
     const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
     const abort = () => Boolean(opts?.signal?.aborted);
     if (!isFyersMarketSessionReady()) {
-      const yahooBars = await loadYahooBars(symbol, tcoTimeframe, requested, range, opts?.signal);
+      const yahooBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
       if (abort()) return [];
       if (yahooBars.length) onBatch(yahooBars);
       return yahooBars;
     }
-    const brokerId = await activeBrokerId();
+    let brokerId: string;
+    try {
+      brokerId = await activeBrokerId();
+    } catch (error) {
+      const fallbackBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
+      if (abort()) return [];
+      if (fallbackBars.length) onBatch(fallbackBars);
+      else throw error;
+      return fallbackBars;
+    }
     if (opts?.signal?.aborted) return [];
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const firstPaintBars = Math.min(requested, 300);
@@ -568,7 +656,7 @@ export class TcoVelaDataProvider implements DataProvider {
     if (!history.length) {
       // A token can still look connected while broker admission/history fails. Try
       // delayed Yahoo bars instead of stranding this chart with zero candles.
-      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range, opts?.signal);
+      const fallbackBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
       if (abort()) return [];
       if (fallbackBars.length) {
         first = fallbackBars;
@@ -633,7 +721,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(2, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
-    if (!isFyersMarketSessionReady()) return loadYahooBars(symbol, tcoTimeframe, requested, range);
+    if (!isFyersMarketSessionReady()) return loadYahooBarsForChart(symbol, tcoTimeframe, requested, range);
     try {
       const brokerId = await activeBrokerId();
       const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
@@ -648,7 +736,7 @@ export class TcoVelaDataProvider implements DataProvider {
       if (loaded.length) return marketViewToBars(loaded, range, requested);
       return await this.getBars(ticker, timeframe, range);
     } catch (error) {
-      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range);
+      const fallbackBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range);
       if (fallbackBars.length) return fallbackBars;
       throw error;
     }
@@ -658,8 +746,15 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(2_000, Math.floor(Number(range.limit) || 2_000)));
-    if (!isFyersMarketSessionReady()) return loadYahooBars(symbol, tcoTimeframe, requested, range);
-    const brokerId = await activeBrokerId();
+    if (!isFyersMarketSessionReady()) return loadYahooBarsForChart(symbol, tcoTimeframe, requested, range);
+    let brokerId: string;
+    try {
+      brokerId = await activeBrokerId();
+    } catch (error) {
+      const fallbackBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range);
+      if (fallbackBars.length) return fallbackBars;
+      throw error;
+    }
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
     const historyPromise = plane.ensureReadyHistory(requested);
@@ -693,7 +788,7 @@ export class TcoVelaDataProvider implements DataProvider {
     // Never fabricate historical OHLC from a quote. Fall back to the delayed
     // provider when FYERS history was rejected or unavailable.
     if (lastError) {
-      const fallbackBars = await loadYahooBars(symbol, tcoTimeframe, requested, range);
+      const fallbackBars = await loadYahooBarsForChart(symbol, tcoTimeframe, requested, range);
       if (fallbackBars.length) return fallbackBars;
       throw lastError;
     }
