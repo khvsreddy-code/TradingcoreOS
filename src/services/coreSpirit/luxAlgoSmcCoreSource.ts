@@ -40,12 +40,6 @@ let internalRollingLow = lowest(low, internalBars)
 let internalHigh = internalRollingHigh[1]
 let internalLow = internalRollingLow[1]
 
-// TEMPORARY PREBUILD DIAGNOSTICS — remove after the SMC contract passes.
-plot(swingLength, "#FFFFFF", 1, 0, "DEBUG swingLength")
-plot(internalBars, "#FFFFFF", 1, 0, "DEBUG internalBars")
-plot(internalRollingHigh, "#FFFFFF", 1, 0, "DEBUG internal rolling high")
-plot(internalRollingLow, "#FFFFFF", 1, 0, "DEBUG internal rolling low")
-
 // Previous-bar extremes avoid using the still-forming current bar as its own level.
 if showStructureLevels == true and showSwingStructure == true {
     plot(swingHigh, "#F23645", 1, 0, "Swing High")
