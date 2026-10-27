@@ -7,6 +7,7 @@ type TcoDrawingLabel = DrawingLabel;
 type TcoDrawingPolyline = DrawingPolyline;
 type TcoDrawingTable = DrawingTable;
 type TcoBackground = Background;
+type TcoBarColor = { time:number; color:string };
 type TcoRectInstance = HighCardinalityRectInstance;
 type TcoRectBatch = HighCardinalityRectBatch;
 type TcoSeriesPresentation = { title?:string; style:ReturnType<typeof seriesStyle> };
@@ -172,6 +173,7 @@ type SceneDiffEmission = {
     deltas?: SeriesValueDelta[];
     collection?: CollectionValueDelta;
     instanceDelta?: HighCardinalityRectDelta;
+    barColorsChanged?: boolean;
 } | null;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
@@ -277,6 +279,7 @@ export interface CoreSpiritSceneSnapshot {
     polylines: TcoDrawingPolyline[];
     backgrounds: TcoBackground[];
     tables: TcoDrawingTable[];
+    barColors: TcoBarColor[];
 }
 
 export class CoreSpiritSceneDiff {
@@ -293,6 +296,7 @@ export class CoreSpiritSceneDiff {
     private readonly retainedSpans = new Map<string, DirtySpan>();
     private readonly rectBatches = new Map<string, TcoRectInstance[]>;
     private readonly rectBatchMeta = new Map<string, { paneId: string; overlay?: boolean; indexOffset?: number }>();
+    private readonly barColors = new Map<number, string>();
     private readonly collections: Record<CollectionName, Identified[]> = {
         lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [], tables: [],
     };
@@ -318,6 +322,7 @@ export class CoreSpiritSceneDiff {
         this.retainedSpans.clear();
         this.rectBatches.clear();
         this.rectBatchMeta.clear();
+        this.barColors.clear();
         for (const values of Object.values(this.collections)) values.splice(0, values.length);
         this.markerSeriesMounted = false;
     }
@@ -372,6 +377,8 @@ export class CoreSpiritSceneDiff {
                     merges: table.merges.map(merge => ({ ...merge })),
                 };
             }),
+            barColors: [...this.barColors.entries()].sort((left, right) => left[0] - right[0])
+                .map(([time, color]) => ({ time, color })),
         };
     }
 
@@ -379,6 +386,7 @@ export class CoreSpiritSceneDiff {
         const series: SeriesValueDelta[] = [];
         const collections: CollectionValueDelta[] = [];
         const instanceBatches: HighCardinalityRectDelta[] = [];
+        let barColorsChanged = false;
         const out: ScenePatch[] = [];
         // Track the actual time extent of emitted changes. Initializing this to the
         // requested range silently widened every small patch back to the full range.
@@ -398,8 +406,9 @@ export class CoreSpiritSceneDiff {
             if (result?.deltas) series.push(...result.deltas);
             if (result?.collection) collections.push(result.collection);
             if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
+            if (result?.barColorsChanged) barColorsChanged = true;
 
-            if (result?.delta || result?.deltas || result?.collection || result?.instanceDelta) {
+            if (result?.delta || result?.deltas || result?.collection || result?.instanceDelta || result?.barColorsChanged) {
                 if (!span) {
                     hasUnboundedValuePatch = true;
                 } else {
@@ -424,7 +433,7 @@ export class CoreSpiritSceneDiff {
             for (let i = series.length - 1; i >= 0; i--) if (series[i]!.seriesId === this.markerSeriesId) series.splice(i, 1);
         }
 
-        if (series.length || collections.length || instanceBatches.length) {
+        if (series.length || collections.length || instanceBatches.length || barColorsChanged) {
             const patchDirty = hasUnboundedValuePatch || !Number.isFinite(from) || !Number.isFinite(to)
                 ? dirty
                 : { from, to };
@@ -432,6 +441,7 @@ export class CoreSpiritSceneDiff {
                 kind: 'value', indicatorId: this.indicatorId, dirty: patchDirty, series,
                 ...(collections.length ? { collections } : {}),
                 ...(instanceBatches.length ? { instanceBatches } : {}),
+                ...(barColorsChanged ? { barColors: [...this.barColors.entries()].sort((left, right) => left[0] - right[0]).map(([time, color]) => ({ time, color })) } : {}),
             });
         }
         // Stamp emitted schema/value patches so delayed worker replies cannot overwrite a
@@ -641,6 +651,21 @@ export class CoreSpiritSceneDiff {
         return emit ? { collection: { collection: name, values: [value], op: 'replace-range', start: idx, remove: 1 } } : null;
     }
 
+    private applyBarColor(output: Extract<CoreSpiritObject, { kind: 'barcolor' }>, emit: boolean): SceneDiffEmission {
+        const time = Number(output.time);
+        if (!Number.isFinite(time)) return null;
+        const previous = this.barColors.get(time);
+        if (removed(output)) {
+            if (previous === undefined) return null;
+            this.barColors.delete(time);
+            return emit ? { barColorsChanged: true } : null;
+        }
+        const next = colorWithOpacity(output.color, output.opacity ?? 1, output.color);
+        if (previous === next) return null;
+        this.barColors.set(time, next);
+        return emit ? { barColorsChanged: true } : null;
+    }
+
     private applyTable(output: Extract<CoreSpiritObject, { kind: 'table' }>, emit: boolean): SceneDiffEmission {
         const row = Number(output.row);
         const column = Number(output.column);
@@ -723,6 +748,7 @@ export class CoreSpiritSceneDiff {
             case 'polyline':
             case 'polygon': return this.applyCollection('polylines', polyline(output), emit, removed(output));
             case 'table': return this.applyTable(output, emit);
+            case 'barcolor': return this.applyBarColor(output, emit);
             case 'background': {
                 const start = Number(output.time);
                 const end = Number(output.metadata?.endTime ?? start + 1);
