@@ -33,7 +33,12 @@ function hasPricePoint(value: unknown): boolean {
 }
 
 function hasRectangle(record: OutputRecord): boolean {
-  return finite(record.left) && finite(record.right) && finite(record.top) && finite(record.bottom);
+  // Viewport-anchored zones intentionally use +Infinity for the right edge so
+  // they span the current chart width. Reject NaN/-Infinity and all other
+  // non-finite coordinates; only that explicit domain contract permits it.
+  const validRight = finite(record.right) ||
+    (record.domain === 'viewport' && record.right === Number.POSITIVE_INFINITY);
+  return finite(record.left) && validRight && finite(record.top) && finite(record.bottom);
 }
 
 function hasPoints(record: OutputRecord): boolean {
