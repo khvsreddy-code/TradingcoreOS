@@ -89,10 +89,10 @@ if showInternalStructure == true and close < internalLow and internalBias > 0 {
 if showInternalStructure == true and close < internalLow and internalBias <= 0 {
     label("Internal BOS ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
 }
-if internalBullishBreak {
+if close > internalHigh {
     internalBias := 1
 }
-if internalBearishBreak {
+if close < internalLow {
     internalBias := -1
 }
 
