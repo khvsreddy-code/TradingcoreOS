@@ -198,7 +198,7 @@ assert.equal(drawingModel.barColors?.length, 1, 'native CoreSpirit bar colors mu
 const committedSeriesPoints = drawingModel.series[0]?.points;
 const committedScenePoints = drawingSnapshot.points.get('swing-high');
 const committedZoneRight = drawingSnapshot.rectBatches[0]?.instances[0]?.right;
-drawingScene.apply([
+const updatedScenePatches = drawingScene.apply([
   { kind: 'series', time: (t0 + 900) * 1000, value: 106, seriesId: 'swing-high' },
   { kind: 'zone', id: 'demand-zone', left: t0 * 1000, right: (t0 + 900) * 1000, top: 104, bottom: 99,
     style: { color: '#1848CC', fillColor: '#1848CC', fillOpacity: 0.18 } },
@@ -206,6 +206,11 @@ drawingScene.apply([
     style: { background: '#101827', color: '#34d399', fontSize: 10, fontWeight: 'bold', border: '#334155' } },
   { kind: 'barcolor', id: 'bar-color-0', time: t0 * 1000, color: '#ef4444', opacity: 0.5 },
 ], { from: t0 * 1000, to: (t0 + 900) * 1000 }, 2);
+const updatedValuePatch = updatedScenePatches.find(patch => patch.kind === 'value');
+assert.equal(updatedValuePatch?.barColors?.[0]?.color, 'rgba(239, 68, 68, 0.5)',
+  'incremental patches must send the native candle-color update, not just change the retained cache');
+assert.equal(updatedValuePatch?.collections?.some(delta => delta.collection === 'tables'), true,
+  'incremental table updates must be sent through Vela collection patches');
 assert.equal(committedSeriesPoints?.length, 1,
   'a later series update must not mutate the previously committed Vela model');
 assert.equal(committedScenePoints?.length, 1,
