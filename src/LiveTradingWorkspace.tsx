@@ -432,6 +432,26 @@ const browserRuntimeMetrics = useRef({
         if (activeCell.indicatorCount <= before) {
           throw new Error('Vela did not attach this script to the active chart. Check the compiler diagnostics and try again.');
         }
+        const handle = activeCell.instances.at(-1)?.handle;
+        if (!handle) throw new Error('Vela attached a row but did not create a runnable CoreSpirit indicator handle.');
+        // A legend row is not a successful run: await the first model or surface the actual engine error.
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          let removeReady: (() => void) | undefined;
+          let removeError: (() => void) | undefined;
+          let timer: number | undefined;
+          const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            if (timer !== undefined) window.clearTimeout(timer);
+            removeReady?.();
+            removeError?.();
+            if (error) reject(error); else resolve();
+          };
+          timer = window.setTimeout(() => finish(new Error('CoreSpirit did not finish compiling and drawing within 25 seconds. Check the indicator error details and worker status.')), 25_000);
+          removeReady = handle.on('ready', () => finish());
+          removeError = handle.on('error', payload => finish(payload.error));
+        });
         try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
         window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', {
           detail: { name: scriptName, source: scriptSource },

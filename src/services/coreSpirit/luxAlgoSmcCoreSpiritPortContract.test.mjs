@@ -97,8 +97,13 @@ assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vel
 assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.start.price === item.end.price),
   'BOS/CHoCH structure lines must use chart-time anchors and a stable horizontal price level');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
+assert.ok(structureLines.length < bars.length / 3,
+  'structure drawings should be emitted on break transitions, not on every bar after the break');
 assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'), 'bearish fair-value gaps must produce red chart zones');
+const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fillColor === '#00FF68' || item.style?.fillColor === '#FF0008'));
+assert.ok(fvgZones.length > 0, 'edge-triggered FVG transitions must keep real imbalance zones');
+assert.ok(fvgZones.every(item => item.right > item.left), 'FVGs must be forward-projected zones rather than zero-width rectangles');
 
 console.log('CORESPIRIT_LUXALGO_SMC_PORT_COMPILE_AND_CHART_OUTPUT_OK');

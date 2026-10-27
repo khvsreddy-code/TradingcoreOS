@@ -113,9 +113,58 @@ function optionalString(record: OutputRecord, key: string): boolean {
   return record[key] === undefined || typeof record[key] === 'string';
 }
 
-export function requireCoreSpiritOutputs(value: unknown): CoreSpiritObject[] {
-  if (!Array.isArray(value) || !value.every(isCoreSpiritOutput)) {
-    throw new Error('Invalid CoreSpirit worker output payload');
+function invalidOutputReason(value: unknown): string {
+  if (!isRecord(value)) return 'expected an output object';
+  if (typeof value.kind !== 'string') return 'missing string kind';
+  if (!CORE_SPIRIT_OUTPUT_KINDS.has(value.kind)) return `unsupported output kind '${value.kind}'`;
+  const row = value;
+  switch (row.kind) {
+    case 'series':
+      if (!hasTime(row)) return 'time must be a finite number';
+      if (!(row.value === null || finite(row.value))) return 'value must be a finite number or null';
+      if (!optionalString(row, 'name') || !optionalString(row, 'seriesId')) return 'name and seriesId must be strings when present';
+      break;
+    case 'line':
+    case 'arrow':
+      if (!hasPricePoint(row.start)) return 'start must contain finite time and price numbers';
+      if (!hasPricePoint(row.end)) return 'end must contain finite time and price numbers';
+      break;
+    case 'zone':
+    case 'box':
+      if (!finite(row.left)) return 'left must be finite';
+      if (!(finite(row.right) || (row.domain === 'viewport' && row.right === Number.POSITIVE_INFINITY))) return 'right must be finite (or +Infinity only for domain=viewport)';
+      if (!finite(row.top)) return 'top must be finite';
+      if (!finite(row.bottom)) return 'bottom must be finite';
+      break;
+    case 'label':
+      if (!hasTime(row)) return 'time must be finite';
+      if (!finite(row.price)) return 'price must be finite';
+      if (typeof row.id !== 'string') return 'id must be a string';
+      if (typeof row.text !== 'string') return 'text must be a string';
+      if (!['above', 'below', 'inBar', 'price'].includes(String(row.position))) return 'position must be above, below, inBar, or price';
+      break;
+    case 'polyline':
+    case 'polygon':
+      if (typeof row.id !== 'string') return 'id must be a string';
+      if (!hasPoints(row)) return 'points must be an array of finite {time, price} points';
+      if (row.kind === 'polygon' && !isRecord(row.geometry)) return 'polygon geometry must be an object';
+      break;
+    default:
+      return `fields do not satisfy the ${row.kind} output contract`;
   }
-  return value;
+  return `fields do not satisfy the ${row.kind} output contract`;
+}
+
+export function requireCoreSpiritOutputs(value: unknown): CoreSpiritObject[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid CoreSpirit worker output payload: expected an array, received ${value === null ? 'null' : typeof value}`);
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    const output = value[index];
+    if (!isCoreSpiritOutput(output)) {
+      const kind = isRecord(output) && typeof output.kind === 'string' ? ` (${output.kind})` : '';
+      throw new Error(`Invalid CoreSpirit worker output payload at output[${index}]${kind}: ${invalidOutputReason(output)}`);
+    }
+  }
+  return value as CoreSpiritObject[];
 }
