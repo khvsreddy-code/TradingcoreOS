@@ -20,6 +20,7 @@ import { createSharedSeriesOutput } from './sharedOutputBuffer';
 import { createGraphResolver, type CoreSpiritDataGraphResolver, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
+import { toCoreSpiritWorkerTransportValue } from './workerTransport';
 
 type WorkerContext={
   artifact:CoreSpiritExecutableArtifact;
@@ -262,7 +263,13 @@ self.onmessage=(event:MessageEvent<Message>)=>{
 
     context.datasetVersion=message.datasetVersion;
 
-    const transported=createSharedSeriesOutput(requireCoreSpiritOutputs(result.outputs));
+    // The incremental runtime fast path returns proxy-backed series views in
+    // result.state (getState({ clone:false })). Worker.postMessage cannot clone
+    // proxies/functions from runtime or extension metadata, so rebuild the state
+    // from the runtime's public snapshot and sanitize both state and outputs.
+    const safeOutputs=requireCoreSpiritOutputs(toCoreSpiritWorkerTransportValue(result.outputs));
+    const transported=createSharedSeriesOutput(safeOutputs);
+    const safeState=toCoreSpiritWorkerTransportValue(context.runtime.getState());
     self.postMessage({
       type:'result',
       requestId:message.requestId,
@@ -270,7 +277,7 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       artifactId:artifactIdFor(context.artifact),
       outputs:transported.passthrough,
       ...(transported.descriptor ? {sharedSeries:transported.descriptor} : {}),
-      state:result.state,
+      state:safeState,
       diagnostics:result.diagnostics,
       dirtyFrom:sync.dirtyFrom,
       dirtyTo:sync.dirtyTo,
