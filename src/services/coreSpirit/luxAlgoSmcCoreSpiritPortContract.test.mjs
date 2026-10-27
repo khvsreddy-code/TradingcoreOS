@@ -29,6 +29,8 @@ for (let i = 0; i < 70; i += 1) {
 bars[25] = candle(25, 108, 113, 107.5, 112); // bullish imbalance and upward structure break
 bars[35] = candle(35, 100, 101, 94.5, 96);  // bearish imbalance and downward structure break
 bars[52] = candle(52, 102, 107, 101.5, 106); // bullish reversal through the prior range
+bars[60] = candle(60, 113, 122, 112.5, 120); // post-warmup bullish swing break and bullish FVG
+bars[65] = candle(65, 89.5, 90, 88, 89); // post-warmup bearish break, CHoCH, and bearish FVG
 
 const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
