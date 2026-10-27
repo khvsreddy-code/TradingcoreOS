@@ -93,6 +93,26 @@ let probe = unusedRegistryProbe(close)`;
     noisyMainLookup.semanticHash,
     'worker compilation must accept the same source identity despite unrelated registry drift',
   );
+
+  // A worker can outlive UI-side component registration changes. The cache must
+  // recover by compiling once against the authoritative registry, not silently
+  // relabel the mismatched worker artifact or leave Add to Chart permanently broken.
+  const recoverySourceId = 'corespirit-worker-identity-recovery';
+  const recoveryLookup = buildCoreSpiritArtifactLookupIdentity(source, recoverySourceId, options);
+  const mismatchedWorkerArtifact = {
+    ...compiled.artifact,
+    abi: { ...compiled.artifact.abi, semanticHash: 'stale-worker-semantic-hash' },
+  };
+  const recovered = await loadOrCompileCoreSpiritArtifact(source, recoverySourceId, {
+    ...options,
+    backend: 'worker-vm',
+    compileInWorker: async () => mismatchedWorkerArtifact as typeof compiled.artifact,
+  });
+  assert.equal(
+    recovered.abi.semanticHash,
+    recoveryLookup.semanticHash,
+    'a worker/main semantic identity drift must recover through authoritative compilation',
+  );
 } finally {
   coreSpiritComponentRegistry.unregister(unrelatedComponent.id);
 }
