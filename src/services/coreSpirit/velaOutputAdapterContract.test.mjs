@@ -158,6 +158,8 @@ drawingScene.seed([
   { kind: 'polyline', id: 'swing-path', points: [{ time: t0 * 1000, price: 99 }, { time: (t0 + 300) * 1000, price: 102 }], style: { color: '#3179F5', lineWidth: 2 } },
   { kind: 'zone', id: 'demand-zone', left: t0 * 1000, right: (t0 + 600) * 1000, top: 104, bottom: 99, style: { color: '#1848CC', fillColor: '#1848CC', fillOpacity: 0.18 } },
   { kind: 'background', id: 'session-bg', time: t0 * 1000, color: '#38bdf8', opacity: 0.2 },
+  { kind: 'table', id: 'bias-table', position: 'topRight', row: 0, column: 0, text: 'BIAS: BULL',
+    style: { background: '#101827', color: '#f8fafc', fontSize: 10, fontWeight: 'bold', border: '#334155' } },
 ]);
 const drawingSnapshot = drawingScene.snapshot();
 assert.equal(drawingSnapshot.lines.length, 1);
@@ -166,10 +168,13 @@ assert.equal(drawingSnapshot.polylines.length, 1);
 assert.equal(drawingSnapshot.boxes.length, 1, 'zones retain a native Vela outline');
 assert.match(drawingSnapshot.rectBatches[0].instances[0].fill, /^rgba\(/, 'zone fill keeps its configured opacity');
 assert.match(drawingSnapshot.backgrounds[0].color, /^rgba\(/, 'background tint keeps its configured opacity');
+assert.equal(drawingSnapshot.tables.length, 1, 'CoreSpirit table cells are retained as native Vela tables');
+assert.equal(drawingSnapshot.tables[0]?.cells[0]?.[0]?.text, 'BIAS: BULL');
 const drawingModel = buildCoreSpiritVelaIndicatorModel('native-drawing-bridge-test', { title: 'Native drawings', overlay: true },
   drawingSnapshot.points, [], drawingSnapshot.priceLines, drawingSnapshot.rectBatches, t0 * 1000, undefined, [], {}, [], {}, {
     seriesStyles: drawingSnapshot.seriesStyles, lines: drawingSnapshot.lines, boxes: drawingSnapshot.boxes,
     labels: drawingSnapshot.labels, polylines: drawingSnapshot.polylines, backgrounds: drawingSnapshot.backgrounds,
+    tables: drawingSnapshot.tables,
   });
 assert.equal(drawingModel.series[0]?.title, 'Swing High');
 assert.equal(drawingModel.series[0]?.style?.color, '#F23645');
@@ -180,6 +185,8 @@ assert.equal(drawingModel.labels?.[0]?.text, 'BOS');
 assert.equal(drawingModel.polylines?.[0]?.id, 'swing-path');
 assert.equal(drawingModel.boxes?.[0]?.id, 'demand-zone');
 assert.equal(drawingModel.backgrounds?.[0]?.id, 'session-bg');
+assert.equal(drawingModel.tables?.[0]?.cells[0]?.[0]?.text, 'BIAS: BULL',
+  'native CoreSpirit tables must survive the semantic adapter');
 
 // A Vela model is a committed snapshot. Later CoreSpirit mutations must not rewrite its
 // points or native drawing instances behind the renderer's patch/revision boundary.
@@ -190,6 +197,8 @@ drawingScene.apply([
   { kind: 'series', time: (t0 + 900) * 1000, value: 106, seriesId: 'swing-high' },
   { kind: 'zone', id: 'demand-zone', left: t0 * 1000, right: (t0 + 900) * 1000, top: 104, bottom: 99,
     style: { color: '#1848CC', fillColor: '#1848CC', fillOpacity: 0.18 } },
+  { kind: 'table', id: 'bias-table', position: 'topRight', row: 1, column: 0, text: 'REGIME: BULL',
+    style: { background: '#101827', color: '#34d399', fontSize: 10, fontWeight: 'bold', border: '#334155' } },
 ], { from: t0 * 1000, to: (t0 + 900) * 1000 }, 2);
 assert.equal(committedSeriesPoints?.length, 1,
   'a later series update must not mutate the previously committed Vela model');
@@ -200,6 +209,9 @@ assert.equal(drawingSnapshot.rectBatches[0]?.instances[0]?.right, committedZoneR
 const updatedDrawingSnapshot = drawingScene.snapshot();
 assert.equal(updatedDrawingSnapshot.points.get('swing-high')?.length, 2);
 assert.equal(updatedDrawingSnapshot.rectBatches[0]?.instances[0]?.right, (t0 + 900) * 1000);
+assert.equal(drawingModel.tables?.[0]?.rows, 1, 'the committed Vela table must remain isolated from later cell updates');
+assert.equal(updatedDrawingSnapshot.tables[0]?.rows, 2);
+assert.equal(updatedDrawingSnapshot.tables[0]?.cells[1]?.[0]?.text, 'REGIME: BULL');
 
 // CoreSpiritOutputDispatcher is a retained output cache, not an append-only tick log.
 // A forming bar reuses the timestamp and historical inserts maintain sorted time order.
