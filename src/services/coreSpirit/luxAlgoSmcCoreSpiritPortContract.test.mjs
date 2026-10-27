@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from './luxAlgoSmcCoreSource.ts';
 import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
+import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
 const compiled = compileCoreSpirit(source, 'luxalgo-smc-port-contract', { layer: 'script' });
@@ -55,6 +56,19 @@ const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
+// The real SMC run emits rectangles/zones whose coordinates are left/right/top/bottom,
+// not a top-level time. Every valid output must pass the same worker boundary used in production.
+assert.equal(requireCoreSpiritOutputs(outputs).length, outputs.length,
+  'the SMC worker output payload must accept valid series, labels, and time-independent zone coordinates');
+assert.equal(requireCoreSpiritOutputs([
+  { kind: 'zone', left: 1, right: 2, top: 10, bottom: 9 },
+  { kind: 'line', start: { time: 1, price: 9 }, end: { time: 2, price: 10 } },
+  { kind: 'table', id: 'table-1', position: 'topRight', row: 0, column: 0, text: 'SMC' },
+]).length, 3, 'zone, line, and table outputs must validate according to their own coordinate contracts');
+assert.throws(() => requireCoreSpiritOutputs([
+  { kind: 'zone', left: 1, right: 2, top: 10, bottom: Number.NaN },
+]), /Invalid CoreSpirit worker output payload/,
+  'malformed geometry must still be rejected at the worker boundary');
 assert.ok(outputs.some(item => item.kind === 'series'), 'swing-high/low plots must produce chart series');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
