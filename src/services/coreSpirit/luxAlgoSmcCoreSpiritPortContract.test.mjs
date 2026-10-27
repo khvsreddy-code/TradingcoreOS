@@ -62,9 +62,10 @@ assert.equal(requireCoreSpiritOutputs(outputs).length, outputs.length,
   'the SMC worker output payload must accept valid series, labels, and time-independent zone coordinates');
 assert.equal(requireCoreSpiritOutputs([
   { kind: 'zone', left: 1, right: 2, top: 10, bottom: 9 },
+  { kind: 'zone', left: 0, right: Number.POSITIVE_INFINITY, top: 10, bottom: 9, domain: 'viewport' },
   { kind: 'line', start: { time: 1, price: 9 }, end: { time: 2, price: 10 } },
   { kind: 'table', id: 'table-1', position: 'topRight', row: 0, column: 0, text: 'SMC' },
-]).length, 3, 'zone, line, and table outputs must validate according to their own coordinate contracts');
+]).length, 4, 'zone, line, and table outputs must validate according to their own coordinate contracts');
 assert.throws(() => requireCoreSpiritOutputs([
   { kind: 'zone', left: 1, right: 2, top: 10, bottom: Number.NaN },
 ]), /Invalid CoreSpirit worker output payload/,
