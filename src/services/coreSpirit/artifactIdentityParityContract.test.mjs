@@ -106,7 +106,7 @@ let probe = unusedRegistryProbe(close)`;
   const recovered = await loadOrCompileCoreSpiritArtifact(source, recoverySourceId, {
     ...options,
     backend: 'worker-vm',
-    compileInWorker: async () => mismatchedWorkerArtifact as typeof compiled.artifact,
+    compileInWorker: async () => mismatchedWorkerArtifact,
   });
   assert.equal(
     recovered.abi.semanticHash,
