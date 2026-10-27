@@ -397,7 +397,7 @@ export class CoreSpiritCompiler {
           const component = n.expression.type === 'call' ? resolveCoreSpiritComponent(componentSource,n.expression.name) : undefined;
           if (component && component.outputs.length > 1) componentRefRegisters.set(n.name, component.id);
           const isState=isStateType(semantic.symbols.get(n.name) as any);
-          if(isState) emitInstruction(n,{op:'setState',name:n.name,source});
+          if(isState) emitInstruction(n,{op:'setState',name:n.name,source,initialize:true});
           else emitInstruction(n,{op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef});
           if(!locals.includes(n.name))locals.push(n.name);
           break;

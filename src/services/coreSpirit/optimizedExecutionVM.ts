@@ -85,7 +85,7 @@ function validateSpecializedPlan(
         assertSlot(plan, original.source, lowered.source, `instruction ${index} local source`);
         break;
       case 'setState':
-        if (lowered.op !== 'setState' || lowered.name !== original.name) throw new Error(`specialized setState metadata is stale at instruction ${index}`);
+        if (lowered.op !== 'setState' || lowered.name !== original.name || lowered.initialize !== original.initialize) throw new Error(`specialized setState metadata is stale at instruction ${index}`);
         assertSlot(plan, original.source, lowered.source, `instruction ${index} state source`);
         break;
       case 'unary':
@@ -374,7 +374,7 @@ export class CoreSpiritOptimizedExecutionVM {
               if (ins.series !== false && ins.seriesId >= 0 && host.setLocalBySeriesId) host.setLocalBySeriesId(ins.seriesId, ins.name, values.get(ins.source));
               else host.setLocal(ins.name, values.get(ins.source), ins.series !== false);
               pc += 1; break;
-            case 'setState': host.setState(ins.name, values.get(ins.source)); pc += 1; break;
+            case 'setState': host.setState(ins.name, values.get(ins.source), ins.initialize); pc += 1; break;
             case 'unary': values.set(ins.dest, host.unary(ins.operator, values.get(ins.operand))); pc += 1; break;
             case 'binary': values.set(ins.dest, host.binary(ins.operator, values.get(ins.left), values.get(ins.right))); pc += 1; break;
             case 'call': {

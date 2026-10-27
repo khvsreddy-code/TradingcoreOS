@@ -1251,7 +1251,10 @@ export class CoreSpiritRuntime {
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
       moveLocal: (source) => this.state.locals[source],
       loadState: (name) => this.stateStore.getState(name),
-      setState: (name,value) => { this.stateStore.setState(name, value as CoreSpiritValue); this.state.locals[name] = value; },
+      setState: (name,value,initialize) => {
+        this.stateStore.setState(name, value as CoreSpiritValue, initialize === true);
+        this.state.locals[name] = initialize ? this.stateStore.getState(name) : value;
+      },
       setLocal: (name, value, series) => {
         this.state.locals[name] = value;
         if (series) this.pushLocalState(this.seriesRegistry.idFor(name), value as CoreSpiritValue);

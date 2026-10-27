@@ -74,7 +74,8 @@ export class CoreSpiritStateStore {
     return this.persistentState.get(key) ?? null;
   }
 
-  setState(key: string, value: CoreSpiritStoredValue): void {
+  setState(key: string, value: CoreSpiritStoredValue, initializeIfAbsent = false): void {
+    if (initializeIfAbsent && this.persistentState.has(key)) return;
     if (this.persistentJournal && !this.persistentJournal.has(key)) {
       this.persistentJournal.set(key, this.persistentState.has(key) ? this.persistentState.get(key) : undefined);
     }

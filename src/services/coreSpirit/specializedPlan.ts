@@ -8,7 +8,7 @@ export type CoreSpiritSpecializedInstruction =
   | { op:'loadState'; dest:number; name:string }
   | { op:'move'; dest:number; source:string }
   | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }
-  | { op:'setState'; name:string; source:number }
+  | { op:'setState'; name:string; source:number; initialize?:boolean }
   | { op:'unary'; dest:number; operator:'!'|'+'|'-'; operand:number }
   | { op:'binary'; dest:number; operator:string; left:number; right:number }
   | { op:'call'; dest:number; name:string; args:number[]; instruction:Extract<CoreSpiritIrInstruction,{op:'call'}> }
@@ -93,7 +93,7 @@ export function buildCoreSpiritSpecializedPlan(
       case 'loadState': return {op:'loadState',dest:slot(instruction.dest),name:instruction.name};
       case 'move': return {op:'move',dest:slot(instruction.dest),source:instruction.source};
       case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
-      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source)};
+      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source),...(instruction.initialize ? {initialize:true} : {})};
       case 'unary': return {op:'unary',dest:slot(instruction.dest),operator:instruction.operator,operand:slot(instruction.operand)};
       case 'binary': return {op:'binary',dest:slot(instruction.dest),operator:instruction.operator,left:slot(instruction.left),right:slot(instruction.right)};
       case 'call': return {op:'call',dest:slot(instruction.dest),name:instruction.name,args:instruction.args.map(slot),instruction};

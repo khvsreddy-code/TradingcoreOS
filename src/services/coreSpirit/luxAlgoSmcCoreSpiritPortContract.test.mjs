@@ -15,6 +15,25 @@ function candle(index, open, high, low, close) {
     open, high, low, close, volume: 1000 + index,
   };
 }
+
+const stateProbeSource = `
+indicator("Persistent State Probe") {
+    overlay: true
+}
+let bias: state<number> = 0
+if close > 100 {
+    bias := 1
+}
+if close < 90 and bias > 0 {
+    label("State CHoCH", "below", "#089981", "#FFFFFF", 10, "pill")
+}
+`;
+const stateProbeRun = executeCoreSpirit(stateProbeSource, [
+  candle(0, 104, 106, 103, 105),
+  candle(1, 90, 91, 88, 89),
+], 'persistent-state-initializer');
+assert.ok(stateProbeRun.outputs.some(item => item.kind === 'label' && item.text === 'State CHoCH'),
+  'typed state initializer must not overwrite the state updated on the previous bar');
 const bars = [];
 for (let i = 0; i < 70; i += 1) {
   let base;

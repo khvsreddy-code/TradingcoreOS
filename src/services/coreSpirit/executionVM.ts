@@ -13,7 +13,7 @@ export type CoreSpiritExecutionVMHost = {
   loadSeries: (name: string, offset: number) => number | null;
   moveLocal: (source: string) => unknown;
   loadState: (name: string) => unknown;
-  setState: (name: string, value: unknown) => void;
+  setState: (name: string, value: unknown, initialize?: boolean) => void;
   setLocal: (name: string, value: unknown, series: boolean) => void;
   setLocalBySeriesId?: (id: number, name: string, value: unknown) => void;
   unary: (operator: string, value: unknown) => unknown;
@@ -71,7 +71,7 @@ export class CoreSpiritExecutionVM {
             pc += 1;
             break;
           case 'setState':
-            host.setState(ins.name, values.get(ins.source));
+            host.setState(ins.name, values.get(ins.source), ins.initialize);
             pc += 1;
             break;
           case 'unary':

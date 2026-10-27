@@ -36,7 +36,7 @@ export type CoreSpiritIrInstruction =
   | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; seriesSources?:Array<{ ref:string; field:'open'|'high'|'low'|'close'|'volume'|'time' }>; callId?:string; componentId?:string; componentPure?:boolean; componentStateful?:boolean; componentDeterministic?:boolean; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'index'; dest:string; target:string; index:string; seriesName?:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'setLocal'; name:string; source:string; series?: boolean; origin?:CoreSpiritIrInstructionOrigin }
-  | { op:'setState'; name:string; source:string; origin?:CoreSpiritIrInstructionOrigin }
+  | { op:'setState'; name:string; source:string; initialize?:boolean; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'eventGate'; eventName:string; target:number; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'jumpIfFalse'; condition:string; target:number; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'jump'; target:number; origin?:CoreSpiritIrInstructionOrigin }

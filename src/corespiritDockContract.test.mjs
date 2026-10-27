@@ -26,7 +26,7 @@ includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
 includes(dock, 'CORESPIRIT_LUXALGO_SMC_SOURCE', 'the editor uses the converted SMC script as its default');
 includes(smc, 'input swingLength: int = 50 min=10 max=100', 'SMC swing lookback defaults to the Pine script 50-bar setting');
-includes(smc, 'input internalLength: int = 5 min=2 max=20', 'SMC internal structure defaults to five bars');
+includes(smc, 'input internalBars: int = 5 min=2 max=20', 'SMC internal structure defaults to five bars');
 includes(smc, 'Swing CHoCH', 'converted source emits swing structure labels');
 includes(smc, 'Swing BOS', 'converted source emits swing structure labels');
 includes(smc, 'Internal CHoCH', 'converted source emits internal structure labels');
