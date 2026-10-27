@@ -465,6 +465,14 @@ export class CoreSpiritVelaEngine {
         currentMetadata.inputValues,
         currentMetadata.props,
         currentMetadata.propValues,
+        {
+          seriesStyles: snapshot.seriesStyles,
+          lines: snapshot.lines,
+          boxes: snapshot.boxes,
+          labels: snapshot.labels,
+          polylines: snapshot.polylines,
+          backgrounds: snapshot.backgrounds,
+        },
       ));
     };
 

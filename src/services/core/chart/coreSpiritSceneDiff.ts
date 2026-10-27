@@ -1,19 +1,23 @@
 type TcoSeriesPoint = { time:number; value:number|null; color?:string };
 type TcoMarkerPoint = { time:number; position:'aboveBar'|'belowBar'|'inBar'; shape:string; color:string; text?:string; size?:'tiny'|'small'|'normal'|'large'|'huge'; textSize?:number; offset?:number };
-type TcoPriceLine = { id:string; paneId:string; price:number; color?:string; lineStyle?:'solid'|'dashed'|'dotted'; width?:number; title?:string };
-type TcoDrawingLine = { id:string; paneId:string; xloc:'bar_time'; x1:number; y1:number; x2:number; y2:number; extend:'none'; color?:string; invisible:boolean; width:number; style:'solid'|'dashed'|'dotted'; arrowLeft:boolean; arrowRight:boolean; overlay?:boolean };
-type TcoDrawingLabel = { id:string; paneId:string; xloc:'bar_time'; x:number; y:number; yloc:'price'|'abovebar'|'belowbar'; text?:string; style:string; color?:string; textColor?:string; size:'small'; textAlign:'left'|'center'|'right'; fontFamily?:'default'|'monospace'; bold?:boolean; italic?:boolean; overlay?:boolean };
-type TcoDrawingPolyline = { id:string; paneId:string; points:Array<{xloc:'bar_time';x:number;price:number}>; curved:boolean; closed:boolean; lineColor?:string; fillColor?:string; lineWidth:number; lineStyle:'solid'|'dashed'|'dotted'; arrowLeft:boolean; arrowRight:boolean; overlay?:boolean };
-type TcoBackground = { id:string; paneId:string; from:number; to:number; color:string; overlay?:boolean };
-type TcoRectInstance = { id:string; xloc:'bar_time'; left:number; right:number; top:number; bottom:number; fill:string };
-type TcoRectBatch = { id:string; paneId:string; overlay?:boolean; indexOffset?:number; instances:TcoRectInstance[] };
+type TcoPriceLine = PriceLine;
+type TcoDrawingLine = DrawingLine;
+type TcoDrawingBox = DrawingBox;
+type TcoDrawingLabel = DrawingLabel;
+type TcoDrawingPolyline = DrawingPolyline;
+type TcoBackground = Background;
+type TcoRectInstance = HighCardinalityRectInstance;
+type TcoRectBatch = HighCardinalityRectBatch;
+type TcoSeriesPresentation = { title?:string; style:ReturnType<typeof seriesStyle> };
 import type {
     CollectionValueDelta,
     SchemaPatch,
     ScenePatch,
     SeriesValueDelta,
 } from '../../../../vendor/vela/src/core/model/patch';
-import type { HighCardinalityRectDelta } from '../../../../vendor/vela/src/core/model/instances';
+import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
+import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
+import type { HighCardinalityRectBatch, HighCardinalityRectDelta, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 import type { VelaTimeRange } from '../../../architecture/crossPlaneContracts';
 
@@ -26,6 +30,27 @@ function style(value: unknown): 'solid' | 'dashed' | 'dotted' {
 }
 function color(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+/** Bake opacity into a CSS color; Vela's GPU rect pass consumes CSS fill strings. */
+function colorWithOpacity(value: unknown, opacity: unknown, fallback: string): string {
+    const source = color(value, fallback).trim();
+    const rawOpacity = Number(opacity);
+    if (!Number.isFinite(rawOpacity)) return source;
+    const factor = Math.max(0, Math.min(1, rawOpacity));
+    const hex = source.match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+    if (hex) {
+        let digits = hex[1]!;
+        if (digits.length === 3 || digits.length === 4) digits = [...digits].map(part => part + part).join('');
+        const red = parseInt(digits.slice(0, 2), 16), green = parseInt(digits.slice(2, 4), 16), blue = parseInt(digits.slice(4, 6), 16);
+        const alpha = digits.length === 8 ? parseInt(digits.slice(6, 8), 16) / 255 : 1;
+        return `rgba(${red}, ${green}, ${blue}, ${Number((alpha * factor).toFixed(3))})`;
+    }
+    const rgb = source.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9]*\.?[0-9]+))?\s*\)$/i);
+    if (rgb) {
+        const alpha = rgb[4] === undefined ? 1 : Math.max(0, Math.min(1, Number(rgb[4])));
+        return `rgba(${Number(rgb[1])}, ${Number(rgb[2])}, ${Number(rgb[3])}, ${Number((alpha * factor).toFixed(3))})`;
+    }
+    return source;
 }
 function seriesStyle(output: Extract<CoreSpiritObject, { kind: 'series' }>) {
     return {
@@ -185,26 +210,53 @@ function label(output: Extract<CoreSpiritObject, { kind: 'label' | 'shape' }>): 
         id: output.id, paneId: pane(output), xloc: 'bar_time', x: Number(output.time), y: Number(output.price), yloc: 'price',
         style: output.shape === 'triangleUp' ? 'triangleup' : output.shape === 'triangleDown' ? 'triangledown' : output.shape === 'diamond' ? 'diamond' : output.shape === 'square' ? 'square' : 'circle',
         color: color(output.style?.color, '#9b8aff'), textColor: color(output.style?.textColor, '#fff'),
-        size: 'small', textAlign: 'center', ...(output.style?.text ? { text: output.style.text } : {}),
+        size: Number(output.style?.size ?? 10) <= 8 ? 'tiny' : Number(output.style?.size ?? 10) >= 18 ? 'large' : 'small',
+        textAlign: 'center', fontFamily: 'default', ...(output.style?.text ? { text: output.style.text } : {}),
         overlay: isPriceOverlay(output),
     };
+    const fontSize = Number(output.style?.fontSize ?? 12);
+    const requestedShape = output.style?.shape;
+    const labelStyle = requestedShape === 'circle' ? 'circle'
+        : requestedShape === 'box' ? 'label_center'
+        : output.position === 'above' ? 'label_down'
+        : output.position === 'below' ? 'label_up' : 'label_center';
     return {
         id: output.id, paneId: pane(output), xloc: 'bar_time', x: Number(output.time), y: Number(output.price),
         yloc: output.position === 'above' ? 'abovebar' : output.position === 'below' ? 'belowbar' : 'price',
-        style: output.style?.shape === 'circle' ? 'circle' : 'label_center',
+        style: labelStyle,
         color: color(output.style?.background, '#9b8aff'), textColor: color(output.style?.color, '#fff'), text: output.text,
-        size: 'small', textAlign: output.style?.textAlign === 'left' ? 'left' : output.style?.textAlign === 'right' ? 'right' : 'center',
-        bold: output.style?.fontWeight === 'bold', italic: output.style?.fontStyle === 'italic',
+        size: fontSize <= 9 ? 'tiny' : fontSize <= 12 ? 'small' : fontSize <= 15 ? 'normal' : fontSize <= 20 ? 'large' : 'huge',
+        textAlign: output.style?.textAlign === 'left' ? 'left' : output.style?.textAlign === 'right' ? 'right' : 'center',
+        fontFamily: 'default',
+        bold: output.style?.fontWeight === 'bold' || Number(output.style?.fontWeight) >= 600,
+        italic: output.style?.fontStyle === 'italic',
         overlay: isPriceOverlay(output),
     };
 }
-function polyline(output: Extract<CoreSpiritObject, { kind: 'polyline' }>): TcoDrawingPolyline {
+function polyline(output: Extract<CoreSpiritObject, { kind: 'polyline' | 'polygon' }>): TcoDrawingPolyline {
     return {
         id: output.id, paneId: pane(output),
         points: output.points.map(point => ({ xloc: 'bar_time', x: Number(point.time), price: Number(point.price) })),
-        curved: false, closed: false, lineColor: color(output.style?.color, '#9b8aff'), fillColor: output.style?.fillColor,
+        curved: false, closed: output.kind === 'polygon',
+        lineColor: color(output.style?.color, '#9b8aff'),
+        fillColor: output.style?.fillColor ?? (output.kind === 'polygon' ? output.style?.color : undefined),
         lineWidth: Math.max(1, Number(output.style?.lineWidth ?? 1)), lineStyle: style(output.style?.lineStyle),
         arrowLeft: false, arrowRight: false, overlay: isPriceOverlay(output),
+    };
+}
+function box(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, id: string): TcoDrawingBox {
+    const drawStyle = output.style ?? {};
+    const border = drawStyle.borderColor ?? drawStyle.color;
+    return {
+        id, paneId: pane(output), xloc: 'bar_time', left: Number(output.left), right: Number(output.right),
+        top: Number(output.top), bottom: Number(output.bottom), extend: 'none',
+        ...(typeof border === 'string' && border.length ? { borderColor: colorWithOpacity(border, 1, '#9b8aff') } : {}),
+        borderWidth: Math.max(0, Math.min(6, Number(drawStyle.borderWidth ?? drawStyle.lineWidth ?? 1))),
+        borderStyle: style(drawStyle.lineStyle),
+        ...(typeof drawStyle.text === 'string' ? { text: drawStyle.text } : {}),
+        ...(typeof drawStyle.textColor === 'string' ? { textColor: drawStyle.textColor } : {}),
+        textSize: 'auto', hAlign: 'left', vAlign: 'center', wrap: false, fontFamily: 'default',
+        bold: false, italic: false, overlay: isPriceOverlay(output),
     };
 }
 
@@ -214,13 +266,20 @@ function idIndex<T extends Identified>(items: readonly T[], id: string): number 
 
 export interface CoreSpiritSceneSnapshot {
     points: Map<string, TcoSeriesPoint[]>;
+    seriesStyles: Map<string, TcoSeriesPresentation>;
     markers: TcoMarkerPoint[];
     priceLines: TcoPriceLine[];
     rectBatches: TcoRectBatch[];
+    lines: TcoDrawingLine[];
+    boxes: TcoDrawingBox[];
+    labels: TcoDrawingLabel[];
+    polylines: TcoDrawingPolyline[];
+    backgrounds: TcoBackground[];
 }
 
 export class CoreSpiritSceneDiff {
     private readonly points = new Map<string, TcoSeriesPoint[]>();
+    private readonly seriesStyles = new Map<string, TcoSeriesPresentation>();
     private readonly seriesMounted = new Set<string>();
     private readonly markers = new Map<string, TcoMarkerPoint>();
     /** Time-sorted marker keys plus indexes avoid sorting the whole marker scene per event. */
@@ -247,6 +306,7 @@ export class CoreSpiritSceneDiff {
 
     reset(): void {
         this.points.clear();
+        this.seriesStyles.clear();
         this.seriesMounted.clear();
         this.markers.clear();
         this.markerOrder.length = 0;
@@ -274,6 +334,7 @@ export class CoreSpiritSceneDiff {
     snapshot(): CoreSpiritSceneSnapshot {
         return {
             points: this.points,
+            seriesStyles: this.seriesStyles,
             markers: this.orderedMarkers(),
             priceLines: this.collections.priceLines as TcoPriceLine[],
             rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
@@ -283,6 +344,11 @@ export class CoreSpiritSceneDiff {
                 indexOffset: this.rectBatchMeta.get(id)?.indexOffset,
                 instances,
             })),
+            lines: this.collections.lines as TcoDrawingLine[],
+            boxes: this.collections.boxes as TcoDrawingBox[],
+            labels: this.collections.labels as TcoDrawingLabel[],
+            polylines: this.collections.polylines as TcoDrawingPolyline[],
+            backgrounds: this.collections.backgrounds as TcoBackground[],
         };
     }
 
@@ -366,7 +432,7 @@ export class CoreSpiritSceneDiff {
         if (output.kind === 'line' || output.kind === 'arrow') return `lines:${id}`;
         if (output.kind === 'box' || output.kind === 'zone') return `rectangles:${id}`;
         if (output.kind === 'label' || output.kind === 'shape') return `labels:${id}`;
-        if (output.kind === 'polyline') return `polylines:${id}`;
+        if (output.kind === 'polyline' || output.kind === 'polygon') return `polylines:${id}`;
         if (output.kind === 'background') return `backgrounds:${id}`;
         return null;
     }
@@ -402,6 +468,7 @@ export class CoreSpiritSceneDiff {
             list.splice(lo, 1); this.points.set(name, list);
             return emit ? { delta: { seriesId, kind: 'points', points: [], op: 'replace-range', start: lo, remove: 1 } } : null;
         }
+        this.seriesStyles.set(name, { title: output.style?.title || name, style: seriesStyle(output) });
         const point: TcoSeriesPoint = { time, value: output.value == null ? null : Number(output.value) };
         list.splice(lo, exists ? 1 : 0, point); this.points.set(name, list);
         if (!wasMounted) this.seriesMounted.add(name);
@@ -499,34 +566,43 @@ export class CoreSpiritSceneDiff {
     private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): SceneDiffEmission {
         const batchId = `${this.indicatorId}:zones:${pane(output)}:${isPriceOverlay(output) ? 'overlay' : 'own'}`;
         const target = this.rectBatches.get(batchId) ?? [];
+        const id = output.id ?? `${batchId}:${target.length}`;
+        const fillColor = output.style?.fillColor ?? output.style?.color;
         const value: TcoRectInstance = {
-            id: output.id ?? `${batchId}:${target.length}`,
-            xloc: 'bar_time',
-            left: Number(output.left),
-            right: Number(output.right),
-            top: Number(output.top),
-            bottom: Number(output.bottom),
-            fill: color(output.style?.fillColor ?? output.style?.color, 'rgba(155,138,255,0.16)'),
+            id, xloc: 'bar_time', left: Number(output.left), right: Number(output.right),
+            top: Number(output.top), bottom: Number(output.bottom),
+            fill: colorWithOpacity(fillColor, output.style?.fillOpacity ?? output.style?.opacity ?? 0.16, 'rgba(155,138,255,0.16)'),
         };
         const idx = target.findIndex(item => item.id === value.id);
         const remove = removed(output);
+        // Batched translucent fill + Vela-native box outline, sharing time/price anchors.
+        const boxChange = output.kind === 'zone' && output.domain === 'viewport'
+            ? null : this.applyCollection('boxes', box(output, id), emit, remove);
+        const collection = boxChange?.collection;
         if (remove) {
-            if (idx < 0) return null;
+            if (idx < 0) return boxChange;
             target.splice(idx, 1);
-            this.rectBatches.set(batchId, target);
-            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
-            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
+            if (target.length === 0) { this.rectBatches.delete(batchId); this.rectBatchMeta.delete(batchId); }
+            else { this.rectBatches.set(batchId, target); this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) }); }
+            return {
+                ...(emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range' as const, values: [], start: idx, remove: 1 } } : {}),
+                ...(collection ? { collection } : {}),
+            };
         }
         if (idx < 0) {
-            target.push(value);
-            this.rectBatches.set(batchId, target);
+            target.push(value); this.rectBatches.set(batchId, target);
             this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
-            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'append', values: [value] } } : null;
+            return {
+                ...(emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'append' as const, values: [value] } } : {}),
+                ...(collection ? { collection } : {}),
+            };
         }
-        target[idx] = value;
-        this.rectBatches.set(batchId, target);
+        target[idx] = value; this.rectBatches.set(batchId, target);
         this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
-        return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range', values: [value], start: idx, remove: 1 } } : null;
+        return {
+            ...(emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range' as const, values: [value], start: idx, remove: 1 } } : {}),
+            ...(collection ? { collection } : {}),
+        };
     }
 
     private applyCollection(name: CollectionName, value: Identified, emit: boolean, remove = false): SceneDiffEmission {
@@ -560,11 +636,12 @@ export class CoreSpiritSceneDiff {
             case 'shape': return this.applyCollection('labels', label(output), emit, removed(output));
             case 'box':
             case 'zone': return this.applyRect(output, emit);
-            case 'polyline': return this.applyCollection('polylines', polyline(output), emit, removed(output));
+            case 'polyline':
+            case 'polygon': return this.applyCollection('polylines', polyline(output), emit, removed(output));
             case 'background': {
                 const start = Number(output.time);
                 const end = Number(output.metadata?.endTime ?? start + 1);
-                const value: TcoBackground = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: output.color, overlay: isPriceOverlay(output) };
+                const value: TcoBackground = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: colorWithOpacity(output.color, output.opacity ?? 1, output.color), overlay: isPriceOverlay(output) };
                 return this.applyCollection('backgrounds', value, emit, removed(output));
             }
             default: return null;

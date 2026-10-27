@@ -51,23 +51,34 @@ export function buildCoreSpiritVelaIndicatorModel(
   inputValues:Readonly<Record<string,InputValue>> = {},
   props:readonly InputSchema[] = [],
   propValues:Readonly<Record<string,InputValue>> = {},
+  drawings?:{
+    seriesStyles?:ReadonlyMap<string,{title?:string;style?:{color?:string;width?:number;lineStyle?:'solid'|'dashed'|'dotted'}}>;
+    lines?:NonNullable<IndicatorModel['lines']>;
+    boxes?:NonNullable<IndicatorModel['boxes']>;
+    labels?:NonNullable<IndicatorModel['labels']>;
+    polylines?:NonNullable<IndicatorModel['polylines']>;
+    backgrounds?:NonNullable<IndicatorModel['backgrounds']>;
+  },
 ): IndicatorModel {
-  const series:SeriesSpec[]=[...points.entries()].map(([seriesId, seriesPoints], index)=>({
+  const series:SeriesSpec[]=[...points.entries()].map(([seriesId, seriesPoints], index)=>{
+    const presentation=drawings?.seriesStyles?.get(seriesId);
+    return ({
     id:`${id}:series:${seriesId}`,
-    title:seriesId.includes(':') ? seriesId.split(':').pop() || 'CoreSpirit' : seriesId,
+    title:presentation?.title || (seriesId.includes(':') ? seriesId.split(':').pop() || 'CoreSpirit' : seriesId),
     paneId:'price',
     kind:'line',
     points:seriesPoints,
     style:{
-      color:index===0 ? '#9b8aff' : '#c4b5fd',
-      width:2,
-      lineStyle:'solid',
+      color:presentation?.style?.color ?? (index===0 ? '#9b8aff' : '#c4b5fd'),
+      width:presentation?.style?.width ?? 2,
+      lineStyle:presentation?.style?.lineStyle ?? 'solid',
     },
     visible:true,
     // Only price-overlay scripts should force their series onto Vela's price pane.
     // For overlay:false, Vela routes the model into its dedicated study pane.
     overlay:meta.overlay,
-  }));
+  });
+  });
 
   if(markers.length){
     series.push({
@@ -94,7 +105,11 @@ export function buildCoreSpiritVelaIndicatorModel(
     anchorTime:anchorTime as IndicatorModel['anchorTime'],
     series,
     fills:[],
-    backgrounds:[],
+    backgrounds:drawings?.backgrounds?.length ? [...drawings.backgrounds] : [],
+    ...(drawings?.lines?.length ? { lines:[...drawings.lines] } : {}),
+    ...(drawings?.boxes?.length ? { boxes:[...drawings.boxes] } : {}),
+    ...(drawings?.labels?.length ? { labels:[...drawings.labels] } : {}),
+    ...(drawings?.polylines?.length ? { polylines:[...drawings.polylines] } : {}),
     ...(rectBatches.length ? { instanceBatches:[...rectBatches] } : {}),
     priceLines,
     inputs:[...inputs],

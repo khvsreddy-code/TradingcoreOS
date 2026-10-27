@@ -10,6 +10,7 @@ import {
 } from './velaOutputAdapter.ts';
 import { CoreSpiritOutputDispatcher } from './outputDispatcher.ts';
 import { CoreSpiritSceneDiff } from '../core/chart/coreSpiritSceneDiff.ts';
+import { buildCoreSpiritVelaIndicatorModel } from '../core/chart/tcoVelaSemanticAdapter.ts';
 
 const t0 = 1767225600; // 2026-01-01T00:00:00Z in CoreSpirit epoch-seconds.
 const bars = normalizeVelaBarsToCoreSpirit([
@@ -147,6 +148,38 @@ assert.equal(styledSchema.added[0]?.title, 'Swing High',
   'CoreSpirit plot title must survive scene adaptation');
 assert.deepEqual(styledSchema.added[0]?.style, { color: '#F23645', width: 1, lineStyle: 'dashed' },
   'CoreSpirit plot color, width and line style must reach Vela instead of falling back to lavender');
+
+// Full-history snapshots must include native drawings and retain declared plot styling.
+const drawingScene = new CoreSpiritSceneDiff('native-drawing-bridge-test');
+drawingScene.seed([
+  { kind: 'series', time: t0 * 1000, value: 101, seriesId: 'swing-high', style: { color: '#F23645', lineWidth: 1, lineStyle: 1, title: 'Swing High' } },
+  { kind: 'line', id: 'bos-line', start: { time: t0 * 1000, price: 100 }, end: { time: (t0 + 600) * 1000, price: 100 }, style: { color: '#089981', lineWidth: 2 } },
+  { kind: 'label', id: 'bos-label', time: (t0 + 300) * 1000, price: 103, text: 'BOS', position: 'below', style: { background: '#089981', color: '#FFFFFF', fontSize: 10, shape: 'pill' } },
+  { kind: 'polyline', id: 'swing-path', points: [{ time: t0 * 1000, price: 99 }, { time: (t0 + 300) * 1000, price: 102 }], style: { color: '#3179F5', lineWidth: 2 } },
+  { kind: 'zone', id: 'demand-zone', left: t0 * 1000, right: (t0 + 600) * 1000, top: 104, bottom: 99, style: { color: '#1848CC', fillColor: '#1848CC', fillOpacity: 0.18 } },
+  { kind: 'background', id: 'session-bg', time: t0 * 1000, color: '#38bdf8', opacity: 0.2 },
+]);
+const drawingSnapshot = drawingScene.snapshot();
+assert.equal(drawingSnapshot.lines.length, 1);
+assert.equal(drawingSnapshot.labels.length, 1);
+assert.equal(drawingSnapshot.polylines.length, 1);
+assert.equal(drawingSnapshot.boxes.length, 1, 'zones retain a native Vela outline');
+assert.match(drawingSnapshot.rectBatches[0].instances[0].fill, /^rgba\(/, 'zone fill keeps its configured opacity');
+assert.match(drawingSnapshot.backgrounds[0].color, /^rgba\(/, 'background tint keeps its configured opacity');
+const drawingModel = buildCoreSpiritVelaIndicatorModel('native-drawing-bridge-test', { title: 'Native drawings', overlay: true },
+  drawingSnapshot.points, [], drawingSnapshot.priceLines, drawingSnapshot.rectBatches, t0 * 1000, undefined, [], {}, [], {}, {
+    seriesStyles: drawingSnapshot.seriesStyles, lines: drawingSnapshot.lines, boxes: drawingSnapshot.boxes,
+    labels: drawingSnapshot.labels, polylines: drawingSnapshot.polylines, backgrounds: drawingSnapshot.backgrounds,
+  });
+assert.equal(drawingModel.series[0]?.title, 'Swing High');
+assert.equal(drawingModel.series[0]?.style?.color, '#F23645');
+assert.equal(drawingModel.series[0]?.style?.width, 1);
+assert.equal(drawingModel.series[0]?.style?.lineStyle, 'dashed');
+assert.equal(drawingModel.lines?.[0]?.id, 'bos-line');
+assert.equal(drawingModel.labels?.[0]?.text, 'BOS');
+assert.equal(drawingModel.polylines?.[0]?.id, 'swing-path');
+assert.equal(drawingModel.boxes?.[0]?.id, 'demand-zone');
+assert.equal(drawingModel.backgrounds?.[0]?.id, 'session-bg');
 
 // CoreSpiritOutputDispatcher is a retained output cache, not an append-only tick log.
 // A forming bar reuses the timestamp and historical inserts maintain sorted time order.
