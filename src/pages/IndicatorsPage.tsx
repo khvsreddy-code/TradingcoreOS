@@ -8,6 +8,7 @@ import { listPublicIndicatorPublications, type IndicatorPublication } from '../s
 import { IndicatorSettingsPanel } from '../components/indicators/IndicatorSettingsPanel';
 const IndicatorSourceEditor = lazy(() => import('../components/indicators/IndicatorSourceEditor').then((m) => ({ default: m.IndicatorSourceEditor })));
 import { useAuth } from '../auth/hooks/useAuth';
+import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../services/coreSpirit/luxAlgoSmcCoreSource';
 
 const groups: Record<string, string[]> = {
   Trend: ['EMA','SMA','HMA','Supertrend','Ichimoku Cloud'],
@@ -88,6 +89,22 @@ export function IndicatorsPage({ onNavigate, onBackToLanding, onBroker }: { onNa
             </div>) : <div className="px-3 py-5 text-center text-[10px] text-[var(--tco-dim)]">No active studies. Add one from the library.</div>}
           </div>
           <div className="mt-3 flex items-center justify-between gap-2"><button onClick={reset} className="rounded-lg border border-[var(--tco-border)] px-3 py-2 text-[9px] text-[var(--tco-dim)] hover:text-white"><SlidersHorizontal className="mr-1 inline h-3 w-3"/> Reset starter set</button><span className="text-[8px] font-mono text-[var(--tco-dim)]">{enabled.length} active</span></div>
+        </Panel>
+
+        <Panel title="CoreSpirit Indicators" subtitle="Native CoreScript indicators compiled by CoreSpirit and rendered through Vela.">
+          <div className="rounded-xl border border-orange-500/25 bg-gradient-to-br from-orange-500/10 via-[var(--tco-surface-2)] to-[#3b82f6]/10 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs font-semibold text-white"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-300"><Code2 className="h-4 w-4"/></span>Smart Money Concepts · CoreSpirit port</div>
+                <p className="mt-2 text-[10px] leading-5 text-[var(--tco-muted)]">CoreScript conversion of the supplied LuxAlgo SMC Pine v5 script. This first runnable port plots swing/internal structure levels, BOS/CHoCH labels, provisional order-block zones and causal three-candle fair-value gaps. Pine-only MTF and pivot/object lifecycle features are not claimed as exact parity yet.</p>
+                <div className="mt-2 flex flex-wrap gap-1.5"><span className="rounded-full border border-[#22c55e]/30 px-2 py-1 text-[8px] text-[#86efac]">CoreScript</span><span className="rounded-full border border-[#3b82f6]/30 px-2 py-1 text-[8px] text-[#93c5fd]">Overlay</span><span className="rounded-full border border-orange-500/30 px-2 py-1 text-[8px] text-orange-200">Runnable port</span></div>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button onClick={() => { try { localStorage.setItem('tradingcore:corespirit:editor', CORESPIRIT_LUXALGO_SMC_SOURCE); localStorage.setItem('tradingcore:corespirit:chart-source', CORESPIRIT_LUXALGO_SMC_SOURCE); localStorage.setItem('tradingcore:corespirit:editor-name', 'Smart Money Concepts [CoreSpirit]'); localStorage.setItem('tradingcore:corespirit:editor-category', 'CoreSpirit Indicators'); } catch {} window.location.assign('/corespirit'); }} className="rounded-lg bg-orange-500 px-3 py-2 text-[9px] font-bold text-black hover:bg-orange-400"><Code2 className="mr-1 inline h-3.5 w-3.5"/> Open in CoreSpirit</button>
+              <button onClick={() => { try { localStorage.setItem('tradingcore:corespirit:editor', CORESPIRIT_LUXALGO_SMC_SOURCE); localStorage.setItem('tradingcore:corespirit:chart-source', CORESPIRIT_LUXALGO_SMC_SOURCE); localStorage.setItem('tradingcore:corespirit:editor-name', 'Smart Money Concepts [CoreSpirit]'); localStorage.setItem('tradingcore:corespirit:editor-category', 'CoreSpirit Indicators'); } catch {} window.location.assign('/live'); }} className="rounded-lg border border-[var(--tco-border)] px-3 py-2 text-[9px] font-semibold text-[var(--tco-text-2)] hover:text-white">Open live chart</button>
+            </div>
+          </div>
         </Panel>
 
         <Panel title="Indicator library" subtitle="Add any native study; selected settings are persisted to the workspace.">
