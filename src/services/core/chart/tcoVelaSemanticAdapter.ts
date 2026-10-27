@@ -59,6 +59,7 @@ export function buildCoreSpiritVelaIndicatorModel(
     polylines?:NonNullable<IndicatorModel['polylines']>;
     backgrounds?:NonNullable<IndicatorModel['backgrounds']>;
     tables?:NonNullable<IndicatorModel['tables']>;
+    barColors?:NonNullable<IndicatorModel['barColors']>;
   },
 ): IndicatorModel {
   const series:SeriesSpec[]=[...points.entries()].map(([seriesId, seriesPoints], index)=>{
@@ -113,6 +114,7 @@ export function buildCoreSpiritVelaIndicatorModel(
     ...(drawings?.labels?.length ? { labels:drawings.labels.map(value=>({...value})) } : {}),
     ...(drawings?.polylines?.length ? { polylines:drawings.polylines.map(value=>({...value,points:value.points.map(point=>({...point}))})) } : {}),
     ...(drawings?.tables?.length ? { tables:drawings.tables.map(table=>({...table,cells:table.cells.map(row=>row.map(cell=>cell?({...cell}):null)),merges:table.merges.map(merge=>({...merge}))})) } : {}),
+    ...(drawings?.barColors?.length ? { barColors:drawings.barColors.map(value=>({...value})) } : {}),
     ...(rectBatches.length ? { instanceBatches:rectBatches.map(batch=>({...batch,instances:batch.instances.map(instance=>({...instance}))})) } : {}),
     priceLines:priceLines.map(value=>({...value})),
     inputs:[...inputs],
