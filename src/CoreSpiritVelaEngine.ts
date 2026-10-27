@@ -472,6 +472,7 @@ export class CoreSpiritVelaEngine {
           labels: snapshot.labels,
           polylines: snapshot.polylines,
           backgrounds: snapshot.backgrounds,
+          tables: snapshot.tables,
         },
       ));
     };
