@@ -27,6 +27,13 @@ function style(value: unknown): 'solid' | 'dashed' | 'dotted' {
 function color(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
+function seriesStyle(output: Extract<CoreSpiritObject, { kind: 'series' }>) {
+    return {
+        color: color(output.style?.color, '#9b8aff'),
+        width: Math.max(1, Math.min(8, Number(output.style?.lineWidth ?? 2))),
+        lineStyle: style(output.style?.lineStyle),
+    };
+}
 function pane(output: CoreSpiritObject): string {
     const visual = 'visual' in output ? output.visual : undefined;
     const area = visual?.area;
@@ -400,12 +407,12 @@ export class CoreSpiritSceneDiff {
         if (!wasMounted) this.seriesMounted.add(name);
         if (!emit) return wasMounted ? null : { schema: {
             kind: 'schema', indicatorId: this.indicatorId,
-            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line', points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' }, visible: true, overlay: true } as any],
+            added: [{ id: seriesId, title: output.style?.title || name, paneId: 'price', kind: 'line', points: [], style: seriesStyle(output), visible: true, overlay: true } as any],
             removed: [], changed: [],
         } };
         const schema = !wasMounted ? { schema: {
             kind: 'schema' as const, indicatorId: this.indicatorId,
-            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line' as const, points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' as const }, visible: true, overlay: true } as any],
+            added: [{ id: seriesId, title: output.style?.title || name, paneId: 'price', kind: 'line' as const, points: [], style: seriesStyle(output), visible: true, overlay: true } as any],
             removed: [], changed: [],
         } } : {};
         if (exists && lo === list.length - 1) return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-last' } };
