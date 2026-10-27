@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from './luxAlgoSmcCoreSource.ts';
 import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
 import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
+import { toCoreSpiritWorkerTransportValue } from './workerTransport.ts';
 
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
 const compiled = compileCoreSpirit(source, 'luxalgo-smc-port-contract', { layer: 'script' });
@@ -56,6 +57,25 @@ const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
+// Incremental execution exposes proxy-backed compatibility views and extension
+// metadata can contain callbacks. The worker transport must turn these into
+// clone-safe data instead of failing DedicatedWorkerGlobalScope.postMessage.
+const transportProbe = toCoreSpiritWorkerTransportValue({
+  outputs,
+  state: {
+    seriesState: new Proxy({ swing: [1, 2, 3] }, {}),
+    localSeries: new Proxy({ enabled: [true, false] }, {}),
+    callback: () => 'host-only',
+    nested: { render: () => undefined, value: 7 },
+  },
+  diagnostics: [],
+});
+assert.doesNotThrow(() => structuredClone(transportProbe),
+  'sanitized CoreSpirit execution payloads must be structured-cloneable');
+assert.equal(transportProbe.state.callback, undefined,
+  'worker transport must strip executable callbacks from runtime snapshots');
+assert.deepEqual(transportProbe.state.seriesState, { swing: [1, 2, 3] },
+  'proxy-backed runtime views must be copied into plain data records');
 // The real SMC run emits rectangles/zones whose coordinates are left/right/top/bottom,
 // not a top-level time. Every valid output must pass the same worker boundary used in production.
 assert.equal(requireCoreSpiritOutputs(outputs).length, outputs.length,
