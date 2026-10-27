@@ -40,11 +40,26 @@ let internalLow = internalRollingLow[1]
 // Retain the originating candle time for each rolling extreme. When a break
 // confirms, the drawing starts at that extreme and ends at the breaking candle.
 // Unlike plot(highest(...)), this does not connect changing extrema across every bar.
-// Use compiler-supported fixed history anchors for now. The runtime already emits
-// native chart-time line objects; precise latest-pivot timestamps need a dedicated
-// time-of-high/low primitive rather than assigning timestamp series into scalar state.
-let swingAnchorTime = time[50]
-let internalAnchorTime = time[5]
+// Retain the exact timestamp of the most recent qualifying extreme as numeric state.
+// time[0] is the current bar's numeric timestamp; bare time remains the compiler's
+// special timestamp-series type and cannot be assigned to state<number> directly.
+let swingHighAnchorTime: state<number> = time[50]
+let swingLowAnchorTime: state<number> = time[50]
+let internalHighAnchorTime: state<number> = time[5]
+let internalLowAnchorTime: state<number> = time[5]
+
+if high >= swingRollingHigh {
+    swingHighAnchorTime := time[0]
+}
+if low <= swingRollingLow {
+    swingLowAnchorTime := time[0]
+}
+if high >= internalRollingHigh {
+    internalHighAnchorTime := time[0]
+}
+if low <= internalRollingLow {
+    internalLowAnchorTime := time[0]
+}
 
 // Use the previous regular candle interval, not the current open-to-open gap,
 // to give finite imbalance/order-block zones a visible forward projection.
@@ -61,10 +76,10 @@ let internalBias: state<number> = 0
 
 
 if showStructureLevels == true and showSwingStructure == true and close > swingHigh {
-    line(swingAnchorTime, swingHigh, time, swingHigh, "#089981", 2)
+    line(swingHighAnchorTime[1], swingHigh, time, swingHigh, "#089981", 2)
 }
 if showStructureLevels == true and showSwingStructure == true and close < swingLow {
-    line(swingAnchorTime, swingLow, time, swingLow, "#F23645", 2)
+    line(swingLowAnchorTime[1], swingLow, time, swingLow, "#F23645", 2)
 }
 if showSwingStructure == true and close > swingHigh and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
@@ -86,10 +101,10 @@ if close < swingLow {
 }
 
 if showStructureLevels == true and showInternalStructure == true and close > internalHigh {
-    line(internalAnchorTime, internalHigh, time, internalHigh, "#3179F5", 1)
+    line(internalHighAnchorTime[1], internalHigh, time, internalHigh, "#3179F5", 1)
 }
 if showStructureLevels == true and showInternalStructure == true and close < internalLow {
-    line(internalAnchorTime, internalLow, time, internalLow, "#F77C80", 1)
+    line(internalLowAnchorTime[1], internalLow, time, internalLow, "#F77C80", 1)
 }
 if showInternalStructure == true and close > internalHigh and internalBias < 0 {
     label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
