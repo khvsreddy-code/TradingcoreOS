@@ -55,8 +55,8 @@ swingBearishBreak = crossunder(close, swingLow)
 internalBullishBreak = crossover(close, internalHigh)
 internalBearishBreak = crossunder(close, internalLow)
 
-let swingBias: state<int> = 0
-let internalBias: state<int> = 0
+let swingBias: state<number> = 0
+let internalBias: state<number> = 0
 
 if showSwingStructure == true and swingBullishBreak and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
