@@ -2,7 +2,7 @@ import { CoreSpiritProgram } from './types';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { CoreSpiritCompiler } from './compiler';
-import { buildCoreSpiritArtifactLookupIdentity, buildCoreSpiritSemanticFingerprint, coreSpiritComponentFingerprint } from './artifactLookupIdentity';
+import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 export { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
@@ -10,7 +10,6 @@ import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
 
-import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 
@@ -72,26 +71,11 @@ export function compileCoreSpirit(
     };
   }
 
-  const normalizedSource=normalizeCoreSpiritSource(source);
-  const semanticFingerprint=JSON.stringify({
-    compiler:CORE_SPIRIT_COMPILER_VERSION,
-    semantic:buildCoreSpiritSemanticFingerprint({
-      layer:options.layer,
-      components:options.components,
-    }),
-    componentSet:coreSpiritComponentFingerprint(options),
-  });
-
   const surface=describeCoreSpiritSurface(source,options as any);
   const result=new CoreSpiritCompiler().compileSource(source,sourceId,{
     components:options.components,
     layer:options.layer,
     surface,
-    artifactContext:{
-      source,
-      normalizedSource,
-      semanticFingerprint,
-    },
   });
 
   if(result.artifact){

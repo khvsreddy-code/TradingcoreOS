@@ -19,6 +19,23 @@ export function buildCoreSpiritSemanticFingerprint(options:{layer?:string;compon
   return JSON.stringify({compilerPipeline:'semantic-v5',layer:options.layer || 'script',components:componentContracts});
 }
 
+/**
+ * Canonical semantic fingerprint shared by artifact lookup and artifact production.
+ * Do not duplicate this object shape in the compiler: any drift makes a valid compiled
+ * artifact fail the cache's semantic identity check before it can reach Vela.
+ */
+export function buildCoreSpiritArtifactSemanticFingerprint(
+  options:{components?:CoreSpiritComponentRegistryLike;layer?:string}={},
+):string{
+  return JSON.stringify({
+    compiler:CORE_SPIRIT_COMPILER_VERSION,
+    semantic:buildCoreSpiritSemanticFingerprint({layer:options.layer,components:options.components}),
+    componentSet:coreSpiritComponentFingerprint(options),
+    runtimeABI:CORE_SPIRIT_RUNTIME_ABI,
+    optimizerABI:CORE_SPIRIT_OPTIMIZER_ABI,
+  });
+}
+
 export function buildCoreSpiritArtifactLookupIdentity(
   source:string,
   sourceId:string,
@@ -27,13 +44,7 @@ export function buildCoreSpiritArtifactLookupIdentity(
   const normalizedSource=normalizeCoreSpiritSource(source);
   const sourceHash=sha256HexSync(source);
   const normalizedHash=sha256HexSync(normalizedSource);
-  const semanticFingerprint=JSON.stringify({
-    compiler:CORE_SPIRIT_COMPILER_VERSION,
-    semantic:buildCoreSpiritSemanticFingerprint({layer:options.layer,components:options.components}),
-    componentSet:coreSpiritComponentFingerprint(options),
-    runtimeABI:CORE_SPIRIT_RUNTIME_ABI,
-    optimizerABI:CORE_SPIRIT_OPTIMIZER_ABI,
-  });
+  const semanticFingerprint=buildCoreSpiritArtifactSemanticFingerprint(options);
   const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
   return {key:`${sourceId}:${semanticHash}`,sourceHash,normalizedHash,semanticHash};
 }
