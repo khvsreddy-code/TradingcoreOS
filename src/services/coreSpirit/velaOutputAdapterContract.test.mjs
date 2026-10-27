@@ -62,7 +62,7 @@ assert.equal(adapted.timeUnit, 'epoch-milliseconds');
 assert.equal(adapted.outputs[0].time, t0 * 1000);
 assert.equal(adapted.outputs[1].time, (t0 + 300) * 1000);
 assert.deepEqual(adapted.alignment.slice(0, 2).map(item => [item.barIndex, item.aligned]), [[0, true], [1, true]]);
-const convertedLine = adapted.outputs[2]!;
+const convertedLine = adapted.outputs[2];
 assert.equal(convertedLine.kind, 'line');
 if (convertedLine.kind === 'line') {
   assert.equal(convertedLine.start.time, t0 * 1000, 'drawing geometry must use the same Vela millisecond coordinate space');
@@ -107,7 +107,7 @@ const sessionBars = normalizeVelaBarsToCoreSpirit(sessionTimes.map((time, index)
   time, open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 1000,
 })));
 const afterSessionGap = adaptCoreSpiritOutputsForVela([
-  { kind: 'series', time: sessionTimes[2]! / 1000, value: 103, seriesId: 'session', metadata: { barIndex: 2 } },
+  { kind: 'series', time: sessionTimes[2] / 1000, value: 103, seriesId: 'session', metadata: { barIndex: 2 } },
 ], sessionBars);
 assert.deepEqual(afterSessionGap.alignment.map(item => [item.barIndex, item.aligned]), [[2, true]]);
 
@@ -192,7 +192,7 @@ dispatcher.accept([
   { kind: 'series', time: t0 + 600, value: 13, seriesId: 'ema' },
   { kind: 'series', time: t0 + 300, value: 11, seriesId: 'ema' },
 ], 'test');
-const emaPoints = dispatcher.frame().plots.get('ema')!;
+const emaPoints = dispatcher.frame().plots.get('ema');
 assert.deepEqual(emaPoints.map(point => point.time), [t0, t0 + 300, t0 + 600]);
 assert.deepEqual(emaPoints.map(point => point.value), [10, 11, 13], 'forming-bar updates replace, not duplicate, their observation');
 
