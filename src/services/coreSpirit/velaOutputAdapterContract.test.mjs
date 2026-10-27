@@ -21,7 +21,7 @@ const bars = normalizeVelaBarsToCoreSpirit([
 
 assert.equal(coreSpiritTimeToVelaMillis(t0), t0 * 1000);
 assert.equal(coreSpiritTimeToVelaMillis(t0 * 1000), t0 * 1000);
-assert.equal(Date.parse(bars[1]!.timestamp), (t0 + 300) * 1000);
+assert.equal(Date.parse(bars[1].timestamp), (t0 + 300) * 1000);
 
 assert.equal(safeVelaNormalizationStart([
   { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
@@ -59,8 +59,8 @@ const adapted = adaptCoreSpiritOutputsForVela([
 ], bars);
 
 assert.equal(adapted.timeUnit, 'epoch-milliseconds');
-assert.equal(adapted.outputs[0]!.time, t0 * 1000);
-assert.equal(adapted.outputs[1]!.time, (t0 + 300) * 1000);
+assert.equal(adapted.outputs[0].time, t0 * 1000);
+assert.equal(adapted.outputs[1].time, (t0 + 300) * 1000);
 assert.deepEqual(adapted.alignment.slice(0, 2).map(item => [item.barIndex, item.aligned]), [[0, true], [1, true]]);
 const convertedLine = adapted.outputs[2]!;
 assert.equal(convertedLine.kind, 'line');
@@ -68,7 +68,7 @@ if (convertedLine.kind === 'line') {
   assert.equal(convertedLine.start.time, t0 * 1000, 'drawing geometry must use the same Vela millisecond coordinate space');
   assert.equal(convertedLine.end.time, (t0 + 600) * 1000);
 }
-assert.equal(adapted.outputs[3]!.time, (t0 + 300) * 1000);
+assert.equal(adapted.outputs[3].time, (t0 + 300) * 1000);
 
 // CoreScript geometry declares its own coordinate space. Time-space x coordinates
 // are converted to Vela milliseconds while screen/normalized coordinates stay pixels.
@@ -86,14 +86,14 @@ const geometryAdapted = adaptCoreSpiritOutputsForVela([
     geometry: { kind: 'point', point: { kind: 'point', space: 'normalized', x: 0.5, y: 0.25 } },
   },
 ], bars);
-assert.equal(geometryAdapted.outputs[0]!.kind, 'customVisual');
-if (geometryAdapted.outputs[0]!.kind === 'customVisual') {
-  assert.equal(geometryAdapted.outputs[0]!.geometry.from?.x, (t0 + 300) * 1000);
-  assert.equal(geometryAdapted.outputs[0]!.geometry.to?.x, (t0 + 600) * 1000);
+assert.equal(geometryAdapted.outputs[0].kind, 'customVisual');
+if (geometryAdapted.outputs[0].kind === 'customVisual') {
+  assert.equal(geometryAdapted.outputs[0].geometry.from?.x, (t0 + 300) * 1000);
+  assert.equal(geometryAdapted.outputs[0].geometry.to?.x, (t0 + 600) * 1000);
 }
-if (geometryAdapted.outputs[1]!.kind === 'customVisual') {
-  assert.equal(geometryAdapted.outputs[1]!.geometry.point?.x, 0.5, 'normalized coordinates must never be interpreted as timestamps');
-  assert.equal(geometryAdapted.outputs[1]!.geometry.point?.y, 0.25);
+if (geometryAdapted.outputs[1].kind === 'customVisual') {
+  assert.equal(geometryAdapted.outputs[1].geometry.point?.x, 0.5, 'normalized coordinates must never be interpreted as timestamps');
+  assert.equal(geometryAdapted.outputs[1].geometry.point?.y, 0.25);
 }
 
 // Opening-time alignment must survive overnight/session gaps; infer the index
