@@ -5,6 +5,7 @@ type TcoDrawingLine = DrawingLine;
 type TcoDrawingBox = DrawingBox;
 type TcoDrawingLabel = DrawingLabel;
 type TcoDrawingPolyline = DrawingPolyline;
+type TcoDrawingTable = DrawingTable;
 type TcoBackground = Background;
 type TcoRectInstance = HighCardinalityRectInstance;
 type TcoRectBatch = HighCardinalityRectBatch;
@@ -15,14 +16,14 @@ import type {
     ScenePatch,
     SeriesValueDelta,
 } from '../../../../vendor/vela/src/core/model/patch';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
+import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, TableCell, TablePosition } from '../../../../vendor/vela/src/core/model/drawings';
 import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
 import type { HighCardinalityRectBatch, HighCardinalityRectDelta, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 import type { VelaTimeRange } from '../../../architecture/crossPlaneContracts';
 
 type Identified = { id: string };
-type CollectionName = 'lines' | 'boxes' | 'labels' | 'polylines' | 'backgrounds' | 'priceLines';
+type CollectionName = 'lines' | 'boxes' | 'labels' | 'polylines' | 'backgrounds' | 'priceLines' | 'tables';
 
 function style(value: unknown): 'solid' | 'dashed' | 'dotted' {
     const n = Number(value);
@@ -275,6 +276,7 @@ export interface CoreSpiritSceneSnapshot {
     labels: TcoDrawingLabel[];
     polylines: TcoDrawingPolyline[];
     backgrounds: TcoBackground[];
+    tables: TcoDrawingTable[];
 }
 
 export class CoreSpiritSceneDiff {
@@ -292,7 +294,7 @@ export class CoreSpiritSceneDiff {
     private readonly rectBatches = new Map<string, TcoRectInstance[]>;
     private readonly rectBatchMeta = new Map<string, { paneId: string; overlay?: boolean; indexOffset?: number }>();
     private readonly collections: Record<CollectionName, Identified[]> = {
-        lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [],
+        lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [], tables: [],
     };
     private markerSeriesMounted = false;
     private outputRevision = 0;
@@ -359,6 +361,14 @@ export class CoreSpiritSceneDiff {
                 points: value.points.map(point => ({ ...point })),
             })) as TcoDrawingPolyline[],
             backgrounds: this.collections.backgrounds.map(value => ({ ...value })) as TcoBackground[],
+            tables: this.collections.tables.map(value => {
+                const table = value as TcoDrawingTable;
+                return {
+                    ...table,
+                    cells: table.cells.map(row => row.map(cell => cell ? { ...cell } : null)),
+                    merges: table.merges.map(merge => ({ ...merge })),
+                };
+            }),
         };
     }
 
@@ -628,6 +638,67 @@ export class CoreSpiritSceneDiff {
         return emit ? { collection: { collection: name, values: [value], op: 'replace-range', start: idx, remove: 1 } } : null;
     }
 
+    private applyTable(output: Extract<CoreSpiritObject, { kind: 'table' }>, emit: boolean): SceneDiffEmission {
+        const row = Number(output.row);
+        const column = Number(output.column);
+        // Tables are user-authored chart output; bound their dimensions so a malformed
+        // worker result cannot allocate an unbounded cell grid on the chart thread.
+        if (!Number.isSafeInteger(row) || row < 0 || row >= 100 ||
+            !Number.isSafeInteger(column) || column < 0 || column >= 100) return null;
+
+        const index = idIndex(this.collections.tables, output.id);
+        if (removed(output) && index < 0) return null;
+        const previous = index >= 0 ? this.collections.tables[index] as TcoDrawingTable : undefined;
+        if (removed(output) && (!previous || row >= previous.rows || column >= previous.columns)) return null;
+
+        const position = output.position.replace(/([A-Z])/g, '_$1').toLowerCase() as TablePosition;
+        const rows = Math.max(previous?.rows ?? 0, row + 1);
+        const columns = Math.max(previous?.columns ?? 0, column + 1);
+        const cells: Array<Array<TableCell | null>> = previous
+            ? previous.cells.map(existingRow => [...existingRow])
+            : [];
+        while (cells.length < rows) cells.push([]);
+        for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+            while (cells[rowIndex]!.length < columns) cells[rowIndex]!.push(null);
+        }
+
+        if (removed(output)) {
+            cells[row]![column] = null;
+        } else {
+            const weight = String(output.style?.fontWeight ?? '500').toLowerCase();
+            const numericWeight = Number(weight);
+            cells[row]![column] = {
+                text: output.text,
+                ...(output.style?.color ? { textColor: output.style.color } : {}),
+                ...(output.style?.background ? { bgColor: output.style.background } : {}),
+                hAlign: output.style?.align ?? 'left',
+                vAlign: 'center',
+                textSize: Math.max(8, Math.min(32, Number(output.style?.fontSize ?? 11))),
+                fontFamily: 'default',
+                bold: weight === 'bold' || (Number.isFinite(numericWeight) && numericWeight >= 600),
+                italic: false,
+            };
+        }
+
+        const table: TcoDrawingTable = {
+            id: output.id,
+            paneId: pane(output),
+            position,
+            columns,
+            rows,
+            ...(previous?.bgColor ? { bgColor: previous.bgColor } : output.style?.background ? { bgColor: output.style.background } : {}),
+            ...(previous?.frameColor ? { frameColor: previous.frameColor } : output.style?.border ? { frameColor: output.style.border } : {}),
+            frameWidth: previous?.frameWidth ?? 1,
+            ...(previous?.borderColor ? { borderColor: previous.borderColor } : output.style?.border ? { borderColor: output.style.border } : {}),
+            borderWidth: previous?.borderWidth ?? 1,
+            cells,
+            merges: previous ? previous.merges.map(merge => ({ ...merge })) : [],
+            overlay: isPriceOverlay(output),
+        };
+        const empty = cells.every(existingRow => existingRow.every(cell => cell == null));
+        return this.applyCollection('tables', table, emit, removed(output) && empty);
+    }
+
     private applyOutput(output: CoreSpiritObject, emit: boolean): SceneDiffEmission {
         if (output.kind === 'series') return this.applySeries(output, emit);
         if (output.kind === 'marker' || output.kind === 'signal') return this.applyMarker(output, emit);
@@ -648,6 +719,7 @@ export class CoreSpiritSceneDiff {
             case 'zone': return this.applyRect(output, emit);
             case 'polyline':
             case 'polygon': return this.applyCollection('polylines', polyline(output), emit, removed(output));
+            case 'table': return this.applyTable(output, emit);
             case 'background': {
                 const start = Number(output.time);
                 const end = Number(output.metadata?.endTime ?? start + 1);
