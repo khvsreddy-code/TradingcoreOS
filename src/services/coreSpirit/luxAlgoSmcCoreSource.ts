@@ -106,12 +106,10 @@ if showOrderBlockZones == true and close < swingLow {
 }
 
 // Causal three-candle imbalance zones. No lookahead or higher-timeframe request.
-let bullishFvg = low > high[2] and close > open
-let bearishFvg = high < low[2] and close < open
-if showFairValueGaps == true and bullishFvg {
+if showFairValueGaps == true and low > high[2] and close > open {
     zone(time[2], time, low, high[2], "#00FF68", "#00FF68", 0.12)
 }
-if showFairValueGaps == true and bearishFvg {
+if showFairValueGaps == true and high < low[2] and close < open {
     zone(time[2], time, low[2], high, "#FF0008", "#FF0008", 0.12)
 }
 `;
