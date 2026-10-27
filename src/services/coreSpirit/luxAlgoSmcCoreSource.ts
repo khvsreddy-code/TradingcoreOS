@@ -41,10 +41,10 @@ let internalLow = internalRollingLow[1]
 // confirms, the drawing starts at that extreme and ends at the breaking candle.
 // Unlike plot(highest(...)), this does not connect changing extrema across every bar.
 // Use supported bar-indexed time coordinates for anchored structure segments.
-// swingLength selects the swing window; internal structure uses its 5-bar window.
-// A true last-pivot timestamp requires highestbars/pivot-state semantics, which
-// are not yet part of this first-stage language surface.
-let swingAnchorTime = time[swingLength]
+// Swing segments use the default 50-bar anchor; internal segments use five bars.
+// Dynamic series indexing and true last-pivot timestamps need highestbars/pivot-state
+// semantics, which are not yet part of this first-stage language surface.
+let swingAnchorTime = time[50]
 let internalAnchorTime = time[5]
 
 // Use the previous regular candle interval, not the current open-to-open gap,
