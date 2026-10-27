@@ -87,9 +87,12 @@ export function isCoreSpiritOutput(value: unknown): value is CoreSpiritObject {
     case 'barcolor':
       return hasTime(row) && typeof row.color === 'string' && optionalFinite(row, 'opacity');
     case 'table':
+      // Keep chart-owned table allocation bounded and coordinates integral.
       return typeof row.id === 'string' &&
         ['topLeft','topCenter','topRight','middleLeft','middleCenter','middleRight','bottomLeft','bottomCenter','bottomRight'].includes(String(row.position)) &&
-        finite(row.row) && finite(row.column) && typeof row.text === 'string';
+        Number.isSafeInteger(row.row) && Number(row.row) >= 0 && Number(row.row) < 100 &&
+        Number.isSafeInteger(row.column) && Number(row.column) >= 0 && Number(row.column) < 100 &&
+        typeof row.text === 'string';
     case 'footprint':
       return hasTime(row) && Array.isArray(row.rows) && finite(row.tickSize) && row.tickSize > 0;
     case 'signal':
