@@ -25,6 +25,11 @@ includes(chrome, "ctx.togglePanel('tco.corespirit-code', false)", 'terminal clos
 includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart bridge for Add to Chart');
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
 includes(dock, 'CORESPIRIT_LUXALGO_SMC_SOURCE', 'the editor uses the converted SMC script as its default');
+includes(dock, 'isLegacySmcStarter', 'existing users with the bundled step-plot SMC starter are migrated to corrected drawings');
+includes(dock, 'isBundledLegacyStarter(cloudSource)', 'cloud drafts are upgraded only when they match a known bundled starter');
+excludes(smc, 'plot(swingHigh,', 'SMC structure levels are rendered as anchored drawings rather than continuous rolling plots');
+includes(smc, 'line(swingHighAnchorTime[1]', 'swing breaks are anchored to the retained swing-high time');
+includes(smc, 'zone(time[2], zoneRight, low, high[2]', 'fair-value gaps are forward-projected as chart zones');
 includes(smc, 'input swingLength: int = 50 min=10 max=100', 'SMC swing lookback defaults to the Pine script 50-bar setting');
 includes(smc, 'let internalRollingHigh = highest(high, 5)', 'SMC internal structure uses the original fixed five-bar internal length');
 includes(smc, 'Swing CHoCH', 'converted source emits swing structure labels');
