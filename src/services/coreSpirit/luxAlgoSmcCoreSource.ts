@@ -30,15 +30,15 @@ export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [C
     input showFairValueGaps: bool = true
 }
 
-swingRollingHigh = highest(high, swingLength)
-swingRollingLow = lowest(low, swingLength)
-swingHigh = swingRollingHigh[1]
-swingLow = swingRollingLow[1]
+let swingRollingHigh = highest(high, swingLength)
+let swingRollingLow = lowest(low, swingLength)
+let swingHigh = swingRollingHigh[1]
+let swingLow = swingRollingLow[1]
 
-internalRollingHigh = highest(high, internalLength)
-internalRollingLow = lowest(low, internalLength)
-internalHigh = internalRollingHigh[1]
-internalLow = internalRollingLow[1]
+let internalRollingHigh = highest(high, internalLength)
+let internalRollingLow = lowest(low, internalLength)
+let internalHigh = internalRollingHigh[1]
+let internalLow = internalRollingLow[1]
 
 // Previous-bar extremes avoid using the still-forming current bar as its own level.
 if showStructureLevels == true and showSwingStructure == true {
@@ -52,10 +52,10 @@ if showStructureLevels == true and showInternalStructure == true {
 
 // Explicit causal cross formulas avoid relying on stateful crossover call identity.
 // A rolling level already represents the prior-bar extreme; a close beyond it is the break.
-swingBullishBreak = close > swingHigh
-swingBearishBreak = close < swingLow
-internalBullishBreak = close > internalHigh
-internalBearishBreak = close < internalLow
+let swingBullishBreak = close > swingHigh
+let swingBearishBreak = close < swingLow
+let internalBullishBreak = close > internalHigh
+let internalBearishBreak = close < internalLow
 
 let swingBias: state<number> = 0
 let internalBias: state<number> = 0
@@ -108,8 +108,8 @@ if showOrderBlockZones == true and swingBearishBreak {
 }
 
 // Causal three-candle imbalance zones. No lookahead or higher-timeframe request.
-bullishFvg = low > high[2] and close > open
-bearishFvg = high < low[2] and close < open
+let bullishFvg = low > high[2] and close > open
+let bearishFvg = high < low[2] and close < open
 if showFairValueGaps == true and bullishFvg {
     zone(time[2], time, low, high[2], "#00FF68", "#00FF68", 0.12)
 }
