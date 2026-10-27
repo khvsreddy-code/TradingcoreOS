@@ -331,24 +331,34 @@ export class CoreSpiritSceneDiff {
         this.markerSeriesMounted = this.markers.size > 0;
     }
 
+    /**
+     * A model snapshot must never share mutable retained buffers with the live scene.
+     * Vela keeps the returned IndicatorModel between patches; mutating a retained
+     * plot array here would otherwise update the model without a corresponding patch.
+     */
     snapshot(): CoreSpiritSceneSnapshot {
         return {
-            points: this.points,
-            seriesStyles: this.seriesStyles,
-            markers: this.orderedMarkers(),
-            priceLines: this.collections.priceLines as TcoPriceLine[],
+            points: new Map([...this.points.entries()].map(([id, values]) =>
+                [id, values.map(point => ({ ...point }))])),
+            seriesStyles: new Map([...this.seriesStyles.entries()].map(([id, presentation]) =>
+                [id, { ...presentation, style: { ...presentation.style } }])),
+            markers: this.orderedMarkers().map(value => ({ ...value })),
+            priceLines: this.collections.priceLines.map(value => ({ ...value })) as TcoPriceLine[],
             rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
                 id,
                 paneId: this.rectBatchMeta.get(id)?.paneId ?? 'price',
                 overlay: this.rectBatchMeta.get(id)?.overlay,
                 indexOffset: this.rectBatchMeta.get(id)?.indexOffset,
-                instances,
+                instances: instances.map(instance => ({ ...instance })),
             })),
-            lines: this.collections.lines as TcoDrawingLine[],
-            boxes: this.collections.boxes as TcoDrawingBox[],
-            labels: this.collections.labels as TcoDrawingLabel[],
-            polylines: this.collections.polylines as TcoDrawingPolyline[],
-            backgrounds: this.collections.backgrounds as TcoBackground[],
+            lines: this.collections.lines.map(value => ({ ...value })) as TcoDrawingLine[],
+            boxes: this.collections.boxes.map(value => ({ ...value })) as TcoDrawingBox[],
+            labels: this.collections.labels.map(value => ({ ...value })) as TcoDrawingLabel[],
+            polylines: this.collections.polylines.map(value => ({
+                ...value,
+                points: value.points.map(point => ({ ...point })),
+            })) as TcoDrawingPolyline[],
+            backgrounds: this.collections.backgrounds.map(value => ({ ...value })) as TcoBackground[],
         };
     }
 
