@@ -60,6 +60,20 @@ let internalBearishBreak = close < internalLow
 let swingBias: state<number> = 0
 let internalBias: state<number> = 0
 
+// TEMPORARY TEST PROBES — remove after bearish-break diagnosis.
+if close < 90 {
+    label("DEBUG close below 90", "below", "#FFFFFF", "#000000", 9, "pill")
+}
+if close < swingLow {
+    label("DEBUG close below swing low", "below", "#FFFFFF", "#000000", 9, "pill")
+}
+if swingBearishBreak {
+    label("DEBUG swing bearish break", "below", "#FFFFFF", "#000000", 9, "pill")
+}
+if close < 90 and swingBias > 0 {
+    label("DEBUG positive swing bias", "below", "#FFFFFF", "#000000", 9, "pill")
+}
+
 if showSwingStructure == true and swingBullishBreak and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
