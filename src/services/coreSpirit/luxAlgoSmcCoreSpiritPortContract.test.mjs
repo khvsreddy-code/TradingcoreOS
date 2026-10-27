@@ -36,6 +36,12 @@ const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
+console.log('SMC_PORT_OUTPUT_DIAGNOSTICS', JSON.stringify({
+  outputCount: outputs.length,
+  counts: outputs.reduce((out, item) => { out[item.kind] = (out[item.kind] || 0) + 1; return out; }, {}),
+  labels: outputs.filter(item => item.kind === 'label').slice(0, 12).map(item => ({text:item.text, time:item.time, price:item.price})),
+  seriesTail: outputs.filter(item => item.kind === 'series').slice(-8).map(item => ({name:item.seriesId, time:item.time, value:item.value})),
+}));
 assert.ok(outputs.some(item => item.kind === 'series'), 'swing-high/low plots must produce chart series');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
