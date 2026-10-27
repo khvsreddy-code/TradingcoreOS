@@ -252,7 +252,7 @@ assert.ok(velaEngine.includes('safeVelaNormalizationStart(rows,normalizedBarsCac
   'the canonical bar adapter must prove stable timestamp anchors before reusing an incremental history prefix');
 assert.ok(velaEngine.includes('time<=previousTime'),
   'the canonical bar adapter must reject duplicate as well as descending bar-opening timestamps');
-assert.ok(velaEngine.includes('return Object.freeze(normalizedBarsCache.slice())'),
+assert.ok(velaEngine.includes('isolateSnapshot ? Object.freeze(normalizedBarsCache.slice())'),
   'asynchronous execution receives an isolated array snapshot rather than a mutable reference to the adapter cache');
 assert.ok(chartController.includes('const bars=[...candles.current]'),
   'chart-indicator execution captures one stable source snapshot per run rather than copying history on render');
