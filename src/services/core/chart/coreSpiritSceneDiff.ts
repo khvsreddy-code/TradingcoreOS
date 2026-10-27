@@ -338,10 +338,10 @@ export class CoreSpiritSceneDiff {
      */
     snapshot(): CoreSpiritSceneSnapshot {
         return {
-            points: new Map([...this.points.entries()].map(([id, values]) =>
-                [id, values.map(point => ({ ...point }))])),
-            seriesStyles: new Map([...this.seriesStyles.entries()].map(([id, presentation]) =>
-                [id, { ...presentation, style: { ...presentation.style } }])),
+            points: new Map<string, TcoSeriesPoint[]>([...this.points.entries()].map(([id, values]) =>
+                [id, values.map(point => ({ ...point }))] as [string, TcoSeriesPoint[]])),
+            seriesStyles: new Map<string, TcoSeriesPresentation>([...this.seriesStyles.entries()].map(([id, presentation]) =>
+                [id, { ...presentation, style: { ...presentation.style } }] as [string, TcoSeriesPresentation])),
             markers: this.orderedMarkers().map(value => ({ ...value })),
             priceLines: this.collections.priceLines.map(value => ({ ...value })) as TcoPriceLine[],
             rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
