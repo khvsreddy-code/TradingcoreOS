@@ -244,8 +244,10 @@ assert.ok(outputLayer.includes('args.coords.logicalToX('),
   'bar-index visual coordinates must use Vela’s logical-index transform');
 assert.ok(velaKernel.includes("import './coreSpiritVelaOutputLayer'"),
   'the layer must register before native renderers are constructed');
-assert.ok(velaEngine.includes('const getCurrentBars=(forceFullNormalization=false,isolateSnapshot=true)=>'),
+assert.match(velaEngine, /const getCurrentBars\s*=\s*\(forceFullNormalization\s*=\s*false,\s*isolateSnapshot\s*=\s*true\)\s*:/,
   'Vela history is read through one normalized host-data boundary with explicit snapshot isolation');
+assert.match(velaEngine, /return\s+isolateSnapshot\s*\?\s*Object\.freeze\(normalizedBarsCache\.slice\(\)\)/,
+  'async workers receive an isolated copy of the normalized bar cache');
 assert.ok(velaEngine.includes('safeVelaNormalizationStart(rows,normalizedBarsCache,normalizedInputLength,forceFullNormalization)'),
   'the canonical bar adapter must prove stable timestamp anchors before reusing an incremental history prefix');
 assert.ok(velaEngine.includes('time<=previousTime'),
