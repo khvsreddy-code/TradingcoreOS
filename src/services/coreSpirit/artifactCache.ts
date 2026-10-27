@@ -314,9 +314,28 @@ export async function loadOrCompileCoreSpiritArtifact(
       throw new Error('CoreSpirit artifact compilation produced an invalid executable artifact');
     }
 
-    const identity=identityFromArtifact(artifact);
+    let identity=identityFromArtifact(artifact);
     if(identity.semanticHash!==lookup.semanticHash){
-      throw new Error('CoreSpirit artifact semantic identity mismatch');
+      // The UI may have registered source-referenced component contracts after the
+      // compiler worker was created. Never relabel the worker artifact: rebuild once
+      // against the authoritative registry used to calculate the lookup identity.
+      // This is a mismatch-only recovery path; normal compilation remains off-thread.
+      const {compileCoreSpirit}=await import('./coreSpiritPipeline');
+      const recovered=compileCoreSpirit(source,sourceId,{
+        components:options.components,
+        layer:options.layer as any,
+      });
+      const recoveredArtifact=recovered.artifact;
+      if(!recoveredArtifact || !recoveredArtifact.abi || !validateExecutableArtifact(recoveredArtifact)){
+        const message=recovered.diagnostics?.find(d=>d.severity==='error')?.message;
+        throw new Error(message || 'CoreSpirit worker/main semantic identity drift; authoritative compilation failed');
+      }
+      const recoveredIdentity=identityFromArtifact(recoveredArtifact);
+      if(recoveredIdentity.semanticHash!==lookup.semanticHash){
+        throw new Error('CoreSpirit artifact semantic identity mismatch after authoritative recompilation');
+      }
+      artifact=recoveredArtifact;
+      identity=recoveredIdentity;
     }
 
     memoryPut(aliasKey,artifact,identity);
