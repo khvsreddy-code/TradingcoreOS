@@ -181,6 +181,26 @@ assert.equal(drawingModel.polylines?.[0]?.id, 'swing-path');
 assert.equal(drawingModel.boxes?.[0]?.id, 'demand-zone');
 assert.equal(drawingModel.backgrounds?.[0]?.id, 'session-bg');
 
+// A Vela model is a committed snapshot. Later CoreSpirit mutations must not rewrite its
+// points or native drawing instances behind the renderer's patch/revision boundary.
+const committedSeriesPoints = drawingModel.series[0]?.points;
+const committedScenePoints = drawingSnapshot.points.get('swing-high');
+const committedZoneRight = drawingSnapshot.rectBatches[0]?.instances[0]?.right;
+drawingScene.apply([
+  { kind: 'series', time: (t0 + 900) * 1000, value: 106, seriesId: 'swing-high' },
+  { kind: 'zone', id: 'demand-zone', left: t0 * 1000, right: (t0 + 900) * 1000, top: 104, bottom: 99,
+    style: { color: '#1848CC', fillColor: '#1848CC', fillOpacity: 0.18 } },
+], { from: t0 * 1000, to: (t0 + 900) * 1000 }, 2);
+assert.equal(committedSeriesPoints?.length, 1,
+  'a later series update must not mutate the previously committed Vela model');
+assert.equal(committedScenePoints?.length, 1,
+  'scene snapshots must copy retained series arrays');
+assert.equal(drawingSnapshot.rectBatches[0]?.instances[0]?.right, committedZoneRight,
+  'scene snapshots must isolate high-cardinality rectangle arrays');
+const updatedDrawingSnapshot = drawingScene.snapshot();
+assert.equal(updatedDrawingSnapshot.points.get('swing-high')?.length, 2);
+assert.equal(updatedDrawingSnapshot.rectBatches[0]?.instances[0]?.right, (t0 + 900) * 1000);
+
 // CoreSpiritOutputDispatcher is a retained output cache, not an append-only tick log.
 // A forming bar reuses the timestamp and historical inserts maintain sorted time order.
 const dispatcher = new CoreSpiritOutputDispatcher();
