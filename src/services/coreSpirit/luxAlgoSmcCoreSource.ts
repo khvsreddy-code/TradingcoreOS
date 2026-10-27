@@ -2,22 +2,20 @@
  * Executable first-stage CoreSpirit port of the supplied Pine v5
  * "Smart Money Concepts [LuxAlgo]" indicator.
  *
- * This deliberately uses only the canonical CoreScript compiler/runtime and its
- * chart-output ABI. Structure levels are causal rolling extremes, not a byte-for-
- * byte recreation of Pine's custom pivot objects.
+ * This port uses the canonical CoreScript compiler/runtime and Vela chart-output
+ * ABI. Structure breaks are emitted as anchored Vela drawing objects, rather than
+ * plotting a rolling high/low on every candle (which produces misleading stair
+ * lines instead of BOS/CHoCH segments).
  *
  * Implemented in this stage:
- * - separate internal (default 5 bars) and swing (default 50 bars) structure levels
- * - BOS/CHoCH labels with independent retained trend bias for both structures
- * - optional order-block-like origin zones on structure breaks (last-bar range;
- *   explicitly an approximation until the runtime supports Pine's mutable OB pools)
- * - three-candle bullish/bearish FVG zones
+ * - separate internal (5-bar) and swing (configurable) causal break levels
+ * - swing-origin-anchored BOS/CHoCH line segments plus event labels
+ * - provisional order-block origin zones and forward-extended three-candle FVGs
  *
- * Still not equivalent to the full Pine source: Pine custom types/object arrays,
- * true leg/pivot confirmation, OB selection/mitigation lifecycle, EQH/EQL pivot
- * confirmation, request.security MTF levels, configurable historical/present
- * drawing lifecycle, strong/weak swing tracking, and premium/discount zones.
- * Those are not silently claimed as converted.
+ * It is still a first-stage port, not a complete line-for-line clone of Pine:
+ * true pivot-leg confirmation, full OB selection/mitigation lifecycle, EQH/EQL,
+ * request.security MTF levels, configurable present/history drawing lifecycle,
+ * strong/weak swing tracking and premium/discount zones need additional support.
  */
 export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [CoreSpirit]") {
     overlay: true
@@ -39,15 +37,31 @@ let internalRollingLow = lowest(low, 5)
 let internalHigh = internalRollingHigh[1]
 let internalLow = internalRollingLow[1]
 
-// Previous-bar extremes avoid using the still-forming current bar as its own level.
-if showStructureLevels == true and showSwingStructure == true {
-    plot(swingHigh, "#F23645", 1, 0, "Swing High")
-    plot(swingLow, "#089981", 1, 0, "Swing Low")
+// Retain the originating candle time for each rolling extreme. When a break
+// confirms, the drawing starts at that extreme and ends at the breaking candle.
+// Unlike plot(highest(...)), this does not connect changing extrema across every bar.
+let swingHighAnchorTime: state<number> = time
+let swingLowAnchorTime: state<number> = time
+let internalHighAnchorTime: state<number> = time
+let internalLowAnchorTime: state<number> = time
+
+if high >= swingRollingHigh {
+    swingHighAnchorTime := time
 }
-if showStructureLevels == true and showInternalStructure == true {
-    plot(internalHigh, "#F77C80", 1, 0, "Internal High")
-    plot(internalLow, "#3179F5", 1, 0, "Internal Low")
+if low <= swingRollingLow {
+    swingLowAnchorTime := time
 }
+if high >= internalRollingHigh {
+    internalHighAnchorTime := time
+}
+if low <= internalRollingLow {
+    internalLowAnchorTime := time
+}
+
+// Keep the usual candle interval even when the current candle follows a session
+// gap, then extend finite boxes into future chart time so they read as chart zones.
+let barDuration = time[1] - time[2]
+let zoneRight = time + barDuration * 20
 
 // Explicit causal cross formulas avoid relying on stateful crossover call identity.
 // A rolling level already represents the prior-bar extreme; a close beyond it is the break.
@@ -58,6 +72,12 @@ let swingBias: state<number> = 0
 let internalBias: state<number> = 0
 
 
+if showStructureLevels == true and showSwingStructure == true and close > swingHigh {
+    line(swingHighAnchorTime[1], swingHigh, time, swingHigh, "#089981", 2)
+}
+if showStructureLevels == true and showSwingStructure == true and close < swingLow {
+    line(swingLowAnchorTime[1], swingLow, time, swingLow, "#F23645", 2)
+}
 if showSwingStructure == true and close > swingHigh and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
@@ -77,6 +97,12 @@ if close < swingLow {
     swingBias := -1
 }
 
+if showStructureLevels == true and showInternalStructure == true and close > internalHigh {
+    line(internalHighAnchorTime[1], internalHigh, time, internalHigh, "#3179F5", 1)
+}
+if showStructureLevels == true and showInternalStructure == true and close < internalLow {
+    line(internalLowAnchorTime[1], internalLow, time, internalLow, "#F77C80", 1)
+}
 if showInternalStructure == true and close > internalHigh and internalBias < 0 {
     label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
 }
@@ -99,17 +125,18 @@ if close < internalLow {
 // Provisional order-block origin zones: the immediately preceding candle range.
 // This is a visual starter, not Pine's parsed-extreme selection/mitigation engine.
 if showOrderBlockZones == true and close > swingHigh {
-    zone(time[1], time, high[1], low[1], "#1848CC", "#1848CC", 0.18)
+    zone(time[1], zoneRight, high[1], low[1], "#1848CC", "#1848CC", 0.18)
 }
 if showOrderBlockZones == true and close < swingLow {
-    zone(time[1], time, high[1], low[1], "#B22833", "#B22833", 0.18)
+    zone(time[1], zoneRight, high[1], low[1], "#B22833", "#B22833", 0.18)
 }
 
-// Causal three-candle imbalance zones. No lookahead or higher-timeframe request.
+// Causal three-candle imbalance zones. The right edge is extended forward using
+// the prior regular bar interval; no lookahead or higher-timeframe request.
 if showFairValueGaps == true and low > high[2] and close > open {
-    zone(time[2], time, low, high[2], "#00FF68", "#00FF68", 0.12)
+    zone(time[2], zoneRight, low, high[2], "#00FF68", "#00FF68", 0.12)
 }
 if showFairValueGaps == true and high < low[2] and close < open {
-    zone(time[2], time, low[2], high, "#FF0008", "#FF0008", 0.12)
+    zone(time[2], zoneRight, low[2], high, "#FF0008", "#FF0008", 0.12)
 }
 `;
