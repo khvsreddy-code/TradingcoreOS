@@ -22,7 +22,7 @@
 export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [CoreSpirit]") {
     overlay: true
     input swingLength: int = 50 min=10 max=100
-    input internalLength: int = 5 min=2 max=20
+    input internalBars: int = 5 min=2 max=20
     input showInternalStructure: bool = true
     input showSwingStructure: bool = true
     input showStructureLevels: bool = true
@@ -35,8 +35,8 @@ let swingRollingLow = lowest(low, swingLength)
 let swingHigh = swingRollingHigh[1]
 let swingLow = swingRollingLow[1]
 
-let internalRollingHigh = highest(high, internalLength)
-let internalRollingLow = lowest(low, internalLength)
+let internalRollingHigh = highest(high, internalBars)
+let internalRollingLow = lowest(low, internalBars)
 let internalHigh = internalRollingHigh[1]
 let internalLow = internalRollingLow[1]
 
