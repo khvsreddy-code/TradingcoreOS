@@ -473,6 +473,7 @@ export class CoreSpiritVelaEngine {
           polylines: snapshot.polylines,
           backgrounds: snapshot.backgrounds,
           tables: snapshot.tables,
+          barColors: snapshot.barColors,
         },
       ));
     };
