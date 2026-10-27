@@ -28,7 +28,7 @@ includes(dock, 'CORESPIRIT_LUXALGO_SMC_SOURCE', 'the editor uses the converted S
 includes(dock, 'isLegacySmcStarter', 'existing users with the bundled step-plot SMC starter are migrated to corrected drawings');
 includes(dock, 'isBundledLegacyStarter(cloudSource)', 'cloud drafts are upgraded only when they match a known bundled starter');
 excludes(smc, 'plot(swingHigh,', 'SMC structure levels are rendered as anchored drawings rather than continuous rolling plots');
-includes(smc, 'line(swingHighAnchorTime[1], swingHigh, time, swingHigh', 'swing breaks use the previous bar’s retained timestamp-series anchor');
+includes(smc, 'line(swingAnchorTime, swingHigh, time, swingHigh', 'swing breaks are emitted as anchored horizontal drawing objects');
 includes(smc, 'zone(time[2], zoneRight, low, high[2]', 'fair-value gaps are forward-projected as chart zones');
 includes(smc, 'input swingLength: int = 50 min=10 max=100', 'SMC swing lookback defaults to the Pine script 50-bar setting');
 includes(smc, 'let internalRollingHigh = highest(high, 5)', 'SMC internal structure uses the original fixed five-bar internal length');
