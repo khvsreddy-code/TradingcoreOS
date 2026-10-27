@@ -9,6 +9,7 @@ import {
   safeVelaNormalizationStart,
 } from './velaOutputAdapter.ts';
 import { CoreSpiritOutputDispatcher } from './outputDispatcher.ts';
+import { CoreSpiritSceneDiff } from '../core/chart/coreSpiritSceneDiff.ts';
 
 const t0 = 1767225600; // 2026-01-01T00:00:00Z in CoreSpirit epoch-seconds.
 const bars = normalizeVelaBarsToCoreSpirit([
@@ -132,6 +133,20 @@ assert.equal(revisions.isCurrent(rev1), false);
 assert.equal(revisions.accept({ ...rev2, datasetRevision: 4, outputRevision: 99 }), false, 'a stale dataset cannot win with a larger output revision');
 assert.equal(revisions.accept({ ...rev2, streamId: 'chart-1:NIFTY:15m' }), true,
   'a timeframe change has an independent chart stream and revision sequence');
+
+// The scene ABI must carry plot styling through to Vela's native series schema.
+// Dropping this style caused every CoreSpirit plot to be rendered in the generic lavender.
+const styledScene = new CoreSpiritSceneDiff('styled-series-test');
+const styledPatches = styledScene.apply([
+  { kind: 'series', time: t0 * 1000, value: 101, seriesId: 'swing-high',
+    style: { color: '#F23645', lineWidth: 1, lineStyle: 1, title: 'Swing High' } },
+], { from: t0 * 1000, to: t0 * 1000 }, 1);
+const styledSchema = styledPatches.find(patch => patch.kind === 'schema');
+assert.ok(styledSchema && styledSchema.kind === 'schema', 'the first plot point must mount a Vela line series');
+assert.equal(styledSchema.added[0]?.title, 'Swing High',
+  'CoreSpirit plot title must survive scene adaptation');
+assert.deepEqual(styledSchema.added[0]?.style, { color: '#F23645', width: 1, lineStyle: 'dashed' },
+  'CoreSpirit plot color, width and line style must reach Vela instead of falling back to lavender');
 
 // CoreSpiritOutputDispatcher is a retained output cache, not an append-only tick log.
 // A forming bar reuses the timestamp and historical inserts maintain sorted time order.
