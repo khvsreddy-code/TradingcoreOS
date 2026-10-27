@@ -356,10 +356,17 @@ export class CoreSpiritCompiler {
         case 'typeDeclaration': return '';
         case 'index': {
           const target=expr(n.target), index=expr(n.index), dest=`t${temp++}`;
-          if(n.target.type==='identifier'&&n.index.type==='number'&&typeof n.index.value==='number'&&Number.isInteger(n.index.value)) emitInstruction(n, {op:'loadSeries',dest,name:n.target.name,offset:n.index.value});
-          else if(n.target.type==='identifier'&&['open','high','low','close','volume','time'].includes(n.target.name)) emitInstruction(n, {op:'index',dest,target,index,seriesName:n.target.name});
-          else if(n.target.type==='identifier') emitInstruction(n, {op:'index',dest,target,index,seriesName:n.target.name});
-          else emitInstruction(n, {op:'index',dest,target,index});
+          const marketSeriesNames=['open','high','low','close','volume','time'];
+          // Literal offsets on canonical OHLCV columns use the direct market-data ABI.
+          // Local CoreSpirit series must instead be read from the series registry; routing
+          // every identifier through loadSeries silently returns null for local names.
+          if(n.target.type==='identifier'&&marketSeriesNames.includes(n.target.name)&&n.index.type==='number'&&typeof n.index.value==='number'&&Number.isInteger(n.index.value)) {
+            emitInstruction(n, {op:'loadSeries',dest,name:n.target.name,offset:n.index.value});
+          } else if(n.target.type==='identifier') {
+            emitInstruction(n, {op:'index',dest,target,index,seriesName:n.target.name});
+          } else {
+            emitInstruction(n, {op:'index',dest,target,index});
+          }
           return dest;
         }
         default: throw new Error(`Unsupported expression node ${n.type}`);
