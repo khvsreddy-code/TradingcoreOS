@@ -22,15 +22,25 @@ function isLegacyTrendStarter(source: string): boolean {
     && source.includes('signal "BUY"')
     && source.includes('signal "SELL"');
 }
+function isLegacySmcStarter(source: string): boolean {
+  // Only migrate the bundled early SMC port; preserve custom user scripts.
+  return source.includes('indicator("Smart Money Concepts [CoreSpirit]")')
+    && source.includes('plot(swingHigh, "#F23645", 1, 0, "Swing High")')
+    && source.includes('plot(swingLow, "#089981", 1, 0, "Swing Low")')
+    && source.includes('zone(time[2], time, low, high[2]')
+    && source.split('\n').length <= 110;
+}
+function isBundledLegacyStarter(source: string): boolean {
+  return isLegacyTrendStarter(source) || isLegacySmcStarter(source);
+}
 function localSource(): string {
   try {
     const saved = localStorage.getItem(versionedStorageKey('editor'))
       || localStorage.getItem('tradingcore:corespirit:editor')
       || localStorage.getItem(LIVE_SOURCE_KEY)
       || '';
-    // Migrate only the known generated sample, not custom user scripts. This makes
-    // the converted SMC script appear for users who still have the old default draft.
-    return saved && !isLegacyTrendStarter(saved) ? saved : '';
+    // Migrate only known bundled starter versions, not custom user scripts.
+    return saved && !isBundledLegacyStarter(saved) ? saved : '';
   } catch { return ''; }
 }
 function persistLocalSource(source: string, name: string, scriptId?: string | null): void {
@@ -112,7 +122,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         if (!script || cancelled) return;
         setScriptId(script.id);
         const cloudSource = script.source || DEFAULT_SOURCE;
-        const migrateCloudStarter = isLegacyTrendStarter(cloudSource);
+        const migrateCloudStarter = isBundledLegacyStarter(cloudSource);
         const cloudName = migrateCloudStarter ? DEFAULT_SCRIPT_NAME : (script.name || DEFAULT_SCRIPT_NAME);
         setName(cloudName);
         setNameDraft(cloudName);
