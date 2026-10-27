@@ -91,7 +91,7 @@ export class CoreSpiritCompiler {
       ...options,
       surface,
       researchSource: original,
-      artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options) },
+      artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options, original) },
     });
   }
 
@@ -534,7 +534,7 @@ export class CoreSpiritCompiler {
       return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error ? `${error.message}\\n${error.stack ?? ''}` : String(error)}], symbols};
     }
   }
-  private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
-    return buildCoreSpiritArtifactSemanticFingerprint(options);
+  private semanticFingerprint(options: CoreSpiritCompilerOptions, source: string): string {
+    return buildCoreSpiritArtifactSemanticFingerprint(options, source);
   }
 }
