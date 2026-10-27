@@ -90,7 +90,12 @@ assert.throws(() => requireCoreSpiritOutputs([
   { kind: 'zone', left: 1, right: 2, top: 10, bottom: Number.NaN },
 ]), /Invalid CoreSpirit worker output payload/,
   'malformed geometry must still be rejected at the worker boundary');
-assert.ok(outputs.some(item => item.kind === 'series'), 'swing-high/low plots must produce chart series');
+assert.ok(!outputs.some(item => item.kind === 'series'),
+  'the SMC port must not paint rolling extrema as continuous plots across every candle');
+const structureLines = outputs.filter(item => item.kind === 'line');
+assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vela line drawings');
+assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.start.price === item.end.price),
+  'BOS/CHoCH structure lines must use chart-time anchors and a stable horizontal price level');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
