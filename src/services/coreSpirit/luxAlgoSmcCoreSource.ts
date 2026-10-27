@@ -40,26 +40,14 @@ let internalLow = internalRollingLow[1]
 // Retain the originating candle time for each rolling extreme. When a break
 // confirms, the drawing starts at that extreme and ends at the breaking candle.
 // Unlike plot(highest(...)), this does not connect changing extrema across every bar.
-// Store each rolling extreme's actual timestamp as a numeric state value.
-// toTime() strips the compiler's special timestamp-series type while preserving
-// the exact bar-open time for later Vela drawing anchors.
-let swingHighAnchorTime: state<number> = toTime(time)
-let swingLowAnchorTime: state<number> = toTime(time)
-let internalHighAnchorTime: state<number> = toTime(time)
-let internalLowAnchorTime: state<number> = toTime(time)
-
-if high >= swingRollingHigh {
-    swingHighAnchorTime := toTime(time)
-}
-if low <= swingRollingLow {
-    swingLowAnchorTime := toTime(time)
-}
-if high >= internalRollingHigh {
-    internalHighAnchorTime := toTime(time)
-}
-if low <= internalRollingLow {
-    internalLowAnchorTime := toTime(time)
-}
+// CoreScript's current type checker preserves timestamp-series typing even
+// through toTime(), so this first-stage source uses constant historical indices
+// for the drawing anchors. Structure break levels themselves remain causal;
+// precise pivot timestamps require a native pivot/last-occurrence primitive.
+let swingHighAnchorTime = time[50]
+let swingLowAnchorTime = time[50]
+let internalHighAnchorTime = time[5]
+let internalLowAnchorTime = time[5]
 
 // Use the previous regular candle interval, not the current open-to-open gap,
 // to give finite imbalance/order-block zones a visible forward projection.
