@@ -1,4 +1,5 @@
-import type { CoreSpiritComponentContract, CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
+import type { CoreSpiritComponentContract } from './coreSpiritExecutionModel';
+import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import { sha256HexSync } from './artifactIdentity';
 import { normalizeCoreSpiritSource } from './syntax';
