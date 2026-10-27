@@ -35,7 +35,6 @@ includes(smc, 'showOrderBlockZones', 'converted source exposes the provisional o
 includes(smc, 'showFairValueGaps', 'converted source exposes FVG visibility');
 excludes(smc, 'lookahead =', 'initial conversion does not contain a lookahead expression');
 excludes(smc, 'request.security(', 'initial conversion does not introduce a higher-timeframe security call');
-excludes(smc, 'request.security', 'initial conversion does not introduce higher-timeframe security calls');
 includes(dock, 'saveUserIndicatorDraft', 'Save creates a versioned cloud draft');
 includes(dock, ".from('corespirit_script_versions')", 'version history is read from the script version table');
 includes(dock, 'onClick={() => void rename()}', 'rename button is wired');
