@@ -356,10 +356,13 @@ export class CoreSpiritSceneDiff {
             lines: this.collections.lines.map(value => ({ ...value })) as TcoDrawingLine[],
             boxes: this.collections.boxes.map(value => ({ ...value })) as TcoDrawingBox[],
             labels: this.collections.labels.map(value => ({ ...value })) as TcoDrawingLabel[],
-            polylines: this.collections.polylines.map(value => ({
-                ...value,
-                points: value.points.map(point => ({ ...point })),
-            })) as TcoDrawingPolyline[],
+            polylines: this.collections.polylines.map(value => {
+                const polyline = value as TcoDrawingPolyline;
+                return {
+                    ...polyline,
+                    points: polyline.points.map(point => ({ ...point })),
+                };
+            }),
             backgrounds: this.collections.backgrounds.map(value => ({ ...value })) as TcoBackground[],
             tables: this.collections.tables.map(value => {
                 const table = value as TcoDrawingTable;
