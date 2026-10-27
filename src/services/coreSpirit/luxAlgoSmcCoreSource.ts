@@ -50,10 +50,11 @@ if showStructureLevels == true and showInternalStructure == true {
     plot(internalLow, "#3179F5", 1, 0, "Internal Low")
 }
 
-swingBullishBreak = crossover(close, swingHigh)
-swingBearishBreak = crossunder(close, swingLow)
-internalBullishBreak = crossover(close, internalHigh)
-internalBearishBreak = crossunder(close, internalLow)
+// Explicit causal cross formulas avoid relying on stateful crossover call identity.
+swingBullishBreak = close > swingHigh and close[1] <= swingHigh[1]
+swingBearishBreak = close < swingLow and close[1] >= swingLow[1]
+internalBullishBreak = close > internalHigh and close[1] <= internalHigh[1]
+internalBearishBreak = close < internalLow and close[1] >= internalLow[1]
 
 let swingBias: state<number> = 0
 let internalBias: state<number> = 0
