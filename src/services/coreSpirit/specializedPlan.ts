@@ -90,6 +90,7 @@ export function buildCoreSpiritSpecializedPlan(
       case 'const': return {op:'const',dest:slot(instruction.dest),value:instruction.value};
       case 'loadSeries':
         return {op:'loadSeries',dest:slot(instruction.dest),name:instruction.name,offset:instruction.offset};
+      case 'loadState': return {op:'loadState',dest:slot(instruction.dest),name:instruction.name};
       case 'move': return {op:'move',dest:slot(instruction.dest),source:instruction.source};
       case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
       case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source)};
