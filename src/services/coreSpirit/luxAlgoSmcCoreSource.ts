@@ -51,57 +51,42 @@ if showStructureLevels == true and showInternalStructure == true {
 
 // Explicit causal cross formulas avoid relying on stateful crossover call identity.
 // A rolling level already represents the prior-bar extreme; a close beyond it is the break.
-let swingBullishBreak = close > swingHigh
-let swingBearishBreak = close < swingLow
-let internalBullishBreak = close > internalHigh
-let internalBearishBreak = close < internalLow
+// Use causal direct guards for structure transitions; local boolean series are retained
+// by the series ABI, but the branch uses the same price-level comparison explicitly.
 
 let swingBias: state<number> = 0
 let internalBias: state<number> = 0
 
-// TEMPORARY TEST PROBES — remove after bearish-break diagnosis.
-if close < 90 {
-    label("DEBUG close below 90", "below", "#FFFFFF", "#000000", 9, "pill")
-}
-if close < swingLow {
-    label("DEBUG close below swing low", "below", "#FFFFFF", "#000000", 9, "pill")
-}
-if swingBearishBreak {
-    label("DEBUG swing bearish break", "below", "#FFFFFF", "#000000", 9, "pill")
-}
-if close < 90 and swingBias > 0 {
-    label("DEBUG positive swing bias", "below", "#FFFFFF", "#000000", 9, "pill")
-}
 
-if showSwingStructure == true and swingBullishBreak and swingBias < 0 {
+if showSwingStructure == true and close > swingHigh and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and swingBullishBreak and swingBias >= 0 {
+if showSwingStructure == true and close > swingHigh and swingBias >= 0 {
     label("Swing BOS ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and swingBearishBreak and swingBias > 0 {
+if showSwingStructure == true and close < swingLow and swingBias > 0 {
     label("Swing CHoCH ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and swingBearishBreak and swingBias <= 0 {
+if showSwingStructure == true and close < swingLow and swingBias <= 0 {
     label("Swing BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
-if swingBullishBreak {
+if close > swingHigh {
     swingBias := 1
 }
-if swingBearishBreak {
+if close < swingLow {
     swingBias := -1
 }
 
-if showInternalStructure == true and internalBullishBreak and internalBias < 0 {
+if showInternalStructure == true and close > internalHigh and internalBias < 0 {
     label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and internalBullishBreak and internalBias >= 0 {
+if showInternalStructure == true and close > internalHigh and internalBias >= 0 {
     label("Internal BOS ↑", "below", "#089981", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and internalBearishBreak and internalBias > 0 {
+if showInternalStructure == true and close < internalLow and internalBias > 0 {
     label("Internal CHoCH ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and internalBearishBreak and internalBias <= 0 {
+if showInternalStructure == true and close < internalLow and internalBias <= 0 {
     label("Internal BOS ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
 }
 if internalBullishBreak {
@@ -113,10 +98,10 @@ if internalBearishBreak {
 
 // Provisional order-block origin zones: the immediately preceding candle range.
 // This is a visual starter, not Pine's parsed-extreme selection/mitigation engine.
-if showOrderBlockZones == true and swingBullishBreak {
+if showOrderBlockZones == true and close > swingHigh {
     zone(time[1], time, high[1], low[1], "#1848CC", "#1848CC", 0.18)
 }
-if showOrderBlockZones == true and swingBearishBreak {
+if showOrderBlockZones == true and close < swingLow {
     zone(time[1], time, high[1], low[1], "#B22833", "#B22833", 0.18)
 }
 

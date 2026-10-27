@@ -28,6 +28,7 @@ includes(dock, 'CORESPIRIT_LUXALGO_SMC_SOURCE', 'the editor uses the converted S
 includes(smc, 'input swingLength: int = 50 min=10 max=100', 'SMC swing lookback defaults to the Pine script 50-bar setting');
 includes(smc, 'let internalRollingHigh = highest(high, 5)', 'SMC internal structure uses the original fixed five-bar internal length');
 includes(smc, 'Swing CHoCH', 'converted source emits swing structure labels');
+includes(smc, 'close < swingLow and swingBias > 0', 'SMC bearish CHoCH uses the current close and retained bias directly');
 includes(smc, 'Swing BOS', 'converted source emits swing structure labels');
 includes(smc, 'Internal CHoCH', 'converted source emits internal structure labels');
 includes(smc, 'Internal BOS', 'converted source emits internal structure labels');
