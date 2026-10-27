@@ -64,10 +64,10 @@ let internalBias: state<number> = 0
 
 
 if showStructureLevels == true and showSwingStructure == true and close > swingHigh {
-    line(swingHighAnchorTime[1], swingHigh, time, swingHigh, "#089981", 2)
+    line(swingHighAnchorTime, swingHigh, time, swingHigh, "#089981", 2)
 }
 if showStructureLevels == true and showSwingStructure == true and close < swingLow {
-    line(swingLowAnchorTime[1], swingLow, time, swingLow, "#F23645", 2)
+    line(swingLowAnchorTime, swingLow, time, swingLow, "#F23645", 2)
 }
 if showSwingStructure == true and close > swingHigh and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
@@ -89,10 +89,10 @@ if close < swingLow {
 }
 
 if showStructureLevels == true and showInternalStructure == true and close > internalHigh {
-    line(internalHighAnchorTime[1], internalHigh, time, internalHigh, "#3179F5", 1)
+    line(internalHighAnchorTime, internalHigh, time, internalHigh, "#3179F5", 1)
 }
 if showStructureLevels == true and showInternalStructure == true and close < internalLow {
-    line(internalLowAnchorTime[1], internalLow, time, internalLow, "#F77C80", 1)
+    line(internalLowAnchorTime, internalLow, time, internalLow, "#F77C80", 1)
 }
 if showInternalStructure == true and close > internalHigh and internalBias < 0 {
     label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
