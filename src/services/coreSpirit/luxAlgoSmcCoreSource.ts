@@ -1,60 +1,111 @@
 /**
- * First executable CoreSpirit conversion of the user-supplied LuxAlgo Smart Money
- * Concepts Pine v5 indicator.
+ * Executable first-stage CoreSpirit port of the supplied Pine v5
+ * "Smart Money Concepts [LuxAlgo]" indicator.
  *
- * Supported in this initial port:
- * - rolling swing high/low levels
- * - bullish/bearish structure breaks, classified as BOS or CHoCH by retained trend bias
- * - three-candle bullish/bearish Fair Value Gap zones
+ * This deliberately uses only the canonical CoreScript compiler/runtime and its
+ * chart-output ABI. Structure levels are causal rolling extremes, not a byte-for-
+ * byte recreation of Pine's custom pivot objects.
  *
- * Not ported in this initial pass: Pine custom types/arrays, mutable object pools,
- * internal-vs-swing pivot engines, order blocks/mitigation, MTF security levels,
- * equal-high/low pivot confirmation, and premium/discount zones. Those require
- * additional CoreSpirit state/visual contracts and are deliberately not faked here.
+ * Implemented in this stage:
+ * - separate internal (default 5 bars) and swing (default 50 bars) structure levels
+ * - BOS/CHoCH labels with independent retained trend bias for both structures
+ * - optional order-block-like origin zones on structure breaks (last-bar range;
+ *   explicitly an approximation until the runtime supports Pine's mutable OB pools)
+ * - three-candle bullish/bearish FVG zones
+ *
+ * Still not equivalent to the full Pine source: Pine custom types/object arrays,
+ * true leg/pivot confirmation, OB selection/mitigation lifecycle, EQH/EQL pivot
+ * confirmation, request.security MTF levels, configurable historical/present
+ * drawing lifecycle, strong/weak swing tracking, and premium/discount zones.
+ * Those are not silently claimed as converted.
  */
 export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [CoreSpirit]") {
     overlay: true
-    input swingLength: int = 5 min=2 max=50
+    input swingLength: int = 50 min=10 max=100
+    input internalLength: int = 5 min=2 max=20
+    input showInternalStructure: bool = true
+    input showSwingStructure: bool = true
     input showStructureLevels: bool = true
-    input showStructureBreaks: bool = true
+    input showOrderBlockZones: bool = true
     input showFairValueGaps: bool = true
 }
 
-rollingHigh = highest(high, swingLength)
-rollingLow = lowest(low, swingLength)
-swingHigh = rollingHigh[1]
-swingLow = rollingLow[1]
+swingRollingHigh = highest(high, swingLength)
+swingRollingLow = lowest(low, swingLength)
+swingHigh = swingRollingHigh[1]
+swingLow = swingRollingLow[1]
 
-// The prior rolling extremes act as confirmed, causal structure levels.
-if showStructureLevels == true {
+internalRollingHigh = highest(high, internalLength)
+internalRollingLow = lowest(low, internalLength)
+internalHigh = internalRollingHigh[1]
+internalLow = internalRollingLow[1]
+
+// Previous-bar extremes avoid using the still-forming current bar as its own level.
+if showStructureLevels == true and showSwingStructure == true {
     plot(swingHigh, "#F23645", 1, 0, "Swing High")
     plot(swingLow, "#089981", 1, 0, "Swing Low")
 }
-
-bullishBreak = crossover(close, swingHigh)
-bearishBreak = crossunder(close, swingLow)
-let structureBias: state<int> = 0
-
-if showStructureBreaks == true and bullishBreak and structureBias < 0 {
-    label("CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
-}
-if showStructureBreaks == true and bullishBreak and structureBias >= 0 {
-    label("BOS ↑", "below", "#089981", "#FFFFFF", 10, "pill")
-}
-if showStructureBreaks == true and bearishBreak and structureBias > 0 {
-    label("CHoCH ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
-}
-if showStructureBreaks == true and bearishBreak and structureBias <= 0 {
-    label("BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
-}
-if bullishBreak {
-    structureBias := 1
-}
-if bearishBreak {
-    structureBias := -1
+if showStructureLevels == true and showInternalStructure == true {
+    plot(internalHigh, "#F77C80", 1, 0, "Internal High")
+    plot(internalLow, "#3179F5", 1, 0, "Internal Low")
 }
 
-// Three-candle imbalance: the current low/high does not overlap two bars back.
+swingBullishBreak = crossover(close, swingHigh)
+swingBearishBreak = crossunder(close, swingLow)
+internalBullishBreak = crossover(close, internalHigh)
+internalBearishBreak = crossunder(close, internalLow)
+
+let swingBias: state<int> = 0
+let internalBias: state<int> = 0
+
+if showSwingStructure == true and swingBullishBreak and swingBias < 0 {
+    label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
+}
+if showSwingStructure == true and swingBullishBreak and swingBias >= 0 {
+    label("Swing BOS ↑", "below", "#089981", "#FFFFFF", 10, "pill")
+}
+if showSwingStructure == true and swingBearishBreak and swingBias > 0 {
+    label("Swing CHoCH ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
+}
+if showSwingStructure == true and swingBearishBreak and swingBias <= 0 {
+    label("Swing BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
+}
+if swingBullishBreak {
+    swingBias := 1
+}
+if swingBearishBreak {
+    swingBias := -1
+}
+
+if showInternalStructure == true and internalBullishBreak and internalBias < 0 {
+    label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
+}
+if showInternalStructure == true and internalBullishBreak and internalBias >= 0 {
+    label("Internal BOS ↑", "below", "#089981", "#FFFFFF", 9, "pill")
+}
+if showInternalStructure == true and internalBearishBreak and internalBias > 0 {
+    label("Internal CHoCH ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
+}
+if showInternalStructure == true and internalBearishBreak and internalBias <= 0 {
+    label("Internal BOS ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
+}
+if internalBullishBreak {
+    internalBias := 1
+}
+if internalBearishBreak {
+    internalBias := -1
+}
+
+// Provisional order-block origin zones: the immediately preceding candle range.
+// This is a visual starter, not Pine's parsed-extreme selection/mitigation engine.
+if showOrderBlockZones == true and swingBullishBreak {
+    zone(time[1], time, high[1], low[1], "#1848CC", "#1848CC", 0.18)
+}
+if showOrderBlockZones == true and swingBearishBreak {
+    zone(time[1], time, high[1], low[1], "#B22833", "#B22833", 0.18)
+}
+
+// Causal three-candle imbalance zones. No lookahead or higher-timeframe request.
 bullishFvg = low > high[2] and close > open
 bearishFvg = high < low[2] and close < open
 if showFairValueGaps == true and bullishFvg {
