@@ -21,7 +21,8 @@ The SMC acceptance test compiles the bundled source into an executable artifact 
 - BOS/CHoCH, confirmed swing labels, equal-high/equal-low output, order-block zones, FVGs and premium/discount zones;
 - pivot confirmation delay, actual pivot anchor time/price, and exact bullish/bearish FVG left/right/top/bottom boundaries;
 - FVG visibility input behavior, forming-bar replacement, unique drawing IDs and historical-correction replay;
-- Vela timestamp adaptation and native visual-ABI projection.
+- Vela timestamp adaptation and native visual-ABI projection;
+- stable chart-instance identity: identical source reuses one instance, while changed source only replaces the previous valid instance after the new instance reports ready.
 
 These fixtures test the port's documented contract. They do **not** prove parity with every behavior in the original LuxAlgo source.
 
@@ -39,7 +40,8 @@ For an authenticated workspace, set `TCO_REQUIRE_AUTH=true` and use an existing 
 2. the post-commit native scene contains chart-target drawing objects such as lines, zones, boxes or labels;
 3. the screenshot of the actual Vela plot differs from the pre-compile screenshot by a minimum number of pixels inside the chart-plot region;
 4. a second screenshot comparison proves the plot changed after a wheel zoom and horizontal drag;
-5. the source saved by the actual Compile & Run path is restored exactly after a page reload.
+5. recompiling the same SMC source leaves exactly one stable active-chart instance and does not grow the retained visual inventory;
+6. the source saved by the actual Compile & Run path is restored exactly after a page reload.
 
 The screenshot comparator reads the browser-produced PNG files, decodes RGB/RGBA pixels, and compares only the overlap of the largest visible Vela chart canvas region. The pass threshold is deliberately a *change detector*, not a similarity score: it confirms that the native drawing commit affected pixels and that viewport gestures caused a plot update. It does not assert that the drawing is semantically correct at every coordinate by itself; that is covered by the separate fixed-history fixtures.
 
