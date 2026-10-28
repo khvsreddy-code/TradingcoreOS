@@ -217,6 +217,37 @@ try {
   assert(dockState.sourceLoaded, 'CoreSpirit terminal did not load the canonical bundled SMC source.');
   assert(dockState.hasCompileButton, 'Compile & Run is missing from the mounted CoreSpirit terminal.');
 
+  // Establish a clean visual baseline even when this browser profile previously
+  // ran SMC. Otherwise repeat test runs could "pass" on an already-attached script.
+  const clearedPriorSmc = evaluateJson(`(() => {
+    const cell = window.__TCO_VELA__?.workspace?.active;
+    if (!cell || !Array.isArray(cell.instances) || typeof cell.removeFromChart !== 'function') {
+      return { activeCellAvailable: false, removed: 0, remaining: 0 };
+    }
+    const targetIds = cell.instances
+      .filter(instance => instance?.entry?.language === 'corespirit' &&
+        instance?.entry?.name === 'Smart Money Concepts [CoreSpirit]')
+      .map(instance => instance.id);
+    let removed = 0;
+    for (const id of targetIds.reverse()) {
+      const index = cell.instances.findIndex(instance => instance.id === id);
+      if (index < 0) continue;
+      const nativeCount = cell.indicatorCount - cell.instances.length;
+      cell.removeFromChart(nativeCount + index);
+      removed += 1;
+    }
+    return {
+      activeCellAvailable: true,
+      removed,
+      remaining: cell.instances.filter(instance => instance?.entry?.language === 'corespirit' &&
+        instance?.entry?.name === 'Smart Money Concepts [CoreSpirit]').length
+    };
+  })()`);
+  assert(clearedPriorSmc.activeCellAvailable,
+    'Could not obtain the active Vela cell to establish a clean SMC visual baseline.');
+  assert.equal(clearedPriorSmc.remaining, 0,
+    'Existing SMC instances must be removed before the acceptance baseline is captured.');
+  await pause(350);
   const beforeRegion = getLargestChartCanvasRegion();
   assert(beforeRegion, 'Cannot capture SMC visual baseline: no usable Vela chart canvas was found.');
   const beforeScreenshotPath = takeScreenshot('before');
@@ -377,6 +408,7 @@ try {
       const visualEvidence = {
         url: baseUrl,
         acceptance: 'compile-and-run + native Vela drawing commit + chart plot screenshot diffs before/after compile and after zoom/pan',
+        priorSmcInstancesRemoved: clearedPriorSmc.removed,
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },
         objectCount: commit.objectCount,
         kindCounts: commit.kindCounts,
