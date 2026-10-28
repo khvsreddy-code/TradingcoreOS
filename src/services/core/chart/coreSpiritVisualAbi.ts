@@ -515,8 +515,8 @@ export function projectCoreSpiritObjectsToVela(
         id, paneId: itemPane, xloc: 'bar_time',
         x1: assertVelaEpochMillis(object.start.time, 'line x1'), y1: Number(object.start.price),
         x2: assertVelaEpochMillis(object.end.time, 'line x2'), y2: Number(object.end.price),
-        extend: 'none', color: String(st.color ?? st.borderColor ?? '#f59e0b'),
-        invisible: false, width: Math.max(1, finiteNumber(st.lineWidth ?? st.width) ?? 1),
+        extend: 'none', color: cssWithOpacity(st.color ?? st.borderColor, st.opacity, '#f59e0b'),
+        invisible: st.opacity === 0, width: Math.max(1, finiteNumber(st.lineWidth ?? st.width) ?? 1),
         style: velaLineStyle(st.lineStyle), arrowLeft: false,
         arrowRight: object.kind === 'arrow' || Boolean(st.arrowRight),
         overlay: itemOverlay,
@@ -533,7 +533,7 @@ export function projectCoreSpiritObjectsToVela(
         left: assertVelaEpochMillis(object.left, 'box left'), right: assertVelaEpochMillis(object.right, 'box right'),
         top: Number(object.top), bottom: Number(object.bottom), extend: 'none',
         bgColor: cssWithOpacity(st.fillColor ?? st.color, fillOpacity, 'rgba(59,130,246,0.12)'),
-        borderColor: String(st.borderColor ?? st.color ?? '#3b82f6'),
+        borderColor: cssWithOpacity(st.borderColor ?? st.color, st.opacity, '#3b82f6'),
         borderWidth: Math.max(0, finiteNumber(st.borderWidth ?? st.lineWidth) ?? 1),
         borderStyle: velaLineStyle(st.lineStyle ?? defaultBorderStyle),
         text: typeof st.text === 'string' ? st.text : undefined,
@@ -565,7 +565,7 @@ export function projectCoreSpiritObjectsToVela(
         id, paneId: itemPane,
         points: object.points.map(point => ({ xloc: 'bar_time', x: assertVelaEpochMillis(point.time, 'polyline x'), price: Number(point.price) })),
         curved: false, closed: object.kind === 'polygon' || Boolean((object as any).closed),
-        lineColor: String(st.borderColor ?? st.color ?? '#f59e0b'),
+        lineColor: cssWithOpacity(st.borderColor ?? st.color, st.opacity, '#f59e0b'),
         fillColor: object.kind === 'polygon' ? cssWithOpacity(st.fillColor ?? st.color, st.fillOpacity ?? st.opacity, 'rgba(59,130,246,0.12)') : undefined,
         lineWidth: Math.max(1, finiteNumber(st.lineWidth ?? st.borderWidth) ?? 1),
         lineStyle: velaLineStyle(st.lineStyle), arrowLeft: false, arrowRight: false, overlay: itemOverlay,
@@ -574,7 +574,7 @@ export function projectCoreSpiritObjectsToVela(
       const st = styleRecord((object as any).style);
       priceLines.push({
         id, paneId: itemPane, price: Number(object.price),
-        color: String(st.color ?? '#f59e0b'), lineStyle: velaLineStyle(st.lineStyle),
+        color: cssWithOpacity(st.color, st.opacity, '#f59e0b'), lineStyle: velaLineStyle(st.lineStyle),
         width: Math.max(1, finiteNumber(st.lineWidth ?? st.width) ?? 1),
         title: String(st.text ?? ''),
       });
