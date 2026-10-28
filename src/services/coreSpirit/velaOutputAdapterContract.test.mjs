@@ -21,6 +21,20 @@ const bars = normalizeVelaBarsToCoreSpirit([
 
 assert.equal(coreSpiritTimeToVelaMillis(t0), t0 * 1000);
 assert.equal(coreSpiritTimeToVelaMillis(t0 * 1000), t0 * 1000);
+
+// `visualPoint()` defaults an untagged x/y point to chart-time coordinates.
+// The same second → millisecond boundary must apply to nested geometry, not only
+// the top-level `time` / `left` / `right` drawing anchors.
+const implicitTimeGeometry = adaptCoreSpiritOutputsForVela([{
+  kind: 'customVisual',
+  id: 'implicit-time-point',
+  geometry: { kind: 'point', point: { kind: 'point', space: 'time', x: t0, y: 101 } },
+}], bars).outputs[0];
+assert.equal(
+  implicitTimeGeometry.geometry.point.x,
+  t0 * 1000,
+  'nested time-space geometry is normalized before the Vela paint loop',
+);
 assert.equal(Date.parse(bars[1].timestamp), (t0 + 300) * 1000);
 
 assert.equal(safeVelaNormalizationStart([
