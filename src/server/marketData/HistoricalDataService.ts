@@ -6,6 +6,7 @@ export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
 export const HISTORICAL_SOURCE_POLICY = 'nse-first+investiny-history-fallback+fyers-quota-aware-fno-fallback-5000/v3';
 const CACHE_TTL_MS = 60_000;
+const NEGATIVE_CACHE_TTL_MS = 15_000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const CACHE_TABLE = 'historical_dataset_cache';
 const MAPPING_TABLE = 'historical_instrument_mappings';
@@ -641,6 +642,8 @@ export class HistoricalDataService {
           autoFixer: {
             nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
             investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
           },
           historyCompleteness: {
             status: merged.length >= preferredTarget ? 'page-target-reached' : 'partial-page',
@@ -881,10 +884,11 @@ export class HistoricalDataService {
         arbitraryEndPaging: Boolean(fetchFyersRecent),
         requestRange: { from: new Date(range.fromMs).toISOString(), to: new Date(range.toMs).toISOString() },
       };
+      sourceStatus.noValidatedBars = merged.length === 0;
       let record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
         revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
-        expiresAt: Date.now() + CACHE_TTL_MS, updatedAt: Date.now(), quote,
+        expiresAt: Date.now() + (merged.length ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS), updatedAt: Date.now(), quote,
       };
       if (!merged.length && cached?.bars.length) {
         const staleRecord: CacheRecord = {
@@ -1091,6 +1095,14 @@ export class HistoricalDataService {
           },
         }),
         quote: null,
+      };
+    }
+
+    if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && !cached.bars.length && cached.sourceStatus.noValidatedBars === true) {
+      return {
+        bars: [],
+        metadata: this.metadata(cached, [], { cacheHit: true, degraded: true, stale: false }),
+        quote: cached.quote || null,
       };
     }
 
