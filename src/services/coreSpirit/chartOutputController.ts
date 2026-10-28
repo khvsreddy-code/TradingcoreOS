@@ -1,5 +1,6 @@
 import { IChartApi, ISeriesApi, VelaNativeSeriesKernel, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
 import { CoreSpiritOutputFrame } from './outputDispatcher';
+import { applyCoreSpiritPlotSnapshot, type CoreSpiritPlotSnapshotPoint, type CoreSpiritPlotSeriesSink } from './coreSpiritPlotSnapshot';
 import { CoreSpiritObject } from './types';
 import { CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID, type CoreSpiritVelaOutputLayerData } from '../core/chart/coreSpiritVelaOutputLayer';
 import type { CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
@@ -195,55 +196,12 @@ export class CoreSpiritChartOutputController {
    * the correctness fallback for genuine historical rewrites.
    */
   private applyPlotPoints(series: ISeriesApi<'Line'>, points: readonly { time: number; value: number | null }[]): void {
-    const valid = (point: { time: number; value: number | null }): boolean =>
-      Number.isFinite(point.time) && (point.value == null || Number.isFinite(point.value));
-
     const current = series instanceof VelaNativeSeriesKernel ? series.snapshotPoints() : [];
-    // An empty series is a real output state (e.g. a lookback has not warmed up
-    // after a symbol/timeframe change). Leaving the previous data in place makes
-    // an indicator look valid while its current computation emitted no points.
-    if (!points.length) {
-      if (current.length) series.setData([]);
-      return;
-    }
-    if (!current.length) {
-      const initial = points.filter(valid).map((p) =>
-        p.value == null
-          ? ({ time: p.time as Time } as any)
-          : ({ time: p.time as Time, value: p.value } as any),
-      );
-      // Commit even an empty filtered result so malformed/NaN-only snapshots
-      // cannot leave stale chart pixels behind.
-      series.setData(initial as any);
-      return;
-    }
-
-    const last = points[points.length - 1]!;
-    const currentLast = current[current.length - 1]!;
-    if (!valid(last)) return;
-
-    if (points.length === current.length && last.time === currentLast.time) {
-      series.update(last.value == null ? ({ time: last.time as Time } as any) : ({ time: last.time as Time, value: last.value } as any));
-      return;
-    }
-
-    if (points.length > current.length && points[current.length - 1]?.time === currentLast.time) {
-      for (let i = current.length; i < points.length; i += 1) {
-        const point = points[i]!;
-        if (!valid(point)) continue;
-        series.update(point.value == null ? ({ time: point.time as Time } as any) : ({ time: point.time as Time, value: point.value } as any));
-      }
-      return;
-    }
-
-    const replacement = points.filter(valid).map((p) =>
-      p.value == null
-        ? ({ time: p.time as Time } as any)
-        : ({ time: p.time as Time, value: p.value } as any),
+    applyCoreSpiritPlotSnapshot(
+      series as unknown as CoreSpiritPlotSeriesSink,
+      points as readonly CoreSpiritPlotSnapshotPoint[],
+      current as readonly { time: number; value?: number | null }[],
     );
-    // Full replacement is also the recovery path for a snapshot whose points
-    // all became invalid; an empty result must clear, not preserve, old data.
-    series.setData(replacement as any);
   }
 
   private publishNativeDrawingCollections(
