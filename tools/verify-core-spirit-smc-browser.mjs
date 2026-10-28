@@ -65,24 +65,32 @@ try {
   })()`);
   run(['wait', '--load', 'networkidle']);
 
-  const dockState = evaluateJson(`(() => {
-    let editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
-    if (!editor) {
-      const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
-      if (toggle) toggle.click();
-      editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
-    }
-    return {
-      editorVisible: !!editor,
-      sourceLoaded: !!editor && editor.value.includes('indicator("Smart Money Concepts [CoreSpirit]")') && editor.value.includes('showFairValueGaps'),
-      hasCompileButton: Array.from(document.querySelectorAll('button')).some(button => (button.innerText || '').includes('Compile & Run')),
-      chartCanvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
-        const rect = canvas.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      }).length
-    };
+  evaluate(`(() => {
+    if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
+    const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
+    if (!toggle) throw new Error('CoreSpirit right-rail terminal toggle is missing.');
+    toggle.click();
+    return 'EDITOR_TOGGLE_CLICKED';
   })()`);
-  assert(dockState.editorVisible, 'CoreSpirit terminal is not visible or its source editor did not mount.');
+  let dockState = null;
+  const dockDeadline = Date.now() + 8_000;
+  while (Date.now() < dockDeadline) {
+    dockState = evaluateJson(`(() => {
+      const editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
+      return {
+        editorVisible: !!editor,
+        sourceLoaded: !!editor && editor.value.includes('indicator("Smart Money Concepts [CoreSpirit]")') && editor.value.includes('showFairValueGaps'),
+        hasCompileButton: Array.from(document.querySelectorAll('button')).some(button => (button.innerText || '').includes('Compile & Run')),
+        chartCanvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
+          const rect = canvas.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }).length
+      };
+    })()`);
+    if (dockState.editorVisible && dockState.hasCompileButton) break;
+    await pause(200);
+  }
+  assert(dockState?.editorVisible, 'CoreSpirit terminal is not visible or its source editor did not mount.');
   assert(dockState.sourceLoaded, 'CoreSpirit terminal did not load the canonical bundled SMC source.');
   assert(dockState.hasCompileButton, 'Compile & Run is missing from the mounted CoreSpirit terminal.');
 
