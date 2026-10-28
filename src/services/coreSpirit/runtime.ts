@@ -862,9 +862,11 @@ export class CoreSpiritRuntime {
       parametersSignature:JSON.stringify({ operations:group.operations.map(operation=>({name:operation.name,length:operation.length,parameter:operation.parameter})) }),
     };
     const instructions = this.compiledIr?.entry.instructions ?? [];
-    const instructionIndex = instructions.findIndex(instruction =>
-      instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
-    );
+    const instructionIndex = instructions.findIndex(instruction => {
+      if (instruction.op !== 'call') return false;
+      const callId = instruction.callId || instruction.dest;
+      return callId === key || (family === 'direct' && key.startsWith(`direct:${callId}|`));
+    });
     const instruction = instructionIndex >= 0 ? instructions[instructionIndex] : undefined;
     const isCall = instruction?.op === 'call';
     const parametersSignature = JSON.stringify({
@@ -1643,7 +1645,7 @@ export class CoreSpiritRuntime {
       const current = Number(args[0]);
       if (!Number.isFinite(current)) return finish(null);
       const operation = { name: name as CoreSpiritSeriesOperationName, length };
-      const key = 'direct:' + name + ':' + series + ':' + length;
+      const key = 'direct:' + callKey + '|' + name + '|' + series + '|' + length;
       this.rememberKernelIdentity('direct', key, callKey, seriesArgs);
       let cursor = this.directKernelCursors.get(key);
       if (!cursor) {
