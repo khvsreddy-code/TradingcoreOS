@@ -545,6 +545,7 @@ export function paintCoreSpiritVelaOutputLayer(
 
 type CoreSpiritVisualAcceptanceWindow = Window & {
   __TCO_CORESPIRIT_VISUAL_ACCEPTANCE__?: boolean;
+  __TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__?: boolean;
   __TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__?: number;
 };
 
@@ -560,7 +561,9 @@ function probeVisibleCoreSpiritPixels(
 ): void {
   if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
   const target = window as CoreSpiritVisualAcceptanceWindow;
-  if (target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ !== true || canvas.width < 1 || canvas.height < 1) return;
+  if (target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ !== true ||
+      target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ === true ||
+      canvas.width < 1 || canvas.height < 1) return;
   const now = performance.now();
   const lastProbe = target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ ?? 0;
   if (now - lastProbe < 750) return;
@@ -574,6 +577,7 @@ function probeVisibleCoreSpiritPixels(
     }
     if (nonTransparentPixels < 1) return;
     target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = false;
+    target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = true;
     window.dispatchEvent(new CustomEvent('tco:corespirit:visual-paint', {
       detail: {
         schemaVersion: data.schemaVersion,
