@@ -563,11 +563,11 @@ function registerCoreSpiritVelaOutputLayer(
           if (!data ||
               data.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
               data.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
-              !data.scriptInstanceId ||
-              !Number.isSafeInteger(data.datasetRevision) ||
-              !Number.isSafeInteger(data.outputRevision) ||
-              !Number.isSafeInteger(data.revision) ||
-              !data.paneId.trim() ||
+              typeof data.scriptInstanceId !== 'string' || !data.scriptInstanceId.trim() ||
+              !Number.isSafeInteger(data.datasetRevision) || data.datasetRevision < 0 ||
+              !Number.isSafeInteger(data.outputRevision) || data.outputRevision < 0 ||
+              !Number.isSafeInteger(data.revision) || data.revision < 0 ||
+              typeof data.paneId !== 'string' || !data.paneId.trim() ||
               data.layerRole !== layerRole ||
               data.visible !== true) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
