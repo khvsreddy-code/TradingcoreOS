@@ -98,7 +98,7 @@ const fvgZones = outputs.filter(item => item.kind === 'zone' && ['#00FF68', '#FF
 assert.ok(fvgZones.length > 0 && fvgZones.every(item => Number.isFinite(item.left) && Number.isFinite(item.right) && item.right > item.left),
   'FVG objects must retain explicit ordered bar-time boundaries');
 const pivotLabels = outputs.filter(item => item.kind === 'label' && /^(HH|LH|HL|LL|SH|SL)$/.test(item.text));
-assert.ok(pivotLabels.every(item => item.time <= Number(bars.at(-1).timestamp) / 1000),
+assert.ok(pivotLabels.every(item => item.time <= Date.parse(bars.at(-1).timestamp) / 1000),
   'pivot labels must be anchored to historical bar times, not generated with future coordinates');
 
 // Exercise the production timestamp adapter and the native Vela drawing projection,
