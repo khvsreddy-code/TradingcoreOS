@@ -543,61 +543,6 @@ export function paintCoreSpiritVelaOutputLayer(
   ctx.restore();
 }
 
-type CoreSpiritVisualAcceptanceWindow = Window & {
-  __TCO_CORESPIRIT_VISUAL_ACCEPTANCE__?: boolean;
-  __TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__?: boolean;
-  __TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__?: number;
-};
-
-/**
- * Expensive readback is intentionally opt-in and one-shot. The dedicated browser
- * acceptance runner enables it only after a non-empty SMC scene has committed.
- * Production chart frames never read pixels back from the renderer canvas.
- */
-function probeVisibleCoreSpiritPixels(
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
-  data: CoreSpiritVelaOutputLayerData,
-): void {
-  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
-  const target = window as CoreSpiritVisualAcceptanceWindow;
-  if (target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ !== true ||
-      target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ === true ||
-      canvas.width < 1 || canvas.height < 1) return;
-  const now = performance.now();
-  const lastProbe = target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ ?? 0;
-  if (now - lastProbe < 750) return;
-  target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = now;
-
-  try {
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let nonTransparentPixels = 0;
-    for (let offset = 3; offset < pixels.length; offset += 4) {
-      if (pixels[offset]! > 0) nonTransparentPixels += 1;
-    }
-    if (nonTransparentPixels < 1) return;
-    target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = false;
-    target.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = true;
-    window.dispatchEvent(new CustomEvent('tco:corespirit:visual-paint', {
-      detail: {
-        schemaVersion: data.schemaVersion,
-        scriptInstanceId: data.scriptInstanceId,
-        datasetRevision: data.datasetRevision,
-        outputRevision: data.outputRevision,
-        paneId: data.paneId,
-        layerRole: data.layerRole,
-        nonTransparentPixels,
-        canvasWidth: canvas.width,
-        canvasHeight: canvas.height,
-        visualObjectCount: data.drawings.length + data.visuals.length + data.labels.length + data.tables.length,
-      },
-    }));
-  } catch {
-    // Browser security/context limitations fail the acceptance gate by withholding
-    // evidence; they must not fail or alter the production renderer itself.
-  }
-}
-
 function registerCoreSpiritVelaOutputLayer(
   id: string,
   placement: 'below-data' | 'above-data',
@@ -629,7 +574,6 @@ function registerCoreSpiritVelaOutputLayer(
             return;
           }
           paintCoreSpiritVelaOutputLayer(ctx, args, data);
-          probeVisibleCoreSpiritPixels(ctx, canvas, data);
         },
         destroy() { canvas = undefined; },
       };
