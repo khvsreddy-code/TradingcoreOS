@@ -57,7 +57,7 @@ function persistLocalSource(source: string, name: string, scriptId?: string | nu
 export type CoreSpiritDockProps = {
   onClose: () => void;
   /** The host must validate the exact-source identity again before execution. */
-  onAddToChart: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
+  onAddToChart: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
   /** Render inside Vela's docked side-panel instead of a floating overlay. */
   embedded?: boolean;
   /** Updates Vela's own panel maximization state. */
@@ -258,7 +258,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       const compiled = await compileSource(source);
       const artifact = compiled.artifact;
       if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.');
-      await onAddToChart(cleanName, source, artifact);
+      await onAddToChart(cleanName, source, artifact, scriptId);
       setName(cleanName);
       persistLocalSource(source, cleanName, scriptId);
       setStatus(`Added “${cleanName}” to the active Vela chart.`);
@@ -375,7 +375,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       )}
       <div className="mx-3 mb-2 truncate text-[10px] text-slate-400" role="status" aria-live="polite">{busyText || status}</div>
       <footer className="flex flex-wrap gap-2 border-t border-[#293244] p-3">
-        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); setStatus('Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); await onAddToChart(cleanName, source, artifact); setName(cleanName); persistLocalSource(source, cleanName, scriptId); setStatus(`Compile passed · “${cleanName}” is now running on the active Vela chart.`); }).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
+        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); setStatus('Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); await onAddToChart(cleanName, source, artifact, scriptId); setName(cleanName); persistLocalSource(source, cleanName, scriptId); setStatus(`Compile passed · “${cleanName}” is now running on the active Vela chart.`); }).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
         <button type="button" onClick={() => void save()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Save size={13}/> Save</button>
         <button type="button" onClick={() => void publish()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><UploadCloud size={13}/> Publish</button>
         <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-orange-400 disabled:opacity-50"><Check size={13}/> Add to chart</button>
