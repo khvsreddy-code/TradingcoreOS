@@ -37,28 +37,27 @@ let projectedRight = time + barDuration * 20
 // A pivot candidate is not usable until swingLength bars have arrived after it.
 // The left-side comparison is read at the candidate bar; the right-side window
 // ends at the current bar. This deliberately preserves the confirmation delay.
+let swingRollingHigh = highest(high, swingLength)
+let swingLeftWindowHigh = swingRollingHigh[swingLength]
+let swingRightWindowHigh = swingRollingHigh
+let swingRollingLow = lowest(low, swingLength)
+let swingLeftWindowLow = swingRollingLow[swingLength]
+let swingRightWindowLow = swingRollingLow
 let swingCandidateHigh = high[swingLength]
-let swingLeftWindowHigh = highest(high, swingLength)[swingLength]
-let swingRightWindowHigh = highest(high, swingLength)
 let swingCandidateLow = low[swingLength]
-let swingLeftWindowLow = lowest(low, swingLength)[swingLength]
-let swingRightWindowLow = lowest(low, swingLength)
 let swingPivotHighConfirmed = swingCandidateHigh >= swingLeftWindowHigh and swingCandidateHigh > swingRightWindowHigh
 let swingPivotLowConfirmed = swingCandidateLow <= swingLeftWindowLow and swingCandidateLow < swingRightWindowLow
 
+let internalRollingHigh = highest(high, internalLength)
+let internalLeftWindowHigh = internalRollingHigh[internalLength]
+let internalRightWindowHigh = internalRollingHigh
+let internalRollingLow = lowest(low, internalLength)
+let internalLeftWindowLow = internalRollingLow[internalLength]
+let internalRightWindowLow = internalRollingLow
 let internalCandidateHigh = high[internalLength]
-let internalLeftWindowHigh = highest(high, internalLength)[internalLength]
-let internalRightWindowHigh = highest(high, internalLength)
 let internalCandidateLow = low[internalLength]
-let internalLeftWindowLow = lowest(low, internalLength)[internalLength]
-let internalRightWindowLow = lowest(low, internalLength)
 let internalPivotHighConfirmed = internalCandidateHigh >= internalLeftWindowHigh and internalCandidateHigh > internalRightWindowHigh
 let internalPivotLowConfirmed = internalCandidateLow <= internalLeftWindowLow and internalCandidateLow < internalRightWindowLow
-
-let priorSwingPivotHigh = swingPivotHigh
-let priorSwingPivotHighTime = swingPivotHighTime
-let priorSwingPivotLow = swingPivotLow
-let priorSwingPivotLowTime = swingPivotLowTime
 
 let swingPivotHigh: state<number> = 0
 let swingPivotLow: state<number> = 0
@@ -75,6 +74,11 @@ let internalPivotLowTime: state<number> = 0
 let internalHighBroken: state<bool> = false
 let internalLowBroken: state<bool> = false
 let internalBias: state<number> = 0
+
+let priorSwingPivotHigh = swingPivotHigh
+let priorSwingPivotHighTime = swingPivotHighTime
+let priorSwingPivotLow = swingPivotLow
+let priorSwingPivotLowTime = swingPivotLowTime
 
 if swingPivotHighConfirmed == true {
     swingPivotHigh := swingCandidateHigh
