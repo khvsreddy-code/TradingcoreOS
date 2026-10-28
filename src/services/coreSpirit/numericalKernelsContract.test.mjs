@@ -11,6 +11,25 @@ const values = Float64Array.from([1, 2, 3, 4]);
 assert.deepEqual(Array.from(rollingMean(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingMean(values, 2)[1], 1.5);
 close(rollingMean(values, 2)[3], 3.5);
+
+const { RollingMean } = await import('./statefulIndicatorKernel.ts');
+const incrementalMean = new RollingMean(3);
+assert.equal(incrementalMean.update(1).value, null, 'rolling mean must remain NaN until a full window forms');
+assert.equal(incrementalMean.update(2).value, null, 'rolling mean warm-up must require consecutive finite observations');
+close(incrementalMean.update(3).value, 2);
+assert.equal(incrementalMean.update(Number.NaN).value, null,
+  'a missing observation must reset incremental rolling mean instead of carrying a stale window across a gap');
+assert.equal(incrementalMean.update(Number.POSITIVE_INFINITY).value, null,
+  'non-finite observations must keep the rolling window invalid');
+assert.equal(incrementalMean.update(4).value, null, 'a fresh window must warm up after a gap');
+assert.equal(incrementalMean.update(5).value, null, 'a fresh window must still require its full period');
+close(incrementalMean.update(6).value, 5);
+const correctedMean = new RollingMean(3);
+correctedMean.update(1); correctedMean.update(2); correctedMean.update(3);
+correctedMean.update(Number.NaN);
+correctedMean.update(4); correctedMean.update(5);
+assert.equal(correctedMean.update(6, 'replace').value, null,
+  'a forming-bar replacement must preserve the fresh-window warm-up boundary');
 assert.deepEqual(Array.from(rollingSum(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingSum(values, 2)[3], 7);
 close(rollingVariance(Float64Array.from([1, 2, 3]), 2)[1], 0.25);
