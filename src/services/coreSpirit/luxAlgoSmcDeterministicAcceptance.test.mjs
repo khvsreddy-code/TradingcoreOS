@@ -62,9 +62,14 @@ function semanticFingerprint(outputs) {
 const bars = fixedDataset();
 const first = executeCoreSpirit(source, bars, SOURCE_ID);
 const replay = executeCoreSpirit(source, bars, SOURCE_ID);
+const referenceRuntime = new CoreSpiritRuntime({ sourceId: SOURCE_ID, executionTier: 'reference' });
+const referenceReplay = referenceRuntime.executeIr(compiled.ir, bars);
 assert.deepEqual(first.diagnostics, [], 'fixed SMC history must execute without runtime diagnostics');
+assert.deepEqual(referenceReplay.diagnostics, [], 'reference SMC history must execute without runtime diagnostics');
 assert.equal(semanticFingerprint(replay.outputs), semanticFingerprint(first.outputs),
   'full-history replay must reproduce byte-stable confirmed outputs');
+assert.equal(semanticFingerprint(referenceReplay.outputs), semanticFingerprint(first.outputs),
+  'reference and optimized backends must produce identical confirmed SMC output objects');
 const outputs = first.outputs;
 assert.equal(requireCoreSpiritOutputs(outputs).length, outputs.length, 'SMC output must pass the same worker payload validator as production');
 assert.ok(outputs.some(item => item.kind === 'line'), 'SMC must produce native structure/EQH/EQL line objects');
