@@ -12,7 +12,13 @@ assert.deepEqual(CORE_SPIRIT_LIFECYCLE_STEPS, [
 assert.equal(coreSpiritLifecycleLabel('rendered'), 'Rendered');
 assert.equal(coreSpiritLifecycleLabel('output-rejected'), 'Output rejected');
 
-const compiled = compileCoreSpirit('indicator("Lifecycle contract") { overlay: true }\nlet fast = ema(close, 9)\nplot fast', 'lifecycle-contract', { layer: 'script' });
+const compiled = compileCoreSpirit([
+  'indicator("Lifecycle contract") {',
+  '  overlay: true',
+  '}',
+  'let fast = ema(close, 9)',
+  'plot fast',
+].join('\n'), 'lifecycle-contract', { layer: 'script' });
 assert.ok(compiled.ir, 'the test fixture must produce compiler IR');
 const policy = validateCoreSpiritChartCapabilities(compiled.ir);
 assert.deepEqual(policy.filter(item => item.severity === 'error'), [], 'a basic chart indicator passes the shared chart capability gate');
