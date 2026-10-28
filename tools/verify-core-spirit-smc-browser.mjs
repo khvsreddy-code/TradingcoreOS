@@ -363,6 +363,64 @@ try {
         },
         viewportInteraction,
       };
+      // Recompile the identical source to verify the active chart reuses its
+      // stable script identity instead of appending a second indicator instance.
+      const instanceState = () => evaluateJson(`(() => {
+        const cell = window.__TCO_VELA__?.workspace?.active;
+        const instances = Array.isArray(cell?.instances) ? cell.instances : [];
+        const matches = instances.filter(instance =>
+          instance?.entry?.language === 'corespirit' &&
+          instance?.entry?.name === 'Smart Money Concepts [CoreSpirit]' &&
+          String(instance?.id || '').startsWith('tco-corespirit-'));
+        return { activeCellAvailable: !!cell, count: matches.length, ids: matches.map(instance => instance.id) };
+      })()`);
+      const initialInstanceState = instanceState();
+      assert(initialInstanceState.activeCellAvailable && initialInstanceState.count === 1,
+        'The first SMC run must attach exactly one stable CoreSpirit instance to the active Vela cell.');
+      evaluate(`(() => {
+        const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
+        if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled before the idempotency check.');
+        button.click();
+        return 'SMC_RECOMPILE_CLICKED';
+      })()`);
+      let recompileState = null;
+      let sawCompileState = false;
+      const recompileDeadline = Date.now() + timeoutMs;
+      while (Date.now() < recompileDeadline) {
+        recompileState = evaluateJson(`(() => {
+          const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
+          const body = document.body.innerText || '';
+          const cell = window.__TCO_VELA__?.workspace?.active;
+          const instances = Array.isArray(cell?.instances) ? cell.instances : [];
+          const matches = instances.filter(instance =>
+            instance?.entry?.language === 'corespirit' &&
+            instance?.entry?.name === 'Smart Money Concepts [CoreSpirit]' &&
+            String(instance?.id || '').startsWith('tco-corespirit-'));
+          return {
+            compiling: body.includes('Compiling CoreSpirit and preparing chart output…'),
+            success: body.includes('is now running on the active Vela chart'),
+            buttonBusy: !!button?.disabled,
+            activeCellAvailable: !!cell,
+            count: matches.length,
+            ids: matches.map(instance => instance.id),
+          };
+        })()`);
+        if (recompileState.compiling) sawCompileState = true;
+        if (sawCompileState && recompileState.success && !recompileState.buttonBusy) break;
+        await pause(200);
+      }
+      assert(sawCompileState && recompileState?.success && !recompileState.buttonBusy,
+        'The second SMC Compile & Run must complete successfully.');
+      assert(recompileState.activeCellAvailable && recompileState.count === 1,
+        'Recompiling the identical SMC source must leave exactly one attached CoreSpirit instance, not duplicate chart objects.');
+      visualEvidence.recompileIdempotency = {
+        instanceCountBefore: initialInstanceState.count,
+        instanceCountAfter: recompileState.count,
+        stableInstanceIdsBefore: initialInstanceState.ids,
+        stableInstanceIdsAfter: recompileState.ids,
+        passed: true,
+      };
+
       // Reload after the successful chart commit and confirm that the source
       // saved by the real Compile & Run path is the source restored by the dock.
       run(['open', baseUrl]);
