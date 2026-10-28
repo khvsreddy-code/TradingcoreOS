@@ -1,6 +1,6 @@
 import type { CoreSpiritObject, CoreSpiritVisualStyle } from '../../coreSpirit/types';
 import type { CoreSpiritVelaOutputRevision } from '../../coreSpirit/velaOutputAdapter';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, LabelYLoc, BoxTextSize } from '../../../../vendor/vela/src/core/model/drawings';
+import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, BoxTextSize } from '../../../../vendor/vela/src/core/model/drawings';
 import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
 import type { LineStyle } from '../../../../vendor/vela/src/core/model/series';
 
