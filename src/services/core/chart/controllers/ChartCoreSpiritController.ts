@@ -3,6 +3,7 @@ import { coreEventBus } from '../../../core/event/eventBus';
 import { coreSpiritChartRegistry } from '../../../coreSpirit/chartRegistry';
 import { CoreSpiritChartOutputController } from '../../../coreSpirit/chartOutputController';
 import { runCoreSpiritInWorker, runCoreSpiritArtifactInWorker } from '../../../coreSpirit/chartRunner';
+import type { CoreSpiritExecutionDiagnostic } from '../../../coreSpirit/coreSpiritWorkerPool';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../../coreSpirit/coreSpiritCompilerClient';
 import type { CoreSpiritExecutableArtifact } from '../../../coreSpirit/artifact';
 import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../../../coreSpirit/capabilitySandbox';
@@ -54,7 +55,7 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       // The worker boundary supplies structured runtime diagnostics. Commit policy
       // follows severity/code, never incidental words in an error message. Older or
       // unclassified diagnostic payloads fail closed to preserve the previous scene.
-      const diagnosticDetails=result.diagnosticDetails ?? result.diagnostics.map(message=>({
+      const diagnosticDetails:CoreSpiritExecutionDiagnostic[]=result.diagnosticDetails ?? result.diagnostics.map(message=>({
         severity:'error' as const,code:'RUNTIME_DIAGNOSTIC_UNCLASSIFIED',message,
       }));
       const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity==='error');
