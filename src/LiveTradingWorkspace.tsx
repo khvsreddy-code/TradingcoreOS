@@ -14,6 +14,10 @@ import { chartPerformanceTelemetry } from './services/marketData/chartPerformanc
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact';
 import { stageCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff';
+import {
+  coreSpiritLifecycleDiagnostic, coreSpiritLifecycleStageForError, publishCoreSpiritLifecycle,
+  type CoreSpiritChartManagedField, type CoreSpiritChartManagerBridge, type CoreSpiritChartManagedValue,
+} from './services/coreSpirit/coreSpiritExecutionLifecycle';
 
 type WorkspaceLoadState = { phase: 'loading' | 'ready' } | { phase: 'error'; message: string };
 type ChartStatusPhase = 'auth' | 'loading-history' | 'failed' | 'empty' | 'reconciling' | 'connecting' | 'live' | 'stale' | 'waiting-tick' | 'reconnecting' | 'history-ready';
@@ -505,6 +509,9 @@ const browserRuntimeMetrics = useRef({
             removeError = handle.on('error', payload => finish(payload.error));
           });
         } catch (error) {
+          const stage=coreSpiritLifecycleStageForError(error,'execution-failed');
+          const diagnostic=coreSpiritLifecycleDiagnostic(error,stage,{previousOutputPreserved:previousInstanceIds.length>0});
+          publishCoreSpiritLifecycle({stage,scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,diagnostics:[diagnostic],previousOutputPreserved:previousInstanceIds.length>0,message:diagnostic.message});
           const failedIndex = activeCell.instances.findIndex(instance => instance.id === externalInstanceId);
           if (failedIndex >= 0) {
             try {
@@ -523,18 +530,86 @@ const browserRuntimeMetrics = useRef({
           activeCell.removeFromChart(nativeCount + staleIndex);
         }
         try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
+        publishCoreSpiritLifecycle({stage:'rendered',scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol?.ticker,timeframe:activeCell.timeframe,message:'The compiled source is running on the active Vela chart.'});
+        window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
         window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', {
           detail: { name: scriptName, source: scriptSource },
         }));
       };
+      const chartManager: CoreSpiritChartManagerBridge = {
+        list() {
+          const cell = workspaceRef.current?.active;
+          if (!cell) return [];
+          return cell.instances.filter(instance => instance.entry.language === 'corespirit' && instance.handle).map(instance => {
+            const handle = instance.handle!;
+            const inputValues = handle.inputValues();
+            const propValues = handle.propValues();
+            const mapFields = (schemas: typeof handle.inputs, values: Record<string, CoreSpiritChartManagedValue>): CoreSpiritChartManagedField[] => schemas.map(schema => ({
+              key: schema.key, title: schema.title, type: schema.type,
+              value: values[schema.key] ?? schema.defval, defval: schema.defval,
+              ...(schema.min == null ? {} : { min: schema.min }),
+              ...(schema.max == null ? {} : { max: schema.max }),
+              ...(schema.step == null ? {} : { step: schema.step }),
+              ...(schema.options ? { options: [...schema.options] } : {}),
+              ...(schema.group ? { group: schema.group } : {}),
+              ...(schema.tooltip ? { tooltip: schema.tooltip } : {}),
+            }));
+            return {
+              id: instance.id, name: instance.entry.name, source: instance.entry.script, visible: handle.visible,
+              inputs: mapFields(handle.inputs, inputValues), props: mapFields(handle.props, propValues),
+            };
+          });
+        },
+        setVisible(id, visible) {
+          const cell = workspaceRef.current?.active; const instance = cell?.instances.find(item => item.id === id);
+          if (!cell || !instance?.handle || instance.entry.language !== 'corespirit') return false;
+          instance.handle.setVisible(visible);
+          publishCoreSpiritLifecycle({ stage: visible ? 'rendered' : 'hidden', scriptId: id, scriptName: instance.entry.name, message: visible ? 'CoreSpirit indicator shown on the active chart.' : 'CoreSpirit indicator hidden; its computation is suspended.' });
+          window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
+          return true;
+        },
+        setInput(id, key, value) {
+          const cell = workspaceRef.current?.active; const instance = cell?.instances.find(item => item.id === id);
+          if (!instance?.handle || instance.entry.language !== 'corespirit' || !instance.handle.inputs.some(schema => schema.key === key)) return false;
+          try { instance.handle.setInput(key, value as any); } catch { return false; }
+          publishCoreSpiritLifecycle({ stage: 'executing-historical', scriptId: id, scriptName: instance.entry.name, message: 'Input changed; recomputing this indicator against the current chart history.' });
+          window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
+          return true;
+        },
+        setProp(id, key, value) {
+          const cell = workspaceRef.current?.active; const instance = cell?.instances.find(item => item.id === id);
+          if (!instance?.handle || instance.entry.language !== 'corespirit' || !instance.handle.props.some(schema => schema.key === key)) return false;
+          try { instance.handle.setProp(key, value as any); } catch { return false; }
+          publishCoreSpiritLifecycle({ stage: 'executing-historical', scriptId: id, scriptName: instance.entry.name, message: 'Appearance property changed; recomputing this indicator.' });
+          window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
+          return true;
+        },
+        remove(id) {
+          const cell = workspaceRef.current?.active; if (!cell) return false;
+          const index = cell.instances.findIndex(instance => instance.id === id && instance.entry.language === 'corespirit');
+          if (index < 0) return false;
+          const nativeCount = cell.indicatorCount - cell.instances.length;
+          cell.removeFromChart(nativeCount + index);
+          publishCoreSpiritLifecycle({ stage: 'removed', scriptId: id, message: 'CoreSpirit indicator removed from the active chart.' });
+          window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
+          return true;
+        },
+      };
       const tcoWindow = window as Window & {
         __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
+        __TCO_CORESPIRIT_CHART_MANAGER__?: CoreSpiritChartManagerBridge;
       };
       tcoWindow.__TCO_ADD_CORESPIRIT_TO_CHART__ = addCoreSpiritToChart;
+      tcoWindow.__TCO_CORESPIRIT_CHART_MANAGER__ = chartManager;
+      window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
       workspaceListenerDisposers.push(() => {
         if (tcoWindow.__TCO_ADD_CORESPIRIT_TO_CHART__ === addCoreSpiritToChart) {
           delete tcoWindow.__TCO_ADD_CORESPIRIT_TO_CHART__;
         }
+        if (tcoWindow.__TCO_CORESPIRIT_CHART_MANAGER__ === chartManager) {
+          delete tcoWindow.__TCO_CORESPIRIT_CHART_MANAGER__;
+        }
+        window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
       });
 
       if (!cancelled) setWorkspaceLoadState({ phase: 'ready' });
