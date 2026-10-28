@@ -22,6 +22,7 @@ const contracts = [
   ['vela-history-watchlist-news-markers', ['src/velaHistoryWatchlistEventsContract.test.mjs', false]],
   ['market-feed-lifecycle', ['src/services/marketData/marketFeedLifecycle.test.ts', true]],
   ['market-data-auto-fixer', ['src/server/marketData/MarketDataAutoFixer.test.ts', true]],
+  ['market-data-source-priority', ['src/server/marketData/HistoricalDataService.test.ts', true]],
   ['live-candle-state-machine', ['src/services/marketData/liveCandleStateMachine.test.ts', true]],
   ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
   ['live-candle-lifecycle', ['src/liveCandleLifecycleContract.test.mjs', false]],
