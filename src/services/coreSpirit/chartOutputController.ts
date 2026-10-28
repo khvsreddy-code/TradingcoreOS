@@ -1,7 +1,7 @@
 import { IChartApi, ISeriesApi, VelaNativeSeriesKernel, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
 import { CoreSpiritOutputFrame } from './outputDispatcher';
 import { CoreSpiritObject } from './types';
-import { CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, type CoreSpiritVelaOutputLayerData } from '../core/chart/coreSpiritVelaOutputLayer';
+import { CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID, type CoreSpiritVelaOutputLayerData } from '../core/chart/coreSpiritVelaOutputLayer';
 import type { CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
 import {
   CoreSpiritVisualAbiStore,
@@ -39,7 +39,7 @@ export class CoreSpiritChartOutputController {
   private committedRevision?: CoreSpiritVelaOutputRevision;
   private readonly overlayChannel = `tco-corespirit-output:${++coreSpiritOutputControllerSerial}`;
   private overlayHandle: { readonly id: string };
-  private readonly paneLayerHandles = new Map<string, { channel: string; handle: { readonly id: string } }>();
+  private readonly paneLayerHandles = new Map<string, { paneId: string; role: 'underlay' | 'overlay'; channel: string; handle: { readonly id: string } }>();
   private renderRevision = 0;
 
   constructor(private readonly chart: IChartApi, candle?: ISeriesApi<'Candlestick'>, _host?: HTMLElement) {
@@ -59,21 +59,29 @@ export class CoreSpiritChartOutputController {
       inputs: [],
       inputValues: {},
     });
-    this.paneLayerHandles.set('price', { channel: this.overlayChannel, handle: this.overlayHandle });
+    this.paneLayerHandles.set(this.paneLayerKey('price', 'overlay'), { paneId: 'price', role: 'overlay', channel: this.overlayChannel, handle: this.overlayHandle });
   }
 
-  private ensurePaneLayerHandle(paneId: string): { channel: string; handle: { readonly id: string } } {
+  private paneLayerKey(paneId: string, role: 'underlay' | 'overlay'): string {
+    return `${paneId}\u0000${role}`;
+  }
+
+  private ensurePaneLayerHandle(paneId: string, role: 'underlay' | 'overlay'): { channel: string; handle: { readonly id: string } } {
     const pane = paneId.trim() || 'price';
-    const existing = this.paneLayerHandles.get(pane);
+    const key = this.paneLayerKey(pane, role);
+    const existing = this.paneLayerHandles.get(key);
     if (existing) return existing;
-    const channel = `${this.overlayChannel}:pane:${encodeURIComponent(pane)}`;
+    const channel = role === 'overlay' && pane === 'price'
+      ? this.overlayChannel
+      : `${this.overlayChannel}:pane:${encodeURIComponent(pane)}:${role}`;
+    const layerId = role === 'underlay' ? CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID : CORE_SPIRIT_VELA_OUTPUT_LAYER_ID;
     const handle = this.chart.renderer.mountIndicator({
       id: channel,
-      title: `CoreSpirit visuals · ${pane}`,
+      title: `CoreSpirit ${role} · ${pane}`,
       overlay: pane === 'price',
       paneHint: pane === 'price' ? 'price' : 'new',
       paneId: pane,
-      native: { type: CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, channel },
+      native: { type: layerId, channel },
       legend: false,
       series: [],
       fills: [],
@@ -82,8 +90,8 @@ export class CoreSpiritChartOutputController {
       inputs: [],
       inputValues: {},
     });
-    const entry = { channel, handle };
-    this.paneLayerHandles.set(pane, entry);
+    const entry = { paneId: pane, role, channel, handle };
+    this.paneLayerHandles.set(key, entry);
     return entry;
   }
 
@@ -263,18 +271,25 @@ export class CoreSpiritChartOutputController {
       ...(frame.labels || []),
       ...(frame.tables || []),
     ].filter(isCoreSpiritChartTargetObject).filter(isCoreSpiritVisualVisibleObject).filter(isCoreSpiritCustomLayerObject);
-    const grouped = new Map<string, CoreSpiritObject[]>();
+    const grouped = new Map<string, { paneId: string; role: 'underlay' | 'overlay'; objects: CoreSpiritObject[] }>();
     for (const object of objects) {
       const paneId = coreSpiritPaneIdOf(object, 'price');
-      const group = grouped.get(paneId) ?? [];
-      group.push(object);
-      grouped.set(paneId, group);
+      const role: 'underlay' | 'overlay' =
+        object.kind === 'band' ||
+        object.kind === 'background' ||
+        (object.kind === 'zone' && object.domain === 'viewport')
+          ? 'underlay'
+          : 'overlay';
+      const key = this.paneLayerKey(paneId, role);
+      const group = grouped.get(key) ?? { paneId, role, objects: [] };
+      group.objects.push(object);
+      grouped.set(key, group);
     }
 
-    for (const [paneId, paneObjects] of grouped) {
-      const { channel } = this.ensurePaneLayerHandle(paneId);
-      const drawings = paneObjects.filter(item => item.kind === 'zone') as CoreSpiritObject[];
-      const visuals = paneObjects.filter(item => item.kind !== 'zone') as CoreSpiritObject[];
+    for (const [key, group] of grouped) {
+      const { channel } = this.ensurePaneLayerHandle(group.paneId, group.role);
+      const drawings = group.objects.filter(item => item.kind === 'zone') as CoreSpiritObject[];
+      const visuals = group.objects.filter(item => item.kind !== 'zone') as CoreSpiritObject[];
       const data: CoreSpiritVelaOutputLayerData = Object.freeze({
         revision: ++this.renderRevision,
         schemaVersion: 1,
@@ -282,7 +297,8 @@ export class CoreSpiritChartOutputController {
         datasetRevision: revision.datasetRevision,
         outputRevision: revision.outputRevision,
         coordinateSystem: 'vela-epoch-milliseconds-price+tagged-visual-space',
-        paneId,
+        paneId: group.paneId,
+        layerRole: group.role,
         visible: true,
         drawings: Object.freeze(drawings),
         visuals: Object.freeze(visuals),
@@ -292,11 +308,10 @@ export class CoreSpiritChartOutputController {
       this.chart.renderer.setNativeData(channel, data);
     }
 
-    // A full snapshot with no object in a previously used pane is an explicit
-    // deletion. Clear its channel; the retained native collections are updated
-    // separately and keep their own revision contract.
-    for (const [paneId, { channel }] of this.paneLayerHandles) {
-      if (!grouped.has(paneId)) this.chart.renderer.setNativeData(channel, undefined);
+    // Missing groups mean deletion, not an instruction to retain prior pixels.
+    // Keep handles/revision identity allocated but clear inactive pane/layer data.
+    for (const [key, { channel }] of this.paneLayerHandles) {
+      if (!grouped.has(key)) this.chart.renderer.setNativeData(channel, undefined);
     }
   }
 
