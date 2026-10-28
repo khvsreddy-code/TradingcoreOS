@@ -105,7 +105,8 @@ function normalizeTimeFields(value: unknown): unknown {
     const isTimestampKey = ['time', 'timestamp', 'startTime', 'endTime', 'fromTime', 'toTime'].includes(key);
     const isBoxTimeBoundary = (key === 'left' || key === 'right') &&
       (input.kind === 'box' || input.kind === 'zone') && !isViewport;
-    const isTimeSpaceX = key === 'x' && (input.space === 'time' || input.xloc === 'bar_time');
+    // visualPoint() defaults an untagged point to chart-time coordinates, so its x must be normalized too.
+    const isTimeSpaceX = key === 'x' && (input.space === 'time' || (input.space == null && (input.y != null || input.price != null)) || input.xloc === 'bar_time');
     if ((isTimestampKey || isBoxTimeBoundary || isTimeSpaceX) &&
         (typeof child === 'number' || typeof child === 'string') && child !== '') {
       const normalized = coreSpiritTimeToVelaMillis(child);
