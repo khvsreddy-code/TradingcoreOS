@@ -549,7 +549,6 @@ registerRendererLayer({
             data.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
             data.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
             !data.scriptInstanceId ||
-            data.paneId !== 'price' ||
             !Number.isSafeInteger(data.datasetRevision) ||
             !Number.isSafeInteger(data.outputRevision) ||
             !Number.isSafeInteger(data.revision) ||
