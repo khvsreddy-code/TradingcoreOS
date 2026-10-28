@@ -211,7 +211,7 @@ export function normalizeHistoricalCandles(rows: unknown[], source: 'fyers' | 't
   return normalizeRows(rows, source);
 }
 function sourcePriority(source: StoredBar['source']): number {
-  switch (source) { case 'nse': return 4; case 'fyers': return 3; case 'investiny': return 2; case 'tvdatafeed': return 1; default: return 0; }
+  switch (source) { case 'nse': return 4; case 'investiny': return 3; case 'fyers': return 2; case 'tvdatafeed': return 1; default: return 0; }
 }
 function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
   const byTime = new Map<number, StoredBar>();
@@ -645,7 +645,9 @@ export class HistoricalDataService {
           historyCompleteness: {
             status: merged.length >= preferredTarget ? 'page-target-reached' : 'partial-page',
             requestedBars: preferredTarget, returnedBars: Math.min(merged.length, preferredTarget),
-            datasetComplete: false, paginationSupported: false,
+            datasetComplete: false,
+            paginationSupported: Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent),
+            hasMoreHistory: Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent),
           },
           calendarPolicy: range.calendarPolicy,
         };
@@ -944,12 +946,17 @@ export class HistoricalDataService {
                   pageBars = attempt.bars.filter(bar => bar.timestampMs < beforeTimestamp);
                 }
               }
-              if (!pageBars.length && !isFnoInstrument(mapping) && request.fetchInvestinyHistory) {
+              if (!isFnoInstrument(mapping) && request.fetchInvestinyHistory && pageBars.length < Math.min(2_000, maxBars)) {
+                const hadNsePage = pageBars.some(bar => bar.source === 'nse');
                 const attempt = await fetchProviderBars('investiny', request.fetchInvestinyHistory, mapping, timeframe, range);
-                investinyPageStatus = attempt.status;
+                investinyPageStatus = { ...attempt.status, role: pageBars.length ? 'page-gap-fill' : 'page-fallback' };
                 if (attempt.bars.length) {
-                  pageSource = 'investiny';
-                  pageBars = attempt.bars.filter(bar => bar.timestampMs < beforeTimestamp);
+                  pageBars = mergeStoredBars(pageBars, attempt.bars.filter(bar =>
+                    bar.timestampMs < beforeTimestamp &&
+                    bar.timestampMs >= range.fromMs &&
+                    bar.timestampMs <= range.toMs,
+                  ));
+                  if (!hadNsePage && pageBars.some(bar => bar.source === 'investiny')) pageSource = 'investiny';
                 }
               }
               if (!pageBars.length && request.fetchFyersRecent) {
