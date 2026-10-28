@@ -109,6 +109,7 @@ includes(visualAbi, 'projectCoreSpiritObjectsToVela', 'standard drawing primitiv
 includes(outputController, 'schedulePatch(', 'the output controller accepts incremental upsert/remove visual patches');
 includes(outputController, 'op: \'replace-range\'', 'native drawing updates replace only the changed retained collection range');
 includes(outputController, 'const dirtyObjects = [...this.committedObjects, ...objects]', 'dirty invalidation includes previous and next geometry to erase moved/deleted objects');
+includes(outputController, 'dirty: { from: 0, to: Number.MAX_SAFE_INTEGER }', 'clearing retained drawings invalidates the full time range so stale pixels cannot survive');
 includes(outputController, 'CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID', 'the chart output controller mounts a separate underlay renderer');
 includes(outputController, 'layerRole: group.role', 'renderer data declares underlay or overlay rendering order');
 includes(outputController, 'if (!grouped.has(key)) this.chart.renderer.setNativeData(channel, undefined)', 'disappeared pane/layer groups clear their retained renderer payload');
