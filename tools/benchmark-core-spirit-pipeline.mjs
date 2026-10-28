@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { CoreSpiritCompiler } from '../src/services/coreSpirit/compiler.ts';
 import { CoreSpiritIncrementalCompiler } from '../src/services/coreSpirit/incrementalCompiler.ts';
 import { CoreSpiritRuntime } from '../src/services/coreSpirit/runtime.ts';
+import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../src/services/coreSpirit/luxAlgoSmcCoreSource.ts';
 
 const DEFAULT_BAR_COUNTS = [2_000, 5_000, 20_000, 50_000];
 const START_MS = Date.UTC(2020, 0, 1);
@@ -169,6 +170,12 @@ show line(smoothedRelative)
     symbol: 'NSE:NIFTY50',
     timeframe: '1m',
   },
+  {
+    id: 'luxalgo-smc-stateful-drawings',
+    source: CORESPIRIT_LUXALGO_SMC_SOURCE,
+    symbol: 'NSE:NIFTY50',
+    timeframe: '1m',
+  },
 ];
 
 function makeRuntime(tier, workload) {
@@ -278,6 +285,14 @@ async function main() {
           retainedHeapDeltaBytes: afterMemory.heapUsed - beforeMemory.heapUsed,
           retainedArrayBufferDeltaBytes: afterMemory.arrayBuffers - beforeMemory.arrayBuffers,
           outputCount: correction.value.outputs.length,
+          outputKindCounts: correction.value.outputs.reduce((counts, output) => {
+            const kind = String(output.kind ?? 'unknown');
+            counts[kind] = (counts[kind] ?? 0) + 1;
+            return counts;
+          }, {}),
+          drawingOutputCount: correction.value.outputs.filter(output =>
+            ['line', 'arrow', 'zone', 'box', 'label', 'marker', 'shape', 'polyline', 'polygon', 'hline'].includes(output.kind)
+          ).length,
         });
       }
       assertSame(originalByTier.reference, originalByTier.optimized, `${workload.id} ${count} historical outputs`);
