@@ -46,9 +46,10 @@ incrementalVariance.update(3);
 close(incrementalVariance.variance(), 2 / 3);
 assert.equal(incrementalVariance.update(Number.POSITIVE_INFINITY).value, null,
   'rolling variance and standard deviation must reset across non-finite observations');
-incrementalVariance.update(4); incrementalVariance.update(5);
-assert.equal(incrementalVariance.update(6).value, null,
-  'rolling variance standard deviation must remain in warm-up until its entire window is finite');
+assert.equal(incrementalVariance.update(4).value, null);
+assert.equal(incrementalVariance.update(5).value, null,
+  'rolling variance must remain in warm-up until its entire window is finite');
+close(incrementalVariance.update(6).value, Math.sqrt(2 / 3));
 incrementalVariance.update(7);
 close(incrementalVariance.variance(), 2 / 3);
 
