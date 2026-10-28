@@ -556,7 +556,7 @@ export function projectCoreSpiritObjectsToVela(
         textColor: String(st.textColor ?? st.color ?? '#fff'), size: textSize(st.fontSize ?? st.size),
         textAlign: st.textAlign === 'left' || st.textAlign === 'right' ? st.textAlign : 'center',
         fontFamily: 'default', bold: st.fontWeight === '700' || st.fontWeight === 'bold',
-        italic: st.fontStyle === 'italic', noFill: st.opacity === 0, overlay: true,
+        italic: st.fontStyle === 'italic', noFill: st.opacity === 0, overlay: itemOverlay,
       });
     } else if (object.kind === 'polyline' || object.kind === 'polygon') {
       const st = styleRecord(object.style);
@@ -567,7 +567,7 @@ export function projectCoreSpiritObjectsToVela(
         lineColor: String(st.borderColor ?? st.color ?? '#f59e0b'),
         fillColor: object.kind === 'polygon' ? cssWithOpacity(st.fillColor ?? st.color, st.fillOpacity ?? st.opacity, 'rgba(59,130,246,0.12)') : undefined,
         lineWidth: Math.max(1, finiteNumber(st.lineWidth ?? st.borderWidth) ?? 1),
-        lineStyle: velaLineStyle(st.lineStyle), arrowLeft: false, arrowRight: false, overlay: true,
+        lineStyle: velaLineStyle(st.lineStyle), arrowLeft: false, arrowRight: false, overlay: itemOverlay,
       });
     } else if (object.kind === 'hline') {
       const st = styleRecord((object as any).style);
