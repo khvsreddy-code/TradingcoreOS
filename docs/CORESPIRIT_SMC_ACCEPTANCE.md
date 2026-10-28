@@ -61,10 +61,13 @@ The report includes a capture timestamp and environment; cold/warm compilation a
 For the numerical-kernel CPU/WASM comparison:
 
 ```sh
-TCO_BENCH_BAR_COUNTS=50000,250000 TCO_BENCH_ITERATIONS=5 npm run benchmark:corespirit:wasm
+TCO_BENCH_BAR_COUNTS=50000,250000 \
+TCO_BENCH_ITERATIONS=5 \
+TCO_WASM_BENCH_OUTPUT_FILE=artifacts/corespirit-wasm.json \
+npm run benchmark:corespirit:wasm
 ```
 
-The WASM benchmark checks numerical parity and reports both kernel-only and end-to-end latency. A kernel is not counted as a speed win merely because its inner WASM loop is faster than CPU; transfer and allocation cost are included in the end-to-end comparison.
+The WASM benchmark checks numerical parity and reports both kernel-only and end-to-end latency. A kernel is not counted as a speed win merely because its inner WASM loop is faster than CPU; transfer and allocation cost are included in the end-to-end comparison. The optional `TCO_WASM_BENCH_OUTPUT_FILE` persists a timestamped JSON report with Node/platform/architecture metadata, the selected kernel variant, parity result and end-to-end speedup for every size/kernel combination.
 
 Compare reports only on the same machine/runtime with the same workload, settings and bar counts. Do not turn one machine's result into an unsupported Pine Script speed claim or loosen correctness checks to make a backend look faster.
 
