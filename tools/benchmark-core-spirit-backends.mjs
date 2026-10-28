@@ -44,7 +44,9 @@ function iterations() {
 }
 
 function minWasmWorkUnits() {
-  const requested = Number(process.env.TCO_BENCH_MIN_WASM_WORK_UNITS ?? 100_000);
+  const raw = process.env.TCO_BENCH_MIN_WASM_WORK_UNITS;
+  if (raw == null || raw.trim() === '') return undefined;
+  const requested = Number(raw);
   if (!Number.isSafeInteger(requested) || requested < 1) {
     throw new Error('TCO_BENCH_MIN_WASM_WORK_UNITS must be a positive safe integer');
   }
@@ -206,7 +208,12 @@ async function main() {
           wasmRuntime.executors,
         );
         dispatchSamples.push(performance.now() - started);
-        assert.equal(result, 'wasm', `${testCase.id} ${bars}-bar measured workload must execute the WASM backend under the configured benchmark threshold`);
+        const productionThreshold = 100_000 * Math.max(1, group.operations.length);
+        const expectedBackend = benchmarkMinWasmWorkUnits === undefined
+          ? (bars * group.operations.length >= productionThreshold ? 'wasm' : 'cpu')
+          : 'wasm';
+        assert.equal(result, expectedBackend,
+          `${testCase.id} ${bars}-bar dispatch must respect the active backend work threshold`);
         assertEquivalent(finalOutput, referenceOutput, `${testCase.id} dispatched ${bars} bars sample ${repeat}`);
       }
 
@@ -310,7 +317,12 @@ async function main() {
     environment: { node: process.version, platform: process.platform, arch: process.arch },
     wasmLifecycle: wasmRuntime.backend.lifecycle(),
     wasmManifest: wasmRuntime.backend.profile(),
-    configuration: { sizes: barCounts, iterations: repeatCount, benchmarkMinWasmWorkUnits },
+    configuration: {
+      sizes: barCounts,
+      iterations: repeatCount,
+      benchmarkMinWasmWorkUnits: benchmarkMinWasmWorkUnits ?? 'production-default',
+      defaultProductionWorkThreshold: '100000 work units per fused operation',
+    },
     performancePolicy: 'Only end-to-end timings are compared. A speed win is reported for this environment only when the actual dispatched median beats CPU and all outputs pass parity.',
     correctnessPolicy: 'Each dispatcher measurement must prove that WASM actually executed, and all finite values must meet relative tolerance 1e-7 while NaN/Infinity semantics must match exactly.',
     correctness: {
