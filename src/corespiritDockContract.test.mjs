@@ -80,7 +80,11 @@ includes(outputController, 'tco:corespirit:visual-commit', 'Vela visual acceptan
 includes(smcBrowser, 'sourceDraftRestoredAfterReload', 'browser acceptance checks exact local source-draft restoration after reload');
 includes(smcBrowser, 'zoomWheelDelta', 'SMC renderer acceptance exercises Vela zoom interactions');
 includes(smcBrowser, 'horizontalPanPixels', 'SMC renderer acceptance exercises Vela pan interactions');
-includes(smcBrowser, 'rendererPaintAfterGesture', 'SMC drawing paint evidence is required again after viewport gestures');
+includes(smcBrowser, 'countChartPixelDiff', 'SMC visual acceptance compares actual Vela plot screenshot pixels');
+includes(smcBrowser, "run(['screenshot', path]", 'browser acceptance captures viewport screenshots for pixel comparison');
+includes(smcBrowser, 'chartPixelDiff', 'the actual chart plot must change after SMC native drawing commits');
+includes(smcBrowser, 'viewportPixelDiff', 'chart pixels are compared again after Vela zoom/pan');
+includes(smcBrowser, 'function decodePng(buffer)', 'the screenshot contract computes pixel deltas from PNG bytes without adding a graphics dependency');
 includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
