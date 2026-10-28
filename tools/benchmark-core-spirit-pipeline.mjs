@@ -274,7 +274,13 @@ async function main() {
         let lastLiveResult = append.value;
         let visibleLatencyMs = append.elapsedMs;
         for (let tick = 0; tick < updateCount; tick += 1) {
-          liveBar = { ...liveBar, close: liveBar.close + (tick % 2 ? -0.015 : 0.021), high: Math.max(liveBar.high, liveBar.close + 0.04), low: Math.min(liveBar.low, liveBar.close - 0.04) };
+          const nextClose = liveBar.close + (tick % 2 ? -0.015 : 0.021);
+          liveBar = {
+            ...liveBar,
+            close: nextClose,
+            high: Math.max(liveBar.high, nextClose + 0.04),
+            low: Math.min(liveBar.low, nextClose - 0.04),
+          };
           const update = timeMs(() => runtime.executeBar(liveBar));
           liveTicks.push(update.elapsedMs);
           lastLiveResult = update.value;
