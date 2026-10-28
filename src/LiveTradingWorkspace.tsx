@@ -530,7 +530,7 @@ const browserRuntimeMetrics = useRef({
           activeCell.removeFromChart(nativeCount + staleIndex);
         }
         try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
-        publishCoreSpiritLifecycle({stage:'rendered',scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol?.ticker,timeframe:activeCell.timeframe,message:'The compiled source is running on the active Vela chart.'});
+        publishCoreSpiritLifecycle({stage:'rendered',scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol,timeframe:activeCell.timeframe,message:'The compiled source is running on the active Vela chart.'});
         window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
         window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', {
           detail: { name: scriptName, source: scriptSource },
