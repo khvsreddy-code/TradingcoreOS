@@ -15,6 +15,7 @@ const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
 const outputController = read('./services/coreSpirit/chartOutputController.ts');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
+const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const editorPage = read('./pages/CoreSpiritEditorPage.tsx');
 const copilotRoute = read('./server/routes/coreSpirit-copilot.routes.ts');
 const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
@@ -115,5 +116,8 @@ includes(visualLayer, "registerCoreSpiritVelaOutputLayer(CORE_SPIRIT_VELA_OUTPUT
 includes(visualLayer, "registerCoreSpiritVelaOutputLayer(CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, 'above-data', 'overlay')", 'custom authored geometry renders above candle data');
 includes(visualLayer, "if (data.layerRole === 'underlay')", 'underlay and overlay use distinct deterministic paint passes');
 includes(visualLayer, 'ctx.clip()', 'custom geometry is clipped to the pane viewport');
+includes(velaNativeRenderer, "ownedRendererLayer?.def.placement === 'below-data'", 'Vela does not promote underlay-owned renderer layers over candles');
+includes(velaNativeRenderer, 'this.scene.assignIndicatorZ(model.id)', 'below-data native layer owners start below the price candle stack');
+includes(velaNativeRenderer, 'else if (ownedRendererLayer) this.scene.assignIndicatorZTop(model.id)', 'above-data native layer owners retain their native z-order contract');
 
 console.log('CORESPIRIT_DOCK_CONTRACT_OK');
