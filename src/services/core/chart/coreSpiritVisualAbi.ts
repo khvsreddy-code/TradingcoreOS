@@ -110,7 +110,7 @@ function rawStableSeed(object: CoreSpiritObject, index: number): string {
     case 'event': return `event:${String(object.name)}:${String(object.time)}`;
     case 'orderIntent': return `order:${String(object.time)}:${String(object.side)}:${String(object.tag ?? '')}`;
     case 'scanCandidate': return `candidate:${String(object.time ?? 'static')}:${String(object.score ?? '')}:${String(object.label ?? '')}`;
-    default: return `${object.kind}:${index}`;
+    default: return `${String(item.kind ?? 'unknown')}:${index}`;
   }
 }
 
@@ -315,6 +315,7 @@ export class CoreSpiritVisualAbiStore {
         mutation.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
         !mutation.scriptInstanceId.trim() ||
         typeof mutation.paneId !== 'string' || !mutation.paneId.trim() ||
+        mutation.renderTarget !== 'chart' ||
         typeof mutation.visible !== 'boolean') return undefined;
     const revision = mutation.revision;
     if (revision.streamId !== mutation.scriptInstanceId) {
@@ -405,6 +406,7 @@ export function createCoreSpiritVisualSnapshot(
     outputRevision: revision.outputRevision,
     coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
     paneId,
+    renderTarget: 'chart',
     visible,
     revision,
     operation: 'snapshot',
@@ -427,6 +429,7 @@ export function createCoreSpiritVisualPatch(
     outputRevision: revision.outputRevision,
     coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
     paneId,
+    renderTarget: 'chart',
     visible,
     revision,
     operation: 'patch',
@@ -584,7 +587,7 @@ export function projectCoreSpiritObjectsToVela(
         overlay: itemOverlay,
       });
     } else if (object.kind === 'label' || object.kind === 'marker' || object.kind === 'shape') {
-      const st = styleRecord(object.style);
+      const st = styleRecord((object as unknown as Record<string, unknown>).style);
       const item = object as any;
       const metadataShape = metadata.shape;
       const position = object.kind === 'label' ? object.position : String(metadata.position ?? 'price');
