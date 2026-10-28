@@ -16,4 +16,4 @@ Supported underlying intervals are 1, 5, 15, 30, 60, 300 minutes, daily, weekly 
 
 ## Source-of-truth policy
 
-TradingCoreOS routes an authorized NSE gateway first. Investiny is a historical-only fallback for explicitly mapped non-derivatives. F&O/options fall through to the existing quota-gated FYERS API when NSE is unavailable; existing tvdatafeed remains a final legacy fallback if contract identity and adjustment policy match. Source priority for overlapping timestamps is NSE, FYERS, Investiny, then tvdatafeed.
+TradingCoreOS routes an authorized NSE gateway first. Investiny is a historical-only fallback for explicitly mapped non-derivatives. F&O/options fall through to the existing quota-gated FYERS API when NSE is unavailable; existing tvdatafeed remains a final legacy fallback if contract identity and adjustment policy match. Source priority for overlapping timestamps is NSE, Investiny, FYERS, then tvdatafeed; F&O/options skip Investiny entirely and retain FYERS as the broker fallback.
