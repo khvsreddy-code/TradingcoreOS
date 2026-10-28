@@ -4,7 +4,7 @@ import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 import { adaptCoreSpiritOutputsForVela, normalizeVelaBarsToCoreSpirit } from './velaOutputAdapter.ts';
-import { projectCoreSpiritObjectsToVela } from '../core/chart/coreSpiritVisualAbi.ts';
+import { CoreSpiritVisualAbiStore, createCoreSpiritVisualSnapshot, projectCoreSpiritObjectsToVela } from '../core/chart/coreSpiritVisualAbi.ts';
 
 const SOURCE_ID = 'corespirit-smc-acceptance';
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
@@ -240,5 +240,67 @@ const formingVisualIds = revisedLive.outputs
   .filter(id => typeof id === 'string' && id.length > 0);
 assert.equal(new Set(formingVisualIds).size, formingVisualIds.length,
   'forming-bar replacement must not duplicate retained CoreSpirit drawing IDs');
+
+// Retained visual ABI acceptance: a successful replacement is idempotent, while an
+// invalid/rejected replacement cannot clear or corrupt the previously committed scene.
+const retainedStore = new CoreSpiritVisualAbiStore();
+const retainedStreamId = 'smc-acceptance-retained-scene';
+const retainedRevision1 = { streamId: retainedStreamId, datasetRevision: 1, outputRevision: 1 };
+const retainedSnapshot1 = createCoreSpiritVisualSnapshot(
+  adapted.outputs, retainedRevision1, retainedStreamId, 'price', true,
+);
+const preparedSnapshot1 = retainedStore.prepare(retainedSnapshot1);
+assert.ok(preparedSnapshot1, 'the valid deterministic SMC scene must pass visual ABI preparation');
+retainedStore.commit(preparedSnapshot1);
+
+const retainedIds = () => retainedStore.objects(retainedStreamId)
+  .map(item => String(item.metadata?.coreSpiritVisualAbi?.objectId ?? item.id ?? ''))
+  .filter(Boolean)
+  .sort();
+const idsAfterFirstCommit = retainedIds();
+assert.ok(idsAfterFirstCommit.length > 0, 'the retained SMC snapshot must contain native visual objects');
+assert.equal(new Set(idsAfterFirstCommit).size, idsAfterFirstCommit.length,
+  'the retained visual store must not contain duplicate stable object identities');
+
+const recompilation = compileCoreSpirit(source, SOURCE_ID, { layer: 'script' });
+assert.ok(recompilation.ir && recompilation.artifact &&
+  !recompilation.diagnostics.some(item => item.severity === 'error'),
+  'recompilation must continue to produce a validated SMC artifact');
+const recompiledRun = executeCoreSpirit(source, bars, SOURCE_ID);
+assert.deepEqual(recompiledRun.diagnostics, [], 'recompiled SMC must execute without runtime diagnostics');
+assert.equal(semanticFingerprint(recompiledRun.outputs), semanticFingerprint(outputs),
+  'recompile must reproduce the fixed-data SMC output before replacing chart objects');
+const recompiledAdapted = adaptCoreSpiritOutputsForVela(recompiledRun.outputs, velaBars);
+const retainedRevision2 = { streamId: retainedStreamId, datasetRevision: 1, outputRevision: 2 };
+const preparedSnapshot2 = retainedStore.prepare(createCoreSpiritVisualSnapshot(
+  recompiledAdapted.outputs, retainedRevision2, retainedStreamId, 'price', true,
+));
+assert.ok(preparedSnapshot2, 'a newer successful output revision must prepare as a replacement snapshot');
+retainedStore.commit(preparedSnapshot2);
+const idsAfterRecompile = retainedIds();
+assert.deepEqual(idsAfterRecompile, idsAfterFirstCommit,
+  'recompiling identical source/data must replace retained objects without growing or duplicating the scene');
+
+const retainedBeforeRejectedCommit = JSON.stringify(retainedStore.objects(retainedStreamId));
+const invalidSnapshot = {
+  ...createCoreSpiritVisualSnapshot(
+    [], { streamId: retainedStreamId, datasetRevision: 1, outputRevision: 3 },
+    retainedStreamId, 'price', true,
+  ),
+  coordinateSystem: 'invalid-coordinate-space',
+};
+assert.equal(retainedStore.prepare(invalidSnapshot), undefined,
+  'invalid visual ABI metadata must be rejected before it can replace a valid scene');
+assert.equal(JSON.stringify(retainedStore.objects(retainedStreamId)), retainedBeforeRejectedCommit,
+  'a rejected replacement must preserve the last valid retained SMC scene');
+
+const staleSnapshot = createCoreSpiritVisualSnapshot(
+  [], { streamId: retainedStreamId, datasetRevision: 1, outputRevision: 1 },
+  retainedStreamId, 'price', true,
+);
+assert.equal(retainedStore.prepare(staleSnapshot), undefined,
+  'stale output revisions must not resurrect old drawings after a newer scene commits');
+assert.equal(JSON.stringify(retainedStore.objects(retainedStreamId)), retainedBeforeRejectedCommit,
+  'stale output rejection must leave the retained scene byte-stable');
 
 console.log('CORESPIRIT_SMC_DETERMINISTIC_ACCEPTANCE_OK');
