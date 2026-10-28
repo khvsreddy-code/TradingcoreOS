@@ -12,6 +12,8 @@ import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaActiveWorkspaceId, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
+import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact';
+import { stageCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff';
 
 type WorkspaceLoadState = { phase: 'loading' | 'ready' } | { phase: 'error'; message: string };
 type ChartStatusPhase = 'auth' | 'loading-history' | 'failed' | 'empty' | 'reconciling' | 'connecting' | 'live' | 'stale' | 'waiting-tick' | 'reconnecting' | 'history-ready';
@@ -418,11 +420,19 @@ const browserRuntimeMetrics = useRef({
 
       // Bridge the docked React CoreSpirit terminal to the active Vela cell. Keep
       // the callback scoped to this mounted workspace and remove it on teardown.
-      const addCoreSpiritToChart = async (scriptName: string, scriptSource: string): Promise<void> => {
+      const addCoreSpiritToChart = async (
+        scriptName: string,
+        scriptSource: string,
+        artifact: CoreSpiritExecutableArtifact,
+      ): Promise<void> => {
         const activeWorkspace = workspaceRef.current;
         if (!activeWorkspace) throw new Error('The Vela chart is not ready yet.');
         const activeCell = activeWorkspace.active;
         if (!activeCell) throw new Error('Select an active Vela chart before adding a CoreSpirit script.');
+        // Vela's external-indicator ledger intentionally persists source, not compiled
+        // VM payloads. Stage the artifact only for the immediate prepare() handoff;
+        // the receiver rechecks exact source hash, artifact hash and schema.
+        stageCoreSpiritPrecompiledArtifact(scriptSource, artifact);
         const before = activeCell.indicatorCount;
         activeCell.addExternalIndicator({
           name: scriptName,
@@ -458,7 +468,7 @@ const browserRuntimeMetrics = useRef({
         }));
       };
       const tcoWindow = window as Window & {
-        __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string) => Promise<void>;
+        __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
       };
       tcoWindow.__TCO_ADD_CORESPIRIT_TO_CHART__ = addCoreSpiritToChart;
       workspaceListenerDisposers.push(() => {
