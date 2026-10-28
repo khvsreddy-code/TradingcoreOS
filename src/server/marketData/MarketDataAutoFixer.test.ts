@@ -23,7 +23,7 @@ assert.equal(state.attempts, 2, 'the initial request and the one half-open probe
 assert.equal(state.successes, 1);
 assert.equal(await fixer.canAttempt('investiny', 'history', resource), true);
 const limited = await fixer.recordFailure('investiny', 'history', resource, Object.assign(new Error('rate limited'), { status: 429, retryAfterMs: 5_000 }));
-assert.equal(limited.nextProbeAt, now + 5_000);
+assert.equal(limited.nextProbeAt, now + 5_500, 'rate-limit retry should honor Retry-After plus positive jitter');
 assert.equal(await fixer.canAttempt('investiny', 'history', resource), false);
 assert.equal(await fixer.canAttempt('nse', 'history', 'NSE:SBIN-EQ:5minute'), true);
 const auth = await fixer.recordFailure('nse', 'history', 'NSE:SBIN-EQ:5minute', Object.assign(new Error('credentials expired'), { status: 401 }));
