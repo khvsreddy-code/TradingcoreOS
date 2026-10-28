@@ -15,6 +15,7 @@ export type CoreSpiritVisualAbiMetadata = Readonly<{
   outputRevision: number;
   coordinateSystem: typeof CORE_SPIRIT_VELA_COORDINATE_SYSTEM;
   paneId: string;
+  renderTarget: 'chart' | 'panel' | 'sidePanel' | 'floating';
   visible: boolean;
 }>;
 
@@ -200,6 +201,7 @@ export function normalizeCoreSpiritVisualObjects(
   objects: readonly CoreSpiritObject[],
   scriptInstanceId: string,
   revision: CoreSpiritVelaOutputRevision,
+  fallbackPaneId = 'price',
 ): CoreSpiritObject[] {
   if (!scriptInstanceId.trim()) throw new Error('CoreSpirit visual ABI requires a script instance id.');
   const occurrences = new Map<string, number>();
@@ -211,6 +213,19 @@ export function normalizeCoreSpiritVisualObjects(
     const id = occurrence === 0 ? baseId : `${baseId}:duplicate:${occurrence}`;
     const source = object as unknown as Record<string, any>;
     const metadata = record(object.metadata);
+    const visual = record((object as unknown as Record<string, unknown>).visual);
+    const area = record(visual.area);
+    const declaredPane = typeof metadata.paneId === 'string' && metadata.paneId.trim()
+      ? metadata.paneId.trim()
+      : area.kind === 'chart' && typeof area.id === 'string' && area.id.trim()
+        ? area.id.trim()
+        : area.kind === 'chart' && typeof area.area === 'string' && area.area === 'price'
+          ? 'price'
+          : fallbackPaneId;
+    const renderTarget = area.kind === 'panel' ? 'panel'
+      : area.kind === 'sidePanel' ? 'sidePanel'
+      : area.kind === 'floating' ? 'floating'
+      : 'chart';
     const abiMetadata = Object.freeze({
       schemaVersion: CORE_SPIRIT_VISUAL_ABI_VERSION,
       scriptInstanceId,
@@ -218,7 +233,8 @@ export function normalizeCoreSpiritVisualObjects(
       datasetRevision: revision.datasetRevision,
       outputRevision: revision.outputRevision,
       coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
-      paneId: String(metadata.paneId ?? 'price'),
+      paneId: declaredPane,
+      renderTarget,
       sourceNodeId: metadata.sourceNodeId == null ? undefined : String(metadata.sourceNodeId),
       sourceSpan: metadata.sourceSpan ?? (metadata.start != null || metadata.end != null
         ? { start: metadata.start, end: metadata.end }
@@ -251,7 +267,7 @@ export class CoreSpiritVisualAbiStore {
     if (mutation.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
         mutation.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
         !mutation.scriptInstanceId.trim() ||
-        mutation.paneId !== 'price' ||
+        typeof mutation.paneId !== 'string' || !mutation.paneId.trim() ||
         mutation.visible !== true) return undefined;
     const revision = mutation.revision;
     if (revision.streamId !== mutation.scriptInstanceId) {
@@ -268,14 +284,14 @@ export class CoreSpiritVisualAbiStore {
     if (mutation.operation === 'patch' && !previous) return undefined;
 
     if (mutation.operation === 'snapshot') {
-      const normalized = normalizeCoreSpiritVisualObjects(mutation.objects, mutation.scriptInstanceId, revision);
+      const normalized = normalizeCoreSpiritVisualObjects(mutation.objects, mutation.scriptInstanceId, revision, mutation.paneId);
       for (const object of normalized) {
         const id = String(record(object.metadata).coreSpiritVisualAbi && record(record(object.metadata).coreSpiritVisualAbi).objectId || '');
         if (id) objects.set(id, object);
       }
     } else {
       for (const id of mutation.removeIds) objects.delete(id);
-      const normalized = normalizeCoreSpiritVisualObjects(mutation.upsert, mutation.scriptInstanceId, revision);
+      const normalized = normalizeCoreSpiritVisualObjects(mutation.upsert, mutation.scriptInstanceId, revision, mutation.paneId);
       for (const object of normalized) {
         const id = String(record(record(object.metadata).coreSpiritVisualAbi).objectId ?? '');
         if (id) objects.set(id, object);
@@ -602,8 +618,26 @@ export function projectCoreSpiritObjectsToVela(
   };
 }
 
+export function isCoreSpiritChartTargetObject(object: CoreSpiritObject): boolean {
+  const metadata = record(object.metadata);
+  const abi = record(metadata.coreSpiritVisualAbi);
+  return abi.renderTarget == null || abi.renderTarget === 'chart';
+}
+
+export function coreSpiritPaneIdOf(object: CoreSpiritObject, fallback = 'price'): string {
+  const metadata = record(object.metadata);
+  const abi = record(metadata.coreSpiritVisualAbi);
+  const pane = typeof abi.paneId === 'string' ? abi.paneId.trim() : '';
+  return pane || fallback;
+}
+
 export function isCoreSpiritCustomLayerObject(object: CoreSpiritObject): boolean {
+  if (!isCoreSpiritChartTargetObject(object)) return false;
   if (object.kind === 'zone' && object.domain === 'viewport') return true;
-  if (object.kind === 'background') return finiteNumber(record(object.metadata).endTime) === undefined;
+  if (object.kind === 'background') {
+    const metadata = record(object.metadata);
+    const end = finiteNumber(metadata.endTime);
+    return end === undefined || !Number.isFinite(Number(object.time)) || end <= Number(object.time);
+  }
   return object.kind === 'band' || object.kind === 'footprint' || object.kind === 'customVisual';
 }
