@@ -860,15 +860,16 @@ export class HistoricalDataService {
         pageRangeFrom: new Date(range.fromMs).toISOString(),
         pageRangeTo: new Date(range.toMs).toISOString(),
       };
+      const paginationAvailable = Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent);
       sourceStatus.historyCompleteness = {
         status: targetReached ? 'page-target-reached' : 'partial-page',
         requestedBars: pageTarget,
         returnedBars: Math.min(merged.length, pageTarget),
         fyersReturnedBars: fyersBars.length,
         providerPageLimit: 2_000,
-        paginationSupported: Boolean(fetchFyersRecent),
+        paginationSupported: paginationAvailable,
         datasetComplete: false,
-        hasMoreHistory: Boolean(fetchFyersRecent),
+        hasMoreHistory: paginationAvailable,
         pageRangeFrom: new Date(range.fromMs).toISOString(),
         pageRangeTo: new Date(range.toMs).toISOString(),
         lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
