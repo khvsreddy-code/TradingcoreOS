@@ -6,6 +6,7 @@ import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
+import type { CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
 
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const DEFAULT_SOURCE = CORESPIRIT_LUXALGO_SMC_SOURCE;
@@ -55,7 +56,8 @@ function persistLocalSource(source: string, name: string, scriptId?: string | nu
 
 export type CoreSpiritDockProps = {
   onClose: () => void;
-  onAddToChart: (name: string, source: string) => Promise<void>;
+  /** The host must validate the exact-source identity again before execution. */
+  onAddToChart: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
   /** Render inside Vela's docked side-panel instead of a floating overlay. */
   embedded?: boolean;
   /** Updates Vela's own panel maximization state. */
@@ -89,7 +91,16 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const sourceVersion = useRef(0);
 
   const compileSource = async (value: string) => {
-    const result = await compileCoreSpiritSourceOffThread(value, ++sourceVersion.current, 'corespirit-live-dock', { layer: 'script' });
+    const requestedVersion = ++sourceVersion.current;
+    const result = await compileCoreSpiritSourceOffThread(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
+    // The textarea remains editable while workers run. Never publish diagnostics
+    // or apply an artifact from a compile whose source was superseded in the editor.
+    if (requestedVersion !== sourceVersion.current) {
+      throw new Error('The source changed while CoreSpirit was compiling. Compile the latest source before applying it to the chart.');
+    }
+    if (result.sourceVersion !== requestedVersion) {
+      throw new Error('CoreSpirit compiler returned a result for a different source revision.');
+    }
     setCompileResult(result);
     const errors = result.diagnostics.filter(item => item.severity === 'error');
     setDiagnostics(result.diagnostics.map(item => {
@@ -243,8 +254,10 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     const cleanName = nameDraft.trim() || name || 'CoreSpirit Script';
     setBusy('add');
     try {
-      await compileSource(source);
-      await onAddToChart(cleanName, source);
+      const compiled = await compileSource(source);
+      const artifact = compiled.artifact;
+      if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.');
+      await onAddToChart(cleanName, source, artifact);
       setName(cleanName);
       persistLocalSource(source, cleanName, scriptId);
       setStatus(`Added “${cleanName}” to the active Vela chart.`);
@@ -361,7 +374,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       )}
       <div className="mx-3 mb-2 truncate text-[10px] text-slate-400" role="status" aria-live="polite">{busyText || status}</div>
       <footer className="flex flex-wrap gap-2 border-t border-[#293244] p-3">
-        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); setStatus('Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async () => { await onAddToChart(cleanName, source); setName(cleanName); persistLocalSource(source, cleanName, scriptId); setStatus(`Compile passed · “${cleanName}” is now running on the active Vela chart.`); }).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
+        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); setStatus('Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); await onAddToChart(cleanName, source, artifact); setName(cleanName); persistLocalSource(source, cleanName, scriptId); setStatus(`Compile passed · “${cleanName}” is now running on the active Vela chart.`); }).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
         <button type="button" onClick={() => void save()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Save size={13}/> Save</button>
         <button type="button" onClick={() => void publish()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><UploadCloud size={13}/> Publish</button>
         <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-orange-400 disabled:opacity-50"><Check size={13}/> Add to chart</button>
