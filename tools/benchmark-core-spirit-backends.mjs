@@ -221,8 +221,12 @@ async function main() {
         counts[event.executed] = (counts[event.executed] ?? 0) + 1;
         return counts;
       }, {});
-      if (executedCounts.wasm !== repeatCount) {
-        throw new Error(`${testCase.id} ${bars} bars: requested dispatch but telemetry did not confirm WASM for every sample`);
+      const productionThreshold = 100_000 * Math.max(1, group.operations.length);
+      const expectedBackend = benchmarkMinWasmWorkUnits === undefined
+        ? (bars * group.operations.length >= productionThreshold ? 'wasm' : 'cpu')
+        : 'wasm';
+      if (executedCounts[expectedBackend] !== repeatCount) {
+        throw new Error(`${testCase.id} ${bars} bars: expected ${expectedBackend} per backend policy but telemetry reported ${JSON.stringify(executedCounts)}`);
       }
       const cpuMedianMs = percentile(cpuSamples, 0.5);
       const dispatchMedianMs = percentile(dispatchSamples, 0.5);
