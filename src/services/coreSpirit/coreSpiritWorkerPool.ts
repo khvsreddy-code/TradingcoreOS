@@ -76,7 +76,7 @@ export type CoreSpiritWorkerRunResult = {
 function structureRuntimeDiagnostics(messages: readonly string[]): CoreSpiritExecutionDiagnostic[] {
   return messages.map((raw): CoreSpiritExecutionDiagnostic => {
     const message = String(raw);
-    const barError = message.match(/^bar (\\d+):\\s*(.*)$/s);
+    const barError = message.match(/^bar (\d+):\s*(.*)$/s);
     if (barError) {
       return Object.freeze({
         severity: 'error',
@@ -85,7 +85,7 @@ function structureRuntimeDiagnostics(messages: readonly string[]): CoreSpiritExe
         message: barError[2] || 'Runtime bar execution failed.',
       });
     }
-    const outputError = message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\\d+):\\s*(.*)$/s);
+    const outputError = message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\d+):\s*(.*)$/s);
     if (outputError) {
       return Object.freeze({
         severity: 'error',
