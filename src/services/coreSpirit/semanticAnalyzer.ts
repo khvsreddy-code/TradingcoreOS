@@ -55,6 +55,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   }
 
   const mapDeclaredType=(name:string):CoreSpiritType=> normalizeDeclaredType(name);
+  const surfaceInputs = (options.surface as CoreSpiritSurfaceMetadata | undefined)?.inputs ?? [];
+  const findSurfaceInput = (name: string) => surfaceInputs.find(input => input.key === name);
+  const inputLanguageType = (typeValue: unknown): CoreSpiritType => {
+    const type = String(typeValue ?? '').toLowerCase();
+    if (type === 'source') return 'series<number>';
+    if (['int','integer','float','number','price','volume','currency','duration','time'].includes(type)) return 'number';
+    if (['bool','boolean'].includes(type)) return 'boolean';
+    if (['string','color'].includes(type)) return 'string';
+    return 'unknown';
+  };
 
   const infer=(n:CoreSpiritAstNode, scope:Map<string,CoreSpiritType>):CoreSpiritType=>{
     switch(n.type){
@@ -124,11 +134,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const target=infer(n.target,scope);
         const index=infer(n.index,scope);
         const constantIndex=constantNumber(n.index);
+        const inputIndex = n.index.type === 'identifier' ? findSurfaceInput(n.index.name) : undefined;
         if(constantIndex!==undefined&&Number.isInteger(constantIndex)){
           if(constantIndex<0) report(n,'Future indexing is not allowed; index must be >= 0','FUTURE_INDEX');
           else maxLookback=Math.max(maxLookback,constantIndex);
+        } else if(inputIndex?.type === 'int') {
+          const maximum = Number(inputIndex.max ?? inputIndex.defval);
+          if(Number.isFinite(maximum) && maximum >= 0) maxLookback=Math.max(maxLookback,Math.floor(maximum));
         }
         if(!isNumericType(index)) report(n.index,'Historical index must be numeric','TYPE_INDEX');
+        if(inputIndex && inputIndex.type !== 'int') report(n.index,'Input-based historical index must use an integer input','TYPE_INDEX_INTEGER');
         return target.startsWith('series<') ? target.slice(7,-1) as CoreSpiritType : target;
       }
 
@@ -153,6 +168,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'call': {
         const component=resolveCoreSpiritComponent(componentSource,n.name);
         const argTypes=n.args.map(x=>infer(x,scope));
+        if(n.name === '__input') {
+          const key = n.args[0]?.type === 'string' ? String(n.args[0].value) : '';
+          const definition = findSurfaceInput(key);
+          const type = inputLanguageType(definition?.type);
+          if(type !== 'unknown') return type;
+          return argTypes[1] ?? 'unknown';
+        }
         if(component){
           const errors=validateCoreSpiritComponentInvocation(component,argTypes);
           for(const message of errors) report(n,message,'COMPONENT_INVOCATION');
@@ -259,7 +281,14 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(['plot','marker','line','zone','box','band','gradient','arrow','shape','heatmap','polyline','hline'].includes(n.name) && n.args.length>0 && !isNumericType(argTypes[0])) report(n,`${n.name} requires a numeric value`,'TYPE_OUTPUT');
         if(['bg','barcolor'].includes(n.name) && n.args.length>0 && !compatible('string',argTypes[0])) report(n,`${n.name} color must be a string`,'TYPE_COLOR');
         if(n.name==='label' && n.args.length>2 && !compatible('string',argTypes[2])) report(n,'label text must be a string','TYPE_LABEL_TEXT');
-        if(n.name==='labelAt' && n.args.length>1 && !compatible('string',argTypes[1])) report(n,'labelAt text must be a string','TYPE_LABELAT_TEXT');
+        if(n.name==='labelAt' && n.args.length>1) {
+          const legacyText = compatible('string',argTypes[1] ?? 'unknown');
+          const timeAnchoredText = n.args.length > 2 &&
+            isNumericType(argTypes[0] ?? 'unknown') &&
+            isNumericType(argTypes[1] ?? 'unknown') &&
+            compatible('string',argTypes[2] ?? 'unknown');
+          if(!legacyText && !timeAnchoredText) report(n,'labelAt expects (price, text, ...) or (time, price, text, ...)','TYPE_LABELAT_TEXT');
+        }
         if(n.name==='signal') {
           const valid = (n.args.length>=2 && isBooleanType(argTypes[0]) && compatible('string',argTypes[1])) || (n.args.length>=1 && compatible('string',argTypes[0]));
           if(!valid) report(n,'signal expects a string or a boolean condition followed by a string type','TYPE_SIGNAL');
@@ -402,6 +431,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'call': {
         const args=n.args.map(x=>inferSemantic(x,scope));
+        if(n.name === '__input') {
+          const key = n.args[0]?.type === 'string' ? String(n.args[0].value) : '';
+          const definition = findSurfaceInput(key);
+          const type = inputLanguageType(definition?.type);
+          if(type === 'series<number>') return semanticSeries('number');
+          if(type === 'number') return semanticScalar('number');
+          if(type === 'boolean') return semanticScalar('boolean');
+          if(type === 'string') return semanticScalar('string');
+          return n.args[1] ? inferSemantic(n.args[1], scope) : undefined;
+        }
         if(n.name==='market') {
           return semanticSeries('number',{symbol:n.args[0]?.type==='string' ? String(n.args[0].value) : 'current', timeframe:'chart'});
         }
