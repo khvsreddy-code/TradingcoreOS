@@ -286,6 +286,7 @@ async function main() {
     memoryPolicy: 'Heap/ArrayBuffer values are retained-memory deltas, not allocation counts; browser paint time is not measured.',
     workloads: [],
   };
+  const benchmarkPrograms = new Map();
 
   for (const workload of WORKLOADS) {
     // Separate compiler instances prevent the cold compile from being mistaken
@@ -304,6 +305,7 @@ async function main() {
       throw new Error(workload.id + ' failed to compile after a source revision: ' + sourceChangeCompile.value.diagnostics.map(item => item.message).join('; '));
     }
     const ir = coldCompile.value.ir;
+    benchmarkPrograms.set(workload.id, ir);
     const workloadReport = {
       id: workload.id,
       instructions: ir.entry.instructions.length,
@@ -460,6 +462,63 @@ async function main() {
     }
     report.workloads.push(workloadReport);
   }
+
+  // Cohort acceptance: measure the combined output-ready budget for the three
+  // concurrently-active indicator graphs over the same canonical history. The
+  // runtimes execute serially in this Node benchmark; this is not a browser-worker
+  // contention measurement, but it catches aggregate cost and shared-data regressions.
+  const activeIndicatorReports = [];
+  const activeIndicatorRepeats = 3;
+  for (const count of sizes) {
+    const inputBars = barsFor(count);
+    for (const tier of ['reference', 'optimized']) {
+      const runtimes = WORKLOADS.map(workload => makeRuntime(tier, workload));
+      const latencySamples = [];
+      const expected = WORKLOADS.map(workload => {
+        const workloadReport = report.workloads.find(item => item.id === workload.id);
+        const barReport = workloadReport?.bars.find(item => item.count === count);
+        const tierReport = barReport?.tiers.find(item => item.tier === tier);
+        if (!tierReport?.historicalOutputFingerprint) {
+          throw new Error(`missing single-indicator baseline for cohort ${workload.id} ${count} ${tier}`);
+        }
+        return { workloadId: workload.id, fingerprint: tierReport.historicalOutputFingerprint };
+      });
+      const beforeMemory = process.memoryUsage();
+      for (let repeat = 0; repeat < activeIndicatorRepeats; repeat += 1) {
+        const measured = timeMs(() => WORKLOADS.map((workload, index) => {
+          const ir = benchmarkPrograms.get(workload.id);
+          if (!ir) throw new Error('missing compiled IR for active indicator ' + workload.id);
+          return runtimes[index].executeIr(ir, inputBars);
+        }));
+        measured.value.forEach((run, index) => {
+          assertSame(outputFingerprint(run.outputs), expected[index].fingerprint,
+            `multi-active cohort ${tier} ${count} bars ${expected[index].workloadId} output`);
+        });
+        latencySamples.push(measured.elapsedMs);
+      }
+      const afterMemory = process.memoryUsage();
+      const medianMs = percentile(latencySamples, 0.5);
+      activeIndicatorReports.push({
+        barsPerIndicator: count,
+        tier,
+        activeIndicatorCount: WORKLOADS.length,
+        cohortOutputReady: summary(latencySamples),
+        totalIndicatorBarEvaluationsPerSample: count * WORKLOADS.length,
+        aggregateIndicatorBarEvaluationsPerSecond: Math.round(count * WORKLOADS.length * 1000 / Math.max(medianMs, 0.001)),
+        outputFingerprints: expected,
+        isolatedVsCohortOutputParity: 'passed',
+        retainedHeapDeltaBytes: afterMemory.heapUsed - beforeMemory.heapUsed,
+        retainedArrayBufferDeltaBytes: afterMemory.arrayBuffers - beforeMemory.arrayBuffers,
+      });
+    }
+  }
+  report.multipleActiveIndicators = {
+    scenario: 'three active CoreSpirit graph workloads sharing one canonical test history',
+    workloads: WORKLOADS.map(workload => workload.id),
+    iterationsPerTierAndSize: activeIndicatorRepeats,
+    schedulingSemantics: 'synchronous serial cohort in one Node process; browser worker-pool contention remains a separate browser-level measurement',
+    results: activeIndicatorReports,
+  };
 
   report.modelInference = benchmarkModelInference(updateCount);
   const serializedReport = JSON.stringify(report, null, 2);
