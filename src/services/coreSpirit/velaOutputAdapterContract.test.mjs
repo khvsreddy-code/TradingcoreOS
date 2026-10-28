@@ -329,6 +329,12 @@ assert.match(velaEngine, /return\s+isolateSnapshot\s*\?\s*Object\.freeze\(normal
   'async workers receive an isolated copy of the normalized bar cache');
 assert.ok(velaEngine.includes('safeVelaNormalizationStart(rows,normalizedBarsCache,normalizedInputLength,forceFullNormalization)'),
   'the canonical bar adapter must prove stable timestamp anchors before reusing an incremental history prefix');
+assert.ok(velaEngine.includes('let normalizationCacheInvalidated = false;'),
+  'an unexpected cache invalidation must be retained for the lifecycle event handler');
+assert.ok(velaEngine.includes('normalizationCacheInvalidatedForEvent=normalizationCacheInvalidated;'),
+  'notifyBars must consume the cache invalidation signal even when another reader detected it first');
+assert.ok(velaEngine.includes("reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail||normalizationCacheInvalidatedForEvent"),
+  'detected historical data corrections must force full recursive-state replay');
 assert.ok(velaEngine.includes('time<=previousTime'),
   'the canonical bar adapter must reject duplicate as well as descending bar-opening timestamps');
 assert.ok(velaEngine.includes('isolateSnapshot ? Object.freeze(normalizedBarsCache.slice())'),
