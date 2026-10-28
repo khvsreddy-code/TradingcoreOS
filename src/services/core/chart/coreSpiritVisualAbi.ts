@@ -41,12 +41,17 @@ export type PreparedCoreSpiritVisualSnapshot = Readonly<{
   streamId: string;
   datasetRevision: number;
   outputRevision: number;
+  visible: boolean;
+  /** Chart-visible objects for the render commit. */
   objects: readonly CoreSpiritObject[];
+  /** Full retained source objects so visibility toggles do not lose patch state. */
+  retainedObjects: readonly CoreSpiritObject[];
 }>;
 
 type RetainedVisualState = {
   datasetRevision: number;
   outputRevision: number;
+  visible: boolean;
   objects: Map<string, CoreSpiritObject>;
 };
 
@@ -235,6 +240,7 @@ export function normalizeCoreSpiritVisualObjects(
       coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
       paneId: declaredPane,
       renderTarget,
+      visible: visual.visible !== false,
       sourceNodeId: metadata.sourceNodeId == null ? undefined : String(metadata.sourceNodeId),
       sourceSpan: metadata.sourceSpan ?? (metadata.start != null || metadata.end != null
         ? { start: metadata.start, end: metadata.end }
@@ -268,7 +274,7 @@ export class CoreSpiritVisualAbiStore {
         mutation.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
         !mutation.scriptInstanceId.trim() ||
         typeof mutation.paneId !== 'string' || !mutation.paneId.trim() ||
-        mutation.visible !== true) return undefined;
+        typeof mutation.visible !== 'boolean') return undefined;
     const revision = mutation.revision;
     if (revision.streamId !== mutation.scriptInstanceId) {
       // Stream identity is a separate concept from the Vela indicator id, but both
@@ -298,11 +304,14 @@ export class CoreSpiritVisualAbiStore {
       }
     }
 
+    const retainedObjects = Object.freeze([...objects.values()]);
     return Object.freeze({
       streamId: revision.streamId,
       datasetRevision: revision.datasetRevision,
       outputRevision: revision.outputRevision,
-      objects: Object.freeze([...objects.values()]),
+      visible: mutation.visible,
+      objects: Object.freeze(mutation.visible ? retainedObjects.filter(isCoreSpiritVisualVisibleObject) : []),
+      retainedObjects,
     });
   }
 
@@ -311,15 +320,22 @@ export class CoreSpiritVisualAbiStore {
     const revision = { streamId: prepared.streamId, datasetRevision: prepared.datasetRevision, outputRevision: prepared.outputRevision };
     if (!revisionIsNewer(previous, revision)) throw new Error('CoreSpirit visual ABI commit rejected a stale prepared revision.');
     const objects = new Map<string, CoreSpiritObject>();
-    for (const object of prepared.objects) {
+    for (const object of prepared.retainedObjects) {
       const id = String(record(record(object.metadata).coreSpiritVisualAbi).objectId ?? '');
       if (id) objects.set(id, object);
     }
-    this.streams.set(prepared.streamId, { datasetRevision: prepared.datasetRevision, outputRevision: prepared.outputRevision, objects });
+    this.streams.set(prepared.streamId, {
+      datasetRevision: prepared.datasetRevision,
+      outputRevision: prepared.outputRevision,
+      visible: prepared.visible,
+      objects,
+    });
   }
 
   objects(streamId: string): readonly CoreSpiritObject[] {
-    return Object.freeze([...(this.streams.get(streamId)?.objects.values() ?? [])]);
+    const state = this.streams.get(streamId);
+    if (!state?.visible) return Object.freeze([]);
+    return Object.freeze([...state.objects.values()].filter(isCoreSpiritVisualVisibleObject));
   }
 
   /** Clears visible scene objects but retains revision fences so delayed work cannot resurrect them. */
@@ -624,6 +640,13 @@ export function isCoreSpiritChartTargetObject(object: CoreSpiritObject): boolean
   return abi.renderTarget == null || abi.renderTarget === 'chart';
 }
 
+export function isCoreSpiritVisualVisibleObject(object: CoreSpiritObject): boolean {
+  const metadata = record(object.metadata);
+  const abi = record(metadata.coreSpiritVisualAbi);
+  const visual = record((object as unknown as Record<string, unknown>).visual);
+  return abi.visible !== false && visual.visible !== false;
+}
+
 export function coreSpiritPaneIdOf(object: CoreSpiritObject, fallback = 'price'): string {
   const metadata = record(object.metadata);
   const abi = record(metadata.coreSpiritVisualAbi);
@@ -632,7 +655,7 @@ export function coreSpiritPaneIdOf(object: CoreSpiritObject, fallback = 'price')
 }
 
 export function isCoreSpiritCustomLayerObject(object: CoreSpiritObject): boolean {
-  if (!isCoreSpiritChartTargetObject(object)) return false;
+  if (!isCoreSpiritChartTargetObject(object) || !isCoreSpiritVisualVisibleObject(object)) return false;
   if (object.kind === 'zone' && object.domain === 'viewport') return true;
   if (object.kind === 'background') {
     const metadata = record(object.metadata);
