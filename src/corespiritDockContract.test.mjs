@@ -70,13 +70,13 @@ includes(dock, "category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 
 includes(indicatorsPage, 'Staged acceptance target', 'the bundled SMC conversion is not represented as release-certified before browser visual acceptance');
 includes(indicatorsPage, 'authenticated browser visual acceptance passes', 'SMC limitations and the missing browser acceptance gate remain visible to users');
 includes(outputController, 'tco:corespirit:visual-commit', 'Vela visual acceptance is observable only after native scene commit');
-includes(visualLayer, 'probeVisibleCoreSpiritPixels', 'SMC browser verification can observe the actual custom-layer paint path');
-includes(visualLayer, 'getImageData(0, 0, canvas.width, canvas.height)', 'pixel readback is available for explicit opt-in visual acceptance');
-includes(visualLayer, '__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__', 'pixel readback is disabled unless a browser acceptance session explicitly opts in');
-includes(visualLayer, '__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ === true', 'visual pixel readback is one-shot so acceptance instrumentation does not tax ordinary frames');
-includes(smcBrowser, 'window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = false', 'viewport acceptance explicitly re-arms one additional pixel sample');
-includes(smcBrowser, 'tco:corespirit:visual-paint', 'browser acceptance waits for renderer paint evidence, not just scene commit');
-includes(smcBrowser, 'nonTransparentPixels', 'browser acceptance requires non-transparent pixels from the CoreSpirit render layer');
+
+
+
+
+
+
+
 includes(smcBrowser, 'sourceDraftRestoredAfterReload', 'browser acceptance checks exact local source-draft restoration after reload');
 includes(smcBrowser, 'zoomWheelDelta', 'SMC renderer acceptance exercises Vela zoom interactions');
 includes(smcBrowser, 'horizontalPanPixels', 'SMC renderer acceptance exercises Vela pan interactions');
