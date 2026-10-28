@@ -88,7 +88,11 @@ export function coreSpiritLifecycleDiagnostic(
   error: unknown, stage: CoreSpiritLifecycleStage, options: { previousOutputPreserved?: boolean; outputId?: string; line?: number; column?: number } = {},
 ): CoreSpiritLifecycleDiagnostic {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
-  const rawMessage = error instanceof Error ? error.message : String(error ?? 'Unknown CoreSpirit error');
+  const rawMessage = error instanceof Error
+    ? error.message
+    : typeof value.message === 'string'
+      ? value.message
+      : String(error ?? 'Unknown CoreSpirit error');
   const code = typeof value.code === 'string' ? value.code :
     stage === 'capability-denied' ? 'CHART_CAPABILITY_DENIED' :
     stage === 'output-rejected' ? 'CORESPIRIT_OUTPUT_REJECTED' :
