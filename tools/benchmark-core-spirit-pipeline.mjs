@@ -178,7 +178,7 @@ show line(smoothedRelative)
   },
 ];
 
-function makeRuntime(tier, workload) {
+function makeRuntime(tier, workload, inputValues = {}) {
   return new CoreSpiritRuntime({
     executionTarget: 'chart',
     executionTier: tier,
@@ -188,6 +188,7 @@ function makeRuntime(tier, workload) {
     timeframe: workload.timeframe,
     maxStepsPerBar: 10_000,
     dataResolver: fixtureResolver(),
+    inputValues,
   });
 }
 
@@ -217,6 +218,11 @@ async function main() {
     const incrementalCold = timeMs(() => incrementalCompiler.compile(workload.source, 'benchmark:' + workload.id));
     const incrementalWarm = timeMs(() => incrementalCompiler.compile(workload.source, 'benchmark:' + workload.id));
     if (!incrementalWarm.value.cacheHit) throw new Error('incremental compiler warm pass did not hit its cache');
+    const sourceRevision = workload.source + '\\n// benchmark-only source revision';
+    const sourceChangeCompile = timeMs(() => new CoreSpiritCompiler().compileSource(sourceRevision, 'benchmark:' + workload.id));
+    if (!sourceChangeCompile.value.ir || sourceChangeCompile.value.diagnostics.some(item => item.severity === 'error')) {
+      throw new Error(workload.id + ' failed to compile after a source revision: ' + sourceChangeCompile.value.diagnostics.map(item => item.message).join('; '));
+    }
     const ir = coldCompile.value.ir;
     const workloadReport = {
       id: workload.id,
@@ -227,6 +233,8 @@ async function main() {
       incrementalCompileWarmMs: Number(incrementalWarm.elapsedMs.toFixed(3)),
       incrementalCacheHit: incrementalWarm.value.cacheHit,
       incrementalParseCacheHit: incrementalWarm.value.parseCacheHit,
+      sourceChangeCompileMs: Number(sourceChangeCompile.elapsedMs.toFixed(3)),
+      sourceChangePreservesSemantics: true,
       bars: [],
     };
 
@@ -234,6 +242,8 @@ async function main() {
       const inputBars = barsFor(count);
       const originalByTier = {};
       const correctedByTier = {};
+      const sourceChangedByTier = {};
+      const inputChangedByTier = {};
       const tierReports = [];
       for (const tier of ['reference', 'optimized']) {
         const runtime = makeRuntime(tier, workload);
@@ -272,6 +282,29 @@ async function main() {
         const correction = timeMs(() => runtime.executeIr(ir, correctedBars));
         const correctedFingerprint = outputFingerprint(correction.value.outputs);
         correctedByTier[tier] = correctedFingerprint;
+
+        // A source-only change must compile a new artifact but preserve semantics
+        // when it adds only a comment. This detects cache keys that ignore source identity.
+        const sourceChangedRuntime = makeRuntime(tier, workload);
+        const sourceChangedRun = timeMs(() => sourceChangedRuntime.executeIr(sourceChangeCompile.value.ir, inputBars));
+        const sourceChangedFingerprint = outputFingerprint(sourceChangedRun.value.outputs);
+        assertSame(sourceChangedFingerprint, coldFingerprint, `${workload.id} ${count} ${tier} source-only change semantics`);
+        sourceChangedByTier[tier] = sourceChangedFingerprint;
+
+        // SMC input changes reuse the same compiled artifact but must recompute
+        // the dependent graph using the newly selected input value.
+        let inputChangeReport = undefined;
+        if (workload.id === 'luxalgo-smc-stateful-drawings') {
+          const inputChangedRun = timeMs(() => makeRuntime(tier, workload, { swingLength: 20 }).executeIr(ir, inputBars));
+          const inputChangedFingerprint = outputFingerprint(inputChangedRun.value.outputs);
+          inputChangedByTier[tier] = inputChangedFingerprint;
+          inputChangeReport = {
+            inputChangeReplayMs: Number(inputChangedRun.elapsedMs.toFixed(3)),
+            inputChangeOutputCount: inputChangedRun.value.outputs.length,
+            inputChangeOutputFingerprint: inputChangedFingerprint,
+            inputChangeChangedOutput: inputChangedFingerprint !== coldFingerprint,
+          };
+        }
         tierReports.push({
           tier,
           coldHistoricalReplayMs: Number(coldRun.elapsedMs.toFixed(3)),
@@ -293,10 +326,17 @@ async function main() {
           drawingOutputCount: correction.value.outputs.filter(output =>
             ['line', 'arrow', 'zone', 'box', 'label', 'marker', 'shape', 'polyline', 'polygon', 'hline'].includes(output.kind)
           ).length,
+          sourceChangeReplayMs: Number(sourceChangedRun.elapsedMs.toFixed(3)),
+          sourceChangeOutputFingerprint: sourceChangedFingerprint,
+          ...(inputChangeReport ?? {}),
         });
       }
       assertSame(originalByTier.reference, originalByTier.optimized, `${workload.id} ${count} historical outputs`);
       assertSame(correctedByTier.reference, correctedByTier.optimized, `${workload.id} ${count} corrected historical outputs`);
+      assertSame(sourceChangedByTier.reference, sourceChangedByTier.optimized, `${workload.id} ${count} source-change outputs`);
+      if (workload.id === 'luxalgo-smc-stateful-drawings') {
+        assertSame(inputChangedByTier.reference, inputChangedByTier.optimized, `${workload.id} ${count} changed-input outputs`);
+      }
       workloadReport.bars.push({ count, referenceVsOptimizedParity: 'passed', tiers: tierReports });
       console.log(`[pipeline] ${workload.id} ${count} bars: reference/optimized parity passed`);
     }
