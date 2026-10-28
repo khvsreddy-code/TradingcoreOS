@@ -12,6 +12,8 @@ const handoff = read('./services/coreSpirit/precompiledArtifactHandoff.ts');
 const chartController = read('./services/core/chart/controllers/ChartCoreSpiritController.ts');
 const workerPool = read('./services/coreSpirit/coreSpiritWorkerPool.ts');
 const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
+const editorPage = read('./pages/CoreSpiritEditorPage.tsx');
+const copilotRoute = read('./server/routes/coreSpirit-copilot.routes.ts');
 const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
 const contributions = read('../vendor/vela/src/widget/contributions.ts');
 
@@ -78,5 +80,19 @@ for (const label of ['Compile', 'Compile & Run', 'Save', 'Publish', 'Add to char
 }
 excludes(terminal, "'tco.watchlist',", 'Watchlist must be removed from the topbar action list');
 excludes(terminal, "'tco.corespirit-code',", 'CoreSpirit must be removed from the topbar action list');
+includes(editorPage, 'CORE_SPIRIT_AUTHORING_LEVELS', 'the editor retains one compiler-backed four-level authoring model');
+includes(editorPage, 'getCoreSpiritAuthoringProfileForLevel', 'authoring levels resolve through the existing shared profile');
+for (const level of ['beginner', 'trader', 'quant', 'system']) {
+  includes(editorPage, `${level}:`, `${level} authoring guidance remains available`);
+}
+includes(editorPage, 'editorModel.getSource()!==draft.baseSource||editorModel.getVersion()!==draft.baseEditorVersion', 'AI draft application rejects source edits made after generation');
+includes(editorPage, 'previewCoreSpiritArtifactOffThread(compiled.artifact,recentBars', 'AI-generated source must pass an isolated replay before it is approved to run');
+includes(editorPage, 'replayGateMatches', 'AI replay approval is bound to source, artifact, chart and data identity');
+includes(editorPage, 'compiled.artifact.abi?.artifactHash===copilotServerArtifactHashRef.current', 'client compilation must match the server-validated artifact identity');
+includes(copilotRoute, 'ONE REPAIR PASS ONLY', 'Copilot repair is explicitly bounded');
+includes(copilotRoute, 'repairAttempts=1', 'Copilot does not recursively call repair without a hard cap');
+includes(copilotRoute, 'buildCoreSpiritReviewPatch', 'the AI response includes a reviewable source diff');
+includes(copilotRoute, 'validateCoreScriptCapabilitiesAgainstSandbox', 'AI-generated capabilities are checked against the server sandbox');
+includes(copilotRoute, 'analysisOnly:true', 'analysis-only AI modes cannot produce executable artifacts');
 
 console.log('CORESPIRIT_DOCK_CONTRACT_OK');
