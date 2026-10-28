@@ -58,6 +58,16 @@ export function validateCoreSpiritChartCapabilities(ir: CoreSpiritIrProgram | un
   return [...architecture, ...denied];
 }
 
+export function coreSpiritLifecycleStageForError(error: unknown, fallback: CoreSpiritLifecycleStage = 'execution-failed'): CoreSpiritLifecycleStage {
+  const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+  const code = typeof value.code === 'string' ? value.code : '';
+  if (value.name === 'CoreSpiritCapabilityDeniedError' || code === 'CHART_CAPABILITY_DENIED') return 'capability-denied';
+  if (code === 'CORESPIRIT_VELA_TIME_ALIGNMENT' || code === 'RUNTIME_OUTPUT_VALIDATION' || code === 'CORESPIRIT_OUTPUT_REJECTED') return 'output-rejected';
+  if (fallback === 'applying-chart-output' || code === 'CORESPIRIT_RENDER_COMMIT_FAILED') return 'rendering-failed';
+  if (fallback === 'compiling' || code === 'CORESPIRIT_COMPILE_FAILED') return 'compile-failed';
+  return fallback === 'output-rejected' ? 'output-rejected' : fallback === 'capability-denied' ? 'capability-denied' : 'execution-failed';
+}
+
 export function coreSpiritLifecycleDiagnostic(
   error: unknown, stage: CoreSpiritLifecycleStage, options: { previousOutputPreserved?: boolean; outputId?: string; line?: number; column?: number } = {},
 ): CoreSpiritLifecycleDiagnostic {
