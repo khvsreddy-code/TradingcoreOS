@@ -36,18 +36,18 @@ let barDuration = time[1] - time[2]
 // A pivot candidate is not usable until swingLength bars have arrived after it.
 // The left-side comparison is read at the candidate bar; the right-side window
 // ends at the current bar. This deliberately preserves the confirmation delay.
-let swingLeftWindowHigh = highest(high[swingLength], swingLength)
+let swingLeftWindowHigh = highest(high[swingLength + 1], swingLength)
 let swingRightWindowHigh = highest(high, swingLength)
-let swingLeftWindowLow = lowest(low[swingLength], swingLength)
+let swingLeftWindowLow = lowest(low[swingLength + 1], swingLength)
 let swingRightWindowLow = lowest(low, swingLength)
 let swingCandidateHigh = high[swingLength]
 let swingCandidateLow = low[swingLength]
 let swingPivotHighConfirmed = swingCandidateHigh >= swingLeftWindowHigh and swingCandidateHigh > swingRightWindowHigh
 let swingPivotLowConfirmed = swingCandidateLow <= swingLeftWindowLow and swingCandidateLow < swingRightWindowLow
 
-let internalLeftWindowHigh = highest(high[internalLength], internalLength)
+let internalLeftWindowHigh = highest(high[internalLength + 1], internalLength)
 let internalRightWindowHigh = highest(high, internalLength)
-let internalLeftWindowLow = lowest(low[internalLength], internalLength)
+let internalLeftWindowLow = lowest(low[internalLength + 1], internalLength)
 let internalRightWindowLow = lowest(low, internalLength)
 let internalCandidateHigh = high[internalLength]
 let internalCandidateLow = low[internalLength]
