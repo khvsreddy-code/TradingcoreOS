@@ -307,6 +307,12 @@ async function main() {
         const correction = timeMs(() => runtime.executeIr(ir, correctedBars));
         const correctedFingerprint = outputFingerprint(correction.value.outputs);
         correctedByTier[tier] = correctedFingerprint;
+        // A measured correction replay is only valid if it converges to a clean
+        // runtime over the exact same corrected canonical history.
+        const cleanCorrection = timeMs(() => makeRuntime(tier, workload).executeIr(ir, correctedBars));
+        const cleanCorrectionFingerprint = outputFingerprint(cleanCorrection.value.outputs);
+        assertSame(correctedFingerprint, cleanCorrectionFingerprint,
+          `${workload.id} ${count} ${tier} historical correction vs clean replay`);
 
         // A source-only change must compile a new artifact but preserve semantics
         // when it adds only a comment. This detects cache keys that ignore source identity.
@@ -345,6 +351,8 @@ async function main() {
           formingBarReplacementParity: 'passed',
           lastObservedOutputReadyMs: Number(visibleLatencyMs.toFixed(3)),
           historicalCorrectionReplayMs: Number(correction.elapsedMs.toFixed(3)),
+          cleanCorrectionReferenceReplayMs: Number(cleanCorrection.elapsedMs.toFixed(3)),
+          correctedReplayCleanParity: 'passed',
           historicalBarsPerSecond: Math.round(count * 1000 / Math.max(coldRun.elapsedMs, 0.001)),
           historicalCorrectionBarsPerSecond: Math.round(count * 1000 / Math.max(correction.elapsedMs, 0.001)),
           correctedOutputFingerprint: correctedFingerprint,
