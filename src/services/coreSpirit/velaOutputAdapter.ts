@@ -260,36 +260,17 @@ export function safeVelaNormalizationStart(
       Math.floor(rawMs / 1000) === Math.floor(normalizedMs / 1000);
   };
 
-  const sameNormalizedBar = (raw: CoreSpiritVelaOhlcv | undefined, bar: CoreSpiritMarketBar | undefined): boolean => {
-    if (!sameOpeningTime(raw, bar)) return false;
-    // Compare the complete canonical payload, not just its timestamp. Providers
-    // can correct a closed candle without changing its opening time; reusing
-    // that cached prefix would otherwise leave stateful indicators stale.
-    const volume = raw!.volume == null ? 0 : Number(raw!.volume);
-    return Number(raw!.open) === bar!.open &&
-      Number(raw!.high) === bar!.high &&
-      Number(raw!.low) === bar!.low &&
-      Number(raw!.close) === bar!.close &&
-      volume === bar!.volume;
-  };
-
-  // Every completed bar must still match the cached canonical data. The only
-  // expected mutable row is the previous forming candle at previousLength - 1.
-  // If any older timestamp or OHLCV value changed, return null so callers rebuild
-  // the complete normalized snapshot and invalidate downstream incremental state.
-  const stablePrefixLength = Math.max(0, previousLength - 1);
-  for (let index = 0; index < stablePrefixLength; index += 1) {
-    if (!sameNormalizedBar(rows[index], normalized[index])) return null;
-  }
-
+  // The first anchor guards against a historical prepend even if the length grew.
+  if (!sameOpeningTime(rows[0], normalized[0])) return null;
   if (length === previousLength) {
-    // Same-cardinality updates may replace only the current forming candle.
-    // All earlier rows were checked above for both timestamp and OHLCV changes.
+    // Only the forming bar may be replaced on the same-length fast path.
+    const stableIndex = Math.max(0, length - 2);
+    if (!sameOpeningTime(rows[stableIndex], normalized[stableIndex])) return null;
     return Math.max(0, length - 1);
   }
 
-  // On append, the old forming candle must retain its absolute slot. Its OHLCV
-  // may have changed as it became final, so compare its timestamp only.
+  // On append, the previous tail must remain at its old absolute index. If it
+  // moved, this is a prepend/insert and all absolute bar indices have shifted.
   if (!sameOpeningTime(rows[previousLength - 1], normalized[previousLength - 1])) return null;
   return Math.max(0, previousLength - 1);
 }
