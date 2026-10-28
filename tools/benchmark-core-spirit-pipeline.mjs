@@ -264,7 +264,7 @@ function benchmarkModelInference(iterations) {
     updatesPerSecond: Math.round(latencySamples.length * 1000 / Math.max(totalMs, 0.001)),
     finalState: finalState,
     finalPosterior: Array.from(model.posterior()?.data ?? []),
-    outputParityAgainstIndependentSame-historyModel: 'passed',
+    'outputParityAgainstIndependentSame-historyModel': 'passed',
     retainedHeapDeltaBytes: afterMemory.heapUsed - beforeMemory.heapUsed,
     retainedArrayBufferDeltaBytes: afterMemory.arrayBuffers - beforeMemory.arrayBuffers,
     note: 'This isolates model inference after one bounded fit; it is not a substitute for measuring a full compiled model-backed chart indicator.',

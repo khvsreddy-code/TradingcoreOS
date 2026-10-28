@@ -30,6 +30,10 @@ export interface MarketDataAutoFixerOptions {
   maxEntries?: number;
   /** Disable shared Redis state for deterministic unit tests. */
   useSharedCoordination?: boolean;
+  /** Injected for deterministic tests; defaults to Math.random. */
+  random?: () => number;
+  /** Symmetric jitter applied to transient exponential cooldowns (0–0.5). */
+  jitterRatio?: number;
 }
 function safeError(error: unknown): string {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
@@ -61,6 +65,8 @@ export class MarketDataAutoFixer {
   private readonly rateLimitFloorMs: number;
   private readonly maxEntries: number;
   private readonly useSharedCoordination: boolean;
+  private readonly random: () => number;
+  private readonly jitterRatio: number;
   private readonly probeOwners = new Map<string, string>();
   private readonly sharedStateTtlMs = 60 * 60_000;
   private readonly probeLockTtlMs = 30_000;
@@ -72,6 +78,21 @@ export class MarketDataAutoFixer {
     this.rateLimitFloorMs = Math.max(1, options.rateLimitFloorMs ?? 30_000);
     this.maxEntries = Math.max(16, Math.floor(options.maxEntries ?? 512));
     this.useSharedCoordination = options.useSharedCoordination ?? true;
+    this.random = options.random ?? Math.random;
+    this.jitterRatio = Math.max(0, Math.min(0.5, options.jitterRatio ?? 0.2));
+  }
+  private randomUnit(): number {
+    const value = Number(this.random());
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+  }
+  private jitterTransientCooldown(cooldownMs: number): number {
+    const factor = 1 - this.jitterRatio + 2 * this.jitterRatio * this.randomUnit();
+    return Math.max(1, Math.min(this.maxCooldownMs, Math.round(cooldownMs * factor)));
+  }
+  private jitterRateLimitCooldown(cooldownMs: number): number {
+    // Never retry earlier than Retry-After/rateLimitFloorMs; jitter is positive only.
+    return Math.max(this.rateLimitFloorMs, Math.min(60 * 60_000,
+      Math.round(cooldownMs * (1 + this.jitterRatio * this.randomUnit()))));
   }
   private key(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): string {
     return [source, capability, String(resource || 'global').slice(0, 180)].join('|');
@@ -226,11 +247,12 @@ export class MarketDataAutoFixer {
       cooldown = this.authCooldownMs;
       entry.lastAction = 'credentials-permission-or-mapping-check-required';
     } else if (status === 429) {
-      cooldown = Math.max(this.rateLimitFloorMs, retryAfterOf(error));
-      entry.lastAction = 'rate-limited-respecting-cooldown';
+      cooldown = this.jitterRateLimitCooldown(Math.max(this.rateLimitFloorMs, retryAfterOf(error)));
+      entry.lastAction = 'rate-limited-respecting-cooldown-with-positive-jitter';
     } else {
-      cooldown = Math.min(this.maxCooldownMs, this.baseCooldownMs * 2 ** Math.min(8, entry.failures - 1));
-      entry.lastAction = 'fallback-and-bounded-retry';
+      const exponential = Math.min(this.maxCooldownMs, this.baseCooldownMs * 2 ** Math.min(8, entry.failures - 1));
+      cooldown = this.jitterTransientCooldown(exponential);
+      entry.lastAction = 'fallback-bounded-exponential-backoff-with-jitter';
     }
     entry.state = 'open';
     entry.nextProbeAt = this.now() + cooldown;

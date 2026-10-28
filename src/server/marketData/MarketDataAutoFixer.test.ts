@@ -4,7 +4,7 @@ let now = 10_000;
 const fixer = new MarketDataAutoFixer({
   useSharedCoordination: false,
   now: () => now, baseCooldownMs: 1_000, maxCooldownMs: 8_000,
-  authCooldownMs: 15_000, rateLimitFloorMs: 3_000,
+  authCooldownMs: 15_000, rateLimitFloorMs: 3_000, random: () => 0.5,
 });
 const resource = 'NSE:NIFTY50-INDEX:5minute';
 assert.equal(await fixer.canAttempt('nse', 'history', resource), true);
@@ -30,4 +30,31 @@ const auth = await fixer.recordFailure('nse', 'history', 'NSE:SBIN-EQ:5minute', 
 assert.equal(auth.nextProbeAt, now + 15_000);
 assert.equal(auth.lastAction, 'credentials-permission-or-mapping-check-required');
 assert.equal(fixer.snapshot('nse', 'history', resource)[0]?.lastError, null);
+
+const jitterFixer = new MarketDataAutoFixer({
+  useSharedCoordination: false,
+  now: () => now,
+  baseCooldownMs: 1_000,
+  maxCooldownMs: 8_000,
+  authCooldownMs: 15_000,
+  rateLimitFloorMs: 3_000,
+  random: () => 0,
+  jitterRatio: 0.2,
+});
+const jitterFailure = await jitterFixer.recordFailure('nse', 'history', resource, Object.assign(new Error('transient'), { status: 503 }));
+assert.equal(jitterFailure.nextProbeAt, now + 800, 'transient failures should use symmetric jitter around exponential backoff');
+
+const rateLimitFixer = new MarketDataAutoFixer({
+  useSharedCoordination: false,
+  now: () => now,
+  baseCooldownMs: 1_000,
+  maxCooldownMs: 8_000,
+  authCooldownMs: 15_000,
+  rateLimitFloorMs: 3_000,
+  random: () => 1,
+  jitterRatio: 0.2,
+});
+const rateLimitFailure = await rateLimitFixer.recordFailure('investiny', 'history', resource,
+  Object.assign(new Error('rate limited'), { status: 429, retryAfterMs: 5_000 }));
+assert.equal(rateLimitFailure.nextProbeAt, now + 6_000, 'positive jitter must not retry before Retry-After');
 console.log('MARKET_DATA_AUTO_FIXER_OK');
