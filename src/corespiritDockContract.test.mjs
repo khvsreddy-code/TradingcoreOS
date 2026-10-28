@@ -15,6 +15,7 @@ const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
 const outputController = read('./services/coreSpirit/chartOutputController.ts');
 const smcBrowser = read('../tools/verify-core-spirit-smc-browser.mjs');
 const smcBenchmark = read('../tools/benchmark-core-spirit-pipeline.mjs');
+const wasmBenchmark = read('../tools/benchmark-core-spirit-wasm.mjs');
 const backendBenchmark = read('../tools/benchmark-core-spirit-backends.mjs');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const packageJson = read('../package.json');
@@ -104,7 +105,7 @@ includes(smcBenchmark, 'formingBarReplacementParity', 'performance measurement i
 includes(smcBenchmark, 'liveTickThroughputPerSecond', 'pipeline benchmark reports incremental live-update throughput');
 includes(smcBenchmark, 'historicalCorrectionBarsPerSecond', 'pipeline benchmark reports correction replay throughput');
 includes(smcBenchmark, 'TCO_BENCH_OUTPUT_FILE', 'benchmark results can be persisted as machine-readable evidence');
-includes(smcBenchmark, 'TCO_WASM_BENCH_OUTPUT_FILE', 'CPU-versus-WASM benchmark evidence can be persisted and compared');
+includes(wasmBenchmark, 'TCO_WASM_BENCH_OUTPUT_FILE', 'CPU-versus-WASM benchmark evidence can be persisted and compared');
 includes(packageJson, 'incrementalStatefulKernelContract.test.mjs', 'critical verification runs forming-bar/checkpoint parity tests');
 includes(packageJson, 'multiBackendKernelExecutorContract.test.mjs', 'critical verification exercises the actual WASM backend planner and adapter');
 includes(smcBenchmark, 'inputChangeReport.inputChangeChangedOutput !== true', 'SMC input-change benchmark fails closed if settings do not change results');
