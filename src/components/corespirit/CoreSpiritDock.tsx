@@ -552,14 +552,24 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
               const value = field.value;
               const controlClass = 'min-w-0 rounded border border-[#29364a] bg-[#070b12] px-2 py-1 text-[9px] text-slate-200';
               const onValue = (raw: string | boolean) => {
-                const next: CoreSpiritChartManagedValue = typeof raw === 'boolean' ? raw :
-                  field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time' ? Number(raw) : raw;
+                let next: CoreSpiritChartManagedValue;
+                if (typeof raw === 'boolean') next = raw;
+                else if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') {
+                  if (!raw.trim()) { setManagerError(field.title + ' requires a numeric value.'); return; }
+                  const numeric = Number(raw);
+                  if (!Number.isFinite(numeric)) { setManagerError(field.title + ' must be finite.'); return; }
+                  if (field.type === 'int' && !Number.isInteger(numeric)) { setManagerError(field.title + ' must be a whole number.'); return; }
+                  if (field.min != null && numeric < field.min) { setManagerError(field.title + ' must be at least ' + field.min + '.'); return; }
+                  if (field.max != null && numeric > field.max) { setManagerError(field.title + ' must be no greater than ' + field.max + '.'); return; }
+                  next = numeric;
+                } else next = raw;
+                setManagerError('');
                 updateManagedField(instance, field, next, prop);
               };
               if (field.type === 'bool') return <label key={field.key} className="flex items-center gap-2 text-[9px] text-slate-300"><input type="checkbox" checked={Boolean(value)} onChange={event => onValue(event.target.checked)}/>{field.title}</label>;
               if (field.options?.length) return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><select className={controlClass} value={String(value)} onChange={event => onValue(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
-              if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type="number" value={Number(value)} min={field.min} max={field.max} step={field.step ?? (field.type === 'int' ? 1 : 'any')} onChange={event => onValue(event.target.value)}/></label>;
-              return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type={field.type === 'color' ? 'color' : 'text'} value={String(value)} onChange={event => onValue(event.target.value)}/></label>;
+              if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type="number" defaultValue={Number(value)} min={field.min} max={field.max} step={field.step ?? (field.type === 'int' ? 1 : 'any')} onBlur={event => { if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value); }}/></label>;
+              return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type={field.type === 'color' ? 'color' : 'text'} defaultValue={String(value)} onBlur={event => { if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value); }}/></label>;
             };
             return <div key={instance.id} className="rounded-md border border-[#263249] bg-[#0c121d] p-2">
               <div className="flex items-start gap-2">
