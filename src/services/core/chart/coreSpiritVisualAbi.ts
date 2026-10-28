@@ -504,8 +504,10 @@ export function projectCoreSpiritObjectsToVela(
     const raw = object as unknown as Record<string, any>;
     const metadata = record(object.metadata);
     const abi = record(metadata.coreSpiritVisualAbi);
+    const forceOverlay = metadata.forceOverlay === true || metadata.force_overlay === true || raw.forceOverlay === true;
     const id = String(abi.objectId ?? raw.id ?? `${object.kind}:${raw.time ?? 'static'}`);
-    const itemPane = String(abi.paneId ?? paneId);
+    const itemPane = forceOverlay ? 'price' : String(abi.paneId ?? paneId);
+    const itemOverlay = forceOverlay || itemPane === 'price';
     if (object.kind === 'line' || object.kind === 'arrow') {
       const st = styleRecord(object.style);
       lines.push({
@@ -516,7 +518,7 @@ export function projectCoreSpiritObjectsToVela(
         invisible: false, width: Math.max(1, finiteNumber(st.lineWidth ?? st.width) ?? 1),
         style: velaLineStyle(st.lineStyle), arrowLeft: false,
         arrowRight: object.kind === 'arrow' || Boolean(st.arrowRight),
-        overlay: true,
+        overlay: itemOverlay,
       });
     } else if ((object.kind === 'zone' || object.kind === 'box') &&
       !(object.kind === 'zone' && object.domain === 'viewport')) {
@@ -537,7 +539,7 @@ export function projectCoreSpiritObjectsToVela(
         textColor: typeof st.textColor === 'string' ? st.textColor : undefined,
         textSize: textSize(st.fontSize), hAlign: 'left', vAlign: 'top',
         wrap: false, fontFamily: 'default', bold: false, italic: false,
-        overlay: true,
+        overlay: itemOverlay,
       });
     } else if (object.kind === 'label' || object.kind === 'marker' || object.kind === 'shape') {
       const st = styleRecord(object.style);
@@ -585,7 +587,7 @@ export function projectCoreSpiritObjectsToVela(
           from: assertVelaEpochMillis(object.time, 'background from'),
           to: assertVelaEpochMillis(end, 'background to'),
           color: cssWithOpacity(object.color, object.opacity, object.color),
-          overlay: true,
+          overlay: itemOverlay,
         });
       } else customObjects.push(object);
     } else if (object.kind === 'table') {
@@ -614,6 +616,8 @@ export function projectCoreSpiritObjectsToVela(
       };
       if (style.border) table.borderColor = String(style.border);
       if (style.background) table.bgColor = cssWithOpacity(style.background, style.opacity, '#111827');
+      (table as any).paneId = itemPane;
+      (table as any).overlay = itemOverlay;
     } else if (object.kind === 'series' || object.kind === 'signal') {
       // Ordinary numeric outputs and signals are consumed by native Vela series/markers.
       continue;
