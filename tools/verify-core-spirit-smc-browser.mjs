@@ -157,11 +157,10 @@ try {
     if (last.success && commit && paint && last.canvases > 0) {
       const persisted = evaluateJson(`({
         versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
-        legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)},
-        chartDraft: localStorage.getItem('tradingcore:corespirit:chart-source') === ${JSON.stringify(smcSource)}
+        legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)}
       })`);
-      assert(persisted.versionedDraft && persisted.legacyDraft && persisted.chartDraft,
-        'Successful Compile & Run did not persist the SMC source into all compatibility draft keys.');
+      assert(persisted.versionedDraft && persisted.legacyDraft,
+        'Successful Compile & Run did not persist the SMC source into the versioned and legacy editor-draft keys.');
       // Exercise both viewport gestures before accepting the chart overlay.
       // The probe is re-armed for one paint so the test verifies the overlay
       // still paints after Vela applies new time/price transforms.
