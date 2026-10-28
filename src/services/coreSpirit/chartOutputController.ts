@@ -9,6 +9,7 @@ import {
   createCoreSpiritVisualPatch,
   isCoreSpiritCustomLayerObject,
   isCoreSpiritChartTargetObject,
+  isCoreSpiritVisualVisibleObject,
   coreSpiritPaneIdOf,
   normalizeCoreSpiritVisualObjects,
   projectCoreSpiritObjectsToVela,
@@ -217,7 +218,7 @@ export class CoreSpiritChartOutputController {
       ...(frame.visuals || []),
       ...(frame.labels || []),
       ...(frame.tables || []),
-    ].filter(isCoreSpiritChartTargetObject);
+    ].filter(isCoreSpiritChartTargetObject).filter(isCoreSpiritVisualVisibleObject);
     const projected = projectCoreSpiritObjectsToVela(objects, 'price');
     // Replacing the Vela collection arrays is a full collection snapshot. Vela's
     // own scene patch path now manages object lifetime and redraw invalidation.
@@ -261,7 +262,7 @@ export class CoreSpiritChartOutputController {
       ...(frame.visuals || []),
       ...(frame.labels || []),
       ...(frame.tables || []),
-    ].filter(isCoreSpiritChartTargetObject).filter(isCoreSpiritCustomLayerObject);
+    ].filter(isCoreSpiritChartTargetObject).filter(isCoreSpiritVisualVisibleObject).filter(isCoreSpiritCustomLayerObject);
     const grouped = new Map<string, CoreSpiritObject[]>();
     for (const object of objects) {
       const paneId = coreSpiritPaneIdOf(object, 'price');
@@ -385,7 +386,7 @@ export class CoreSpiritChartOutputController {
     for (const object of normalized) {
       // Program UI visuals (panel/side-panel/floating) are not chart objects.
       // They remain in the ABI snapshot but must never be projected over candles.
-      if (!isCoreSpiritChartTargetObject(object)) continue;
+      if (!isCoreSpiritChartTargetObject(object) || !isCoreSpiritVisualVisibleObject(object)) continue;
       if (object.kind === 'series') {
         const id = object.seriesId || object.name || 'coreSpirit:plot:0';
         const points = frame.plots.get(id) || [];
