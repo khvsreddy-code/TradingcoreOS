@@ -19,6 +19,11 @@ import {
   getCoreSpiritAuthoringProfileForLevel,
 } from '../services/coreSpirit/coreSpiritAuthoring';
 import type { CoreSpiritAuthoringLevel } from '../services/coreSpirit/coreSpiritExecutionModel';
+import {
+  coreSpiritLifecycleDiagnostic, coreSpiritLifecycleLabel, coreSpiritLifecycleStageForError,
+  publishCoreSpiritLifecycle, validateCoreSpiritChartCapabilities,
+  type CoreSpiritLifecycleEvent, type CoreSpiritLifecycleStage,
+} from '../services/coreSpirit/coreSpiritExecutionLifecycle';
 
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
@@ -216,6 +221,8 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [cloudScriptId, setCloudScriptId] = useState<string | null>(null);
   const [lastCompile, setLastCompile] = useState<CoreSpiritCompileResult | null>(null);
   const [runStatus, setRunStatus] = useState('');
+  const [lifecycleStage, setLifecycleStage] = useState<CoreSpiritLifecycleStage>('editing');
+  const runningSourceRef = useRef<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [showCompletions, setShowCompletions] = useState(false);
@@ -412,6 +419,9 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     if(!options.modelAlreadyUpdated)editorModel.updateSource(next,options.completionPrefix||'',{deferSemanticAnalysis:true});
     setSource(next);
     setCompiled(false);
+    setLifecycleStage('editing');
+    publishCoreSpiritLifecycle({stage:'editing',scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',message:runningSourceRef.current && runningSourceRef.current!==next ? 'Unsaved edits · chart continues running the last valid source.' : 'Editing the current CoreSpirit source.'});
+    if(runningSourceRef.current && runningSourceRef.current!==next) setRunStatus('Unsaved edits · the chart continues running the last valid source.');
     setEditorVersion(v=>v+1);
     if(options.cursor!=null)setCursor(options.cursor);
     setShowCompletions(options.showCompletions===true);
@@ -468,18 +478,20 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     const sourceVersion=editorModel.getVersion();
     const request=++compileRequestRef.current;
     setCompilePending(true);
+    setLifecycleStage('compiling');
+    publishCoreSpiritLifecycle({stage:'compiling',scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',message:'Compiling the immutable editor source snapshot.'});
     let promise:Promise<CoreSpiritCompileResult|null>;
     promise=(async()=>{
       try{
         const workerResult=await compileCoreSpiritSourceOffThread(sourceSnapshot,sourceVersion,'corespirit-editor',{layer:'script'});
-        if(request!==compileRequestRef.current||workerResult.sourceVersion!==sourceVersion||editorModel.getSource()!==sourceSnapshot||editorModel.getVersion()!==sourceVersion)return null;
-        // The compiler and capability gate form one blocking validation result.
-        // Generated source receives exactly the same chart policy as handwritten source.
-        const sandbox=createCoreSpiritSandbox({layer:'script',target:'chart'});
-        const policyDiagnostics=[
-          ...validateCoreSpiritSandboxArchitecture().map(message=>({severity:'error' as const,message,code:'EDITOR_SANDBOX_ARCHITECTURE'})),
-          ...(workerResult.ir?validateCoreScriptCapabilitiesAgainstSandbox(sandbox,workerResult.ir.requiredCapabilities??[]):[]).map(message=>({severity:'error' as const,message,code:'EDITOR_CAPABILITY_DENIED'})),
-        ];
+        if(request!==compileRequestRef.current||workerResult.sourceVersion!==sourceVersion||editorModel.getSource()!==sourceSnapshot||editorModel.getVersion()!==sourceVersion){
+          publishCoreSpiritLifecycle({stage:'stale',scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',message:'A superseded compile result was ignored.'});
+          return null;
+        }
+        // Compiler and chart policy are shared with the dock and chart controller.
+        setLifecycleStage('validating-capabilities');
+        publishCoreSpiritLifecycle({stage:'validating-capabilities',scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',artifactHash:workerResult.artifact?.abi?.artifactHash,message:'Validating chart capabilities and sandbox architecture.'});
+        const policyDiagnostics=validateCoreSpiritChartCapabilities(workerResult.ir);
         const isCopilotSource=copilotSourceRef.current===sourceSnapshot;
         const copilotDiagnostics=isCopilotSource?copilotValidationDiagnosticsRef.current:[];
         const expectedServerHash=isCopilotSource?copilotServerArtifactHashRef.current:null;
@@ -519,7 +531,12 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         const serverGateApplies=copilotSourceRef.current===sourceSnapshot;
         const serverArtifactMatches=!serverGateApplies||
           (copilotValidationPassRef.current===true&&Boolean(expectedServerHash)&&workerResult.artifact?.abi?.artifactHash===expectedServerHash);
-        setCompiled(localValid&&copilotValidationPassRef.current!==false&&serverArtifactMatches);
+        const compileAccepted=localValid&&copilotValidationPassRef.current!==false&&serverArtifactMatches;
+        setCompiled(compileAccepted);
+        const capabilityDenied=result.diagnostics.some((item:any)=>item.code==='CHART_CAPABILITY_DENIED'||item.code==='CHART_SANDBOX_ARCHITECTURE');
+        const nextStage:CoreSpiritLifecycleStage=compileAccepted?'compiled':capabilityDenied?'capability-denied':'compile-failed';
+        setLifecycleStage(nextStage);
+        publishCoreSpiritLifecycle({stage:nextStage,scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',artifactHash:workerResult.artifact?.abi?.artifactHash,message:compileAccepted?'Compilation and capability validation passed.':capabilityDenied?'Chart capability validation denied this source.':'Compilation failed; the active chart remains unchanged.'});
         monacoAdapterRef.current?.setDiagnostics(result.diagnostics,sourceSnapshot);
         monacoAdapterRef.current?.setSymbolInfo(workerResult.symbols||[]);
         if(copilotSourceRef.current===sourceSnapshot){
@@ -534,6 +551,9 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
           const message=error instanceof Error?error.message:String(error);
           setDiagnostics([{severity:'error',message}]);
           setCompiled(false);
+          const diagnostic=coreSpiritLifecycleDiagnostic(error,'compile-failed',{previousOutputPreserved:true});
+          setLifecycleStage('compile-failed');
+          publishCoreSpiritLifecycle({stage:'compile-failed',scriptId:cloudScriptId,scriptName:'CoreSpirit Editor',diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
           monacoAdapterRef.current?.setDiagnostics([{severity:'error',message}],sourceSnapshot);
           if(copilotSourceRef.current===sourceSnapshot){setCopilotStatus('needs-fixes');setCopilotArtifactHash(null);}
         }
@@ -576,6 +596,22 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       .catch(()=>{ if(active)setMonacoStatus('fallback'); });
     return ()=>{active=false;monacoAdapterRef.current?.dispose();monacoAdapterRef.current=null;};
   }, [useMonaco, editorModel]);
+
+  useEffect(()=>{
+    const onLifecycle=(event:Event)=>{
+      const detail=(event as CustomEvent<CoreSpiritLifecycleEvent>).detail;
+      if(!detail?.stage || detail.scriptId!=='coreSpirit-editor') return;
+      const active=coreSpiritChartRegistry.getActive();
+      if(detail.chartId && active && detail.chartId!==active.chartId) return;
+      setLifecycleStage(detail.stage);
+      if(detail.message) setRunStatus(detail.message);
+      if(detail.diagnostics?.length){
+        setDiagnostics(detail.diagnostics.map(item=>({severity:item.severity,message:(item.code?'['+item.code+'] ':'')+(item.line==null?'':'Line '+item.line+(item.column==null?'':':'+item.column)+': ')+item.message,line:item.line})));
+      }
+    };
+    window.addEventListener('tco:corespirit:lifecycle',onLifecycle);
+    return ()=>window.removeEventListener('tco:corespirit:lifecycle',onLifecycle);
+  },[]);
 
   const compile=async()=>{
     const existing=lastCompileRef.current;
@@ -625,17 +661,25 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
           return;
         }
       }
-      setLastCompile(result);setCompiled(true);setRunStatus('Running on active chart…');
+      setLastCompile(result);setCompiled(true);setRunStatus('Executing historical data on active chart…');
+      setLifecycleStage('executing-historical');
+      publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:'coreSpirit-editor',scriptName:'CoreSpirit Editor',sourceHash:result.artifact.abi?.sourceHash,artifactHash:result.artifact.abi?.artifactHash,chartId:targetIdentityAtStart.chartId,symbol:targetIdentityAtStart.symbol,timeframe:targetIdentityAtStart.timeframe,message:'Executing the validated artifact on the selected chart.'});
       const target=activeImmediatelyBeforeRun;
       const snapshot=await ideBridge.runActiveChart(source,'coreSpirit-editor',result);
       const run=snapshot.run;
       if(!run)throw new Error(snapshot.error||'CoreSpirit run failed');
+      runningSourceRef.current=source;
+      setLifecycleStage('rendered');
       setRunStatus(`${run.barsProcessed.toLocaleString()} bars · ${run.plotsEmitted} plots · ${run.signalsEmitted} signals`);
       if(cloudScriptId){try{await saveExecutionRun({scriptId:cloudScriptId,executionType:'chart',symbol:target.symbol,timeframe:target.timeframe,status:run.diagnostics.length?'error':'success',barsProcessed:run.barsProcessed,plotsEmitted:run.plotsEmitted,signalsEmitted:run.signalsEmitted,metrics:{source:'CoreSpirit Coder',runtimeStatus:snapshot.status,signalExplainability:snapshot.explanations.length,artifactHash:result.artifact.abi?.artifactHash}});}catch{}}
       setDiagnostics(run.diagnostics.length?run.diagnostics.map(message=>({severity:'warning',message})): [{severity:'info',message:`CoreSpirit rendered on ${target.symbol} · ${target.timeframe}.`}]);
     }catch(error:unknown){
-      setRunStatus('Run failed');
-      setDiagnostics([{severity:'error',message:error instanceof Error?error.message:String(error)}]);
+      const stage=coreSpiritLifecycleStageForError(error,'execution-failed');
+      const diagnostic=coreSpiritLifecycleDiagnostic(error,stage,{previousOutputPreserved:true});
+      setLifecycleStage(stage);
+      setRunStatus(coreSpiritLifecycleLabel(stage));
+      setDiagnostics([{severity:'error',message:'['+diagnostic.code+'] '+diagnostic.message}]);
+      publishCoreSpiritLifecycle({stage,scriptId:'coreSpirit-editor',scriptName:'CoreSpirit Editor',diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
     }
   };
 
@@ -984,7 +1028,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
             {showCompletions && completionItems.length > 0 && <div className="absolute left-4 top-14 z-20 w-72 overflow-hidden rounded-lg border border-[var(--tco-control)] bg-[#0b0f17]/95 shadow-2xl backdrop-blur">{completionItems.map((item,i)=><button key={item.label} onMouseDown={e=>{e.preventDefault(); const ta=editorRef.current; if(!ta)return; const start=ta.selectionStart-(completionState.prefix?.length||0); const snap=editorModel.applyEdit({start,end:ta.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(snap.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{const pos=start+item.label.length; ta.focus(); ta.setSelectionRange(pos,pos);});}} className={`block w-full px-3 py-2 text-left text-[10px] ${i===completionIndex?'bg-[#3b82f6]/15 text-[#f8fafc]':'text-[var(--tco-code-muted)]'} hover:bg-[#3b82f6]/10`}><span className="mr-2 text-[#60a5fa]">{item.kind}</span>{item.label}<span className="ml-2 text-[var(--tco-slate)]">{item.detail}</span></button>)}</div>}
           </div>
         </div>
-        <div role="status" aria-live="polite" aria-atomic="true" className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#3b82f6]/30 text-[#3b82f6]' : 'border-[var(--tco-control)] text-[var(--tco-dim)]'}`}>{compilePending?'COMPILING…':compiled?'COMPILED':'EDITING'}</span><span className="text-[var(--tco-slate)]">CoreSpirit compiler / IR</span><span className="text-[var(--tco-dim)]">{useMonaco ? `Monaco ${monacoStatus}` : 'Classic editor'}</span><span className="ml-2 text-[var(--tco-code-muted)]">{runStatus}</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#3b82f6]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[var(--tco-dim)]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
+        <div role="status" aria-live="polite" aria-atomic="true" className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#3b82f6]/30 text-[#3b82f6]' : 'border-[var(--tco-control)] text-[var(--tco-dim)]'}`}>{compilePending?'COMPILING…':compiled?'COMPILED':'EDITING'}</span><span className="text-[var(--tco-slate)]">CoreSpirit compiler / IR</span><span className="text-[var(--tco-dim)]">{useMonaco ? `Monaco ${monacoStatus}` : 'Classic editor'}</span><span className="ml-2 text-[var(--tco-code-muted)]">{coreSpiritLifecycleLabel(lifecycleStage)} · {runStatus}</span>{runningSourceRef.current && runningSourceRef.current!==source && <span className="rounded border border-amber-500/30 px-2 py-1 text-[8px] text-amber-300">UNAPPLIED EDITS · CHART RUNS PREVIOUS SOURCE</span>}<span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#3b82f6]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[var(--tco-dim)]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
         {diagnostics.length > 0 && <div role="log" aria-label="CoreSpirit compiler diagnostics" aria-live="polite" className="mt-3 space-y-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3">{diagnostics.map((d, i) => { const actions=editorModel.codeActions({message:d.message,line:d.line||1,column:1,severity:d.severity==='error'?'error':'warning'}); return <div key={i} className="rounded-md border border-transparent px-1 py-1 hover:border-[var(--tco-border)]"><div className="flex gap-2 text-[10px] leading-5"><span className={d.severity === 'error' ? 'text-[#ef4444]' : 'text-[#3b82f6]'}>{d.severity === 'error' ? <AlertTriangle className="mt-0.5 h-3 w-3"/> : <CheckCircle2 className="mt-0.5 h-3 w-3"/>}</span><span className="text-[var(--tco-code-muted)]">{d.line ? `Line ${d.line}: ` : ''}{d.message}</span></div>{actions.map(a=><button key={a.title} onClick={()=>{ if(!a.edit)return; const snap=editorModel.applyEdit(a.edit,'',{deferSemanticAnalysis:true}); setEditorSource(snap.source,{modelAlreadyUpdated:true}); }} className="ml-5 mt-1 text-[9px] text-[#60a5fa] hover:text-[#93c5fd]">{a.title}</button>)}</div>})}</div>}
       </Panel>
 
