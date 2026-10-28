@@ -96,11 +96,24 @@ try {
 
   evaluate(`(() => {
     window.__TCO_SMC_VISUAL_COMMITS__ = [];
+    window.__TCO_SMC_VISUAL_PAINTS__ = [];
+    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = false;
+    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
     window.addEventListener('tco:corespirit:visual-commit', event => {
-      window.__TCO_SMC_VISUAL_COMMITS__.push(event.detail || {});
+      const detail = event.detail || {};
+      window.__TCO_SMC_VISUAL_COMMITS__.push(detail);
+      const hasDrawingKind = Object.keys(detail.kindCounts || {}).some(kind =>
+        ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind));
+      if (Number(detail.objectCount) > 0 && hasDrawingKind) {
+        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = true;
+      }
       if (window.__TCO_SMC_VISUAL_COMMITS__.length > 50) window.__TCO_SMC_VISUAL_COMMITS__.shift();
     });
-    return 'SMC_VISUAL_COMMIT_LISTENER_ARMED';
+    window.addEventListener('tco:corespirit:visual-paint', event => {
+      window.__TCO_SMC_VISUAL_PAINTS__.push(event.detail || {});
+      if (window.__TCO_SMC_VISUAL_PAINTS__.length > 20) window.__TCO_SMC_VISUAL_PAINTS__.shift();
+    });
+    return 'SMC_VISUAL_COMMIT_AND_PAINT_LISTENERS_ARMED';
   })()`);
   evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
@@ -117,6 +130,7 @@ try {
       success: (document.body.innerText || '').includes('is now running on the active Vela chart'),
       body: (document.body.innerText || '').slice(-1600),
       commits: window.__TCO_SMC_VISUAL_COMMITS__ || [],
+      paints: window.__TCO_SMC_VISUAL_PAINTS__ || [],
       canvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
         const rect = canvas.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
@@ -126,7 +140,8 @@ try {
     if (last.errorOverlay) throw new Error('Framework error overlay appeared during SMC compile/run.');
     const commit = last.commits.find(item => Number(item.objectCount) > 0 &&
       Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind)));
-    if (last.success && commit && last.canvases > 0) {
+    const paint = last.paints.find(item => Number(item.nonTransparentPixels) > 0 && Number(item.visualObjectCount) > 0);
+    if (last.success && commit && paint && last.canvases > 0) {
       const persisted = evaluateJson(`({
         versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
         legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)},
@@ -143,6 +158,14 @@ try {
         paneCount: commit.paneCount,
         visibleChartCanvases: last.canvases,
         persistedDraftKeys: Object.keys(persisted).filter(key => persisted[key]),
+        rendererPaint: {
+          nonTransparentPixels: paint.nonTransparentPixels,
+          canvasWidth: paint.canvasWidth,
+          canvasHeight: paint.canvasHeight,
+          paneId: paint.paneId,
+          layerRole: paint.layerRole,
+          visualObjectCount: paint.visualObjectCount,
+        },
       };
       // Reload after the successful chart commit and confirm that the source
       // saved by the real Compile & Run path is the source restored by the dock.
@@ -178,7 +201,7 @@ try {
   }
   if (status !== 'accepted') {
     const excerpt = String(last?.body || '').slice(-1200);
-    throw new Error(`SMC browser acceptance timed out after ${timeoutMs} ms. Compile success: ${Boolean(last?.success)}; visible canvas count: ${last?.canvases ?? 0}; visual commits: ${last?.commits?.length ?? 0}. Last page text: ${excerpt}`);
+    throw new Error(`SMC browser acceptance timed out after ${timeoutMs} ms. Compile success: ${Boolean(last?.success)}; visible canvas count: ${last?.canvases ?? 0}; visual commits: ${last?.commits?.length ?? 0}; pixel paint evidence: ${last?.paints?.length ?? 0}. Last page text: ${excerpt}`);
   }
   console.log('CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK');
 } catch (error) {
