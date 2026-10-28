@@ -192,6 +192,8 @@ export class CoreSpiritVelaEngine {
     let stopped = false;
     let initialExecutionStagePublished = false;
     let initialOutputValidationStagePublished = false;
+    let lifecycleExecutionPending = false;
+    let lifecycleOutputValidationPending = false;
     let initialRenderPublished = false;
     // Keep async settings updates latest-wins too: older update callbacks must
     // not rebuild the runtime or emit a scene after a newer update takes over.
@@ -439,8 +441,9 @@ export class CoreSpiritVelaEngine {
       visibleRange?:VelaTimeRange,
       suppressExternalEffectsForRun=false,
     )=>{
-      if(!initialExecutionStagePublished){
+      if(!initialExecutionStagePublished || lifecycleExecutionPending){
         initialExecutionStagePublished=true;
+        lifecycleExecutionPending=false;
         publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Running CoreSpirit against canonical chart history.'});
       }
       const previousController=workerAbortControllers.get(contextKey);previousController?.abort();
@@ -475,8 +478,9 @@ export class CoreSpiritVelaEngine {
         // One adapter owns the CoreSpirit(epoch-seconds) → Vela(epoch-milliseconds)
         // boundary. Validate plot timestamps against the exact input timeline before
         // the retained scene is mutated; a stale/misaligned point must never be rendered.
-        if(!initialOutputValidationStagePublished){
+        if(!initialOutputValidationStagePublished || lifecycleOutputValidationPending){
           initialOutputValidationStagePublished=true;
+          lifecycleOutputValidationPending=false;
           publishCoreSpiritLifecycle({stage:'validating-outputs',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Validating output objects and aligning plot timestamps to canonical bars.'});
         }
         const adapted = adaptCoreSpiritOutputsForVela(result.outputs, currentBars);
@@ -494,9 +498,8 @@ export class CoreSpiritVelaEngine {
 
     const emitModel = (dirty?: VelaTimeRange): void => {
       const snapshot = scene.snapshot();
-      if(!initialRenderPublished){
-        publishCoreSpiritLifecycle({stage:'applying-chart-output',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Applying the validated CoreSpirit scene through Vela.'});
-      }
+      const initialModel = !initialRenderPublished;
+      publishCoreSpiritLifecycle({stage:'applying-chart-output',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:initialModel?'Applying the initial validated CoreSpirit scene through Vela.':'Applying the updated CoreSpirit scene through Vela.'});
       handlers.onModel(buildCoreSpiritVelaIndicatorModel(
         token.sourceId,
         currentMetadata.meta,
@@ -527,10 +530,8 @@ export class CoreSpiritVelaEngine {
           barColors: snapshot.barColors,
         },
       ));
-      if(!initialRenderPublished){
-        initialRenderPublished=true;
-        publishCoreSpiritLifecycle({stage:'rendered',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Vela accepted and applied the initial CoreSpirit chart model.'});
-      }
+      initialRenderPublished=true;
+      publishCoreSpiritLifecycle({stage:'rendered',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:initialModel?'Vela accepted and applied the initial CoreSpirit chart model.':'Vela accepted and applied the updated CoreSpirit chart model.'});
     };
 
     const emitScenePatches = (
@@ -871,6 +872,9 @@ export class CoreSpiritVelaEngine {
         }
 
         abortWorkerComputations();
+        lifecycleExecutionPending=true;
+        lifecycleOutputValidationPending=true;
+        publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'An input or runtime-affecting appearance property changed; recomputing chart history.'});
         const updateGeneration=++updateVersion;
         const executionGeneration=++mainRunGeneration;
         liveTailScheduler.clear();
@@ -981,6 +985,11 @@ export class CoreSpiritVelaEngine {
         const dirtyRangeTouchesHistoryBeforeTail=reason!=='complete'&&dirtyIntersectsLoadedHistory&&
           dirtyFromMs<latestBarTime;
         const historicalCorrection=reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail||normalizationCacheInvalidatedForEvent;
+        if(historicalCorrection){
+          lifecycleExecutionPending=true;
+          lifecycleOutputValidationPending=true;
+          publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Historical candle corrections require a deterministic replay before replacing the chart scene.'});
+        }
         const previousCanonicalRevision=canonicalDatasetRevision;
         const previousDatasetLength=canonicalDatasetLength;
         if(historicalCorrection||reason==='complete'){
