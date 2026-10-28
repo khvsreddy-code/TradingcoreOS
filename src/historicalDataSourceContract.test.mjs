@@ -37,6 +37,7 @@ assert.match(service, /cachedOlderFallbackCount: cachedOlderBars\.length/);
 assert.match(service, /cached\.sourcePolicy === HISTORICAL_SOURCE_POLICY/);
 assert.match(service, /const degraded = fyersFailed \|\| fyersBars\.length === 0 \|\| tvNeededButUnavailable/);
 assert.match(service, /getBoundedHistoryPageRange/);
+assert.match(service, /f\\s\*&\\s\*o/, 'F&O instrument type must skip Investiny and use the FYERS fallback when NSE history fails');
 assert.match(service, /paginationAvailable = Boolean\(request\.fetchNseHistory \|\| request\.fetchInvestinyHistory \|\| request\.fetchFyersRecent\)/);
 assert.match(service, /historyCompleteness/);
 assert.match(service, /pageSource \+ '-page-fetched'/);

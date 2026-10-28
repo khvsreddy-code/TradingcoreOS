@@ -224,7 +224,7 @@ function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly Stor
 }
 function isFnoInstrument(mapping: HistoricalInstrumentMapping): boolean {
   const kind = String(mapping.instrumentType || '').toLowerCase();
-  if (/(option|future|futures|derivative|fno)/.test(kind)) return true;
+  if (/(option|future|derivative|fno|f\s*&\s*o)/.test(kind)) return true;
   const symbol = String(mapping.fyersSymbol || mapping.instrumentId || '');
   return /(?:\d{4,}(?:CE|PE)|FUT(?:URES?)?)$/i.test(symbol)
     || /(?:^|:)NSE_FO:/i.test(symbol) || /(?:^|:)BSE_FO:/i.test(symbol);
