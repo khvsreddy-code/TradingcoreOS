@@ -32,13 +32,26 @@ function pause(ms) {
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
+async function waitForPageContent(timeout = 20_000) {
+  // Waiting for network-idle can hang on live market-data sockets and polling.
+  // DOM readiness plus a bounded content poll is deterministic for this route.
+  run(['wait', '--load', 'domcontentloaded']);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const state = evaluateJson(`({
+      hasText: (document.body?.innerText || '').trim().length > 0,
+      workspace: !!document.querySelector('.vela-workspace'),
+      errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
+    })`);
+    if (state.errorOverlay || state.hasText || state.workspace) return state;
+    await pause(200);
+  }
+  throw new Error(`No page content became available at ${baseUrl} within ${timeout} ms.`);
+}
 
 try {
   run(['open', baseUrl]);
-  run(['wait', '--load', 'networkidle']);
-
-  const hasContent = evaluate('document.body.innerText.trim().length > 0');
-  assert(hasContent === 'true' || hasContent === 'HAS_CONTENT', `Browser acceptance opened a blank page at ${baseUrl}.`);
+  await waitForPageContent();
   const initial = evaluateJson(`({
     workspace: !!document.querySelector('.vela-workspace'),
     errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay'),
@@ -63,7 +76,7 @@ try {
     return 'SMC_SOURCE_STAGED';
   })()`);
   run(['open', baseUrl]);
-  run(['wait', '--load', 'networkidle']);
+  run(['wait', '--load', 'domcontentloaded']);
 
   evaluate(`(() => {
     if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
@@ -220,7 +233,7 @@ try {
       // Reload after the successful chart commit and confirm that the source
       // saved by the real Compile & Run path is the source restored by the dock.
       run(['open', baseUrl]);
-      run(['wait', '--load', 'networkidle']);
+      run(['wait', '--load', 'domcontentloaded']);
       evaluate(`(() => {
         if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
         const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
