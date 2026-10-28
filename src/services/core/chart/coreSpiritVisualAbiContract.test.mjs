@@ -8,6 +8,7 @@ import {
   createCoreSpiritVisualSnapshot,
   isCoreSpiritChartTargetObject,
   isCoreSpiritCustomLayerObject,
+  isCoreSpiritVisualVisibleObject,
   normalizeCoreSpiritVisualObjects,
   projectCoreSpiritObjectsToVela,
 } from './coreSpiritVisualAbi.ts';
@@ -91,7 +92,9 @@ assert.equal(projected.lines[0].id, coreSpiritVisualObjectId(line, instanceId), 
 assert.equal(projected.boxes[0].bgColor, 'rgba(37, 99, 235, 0.12)', 'zone alpha maps to the native drawing fill');
 assert.equal(projected.lines[0].style, 'dashed', 'CoreSpirit line style maps to Vela native line style');
 
-assert.ok(!isCoreSpiritChartTargetObject(prepared.objects.find(object => object.id === 'research-panel-card')), 'panel visuals are excluded from chart painting');
+const panelVisual = prepared.objects.find(object => object.metadata?.coreSpiritVisualAbi?.renderTarget === 'panel');
+assert.ok(panelVisual, 'panel visual remains represented in the ABI snapshot');
+assert.equal(isCoreSpiritChartTargetObject(panelVisual), false, 'panel visuals are excluded from chart painting');
 
 store.commit(prepared);
 assert.equal(store.objects(revision.streamId).length, adapted.outputs.length, 'commit retains exactly one copy of each visual');
@@ -117,5 +120,34 @@ assert.throws(
   'the rendering ABI rejects seconds that bypassed the canonical adapter',
 );
 
-assert.equal(isCoreSpiritCustomLayerObject(prepared.objects.find(object => object.id === 'session-tint')), true, 'custom chart geometry remains on Vela native renderer layers');
+assert.equal(isCoreSpiritCustomLayerObject(prepared.objects.find(object => object.metadata?.sourceNodeId === 'visual:20')), true, 'custom chart geometry remains on Vela native renderer layers');
+
+const visibilityStore = new CoreSpiritVisualAbiStore();
+const toggleId = 'visibility-test-instance';
+const hiddenVisual = {
+  kind: 'customVisual', id: 'visible-toggle',
+  visual: { version: 1, area: { kind: 'chart', area: 'price', id: 'price' }, coordinateSpace: 'normalized', visible: false, clip: 'area' },
+  geometry: { kind: 'point', point: { kind: 'point', space: 'normalized', x: 0.5, y: 0.5 } },
+};
+const hiddenRevision = { streamId: 'visibility-test-stream', datasetRevision: 1, outputRevision: 1 };
+const hiddenPrepared = visibilityStore.prepare(createCoreSpiritVisualSnapshot([hiddenVisual], hiddenRevision, toggleId));
+assert.ok(hiddenPrepared);
+assert.equal(hiddenPrepared.objects.length, 0, 'per-object visibility removes hidden visuals from render snapshots');
+visibilityStore.commit(hiddenPrepared);
+assert.equal(visibilityStore.objects(hiddenRevision.streamId).length, 0, 'hidden objects are not exposed to the chart scene');
+const shownVisual = { ...hiddenVisual, visual: { ...hiddenVisual.visual, visible: true } };
+const shownRevision = { ...hiddenRevision, outputRevision: 2 };
+const shownPrepared = visibilityStore.prepare(createCoreSpiritVisualPatch([shownVisual], [], shownRevision, toggleId));
+assert.ok(shownPrepared);
+assert.equal(shownPrepared.objects.length, 1, 'upserting a visible version restores a previously hidden stable object');
+visibilityStore.commit(shownPrepared);
+assert.equal(visibilityStore.objects(shownRevision.streamId).length, 1);
+
+const hiddenStreamRevision = { streamId: 'script-hidden-stream', datasetRevision: 1, outputRevision: 1 };
+const scriptHidden = visibilityStore.prepare(createCoreSpiritVisualSnapshot([zone], hiddenStreamRevision, toggleId, 'price', false));
+assert.ok(scriptHidden);
+assert.equal(scriptHidden.visible, false, 'script-level visibility is part of the snapshot ABI');
+assert.equal(scriptHidden.objects.length, 0, 'hidden script output cannot be painted');
+visibilityStore.commit(scriptHidden);
+assert.equal(visibilityStore.objects(hiddenStreamRevision.streamId).length, 0, 'hidden script keeps its retained state fenced off from the renderer');
 console.log('CORESPIRIT_VISUAL_ABI_CONTRACT_OK');
