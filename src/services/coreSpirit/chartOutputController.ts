@@ -33,6 +33,7 @@ export class CoreSpiritChartOutputController {
   private latestStreamId?: string;
   private latestDatasetRevision = 0;
   private latestOutputRevision = 0;
+  private committedRevision?: CoreSpiritVelaOutputRevision;
   private readonly overlayChannel = `tco-corespirit-output:${++coreSpiritOutputControllerSerial}`;
   private overlayHandle: { readonly id: string };
   private renderRevision = 0;
@@ -74,14 +75,11 @@ export class CoreSpiritChartOutputController {
 
   applyFrame(frame: CoreSpiritOutputFrame, revision?: CoreSpiritVelaOutputRevision): void {
     this.lastFrame = frame;
-    const activeRevision: CoreSpiritVelaOutputRevision = revision ?? {
-      streamId: this.latestStreamId ?? this.overlayChannel,
-      datasetRevision: this.latestDatasetRevision,
-      outputRevision: ++this.renderRevision,
+    const activeRevision: CoreSpiritVelaOutputRevision = revision ?? this.committedRevision ?? {
+      streamId: this.overlayChannel,
+      datasetRevision: 0,
+      outputRevision: 0,
     };
-    this.latestStreamId = activeRevision.streamId;
-    this.latestDatasetRevision = activeRevision.datasetRevision;
-    this.latestOutputRevision = activeRevision.outputRevision;
     const seenPlots = new Set<string>();
     for (const [id, points] of frame.plots) {
       seenPlots.add(id);
@@ -119,8 +117,8 @@ export class CoreSpiritChartOutputController {
 
     // Standard lines/boxes/labels are committed through Vela's retained drawing
     // collections below; the SDK renderer owns their transforms, clipping and style.
-    this.publishNativeDrawingCollections(frame, activeRevision);
-    this.publishVelaOutputLayer(frame);
+    this.publishNativeDrawingCollections(frame, activeRevision, revision !== undefined);
+    this.publishVelaOutputLayer(frame, activeRevision);
   }
 
   /**
@@ -183,6 +181,7 @@ export class CoreSpiritChartOutputController {
   private publishNativeDrawingCollections(
     frame: CoreSpiritOutputFrame,
     revision: CoreSpiritVelaOutputRevision,
+    revisioned = true,
   ): void {
     const objects = [
       ...(frame.drawings || []),
@@ -209,11 +208,11 @@ export class CoreSpiritChartOutputController {
     this.chart.renderer.updateIndicator(this.overlayHandle, {
       kind: 'value',
       indicatorId: this.overlayHandle.id,
-      revision: {
+      ...(revisioned ? { revision: {
         streamId: revision.streamId,
         datasetRevision: revision.datasetRevision,
         outputRevision: revision.outputRevision,
-      },
+      } } : {}),
       dirty: { from, to },
       series: [],
       lines: projected.lines,
@@ -279,10 +278,11 @@ export class CoreSpiritChartOutputController {
     try {
       this.applyObjects([...prepared.objects], revision, true);
       this.visualAbiStore.commit(prepared);
+      this.commitOutputRevision(revision);
       return Promise.resolve(true);
     } catch (error) {
       try {
-        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true);
+        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true, true);
       } catch (restoreError) {
         return Promise.reject(new AggregateError([error, restoreError], 'Vela output commit and rollback both failed'));
       }
@@ -304,6 +304,7 @@ export class CoreSpiritChartOutputController {
     try {
       this.applyObjects([...prepared.objects], revision, true);
       this.visualAbiStore.commit(prepared);
+      this.commitOutputRevision(revision);
       return Promise.resolve(true);
     } catch (error) {
       try {
@@ -315,62 +316,56 @@ export class CoreSpiritChartOutputController {
     }
   }
 
-  applyObjects(objects: CoreSpiritObject[], revision?: CoreSpiritVelaOutputRevision, alreadyNormalized = false): void {
-    const frame: CoreSpiritOutputFrame = { plots: new Map(), plotStyles: new Map(), drawingCount: 0, signals: [], drawings: [], visuals: [], labels: [], tables: [] };
-    const groups = new Map<string, Array<{ time: number; value: number | null }>>();
-    for (const o of objects) {
-      if (o.kind === 'series') { const id = o.seriesId || o.name || 'coreSpirit:plot:0'; const arr = groups.get(id) || []; arr.push({ time: o.time, value: o.value }); groups.set(id, arr); if (o.style) frame.plotStyles.set(id, o.style); }
-      else if (o.kind === 'signal') frame.signals.push(o);
-      else if (o.kind === 'label') frame.labels.push(o);
-      else if (o.kind === 'line' || o.kind === 'zone' || o.kind === 'polyline' || o.kind === 'hline' || o.kind === 'polygon') frame.drawings.push(o);
-      else if (o.kind === 'table') frame.tables.push(o);
-      else if (o.kind === 'footprint') frame.visuals.push(o);
-      else if (o.kind === 'box' || o.kind === 'band' || o.kind === 'arrow' || o.kind === 'shape' || o.kind === 'background' || o.kind === 'barcolor' || o.kind === 'customVisual') frame.visuals.push(o);
-    }
-    frame.plots = groups;
-    const activeRevision = revision ?? {
-      streamId: this.latestStreamId ?? this.overlayChannel,
-      datasetRevision: this.latestDatasetRevision,
-      outputRevision: this.latestOutputRevision + 1,
-    };
+  applyObjects(objects: CoreSpiritObject[], revision?: CoreSpiritVelaOutputRevision, alreadyNormalized = false, rollback = false): void {
+    const activeRevision: CoreSpiritVelaOutputRevision = revision ?? (rollback
+      ? this.committedRevision ?? { streamId:this.overlayChannel, datasetRevision:0, outputRevision:0 }
+      : {
+          streamId:this.latestStreamId ?? this.overlayChannel,
+          datasetRevision:this.latestDatasetRevision,
+          outputRevision:this.latestOutputRevision + 1,
+        });
     const normalized = alreadyNormalized
-      ? objects
+      ? [...objects]
       : normalizeCoreSpiritVisualObjects(objects, this.overlayChannel, activeRevision);
-    // applyFrame receives the same normalized objects used by the ABI store, so the
-    // native drawing collection and custom renderer layer share object IDs/provenance.
+
     if (!alreadyNormalized) {
-      const normalizedById = new Map<string, CoreSpiritObject>();
-      for (const object of normalized) {
-        const metadata = object.metadata as Record<string, unknown> | undefined;
-        const abi = metadata?.coreSpiritVisualAbi as Record<string, unknown> | undefined;
-        if (abi?.objectId) normalizedById.set(String(abi.objectId), object);
-      }
-      // Rebuild groups from the validated ABI objects, preventing raw seconds or
-      // unnamespaced ids from bypassing the boundary through direct applyObjects().
-      return this.applyObjects([...normalizedById.values()], activeRevision, true);
+      this.applyObjects(normalized, activeRevision, true, rollback);
+      if (!revision && !rollback) this.commitOutputRevision(activeRevision);
+      return;
     }
-    const normalizedFrame: CoreSpiritOutputFrame = { plots: new Map(), plotStyles: new Map(), drawingCount: 0, signals: [], drawings: [], visuals: [], labels: [], tables: [] };
+
+    const frame: CoreSpiritOutputFrame = {
+      plots:new Map(), plotStyles:new Map(), drawingCount:0,
+      signals:[], drawings:[], visuals:[], labels:[], tables:[],
+    };
     for (const object of normalized) {
       if (object.kind === 'series') {
         const id = object.seriesId || object.name || 'coreSpirit:plot:0';
-        const arr = normalizedFrame.plots.get(id) || [];
-        arr.push({ time: object.time, value: object.value });
-        normalizedFrame.plots.set(id, arr);
-        if (object.style) normalizedFrame.plotStyles.set(id, object.style);
-      } else if (object.kind === 'signal') normalizedFrame.signals.push(object);
-      else if (object.kind === 'label') normalizedFrame.labels.push(object);
-      else if (object.kind === 'table') normalizedFrame.tables.push(object);
+        const points = frame.plots.get(id) || [];
+        points.push({ time:object.time, value:object.value });
+        frame.plots.set(id, points);
+        if (object.style) frame.plotStyles.set(id, object.style);
+      } else if (object.kind === 'signal') frame.signals.push(object);
+      else if (object.kind === 'label') frame.labels.push(object);
+      else if (object.kind === 'table') frame.tables.push(object);
       else if (object.kind === 'footprint' || object.kind === 'band' || object.kind === 'background' ||
-               object.kind === 'barcolor' || object.kind === 'shape' || object.kind === 'customVisual') normalizedFrame.visuals.push(object);
+               object.kind === 'barcolor' || object.kind === 'shape' || object.kind === 'customVisual') frame.visuals.push(object);
       else if (object.kind === 'line' || object.kind === 'zone' || object.kind === 'box' ||
                object.kind === 'arrow' || object.kind === 'hline' || object.kind === 'polyline' ||
-               object.kind === 'polygon' || object.kind === 'marker') normalizedFrame.drawings.push(object);
+               object.kind === 'polygon' || object.kind === 'marker') frame.drawings.push(object);
     }
-    normalizedFrame.drawingCount = normalizedFrame.drawings.length + normalizedFrame.visuals.length + normalizedFrame.labels.length + normalizedFrame.tables.length;
-    this.applyFrame(normalizedFrame, activeRevision);
+    frame.drawingCount = frame.drawings.length + frame.visuals.length + frame.labels.length + frame.tables.length;
+    this.applyFrame(frame, rollback ? undefined : activeRevision);
     this.committedObjects = Object.freeze([...normalized]);
+    if (!revision && !rollback) this.commitOutputRevision(activeRevision);
   }
 
+  private commitOutputRevision(revision: CoreSpiritVelaOutputRevision): void {
+    this.committedRevision = revision;
+    this.latestStreamId = revision.streamId;
+    this.latestDatasetRevision = revision.datasetRevision;
+    this.latestOutputRevision = revision.outputRevision;
+  }
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
