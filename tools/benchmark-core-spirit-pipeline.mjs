@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { performance } from 'node:perf_hooks';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { CoreSpiritCompiler } from '../src/services/coreSpirit/compiler.ts';
 import { CoreSpiritIncrementalCompiler } from '../src/services/coreSpirit/incrementalCompiler.ts';
 import { CoreSpiritRuntime } from '../src/services/coreSpirit/runtime.ts';
@@ -373,8 +374,10 @@ async function main() {
   console.log(serializedReport);
   const outputFile = process.env.TCO_BENCH_OUTPUT_FILE?.trim();
   if (outputFile) {
-    await writeFile(outputFile, serializedReport + '\n', 'utf8');
-    console.error(`[pipeline] machine-readable report saved to ${outputFile}`);
+    const resolvedOutputFile = resolve(outputFile);
+    await mkdir(dirname(resolvedOutputFile), { recursive: true });
+    await writeFile(resolvedOutputFile, serializedReport + '\n', 'utf8');
+    console.error(`[pipeline] machine-readable report saved to ${resolvedOutputFile}`);
   }
 }
 
