@@ -77,20 +77,19 @@ try {
     return 'SMC_SOURCE_STAGED';
   })()`);
   run(['open', baseUrl]);
-  run(['wait', '--load', 'domcontentloaded']);
+  await waitForPageContent();
 
-  evaluate(`(() => {
-    if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
-    const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
-    if (!toggle) throw new Error('CoreSpirit right-rail terminal toggle is missing.');
-    toggle.click();
-    return 'EDITOR_TOGGLE_CLICKED';
-  })()`);
   let dockState = null;
   const dockDeadline = Date.now() + 8_000;
   while (Date.now() < dockDeadline) {
     dockState = evaluateJson(`(() => {
-      const editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
+      let editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
+      const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
+      if (!editor && toggle && window.__TCO_SMC_DOCK_TOGGLE_CLICKED__ !== true) {
+        toggle.click();
+        window.__TCO_SMC_DOCK_TOGGLE_CLICKED__ = true;
+      }
+      editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
       return {
         editorVisible: !!editor,
         sourceLoaded: !!editor && editor.value.includes('indicator("Smart Money Concepts [CoreSpirit]")') && editor.value.includes('showFairValueGaps'),
@@ -204,7 +203,7 @@ try {
         await pause(200);
       }
       assert(viewportPaint, 'CoreSpirit drawings stopped producing visible pixels after Vela zoom/pan gestures.');
-      visualEvidence.viewportInteraction = {
+      const viewportInteraction = {
         zoomWheelDelta: -120,
         horizontalPanPixels: 54,
         rendererPaintAfterGesture: {
@@ -230,11 +229,12 @@ try {
           layerRole: paint.layerRole,
           visualObjectCount: paint.visualObjectCount,
         },
+        viewportInteraction,
       };
       // Reload after the successful chart commit and confirm that the source
       // saved by the real Compile & Run path is the source restored by the dock.
       run(['open', baseUrl]);
-      run(['wait', '--load', 'domcontentloaded']);
+      await waitForPageContent();
       let restored = false;
       const restoreDeadline = Date.now() + 8_000;
       while (Date.now() < restoreDeadline) {
