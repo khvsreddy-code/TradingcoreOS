@@ -271,6 +271,42 @@ try {
       })`);
       assert(persisted.versionedDraft && persisted.legacyDraft,
         'Successful Compile & Run did not persist the SMC source into the versioned and legacy editor-draft keys.');
+      // A second real Compile & Run must replace the same retained scene, not append
+      // a second set of drawing objects. Compare the native commit inventory, not just
+      // the rendered pixels, so duplicate drawings cannot hide behind a successful smoke test.
+      const commitsBeforeReplay = evaluateJson('(window.__TCO_SMC_VISUAL_COMMITS__ || []).length');
+      evaluate(`(() => {
+        const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
+        if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled during idempotency check.');
+        button.click();
+        return 'SMC_RECOMPILE_CLICKED';
+      })()`);
+      let recompileCommit = null;
+      const recompileDeadline = Date.now() + timeoutMs;
+      while (Date.now() < recompileDeadline) {
+        const replayState = evaluateJson(`({
+          commits: window.__TCO_SMC_VISUAL_COMMITS__ || [],
+          success: (document.body.innerText || '').includes('is now running on the active Vela chart'),
+          errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
+        })`);
+        if (replayState.errorOverlay) throw new Error('Framework error overlay appeared during SMC recompilation.');
+        const freshCommits = replayState.commits.slice(commitsBeforeReplay);
+        recompileCommit = freshCommits.find(item => Number(item.objectCount) > 0 &&
+          Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind)));
+        if (replayState.success && recompileCommit) break;
+        await pause(250);
+      }
+      assert(recompileCommit, 'Repeated SMC Compile & Run did not commit a fresh native Vela scene.');
+      assert.equal(recompileCommit.objectCount, commit.objectCount,
+        'Recompiling identical SMC source/data must not increase the number of retained drawing objects.');
+      assert.deepEqual(recompileCommit.kindCounts, commit.kindCounts,
+        'Recompiling identical SMC source/data must preserve the native object-kind inventory.');
+      if (recompileCommit.streamId === commit.streamId &&
+          Number.isFinite(Number(recompileCommit.outputRevision)) &&
+          Number.isFinite(Number(commit.outputRevision))) {
+        assert(Number(recompileCommit.outputRevision) > Number(commit.outputRevision),
+          'Same-stream SMC recompilation must advance its output revision.');
+      }
       // Exercise both viewport gestures and compare the actual plot screenshot.
       const canvasCenter = evaluateJson(`(() => {
         const boxes = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
@@ -309,6 +345,9 @@ try {
         kindCounts: commit.kindCounts,
         paneCount: commit.paneCount,
         visibleChartCanvases: last.canvases,
+        recompileObjectCount: recompileCommit.objectCount,
+        recompileKindCounts: recompileCommit.kindCounts,
+        recompileOutputIdempotent: true,
         persistedDraftKeys: Object.keys(persisted).filter(key => persisted[key]),
         chartPixelDiff: {
           changedPixels: chartPixelDiff.changedPixels,
