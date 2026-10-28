@@ -16,6 +16,7 @@ const outputController = read('./services/coreSpirit/chartOutputController.ts');
 const smcBrowser = read('../tools/verify-core-spirit-smc-browser.mjs');
 const smcBenchmark = read('../tools/benchmark-core-spirit-pipeline.mjs');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
+const packageJson = read('../package.json');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
 const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const editorPage = read('./pages/CoreSpiritEditorPage.tsx');
@@ -93,6 +94,9 @@ includes(smcBenchmark, 'formingBarReplacementParity', 'performance measurement i
 includes(smcBenchmark, 'liveTickThroughputPerSecond', 'pipeline benchmark reports incremental live-update throughput');
 includes(smcBenchmark, 'historicalCorrectionBarsPerSecond', 'pipeline benchmark reports correction replay throughput');
 includes(smcBenchmark, 'TCO_BENCH_OUTPUT_FILE', 'benchmark results can be persisted as machine-readable evidence');
+includes(smcBenchmark, 'TCO_WASM_BENCH_OUTPUT_FILE', 'CPU-versus-WASM benchmark evidence can be persisted and compared');
+includes(packageJson, 'incrementalStatefulKernelContract.test.mjs', 'critical verification runs forming-bar/checkpoint parity tests');
+includes(packageJson, 'multiBackendKernelExecutorContract.test.mjs', 'critical verification exercises the actual WASM backend planner and adapter');
 includes(smcBenchmark, 'inputChangeReport.inputChangeChangedOutput !== true', 'SMC input-change benchmark fails closed if settings do not change results');
 includes(chartController, 'existing chart output was preserved', 'fatal runtime diagnostics preserve the last valid chart scene');
 const fatalDiagnosticGate = chartController.indexOf('if(fatalDiagnostic)throw new Error(');
