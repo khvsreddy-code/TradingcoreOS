@@ -70,6 +70,12 @@ includes(dock, "category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 
 includes(indicatorsPage, 'Staged acceptance target', 'the bundled SMC conversion is not represented as release-certified before browser visual acceptance');
 includes(indicatorsPage, 'authenticated browser visual acceptance passes', 'SMC limitations and the missing browser acceptance gate remain visible to users');
 includes(outputController, 'tco:corespirit:visual-commit', 'Vela visual acceptance is observable only after native scene commit');
+includes(visualLayer, 'probeVisibleCoreSpiritPixels', 'SMC browser verification can observe the actual custom-layer paint path');
+includes(visualLayer, 'getImageData(0, 0, canvas.width, canvas.height)', 'pixel readback is available for explicit opt-in visual acceptance');
+includes(visualLayer, '__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__', 'pixel readback is disabled unless a browser acceptance session explicitly opts in');
+includes(smcBrowser, 'tco:corespirit:visual-paint', 'browser acceptance waits for renderer paint evidence, not just scene commit');
+includes(smcBrowser, 'nonTransparentPixels', 'browser acceptance requires non-transparent pixels from the CoreSpirit render layer');
+includes(smcBrowser, 'sourceDraftRestoredAfterReload', 'browser acceptance checks exact local source-draft restoration after reload');
 includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
