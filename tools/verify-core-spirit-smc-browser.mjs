@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 
 const baseUrl = (process.env.TCO_BROWSER_URL || 'http://localhost:5173/live').trim();
@@ -29,6 +32,103 @@ function evaluateJson(expression) {
 function pause(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+function decodePng(buffer) {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (buffer.length < 33 || !buffer.subarray(0, 8).equals(signature)) throw new Error('Screenshot is not a valid PNG.');
+  let offset = 8, width = 0, height = 0, bitDepth = 0, colorType = -1, interlace = -1;
+  const idat = [];
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset), type = buffer.toString('ascii', offset + 4, offset + 8);
+    const start = offset + 8, end = start + length;
+    if (end + 4 > buffer.length) throw new Error('Truncated PNG chunk: ' + type);
+    const data = buffer.subarray(start, end);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0); height = data.readUInt32BE(4);
+      bitDepth = data[8]; colorType = data[9]; interlace = data[12];
+    } else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    offset = end + 4;
+  }
+  if (!width || !height) throw new Error('PNG screenshot has invalid dimensions.');
+  if (bitDepth !== 8 || ![2, 6].includes(colorType) || interlace !== 0) {
+    throw new Error('Unsupported screenshot PNG format: bitDepth=' + bitDepth + ', colorType=' + colorType + ', interlace=' + interlace);
+  }
+  const channels = colorType === 6 ? 4 : 3, stride = width * channels;
+  const inflated = inflateSync(Buffer.concat(idat));
+  if (inflated.length !== height * (stride + 1)) throw new Error('PNG scanline payload length does not match dimensions.');
+  const pixels = new Uint8Array(height * stride);
+  let input = 0;
+  for (let y = 0; y < height; y += 1) {
+    const filter = inflated[input++], row = y * stride, previous = row - stride;
+    for (let x = 0; x < stride; x += 1) {
+      const raw = inflated[input++], left = x >= channels ? pixels[row + x - channels] : 0;
+      const up = y > 0 ? pixels[previous + x] : 0;
+      const upLeft = y > 0 && x >= channels ? pixels[previous + x - channels] : 0;
+      let predictor = 0;
+      if (filter === 1) predictor = left;
+      else if (filter === 2) predictor = up;
+      else if (filter === 3) predictor = Math.floor((left + up) / 2);
+      else if (filter === 4) {
+        const p = left + up - upLeft, pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - upLeft);
+        predictor = pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft;
+      } else if (filter !== 0) throw new Error('Unsupported PNG row filter: ' + filter);
+      pixels[row + x] = (raw + predictor) & 255;
+    }
+  }
+  return { width, height, channels, pixels };
+}
+
+function countChartPixelDiff(beforeBytes, afterBytes, beforeViewport, afterViewport, threshold = 24) {
+  const before = decodePng(beforeBytes), after = decodePng(afterBytes);
+  const a = beforeViewport.rect, b = afterViewport.rect;
+  const left = Math.max(a.left, b.left, 0), top = Math.max(a.top, b.top, 0);
+  const right = Math.min(a.left + a.width, b.left + b.width, beforeViewport.viewportWidth, afterViewport.viewportWidth);
+  const bottom = Math.min(a.top + a.height, b.top + b.height, beforeViewport.viewportHeight, afterViewport.viewportHeight);
+  if (!(right > left && bottom > top)) throw new Error('Before/after screenshot chart regions do not overlap.');
+  const sx1 = before.width / beforeViewport.viewportWidth, sy1 = before.height / beforeViewport.viewportHeight;
+  const sx2 = after.width / afterViewport.viewportWidth, sy2 = after.height / afterViewport.viewportHeight;
+  let changedPixels = 0, comparedPixels = 0;
+  const xStart = Math.max(0, Math.floor(left * sx1)), xEnd = Math.min(before.width, Math.ceil(right * sx1));
+  const yStart = Math.max(0, Math.floor(top * sy1)), yEnd = Math.min(before.height, Math.ceil(bottom * sy1));
+  for (let py = yStart; py < yEnd; py += 1) {
+    const cssY = (py + 0.5) / sy1;
+    if (cssY < top || cssY >= bottom) continue;
+    const ay = Math.floor(cssY * sy2);
+    if (ay < 0 || ay >= after.height) continue;
+    for (let px = xStart; px < xEnd; px += 1) {
+      const cssX = (px + 0.5) / sx1;
+      if (cssX < left || cssX >= right) continue;
+      const ax = Math.floor(cssX * sx2);
+      if (ax < 0 || ax >= after.width) continue;
+      const bi = (py * before.width + px) * before.channels, ai = (ay * after.width + ax) * after.channels;
+      const delta = Math.max(Math.abs(before.pixels[bi] - after.pixels[ai]),
+        Math.abs(before.pixels[bi + 1] - after.pixels[ai + 1]),
+        Math.abs(before.pixels[bi + 2] - after.pixels[ai + 2]));
+      comparedPixels += 1;
+      if (delta > threshold) changedPixels += 1;
+    }
+  }
+  const minimumChangedPixels = Math.max(80, Math.floor(comparedPixels * 0.0001));
+  return { changedPixels, comparedPixels,
+    changedRatio: Number((changedPixels / Math.max(1, comparedPixels)).toFixed(5)),
+    threshold, minimumChangedPixels,
+    regionCss: { left, top, width: right - left, height: bottom - top },
+    passed: changedPixels >= minimumChangedPixels };
+}
+
+function getLargestChartCanvasRegion() {
+  return evaluateJson(\`(() => {
+    const regions = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
+      const rect = canvas.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, area: rect.width * rect.height };
+    }).filter(rect => rect.width > 120 && rect.height > 120 && rect.left < window.innerWidth && rect.top < window.innerHeight);
+    regions.sort((a, b) => b.area - a.area);
+    if (!regions.length) return null;
+    const rect = regions[0];
+    return { viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
+      rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+  })()\`);
+}
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -49,6 +149,16 @@ async function waitForPageContent(timeout = 20_000) {
   }
   throw new Error(`No page content became available at ${baseUrl} within ${timeout} ms.`);
 }
+
+const screenshotPaths = [];
+function takeScreenshot(name) {
+  const path = join(tmpdir(), 'tco-smc-' + process.pid + '-' + name + '.png');
+  run(['screenshot', path]);
+  screenshotPaths.push(path);
+  return path;
+}
+async function screenshotBytes(path) { return readFile(path); }
+async function cleanScreenshots() { await Promise.all(screenshotPaths.map(path => unlink(path).catch(() => undefined))); }
 
 try {
   run(['open', baseUrl]);
@@ -107,27 +217,18 @@ try {
   assert(dockState.sourceLoaded, 'CoreSpirit terminal did not load the canonical bundled SMC source.');
   assert(dockState.hasCompileButton, 'Compile & Run is missing from the mounted CoreSpirit terminal.');
 
+  const beforeRegion = getLargestChartCanvasRegion();
+  assert(beforeRegion, 'Cannot capture SMC visual baseline: no usable Vela chart canvas was found.');
+  const beforeScreenshotPath = takeScreenshot('before');
+  const beforeScreenshot = await screenshotBytes(beforeScreenshotPath);
+
   evaluate(`(() => {
     window.__TCO_SMC_VISUAL_COMMITS__ = [];
-    window.__TCO_SMC_VISUAL_PAINTS__ = [];
-    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = false;
-    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = false;
-    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
     window.addEventListener('tco:corespirit:visual-commit', event => {
-      const detail = event.detail || {};
-      window.__TCO_SMC_VISUAL_COMMITS__.push(detail);
-      const hasDrawingKind = Object.keys(detail.kindCounts || {}).some(kind =>
-        ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind));
-      if (Number(detail.objectCount) > 0 && hasDrawingKind) {
-        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = true;
-      }
+      window.__TCO_SMC_VISUAL_COMMITS__.push(event.detail || {});
       if (window.__TCO_SMC_VISUAL_COMMITS__.length > 50) window.__TCO_SMC_VISUAL_COMMITS__.shift();
     });
-    window.addEventListener('tco:corespirit:visual-paint', event => {
-      window.__TCO_SMC_VISUAL_PAINTS__.push(event.detail || {});
-      if (window.__TCO_SMC_VISUAL_PAINTS__.length > 20) window.__TCO_SMC_VISUAL_PAINTS__.shift();
-    });
-    return 'SMC_VISUAL_COMMIT_AND_PAINT_LISTENERS_ARMED';
+    return 'SMC_NATIVE_SCENE_COMMIT_LISTENER_ARMED';
   })()`);
   evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
@@ -144,7 +245,6 @@ try {
       success: (document.body.innerText || '').includes('is now running on the active Vela chart'),
       body: (document.body.innerText || '').slice(-1600),
       commits: window.__TCO_SMC_VISUAL_COMMITS__ || [],
-      paints: window.__TCO_SMC_VISUAL_PAINTS__ || [],
       canvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
         const rect = canvas.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
@@ -154,17 +254,24 @@ try {
     if (last.errorOverlay) throw new Error('Framework error overlay appeared during SMC compile/run.');
     const commit = last.commits.find(item => Number(item.objectCount) > 0 &&
       Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind)));
-    const paint = last.paints.find(item => Number(item.nonTransparentPixels) > 0 && Number(item.visualObjectCount) > 0);
-    if (last.success && commit && paint && last.canvases > 0) {
+    if (last.success && commit && last.canvases > 0) {
+      // Capture Vela's actual chart output after the native drawing collections commit.
+      await pause(350);
+      const afterRegion = getLargestChartCanvasRegion();
+      assert(afterRegion, 'Vela chart canvas disappeared after SMC compile/run.');
+      const afterScreenshotPath = takeScreenshot('after-compile');
+      const afterScreenshot = await screenshotBytes(afterScreenshotPath);
+      const chartPixelDiff = countChartPixelDiff(beforeScreenshot, afterScreenshot, beforeRegion, afterRegion);
+      assert(chartPixelDiff.passed,
+        'SMC native objects committed but chart screenshot pixels did not change enough: ' +
+        chartPixelDiff.changedPixels + '/' + chartPixelDiff.comparedPixels + '.');
       const persisted = evaluateJson(`({
         versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
         legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)}
       })`);
       assert(persisted.versionedDraft && persisted.legacyDraft,
         'Successful Compile & Run did not persist the SMC source into the versioned and legacy editor-draft keys.');
-      // Exercise both viewport gestures before accepting the chart overlay.
-      // The probe is re-armed for one paint so the test verifies the overlay
-      // still paints after Vela applies new time/price transforms.
+      // Exercise both viewport gestures and compare the actual plot screenshot.
       const canvasCenter = evaluateJson(`(() => {
         const boxes = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
           const rect = canvas.getBoundingClientRect();
@@ -173,62 +280,47 @@ try {
         return boxes[0] || null;
       })()`);
       assert(canvasCenter, 'Cannot exercise Vela viewport: no usable chart canvas was found.');
-      const paintCountBeforeViewportGestures = last.paints.length;
       run(['mouse', 'move', String(Math.round(canvasCenter.x)), String(Math.round(canvasCenter.y))]);
       run(['mouse', 'wheel', '-120', '0']);
       run(['mouse', 'move', String(Math.round(canvasCenter.x)), String(Math.round(canvasCenter.y))]);
       run(['mouse', 'down', 'left']);
       run(['mouse', 'move', String(Math.round(canvasCenter.x - 54)), String(Math.round(canvasCenter.y)), '--duration', '180', '--steps', '8']);
       run(['mouse', 'up', 'left']);
-      evaluate(`(() => {
-        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = true;
-        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = false;
-        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
-        return 'SMC_VIEWPORT_PAINT_PROBE_REARMED';
-      })()`);
-      let viewportPaint = null;
-      const viewportDeadline = Date.now() + 8_000;
-      while (Date.now() < viewportDeadline) {
-        const viewportState = evaluateJson(`({
-          paints: window.__TCO_SMC_VISUAL_PAINTS__ || [],
-          canvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
-            const rect = canvas.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-          }).length,
-          errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
-        })`);
-        if (viewportState.errorOverlay) throw new Error('Framework error overlay appeared after Vela zoom/pan gestures.');
-        viewportPaint = viewportState.paints.slice(paintCountBeforeViewportGestures)
-          .find(item => Number(item.nonTransparentPixels) > 0 && Number(item.visualObjectCount) > 0) || null;
-        if (viewportPaint && viewportState.canvases > 0) break;
-        await pause(200);
-      }
-      assert(viewportPaint, 'CoreSpirit drawings stopped producing visible pixels after Vela zoom/pan gestures.');
+      await pause(250);
+      const afterGestureRegion = getLargestChartCanvasRegion();
+      assert(afterGestureRegion, 'Vela chart canvas disappeared after zoom/pan gestures.');
+      const afterGesturePath = takeScreenshot('after-viewport');
+      const afterGestureScreenshot = await screenshotBytes(afterGesturePath);
+      const viewportPixelDiff = countChartPixelDiff(afterScreenshot, afterGestureScreenshot, afterRegion, afterGestureRegion);
+      assert(viewportPixelDiff.passed,
+        'Vela zoom/pan did not update the chart plot pixels: ' + viewportPixelDiff.changedPixels + '/' + viewportPixelDiff.comparedPixels + '.');
       const viewportInteraction = {
         zoomWheelDelta: -120,
         horizontalPanPixels: 54,
-        rendererPaintAfterGesture: {
-          nonTransparentPixels: viewportPaint.nonTransparentPixels,
-          paneId: viewportPaint.paneId,
-          layerRole: viewportPaint.layerRole,
-        },
+        changedPixels: viewportPixelDiff.changedPixels,
+        comparedPixels: viewportPixelDiff.comparedPixels,
+        changedRatio: viewportPixelDiff.changedRatio,
       };
       const visualEvidence = {
         url: baseUrl,
-        acceptance: 'compile-and-run + committed visible native Vela drawing objects + visible chart canvas',
+        acceptance: 'compile-and-run + native Vela drawing commit + chart plot screenshot diffs before/after compile and after zoom/pan',
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },
         objectCount: commit.objectCount,
         kindCounts: commit.kindCounts,
         paneCount: commit.paneCount,
         visibleChartCanvases: last.canvases,
         persistedDraftKeys: Object.keys(persisted).filter(key => persisted[key]),
-        rendererPaint: {
-          nonTransparentPixels: paint.nonTransparentPixels,
-          canvasWidth: paint.canvasWidth,
-          canvasHeight: paint.canvasHeight,
-          paneId: paint.paneId,
-          layerRole: paint.layerRole,
-          visualObjectCount: paint.visualObjectCount,
+        chartPixelDiff: {
+          changedPixels: chartPixelDiff.changedPixels,
+          comparedPixels: chartPixelDiff.comparedPixels,
+          changedRatio: chartPixelDiff.changedRatio,
+          threshold: chartPixelDiff.threshold,
+        },
+        viewportPixelDiff: {
+          changedPixels: viewportPixelDiff.changedPixels,
+          comparedPixels: viewportPixelDiff.comparedPixels,
+          changedRatio: viewportPixelDiff.changedRatio,
+          threshold: viewportPixelDiff.threshold,
         },
         viewportInteraction,
       };
@@ -266,10 +358,12 @@ try {
   }
   if (status !== 'accepted') {
     const excerpt = String(last?.body || '').slice(-1200);
-    throw new Error(`SMC browser acceptance timed out after ${timeoutMs} ms. Compile success: ${Boolean(last?.success)}; visible canvas count: ${last?.canvases ?? 0}; visual commits: ${last?.commits?.length ?? 0}; pixel paint evidence: ${last?.paints?.length ?? 0}. Last page text: ${excerpt}`);
+    throw new Error(`SMC browser acceptance timed out after ${timeoutMs} ms. Compile success: ${Boolean(last?.success)}; visible canvas count: ${last?.canvases ?? 0}; visual commits: ${last?.commits?.length ?? 0}. Last page text: ${excerpt}`);
   }
   console.log('CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK');
 } catch (error) {
   console.error(error instanceof Error ? error.stack : String(error));
   process.exitCode = 1;
+} finally {
+  await cleanScreenshots();
 }
