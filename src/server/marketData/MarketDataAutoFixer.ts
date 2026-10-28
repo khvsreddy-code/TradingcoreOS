@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
+
 export type MarketDataFixerSource = 'nse' | 'investiny' | 'fyers' | 'tvdatafeed';
 export type MarketDataFixerCapability = 'history' | 'live' | 'options';
 export type MarketDataFixerState = 'healthy' | 'open' | 'half-open';
@@ -25,6 +28,8 @@ export interface MarketDataAutoFixerOptions {
   authCooldownMs?: number;
   rateLimitFloorMs?: number;
   maxEntries?: number;
+  /** Disable shared Redis state for deterministic unit tests. */
+  useSharedCoordination?: boolean;
 }
 function safeError(error: unknown): string {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
@@ -55,6 +60,10 @@ export class MarketDataAutoFixer {
   private readonly authCooldownMs: number;
   private readonly rateLimitFloorMs: number;
   private readonly maxEntries: number;
+  private readonly useSharedCoordination: boolean;
+  private readonly probeOwners = new Map<string, string>();
+  private readonly sharedStateTtlMs = 60 * 60_000;
+  private readonly probeLockTtlMs = 30_000;
   constructor(options: MarketDataAutoFixerOptions = {}) {
     this.now = options.now ?? Date.now;
     this.baseCooldownMs = Math.max(1, options.baseCooldownMs ?? 15_000);
@@ -62,6 +71,7 @@ export class MarketDataAutoFixer {
     this.authCooldownMs = Math.max(this.maxCooldownMs, options.authCooldownMs ?? 15 * 60_000);
     this.rateLimitFloorMs = Math.max(1, options.rateLimitFloorMs ?? 30_000);
     this.maxEntries = Math.max(16, Math.floor(options.maxEntries ?? 512));
+    this.useSharedCoordination = options.useSharedCoordination ?? true;
   }
   private key(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): string {
     return [source, capability, String(resource || 'global').slice(0, 180)].join('|');
@@ -90,8 +100,81 @@ export class MarketDataAutoFixer {
     };
     return this.touch(key, entry);
   }
-  canAttempt(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): boolean {
+  private sharedKey(key: string): string { return 'tco:market-data:fixer:v1:' + encodeURIComponent(key); }
+  private sharedProbeKey(key: string): string { return this.sharedKey(key) + ':probe'; }
+
+  private hydrate(snapshot: MarketDataFixerSnapshot): Entry {
+    const key = this.key(snapshot.source, snapshot.capability, snapshot.resource);
+    const entry = this.getOrCreate(snapshot.source, snapshot.capability, snapshot.resource);
+    Object.assign(entry, snapshot, { probeInFlight: snapshot.state === 'half-open', updatedAt: this.now() });
+    return this.touch(key, entry);
+  }
+
+  private async readShared(key: string): Promise<MarketDataFixerSnapshot | null> {
+    const redis = getSharedRedis();
+    if (!this.useSharedCoordination || !redis.configured) return null;
+    try {
+      const raw = await redis.get<string>(this.sharedKey(key));
+      if (typeof raw !== 'string' || !raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const value = parsed as Partial<MarketDataFixerSnapshot>;
+      if (!['healthy', 'open', 'half-open'].includes(String(value.state))
+        || !['nse', 'investiny', 'fyers', 'tvdatafeed'].includes(String(value.source))
+        || !['history', 'live', 'options'].includes(String(value.capability))
+        || typeof value.resource !== 'string') return null;
+      return value as MarketDataFixerSnapshot;
+    } catch {
+      // When Redis is unavailable, retain bounded process-local protection.
+      return null;
+    }
+  }
+
+  private async writeShared(key: string, snapshot: MarketDataFixerSnapshot, ttlMs: number): Promise<void> {
+    const redis = getSharedRedis();
+    if (!this.useSharedCoordination || !redis.configured) return;
+    try { await redis.set(this.sharedKey(key), JSON.stringify(snapshot), { px: Math.max(1_000, ttlMs) }); } catch {}
+  }
+
+  private async releaseProbe(key: string): Promise<void> {
+    const owner = this.probeOwners.get(key);
+    if (!owner) return;
+    this.probeOwners.delete(key);
+    const redis = getSharedRedis();
+    if (!this.useSharedCoordination || !redis.configured) return;
+    try { await redis.releaseLock(this.sharedProbeKey(key), owner); } catch {}
+  }
+
+  async canAttempt(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): Promise<boolean> {
     const key = this.key(source, capability, resource);
+    const redis = getSharedRedis();
+    if (this.useSharedCoordination && redis.configured) {
+      const remote = await this.readShared(key);
+      if (remote) {
+        this.hydrate(remote);
+        if (remote.state === 'open' && remote.nextProbeAt != null && this.now() < remote.nextProbeAt) return false;
+        if (remote.state === 'open' || remote.state === 'half-open') {
+          const owner = randomUUID();
+          try {
+            const acquired = await redis.acquireLock(this.sharedProbeKey(key), owner, this.probeLockTtlMs);
+            if (!acquired) return false;
+            this.probeOwners.set(key, owner);
+            const entry = this.hydrate({ ...remote, state: 'half-open', lastAction: 'distributed-half-open-single-probe' });
+            entry.attempts += 1;
+            entry.lastAttemptAt = this.now();
+            await this.writeShared(key, this.publicSnapshot(entry), this.probeLockTtlMs * 2);
+            return true;
+          } catch {
+            // Fall through to the local breaker if coordination cannot be reached.
+          }
+        } else if (remote.state === 'healthy') {
+          const entry = this.hydrate(remote);
+          entry.attempts += 1;
+          entry.lastAttemptAt = this.now();
+          return true;
+        }
+      }
+    }
     const entry = this.getOrCreate(source, capability, resource);
     this.touch(key, entry);
     if (entry.state === 'healthy') {
@@ -108,7 +191,9 @@ export class MarketDataAutoFixer {
     entry.lastAction = 'cooldown-expired-single-probe';
     return true;
   }
-  recordSuccess(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): MarketDataFixerSnapshot {
+
+  async recordSuccess(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): Promise<MarketDataFixerSnapshot> {
+    const key = this.key(source, capability, resource);
     const entry = this.getOrCreate(source, capability, resource);
     const recovered = entry.state !== 'healthy' || entry.failures > 0;
     entry.state = 'healthy';
@@ -121,9 +206,14 @@ export class MarketDataAutoFixer {
     entry.lastSuccessAt = this.now();
     entry.nextProbeAt = null;
     entry.probeInFlight = false;
-    return this.publicSnapshot(this.touch(this.key(source, capability, resource), entry));
+    const snapshot = this.publicSnapshot(this.touch(key, entry));
+    await this.writeShared(key, snapshot, this.sharedStateTtlMs);
+    await this.releaseProbe(key);
+    return snapshot;
   }
-  recordFailure(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string, error: unknown): MarketDataFixerSnapshot {
+
+  async recordFailure(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string, error: unknown): Promise<MarketDataFixerSnapshot> {
+    const key = this.key(source, capability, resource);
     const entry = this.getOrCreate(source, capability, resource);
     const status = statusOf(error);
     entry.failures += 1;
@@ -144,7 +234,10 @@ export class MarketDataAutoFixer {
     }
     entry.state = 'open';
     entry.nextProbeAt = this.now() + cooldown;
-    return this.publicSnapshot(this.touch(this.key(source, capability, resource), entry));
+    const snapshot = this.publicSnapshot(this.touch(key, entry));
+    await this.writeShared(key, snapshot, cooldown + 60_000);
+    await this.releaseProbe(key);
+    return snapshot;
   }
   snapshot(source?: MarketDataFixerSource, capability?: MarketDataFixerCapability, resource?: string): MarketDataFixerSnapshot[] {
     const wantedKey = source && capability && resource != null ? this.key(source, capability, resource) : null;
