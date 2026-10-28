@@ -260,8 +260,7 @@ export class CoreSpiritChartOutputController {
     const projected = projectCoreSpiritObjectsToVela(objects, 'price');
     // Replacing the Vela collection arrays is a full collection snapshot. Vela's
     // own scene patch path now manages object lifetime and redraw invalidation.
-    const dirtyObjects = revisioned ? [...this.committedObjects, ...objects] : objects;
-    const hasViewportGeometry = dirtyObjects.some(object => object.kind === 'zone' && object.domain === 'viewport');
+    const dirtyObjects = [...this.committedObjects, ...objects];
     const timestamps = dirtyObjects.flatMap(object => {
       const item = object as unknown as Record<string, any>;
       const values: unknown[] = [];
@@ -270,11 +269,24 @@ export class CoreSpiritChartOutputController {
       if (item.end?.time != null) values.push(item.end.time);
       if (item.left != null && item.domain !== 'viewport') values.push(item.left);
       if (item.right != null && item.domain !== 'viewport') values.push(item.right);
+      if (item.metadata?.startTime != null) values.push(item.metadata.startTime);
+      if (item.metadata?.fromTime != null) values.push(item.metadata.fromTime);
+      if (item.metadata?.endTime != null) values.push(item.metadata.endTime);
+      if (item.metadata?.toTime != null) values.push(item.metadata.toTime);
       for (const point of Array.isArray(item.points) ? item.points : []) if (point?.time != null) values.push(point.time);
       return values.map(Number).filter(Number.isFinite);
     });
-    const from = hasViewportGeometry ? 0 : timestamps.length ? Math.min(...timestamps) : 0;
-    const to = hasViewportGeometry ? Number.MAX_SAFE_INTEGER : timestamps.length ? Math.max(...timestamps) + 1 : 0;
+    // Hlines, screen-fixed tables/custom visuals and viewport zones may dirty
+    // anywhere in the pane; ordinary anchored drawings only invalidate the old
+    // and new time envelope to remove moved/deleted geometry without repainting all history.
+    const hasUnboundedGeometry = dirtyObjects.some(object =>
+      object.kind === 'hline' ||
+      object.kind === 'table' ||
+      object.kind === 'customVisual' ||
+      (object.kind === 'zone' && object.domain === 'viewport')
+    ) || timestamps.length === 0;
+    const from = hasUnboundedGeometry ? 0 : Math.min(...timestamps);
+    const to = hasUnboundedGeometry ? Number.MAX_SAFE_INTEGER : Math.max(...timestamps) + 1;
     const previous = this.nativeDrawingCollections;
     const deltas: CollectionValueDelta[] = [];
     if (revisioned && previous) {
