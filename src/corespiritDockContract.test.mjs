@@ -88,6 +88,8 @@ includes(smcBrowser, "run(['screenshot', path]", 'browser acceptance captures vi
 includes(smcBrowser, 'chartPixelDiff', 'the actual chart plot must change after SMC native drawing commits');
 includes(smcBrowser, 'viewportPixelDiff', 'chart pixels are compared again after Vela zoom/pan');
 includes(smcBrowser, 'function decodePng(buffer)', 'the screenshot contract computes pixel deltas from PNG bytes without adding a graphics dependency');
+includes(smcBrowser, 'clearedPriorSmc.remaining, 0', 'browser acceptance starts from a clean SMC chart baseline even when rerun in the same profile');
+includes(smcBrowser, 'priorSmcInstancesRemoved: clearedPriorSmc.removed', 'visual evidence records stale SMC instances removed before the test run');
 includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
