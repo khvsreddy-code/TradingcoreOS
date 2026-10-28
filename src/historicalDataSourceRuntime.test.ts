@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getBoundedHistoryPageRange, getRecentHistoryRequestRange, normalizeHistoricalCandles } from './server/marketData/HistoricalDataService.js';
+import { getBoundedHistoryPageRange, getRecentHistoryRequestRange, historicalFallbackCacheTtlMs, normalizeHistoricalCandles } from './server/marketData/HistoricalDataService.js';
 
 const rows = normalizeHistoricalCandles([
   [1_800_000_000, 100, 105, 99, 104, 1000],
@@ -12,6 +12,21 @@ assert.equal(rows.length, 1, 'invalid rows, duplicate timestamps, and quote-deri
 assert.equal(rows[0].source, 'fyers');
 assert.equal(rows[0].open, 100);
 assert.ok(rows[0].timestampMs > 0);
+
+const nseRows = normalizeHistoricalCandles([
+  [1_800_000_060, 101, 106, 100, 105, 500],
+], 'nse');
+const investinyRows = normalizeHistoricalCandles([
+  [1_800_000_120, 105, 107, 104, 106, 450],
+], 'investiny');
+assert.equal(nseRows[0]?.source, 'nse', 'the normalizer must preserve NSE provenance');
+assert.equal(investinyRows[0]?.source, 'investiny', 'the normalizer must preserve Investiny provenance');
+const probeNow = 100_000;
+assert.equal(
+  historicalFallbackCacheTtlMs('investiny', { status: 'error', health: { nextProbeAt: probeNow + 17_000 } }, probeNow),
+  17_000,
+  'fallback history should not hide NSE recovery behind the successful-cache TTL',
+);
 
 const range = getRecentHistoryRequestRange({
   timezone: 'Asia/Kolkata',

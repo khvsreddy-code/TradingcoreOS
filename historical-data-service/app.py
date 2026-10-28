@@ -367,7 +367,27 @@ async def investiny_history(request: InvestinyHistoryRequest, authorization: Opt
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "max_bars": MAX_BARS, "workers": MAX_WORKERS, "service_token_configured": bool(os.environ.get("TVDATAFEED_SERVICE_TOKEN"))}
+    tv_token_configured = bool(os.environ.get("TVDATAFEED_SERVICE_TOKEN", "").strip())
+    investiny_token_configured = bool(
+        (os.environ.get("INVESTINY_SERVICE_TOKEN", "").strip()
+         or os.environ.get("TVDATAFEED_SERVICE_TOKEN", "").strip())
+    )
+    investiny_enabled = os.environ.get("INVESTINY_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+    return {
+        "status": "ok",
+        "max_bars": MAX_BARS,
+        "workers": MAX_WORKERS,
+        "service_token_configured": tv_token_configured or investiny_token_configured,
+        "providers": {
+            "tvdatafeed": {"enabled": True, "token_configured": tv_token_configured},
+            "investiny": {
+                "enabled": investiny_enabled,
+                "token_configured": investiny_token_configured,
+                "historical_only": True,
+                "live_stream_supported": False,
+            },
+        },
+    }
 
 
 @app.post("/v1/history")

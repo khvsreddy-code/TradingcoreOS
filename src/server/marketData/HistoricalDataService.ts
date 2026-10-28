@@ -208,7 +208,7 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
   return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 }
 /** Pure normalization hook used by server contracts and source adapters. */
-export function normalizeHistoricalCandles(rows: unknown[], source: 'fyers' | 'tvdatafeed'): StoredBar[] {
+export function normalizeHistoricalCandles(rows: unknown[], source: StoredBar['source']): StoredBar[] {
   return normalizeRows(rows, source);
 }
 export function historicalSourcePriority(source: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed'): number {
@@ -329,6 +329,28 @@ function errorText(error: unknown): string {
   return message.replace(/[\r\n\t]+/g, ' ').slice(0, 240);
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }
+
+/**
+ * Keep fallback candles usable without pinning routing to the fallback for a
+ * full cache TTL. If NSE failed, expire the fallback cache at (or before) its
+ * next bounded recovery probe; otherwise a healthy NSE cache uses the normal TTL.
+ * This is request-driven recovery: no detached timer or unbounded background poll.
+ */
+export function historicalFallbackCacheTtlMs(
+  activeSource: string,
+  nseStatus: Record<string, unknown>,
+  now = Date.now(),
+): number {
+  const status = String(nseStatus.status || '');
+  if (activeSource === 'nse' || !['error', 'circuit-open'].includes(status)) return CACHE_TTL_MS;
+  const rawHealth = nseStatus.health;
+  const health = rawHealth && typeof rawHealth === 'object' ? rawHealth as Record<string, unknown> : null;
+  const nextProbeAt = Number(health?.nextProbeAt);
+  if (!Number.isFinite(nextProbeAt)) return NEGATIVE_CACHE_TTL_MS;
+  const remaining = nextProbeAt - now;
+  if (remaining <= 0) return NEGATIVE_CACHE_TTL_MS;
+  return Math.min(CACHE_TTL_MS, Math.max(1_000, remaining));
+}
 function isMissingTableError(error: unknown): boolean {
   const value = error as { code?: string; message?: string } | null;
   const code = String(value?.code || '');
@@ -657,7 +679,7 @@ export class HistoricalDataService {
           instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
           revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus,
           degraded: activeSource !== 'nse' || merged.length < preferredTarget,
-          expiresAt: now + CACHE_TTL_MS, updatedAt: now, quote: null,
+          expiresAt: now + historicalFallbackCacheTtlMs(activeSource, sourceRoutingStatus.nse, now), updatedAt: now, quote: null,
         });
       };
       if (nseAttempt.bars.length) {
@@ -885,10 +907,18 @@ export class HistoricalDataService {
         requestRange: { from: new Date(range.fromMs).toISOString(), to: new Date(range.toMs).toISOString() },
       };
       sourceStatus.noValidatedBars = merged.length === 0;
+      const activeSource = fyersBars.length ? 'fyers'
+        : tvBars.length ? 'tvdatafeed'
+          : cachedOlderBars.length ? 'cache' : 'none';
+      sourceStatus.route = {
+        activeSource,
+        capability: 'historical-ohlcv',
+        automaticFailback: true,
+      };
       let record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
         revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
-        expiresAt: Date.now() + (merged.length ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS), updatedAt: Date.now(), quote,
+        expiresAt: Date.now() + historicalFallbackCacheTtlMs(activeSource, sourceRoutingStatus.nse), updatedAt: Date.now(), quote,
       };
       if (!merged.length && cached?.bars.length) {
         const staleRecord: CacheRecord = {

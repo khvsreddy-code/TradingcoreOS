@@ -221,6 +221,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
   const investinyBase = String(process.env.INVESTINY_SERVICE_URL || process.env.TVDATAFEED_SERVICE_URL || '').trim().replace(/\/+$/, '');
   const investinyToken = String(process.env.INVESTINY_SERVICE_TOKEN || process.env.TVDATAFEED_SERVICE_TOKEN || '').trim();
   const investinyMap = parseServerMap(process.env.INVESTINY_SYMBOL_MAP);
+  const investinyEnabled = /^(?:1|true|yes|on)$/i.test(String(process.env.INVESTINY_ENABLED || '').trim());
   const fetchNseHistory: PreferredHistorySourceFetcher | undefined = nseBase && nseToken
     ? async (mapping, timeframe, range) => {
         const mapped = nseMap[mapping.instrumentId] || nseMap[mapping.fyersSymbol];
@@ -241,7 +242,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       }
     : undefined;
   const fetchInvestinyHistory: PreferredHistorySourceFetcher | undefined =
-    process.env.INVESTINY_ENABLED === 'true' && investinyBase && investinyToken
+    investinyEnabled && investinyBase && investinyToken
       ? async (mapping, timeframe, range) => {
           const mapped = investinyMap[mapping.instrumentId] || investinyMap[mapping.fyersSymbol];
           const rawId = mapped?.investingId ?? mapped?.investing_id ?? mapped?.id;
