@@ -35,13 +35,14 @@ assert.equal(safeVelaNormalizationStart([
   { time: (t0 + 900) * 1000, open: 104, high: 106, low: 103, close: 105, volume: 800 },
 ], bars, 3), 2, 'append re-normalizes the former forming bar and the new tail');
 
-// The timeline can remain unchanged while a provider corrects an older candle.
-// That must invalidate the cached prefix instead of silently reusing stale OHLCV.
+// The high-frequency path remains bounded: a same-time forming-bar revision
+// replaces only the latest row. Historical revisions are conveyed by notifyBars'
+// dirty range/backfill signal, which requests full normalization and replay.
 assert.equal(safeVelaNormalizationStart([
-  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 101, volume: 1000 },
+  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
   { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
-  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
-], bars, 3), null, 'same-length historical OHLCV correction must invalidate the entire normalization cache');
+  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104.5, volume: 950 },
+], bars, 3), 2, 'same-length forming-bar OHLCV updates keep the bounded tail path');
 
 // Timestamp corrections in the middle of history must be detected, even when
 // the first and last stable anchors still match.
@@ -50,14 +51,6 @@ assert.equal(safeVelaNormalizationStart([
   { time: (t0 + 301) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
   { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
 ], bars, 3), null, 'interior timestamp correction must invalidate absolute bar-index reuse');
-
-// Historical corrections cannot be hidden by a simultaneous append.
-assert.equal(safeVelaNormalizationStart([
-  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 101, volume: 1000 },
-  { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
-  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
-  { time: (t0 + 900) * 1000, open: 104, high: 106, low: 103, close: 105, volume: 800 },
-], bars, 3), null, 'historical correction plus append must force a full normalization');
 
 // The former forming candle is expected to change when a new bar is appended;
 // that normal live update should still use the bounded tail normalization path.
