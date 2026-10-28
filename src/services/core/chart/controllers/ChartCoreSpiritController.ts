@@ -6,7 +6,7 @@ import { runCoreSpiritInWorker, runCoreSpiritArtifactInWorker } from '../../../c
 import type { CoreSpiritExecutionDiagnostic } from '../../../coreSpirit/coreSpiritWorkerPool';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../../coreSpirit/coreSpiritCompilerClient';
 import type { CoreSpiritExecutableArtifact } from '../../../coreSpirit/artifact';
-import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../../../coreSpirit/capabilitySandbox';
+import { coreSpiritLifecycleDiagnostic, coreSpiritLifecycleStageForError, publishCoreSpiritLifecycle, validateCoreSpiritChartCapabilities, type CoreSpiritLifecycleStage } from '../../../coreSpirit/coreSpiritExecutionLifecycle';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
 import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis } from '../../../coreSpirit/velaOutputAdapter';
@@ -44,40 +44,55 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
     const runId=++coreSpiritRunId.current;
     const bars=[...candles.current];
     if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
+    let lifecycleStage:CoreSpiritLifecycleStage='executing-historical';
     publishLifecycle('updating');
+    publishCoreSpiritLifecycle({stage:lifecycleStage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,message:'Executing against the active chart history.'});
     try{
       const runDatasetVersion=++datasetVersion;
       const options={contextKey:chartId,datasetVersion:runDatasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe};
       const result=artifact
         ? await runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options)
         : await runCoreSpiritInWorker(source,bars,sourceId,options);
-      if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
-      // The worker boundary supplies structured runtime diagnostics. Commit policy
-      // follows severity/code, never incidental words in an error message. Older or
-      // unclassified diagnostic payloads fail closed to preserve the previous scene.
+      if(runId!==coreSpiritRunId.current){
+        publishCoreSpiritLifecycle({stage:'stale',scriptId:sourceId,chartId,symbol:resolvedInstrumentKey,timeframe,message:'An obsolete worker run was ignored.'});
+        return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:sourceId+':'+runId,outputs:[]};
+      }
+      lifecycleStage='validating-outputs';
+      publishCoreSpiritLifecycle({stage:lifecycleStage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,message:'Validating runtime diagnostics and chart-output alignment.'});
       const diagnosticDetails:CoreSpiritExecutionDiagnostic[]=result.diagnosticDetails ?? result.diagnostics.map(message=>({
         severity:'error' as const,code:'RUNTIME_DIAGNOSTIC_UNCLASSIFIED',message,
       }));
       const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity==='error');
-      if(fatalDiagnostic)throw new Error(
-        `CoreSpirit replacement rejected [${fatalDiagnostic.code}${fatalDiagnostic.barIndex==null?'':` · bar ${fatalDiagnostic.barIndex}`}]; existing chart output was preserved. ${fatalDiagnostic.message}`,
-      );
-      // Validate timestamps and translate into Vela's millisecond scene contract
-      // before touching visible state. A bad series timestamp preserves the old scene.
+      if(fatalDiagnostic){
+        const failureStage:CoreSpiritLifecycleStage=fatalDiagnostic.code==='RUNTIME_OUTPUT_VALIDATION'?'output-rejected':'execution-failed';
+        const diagnostic=coreSpiritLifecycleDiagnostic({code:fatalDiagnostic.code,message:fatalDiagnostic.message},failureStage,{previousOutputPreserved:true,outputId:fatalDiagnostic.outputKind});
+        publishCoreSpiritLifecycle({stage:failureStage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
+        throw new Error('CoreSpirit replacement rejected ['+fatalDiagnostic.code+(fatalDiagnostic.barIndex==null?'':' · bar '+fatalDiagnostic.barIndex)+']; existing chart output was preserved. '+fatalDiagnostic.message);
+      }
       const adapted=adaptCoreSpiritOutputsForVela(result.outputs,bars);
+      lifecycleStage='applying-chart-output';
+      publishCoreSpiritLifecycle({stage:lifecycleStage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,message:'Applying the validated output snapshot to Vela.'});
       const output=ensureOutput();
       if(output){
         const applied=await output.scheduleObjects(adapted.outputs,{streamId:chartId,datasetRevision:runDatasetVersion,outputRevision:runId});
-        if(runId!==coreSpiritRunId.current||!applied)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit render revision ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
+        if(runId!==coreSpiritRunId.current||!applied){
+          publishCoreSpiritLifecycle({stage:'stale',scriptId:sourceId,chartId,symbol:resolvedInstrumentKey,timeframe,message:'An obsolete chart-output revision was ignored.'});
+          return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit render revision ignored'],runId:sourceId+':'+runId,outputs:[]};
+        }
       }
-      if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
+      if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:sourceId+':'+runId,outputs:[]};
       coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:coreSpiritTimeToVelaMillis(bars[bars.length-1]!.timestamp),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
+      lifecycleStage='rendered';
+      publishCoreSpiritLifecycle({stage:lifecycleStage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,outputRevision:runId,message:'Vela accepted the current validated output snapshot.'});
       publishLifecycle('ready');
-      return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,diagnosticDetails,runId:`${sourceId}:${runId}`,outputs:result.outputs};
+      return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,diagnosticDetails,runId:sourceId+':'+runId,outputs:result.outputs};
     }catch(error){
-      // A superseded worker snapshot is expected during rapid edits/ticks. Never
-      // let an obsolete run flip the current chart lifecycle to an error state.
-      if(runId===coreSpiritRunId.current)publishLifecycle('error');
+      if(runId===coreSpiritRunId.current){
+        const stage=coreSpiritLifecycleStageForError(error,lifecycleStage);
+        const diagnostic=coreSpiritLifecycleDiagnostic(error,stage,{previousOutputPreserved:true});
+        publishCoreSpiritLifecycle({stage,scriptId:sourceId,sourceHash:artifact?.abi?.sourceHash,artifactHash:artifact?.abi?.artifactHash,chartId,symbol:resolvedInstrumentKey,timeframe,diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
+        publishLifecycle('error');
+      }else publishCoreSpiritLifecycle({stage:'stale',scriptId:sourceId,chartId,symbol:resolvedInstrumentKey,timeframe,message:'A superseded run failed after a newer revision took over.'});
       throw error;
     }
   };
@@ -99,28 +114,32 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
     const source=store.getSnapshot().source;
     const generation=++compileGeneration;
     store.setStatus('Compiling in worker…');
+    publishCoreSpiritLifecycle({stage:'compiling',scriptId:'chart-indicator',chartId,symbol:resolvedInstrumentKey,timeframe,message:'Compiling the immutable editor source snapshot.'});
     try{
-      const compilerResult=await compileCoreSpiritSourceOffThread(source,generation,'chart-indicator');
-      if(generation!==compileGeneration||store.getSnapshot().source!==source)return false;
-      const sandbox=createCoreSpiritSandbox({layer:'script',target:'chart'});
-      const policyDiagnostics=[
-        ...validateCoreSpiritSandboxArchitecture().map(message=>({severity:'error' as const,message,code:'CHART_SANDBOX_ARCHITECTURE'})),
-        ...(compilerResult.ir?validateCoreScriptCapabilitiesAgainstSandbox(sandbox,compilerResult.ir.requiredCapabilities??[]):[]).map(message=>({severity:'error' as const,message,code:'CHART_CAPABILITY_DENIED'})),
-      ];
-      const result:CoreSpiritOffThreadCompileResult={
-        ...compilerResult,
-        diagnostics:[...(compilerResult.diagnostics||[]),...policyDiagnostics],
-      };
-      const diagnostics=(result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`);
+      const compilerResult=await compileCoreSpiritSourceOffThread(source,generation,'chart-indicator',{layer:'script'});
+      if(generation!==compileGeneration||store.getSnapshot().source!==source){
+        publishCoreSpiritLifecycle({stage:'stale',scriptId:'chart-indicator',chartId,symbol:resolvedInstrumentKey,timeframe,message:'Compiler result belongs to a superseded editor source.'});
+        return false;
+      }
+      publishCoreSpiritLifecycle({stage:'validating-capabilities',scriptId:'chart-indicator',chartId,symbol:resolvedInstrumentKey,timeframe,artifactHash:compilerResult.artifact?.abi?.artifactHash,message:'Checking required capabilities against the chart sandbox.'});
+      const policyDiagnostics=validateCoreSpiritChartCapabilities(compilerResult.ir);
+      const result:CoreSpiritOffThreadCompileResult={...compilerResult,diagnostics:[...(compilerResult.diagnostics||[]),...policyDiagnostics]};
+      const diagnostics=(result.diagnostics||[]).map((d:any)=> (d.line?'Line '+d.line+': ':'')+(d.column?'Column '+d.column+': ':'')+d.message);
       const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error');
       lastValidated={source,result};
       store.setDiagnostics(diagnostics);
-      store.setStatus(errors.length||!result.artifact?'Compile failed':'Compiled');
-      return !errors.length&&Boolean(result.artifact);
+      const compiledOk=errors.length===0&&Boolean(result.artifact&&result.ir);
+      const capabilityDenied=(result.diagnostics||[]).some((d:any)=>d.code==='CHART_CAPABILITY_DENIED'||d.code==='CHART_SANDBOX_ARCHITECTURE');
+      const stage:CoreSpiritLifecycleStage=compiledOk?'compiled':capabilityDenied?'capability-denied':'compile-failed';
+      publishCoreSpiritLifecycle({stage,scriptId:'chart-indicator',chartId,symbol:resolvedInstrumentKey,timeframe,artifactHash:result.artifact?.abi?.artifactHash,message:compiledOk?'Compilation and chart capability validation passed.':'Compilation or chart capability validation failed.'});
+      store.setStatus(compiledOk?'Compiled · capability validation passed':capabilityDenied?'Capability denied':'Compile failed');
+      return compiledOk;
     }catch(error){
       if(generation!==compileGeneration)return false;
-      store.setDiagnostics([String((error as any)?.message||error)]);
+      const diagnostic=coreSpiritLifecycleDiagnostic(error,'compile-failed');
+      store.setDiagnostics([diagnostic.code+': '+diagnostic.message]);
       store.setStatus('Compile failed');
+      publishCoreSpiritLifecycle({stage:'compile-failed',scriptId:'chart-indicator',chartId,symbol:resolvedInstrumentKey,timeframe,diagnostics:[diagnostic],message:diagnostic.message});
       return false;
     }
   };
