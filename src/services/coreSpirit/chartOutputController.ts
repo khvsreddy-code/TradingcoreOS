@@ -378,7 +378,9 @@ export class CoreSpiritChartOutputController {
     this.chart.renderer.updateIndicator(this.overlayHandle, {
       kind: 'value',
       indicatorId: this.overlayHandle.id,
-      dirty: { from: 0, to: 0 },
+      // Clear spans all time coordinates, not an empty range; otherwise deleted
+      // drawings can remain as stale pixels until the user pans or resizes.
+      dirty: { from: 0, to: Number.MAX_SAFE_INTEGER },
       series: [],
       lines: [], boxes: [], labels: [], polylines: [], linefills: [],
       backgrounds: [], priceLines: [], tables: [], barColors: [],
