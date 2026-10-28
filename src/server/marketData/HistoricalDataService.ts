@@ -642,8 +642,7 @@ export class HistoricalDataService {
           autoFixer: {
             nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
             investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+            fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
           },
           historyCompleteness: {
             status: merged.length >= preferredTarget ? 'page-target-reached' : 'partial-page',
@@ -808,6 +807,7 @@ export class HistoricalDataService {
         autoFixer: {
           nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
           investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
         },
         fyers: {
           status: fyersRows.length ? fyersFailed ? 'partial-error' : 'ok' : fyersFailed ? 'error' : fetchFyersRecent ? 'empty' : 'unavailable',
@@ -1016,6 +1016,7 @@ export class HistoricalDataService {
                 autoFixer: {
                   nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
                   investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+                  fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
                 },
                 fyers: {
                   ...(isRecord(currentRecord.sourceStatus.fyers) ? currentRecord.sourceStatus.fyers : {}),
