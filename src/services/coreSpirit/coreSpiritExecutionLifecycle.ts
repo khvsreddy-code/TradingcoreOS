@@ -37,6 +37,22 @@ export type CoreSpiritLifecycleEvent = Readonly<{
   at: number;
 }>;
 
+export type CoreSpiritChartManagedValue = number | string | boolean;
+export type CoreSpiritChartManagedField = Readonly<{
+  key: string; title: string; type: string; value: CoreSpiritChartManagedValue; defval?: CoreSpiritChartManagedValue;
+  min?: number; max?: number; step?: number; options?: readonly string[]; group?: string; tooltip?: string;
+}>;
+export type CoreSpiritChartManagedIndicator = Readonly<{
+  id: string; name: string; source: string; visible: boolean; inputs: readonly CoreSpiritChartManagedField[]; props: readonly CoreSpiritChartManagedField[];
+}>;
+export type CoreSpiritChartManagerBridge = Readonly<{
+  list(): readonly CoreSpiritChartManagedIndicator[];
+  setVisible(id: string, visible: boolean): boolean;
+  setInput(id: string, key: string, value: CoreSpiritChartManagedValue): boolean;
+  setProp(id: string, key: string, value: CoreSpiritChartManagedValue): boolean;
+  remove(id: string): boolean;
+}>;
+
 export type CoreSpiritChartCompileDiagnostic = {
   severity: 'error' | 'warning' | 'info';
   message: string;
