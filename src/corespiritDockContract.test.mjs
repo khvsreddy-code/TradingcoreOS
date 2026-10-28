@@ -91,8 +91,9 @@ includes(smcBrowser, 'function decodePng(buffer)', 'the screenshot contract comp
 includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
-includes(smcBrowser, 'commitsBeforeReplay', 'SMC browser acceptance recompiles the identical script against the retained chart scene');
-includes(smcBrowser, 'Recompiling identical SMC source/data must not increase the number of retained drawing objects.', 'recompilation acceptance prevents drawing lifecycle duplication');
+includes(smcBrowser, 'recompileIdempotency', 'SMC browser acceptance recompiles the identical script against the active Vela scene');
+includes(smcBrowser, 'instanceCountAfter: recompileState.count', 'recompilation acceptance proves the active chart retains only one matching script instance');
+includes(smcBrowser, 'Recompiling the identical SMC source must leave exactly one attached CoreSpirit instance', 'recompilation acceptance prevents duplicate retained chart instances');
 includes(backendBenchmark, 'executeCoreSpiritSeriesFusionGroupDispatched', 'backend benchmark exercises the real series dispatcher instead of a stand-alone kernel alone');
 includes(backendBenchmark, 'short/gap WASM parity', 'backend acceptance tests missing values and short-history semantics');
 includes(backendBenchmark, 'synthetic test failure after partial write', 'backend acceptance proves staged accelerator failure cannot corrupt output');
@@ -114,11 +115,16 @@ const fatalDiagnosticGate = chartController.indexOf('if(fatalDiagnostic)throw ne
 const nativeSceneCommit = chartController.indexOf('output.scheduleObjects(');
 assert.ok(fatalDiagnosticGate >= 0 && nativeSceneCommit >= 0 && fatalDiagnosticGate < nativeSceneCommit,
   'fatal runtime diagnostics must be rejected before the native Vela output commit is attempted');
-includes(dock, 'await onAddToChart(cleanName, source, artifact)', 'Add to Chart reuses the executable artifact from the exact successful compile');
+includes(dock, 'await onAddToChart(cleanName, source, artifact, scriptId)', 'Add to Chart passes stable script identity alongside the successful compiled artifact');
 includes(dock, 'requestedVersion !== sourceVersion.current', 'a source edit during compilation blocks stale artifact application');
 includes(live, 'stageCoreSpiritPrecompiledArtifact(scriptSource, artifact)', 'the active chart bridge stages the compiled artifact with exact source identity');
-includes(live, '__TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>', 'the chart bridge carries the compiled artifact end to end');
-includes(chrome, 'await addToChart(scriptName, scriptSource, artifact)', 'the embedded dock does not drop the compiled artifact at its bridge');
+includes(live, '__TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>', 'the chart bridge carries the compiled artifact and stable script identity end to end');
+includes(live, 'const externalInstanceId = instancePrefix + stableHash(scriptSource)', 'the chart instance id is stable for the same script identity and source');
+includes(live, 'const sameSourceInstance = activeCell.instances.find', 'same-source recompilation is an idempotent no-op rather than a duplicate Vela instance');
+includes(live, 'activeCell.removeFromChart(nativeCount + staleIndex)', 'a changed source replaces stale script instances only after the replacement is ready');
+assert.ok(live.indexOf('await new Promise<void>') < live.indexOf('for (const previousId of previousInstanceIds)'),
+  'the previous valid CoreSpirit instance must stay attached until the replacement emits ready');
+includes(chrome, 'await addToChart(scriptName, scriptSource, artifact, scriptId)', 'the embedded dock forwards script identity with the compiled artifact');
 includes(engine, 'consumeCoreSpiritPrecompiledArtifact(source)', 'Vela consumes the source-matched artifact before fallback compilation');
 includes(engine, 'validateCoreScriptCapabilitiesAgainstSandbox(', 'precompiled artifacts pass the same chart capability sandbox');
 includes(engine, 'await loadOrCompileCoreSpiritArtifact(source, instanceId', 'a handoff miss safely falls back to the normal compile path');
