@@ -553,6 +553,7 @@ registerRendererLayer({
             !Number.isSafeInteger(data.datasetRevision) ||
             !Number.isSafeInteger(data.outputRevision) ||
             !Number.isSafeInteger(data.revision) ||
+            !data.paneId.trim() ||
             data.visible !== true) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           return;
