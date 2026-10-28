@@ -501,6 +501,7 @@ export function projectCoreSpiritObjectsToVela(
   const customObjects: CoreSpiritObject[] = [];
 
   for (const object of objects) {
+    if (!isCoreSpiritChartTargetObject(object) || !isCoreSpiritVisualVisibleObject(object)) continue;
     const raw = object as unknown as Record<string, any>;
     const metadata = record(object.metadata);
     const abi = record(metadata.coreSpiritVisualAbi);
