@@ -202,7 +202,7 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
         volume < 0 || high < low || high < Math.max(open, close) || low > Math.min(open, close)) continue;
     const bar: StoredBar = { timestamp: new Date(timestampMs).toISOString(), timestampMs, open, high, low, close, volume, source };
     const old = byTime.get(timestampMs);
-    if (!old || sourcePriority(source) >= sourcePriority(old.source)) byTime.set(timestampMs, bar);
+    if (!old || historicalSourcePriority(source) >= historicalSourcePriority(old.source)) byTime.set(timestampMs, bar);
   }
   return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 }
@@ -210,14 +210,14 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
 export function normalizeHistoricalCandles(rows: unknown[], source: 'fyers' | 'tvdatafeed'): StoredBar[] {
   return normalizeRows(rows, source);
 }
-function sourcePriority(source: StoredBar['source']): number {
+export function historicalSourcePriority(source: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed'): number {
   switch (source) { case 'nse': return 4; case 'investiny': return 3; case 'fyers': return 2; case 'tvdatafeed': return 1; default: return 0; }
 }
 function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
   const byTime = new Map<number, StoredBar>();
   for (const bar of [...existing, ...incoming]) {
     const old = byTime.get(bar.timestampMs);
-    if (!old || sourcePriority(bar.source) >= sourcePriority(old.source)) byTime.set(bar.timestampMs, bar);
+    if (!old || historicalSourcePriority(bar.source) >= historicalSourcePriority(old.source)) byTime.set(bar.timestampMs, bar);
   }
   return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 }
@@ -843,7 +843,7 @@ export class HistoricalDataService {
       const byTime = new Map<number, StoredBar>();
       for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars]) {
         const old = byTime.get(bar.timestampMs);
-        if (!old || sourcePriority(bar.source) >= sourcePriority(old.source)) {
+        if (!old || historicalSourcePriority(bar.source) >= historicalSourcePriority(old.source)) {
           byTime.set(bar.timestampMs, bar);
         }
       }
@@ -980,7 +980,7 @@ export class HistoricalDataService {
               const mergedOlder = new Map<number, StoredBar>();
               for (const bar of [...older, ...pageBars]) {
                 const existing = mergedOlder.get(bar.timestampMs);
-                if (!existing || sourcePriority(bar.source) >= sourcePriority(existing.source)) mergedOlder.set(bar.timestampMs, bar);
+                if (!existing || historicalSourcePriority(bar.source) >= historicalSourcePriority(existing.source)) mergedOlder.set(bar.timestampMs, bar);
               }
               older = [...mergedOlder.values()].sort((a, b) => a.timestampMs - b.timestampMs);
               paginationStatus = pageBars.length ? pageSource + '-page-fetched' : 'no-validated-bars-in-page';
@@ -999,7 +999,7 @@ export class HistoricalDataService {
               const allBars = new Map<number, StoredBar>();
               for (const bar of [...currentRecord.bars, ...pageBars]) {
                 const existing = allBars.get(bar.timestampMs);
-                if (!existing || sourcePriority(bar.source) >= sourcePriority(existing.source)) allBars.set(bar.timestampMs, bar);
+                if (!existing || historicalSourcePriority(bar.source) >= historicalSourcePriority(existing.source)) allBars.set(bar.timestampMs, bar);
               }
               const combined = [...allBars.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
               const sourceStatus = {
