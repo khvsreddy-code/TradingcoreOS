@@ -285,8 +285,17 @@ export class CoreSpiritChartOutputController {
       object.kind === 'customVisual' ||
       (object.kind === 'zone' && object.domain === 'viewport')
     ) || timestamps.length === 0;
-    const from = hasUnboundedGeometry ? 0 : Math.min(...timestamps);
-    const to = hasUnboundedGeometry ? Number.MAX_SAFE_INTEGER : Math.max(...timestamps) + 1;
+    // Avoid spreading large drawing collections into Math.min/max arguments. A
+    // high-cardinality SMC scene should not hit the engine's argument-count limit
+    // just to determine the dirty envelope for a patch.
+    let minTime = Number.POSITIVE_INFINITY;
+    let maxTime = Number.NEGATIVE_INFINITY;
+    for (const timestamp of timestamps) {
+      if (timestamp < minTime) minTime = timestamp;
+      if (timestamp > maxTime) maxTime = timestamp;
+    }
+    const from = hasUnboundedGeometry ? 0 : minTime;
+    const to = hasUnboundedGeometry ? Number.MAX_SAFE_INTEGER : maxTime + 1;
     const previous = this.nativeDrawingCollections;
     const deltas: CollectionValueDelta[] = [];
     if (revisioned && previous) {
