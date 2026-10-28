@@ -36,14 +36,14 @@ TCO_BROWSER_URL=http://localhost:5173/live npm run verify:corespirit:smc:browser
 For an authenticated workspace, set `TCO_REQUIRE_AUTH=true` and use an existing logged-in `agent-browser` session. The browser test writes the bundled SMC source to the browser's existing local editor-draft keys, opens the CoreSpirit dock, clicks **Compile & Run**, and fails unless all of the following occur:
 
 1. the active Vela chart accepts the runnable indicator;
-2. the post-commit native scene contains visible chart-target drawing objects;
-3. the CoreSpirit layer paint probe observes non-transparent pixels from its own canvas;
-4. the drawing layer paints pixels again after a wheel zoom and horizontal drag;
-5. the source written by the actual Compile & Run path is restored exactly after a page reload.
+2. the post-commit native scene contains chart-target drawing objects such as lines, zones, boxes or labels;
+3. the screenshot of the actual Vela plot differs from the pre-compile screenshot by a minimum number of pixels inside the chart-plot region;
+4. a second screenshot comparison proves the plot changed after a wheel zoom and horizontal drag;
+5. the source saved by the actual Compile & Run path is restored exactly after a page reload.
 
-The paint probe is opt-in and one-shot. It uses `getImageData` only after the browser acceptance runner enables the flag, and it disables itself when it records non-transparent pixels. Production chart frames do not read back canvas pixels.
+The screenshot comparator reads the browser-produced PNG files, decodes RGB/RGBA pixels, and compares only the overlap of the largest visible Vela chart canvas region. The pass threshold is deliberately a *change detector*, not a similarity score: it confirms that the native drawing commit affected pixels and that viewport gestures caused a plot update. It does not assert that the drawing is semantically correct at every coordinate by itself; that is covered by the separate fixed-history fixtures.
 
-This is a rendered-pixel smoke gate, not a screenshot-diff suite. It does not yet provide baseline image comparisons for every viewport size, pane, color scheme or instrument.
+This is a rendered-pixel smoke gate, not yet a baseline screenshot-diff suite. There are no stored golden images, and it does not yet provide expected-image comparisons for every viewport size, pane, color scheme or instrument.
 
 ## Performance baseline
 
@@ -70,7 +70,7 @@ Compare reports only on the same machine/runtime with the same workload, setting
 
 ## Commit and runtime safety gates
 
-The native visual commit signal is emitted only after `applyObjects` and the visual ABI store commit succeed. The browser test distinguishes that event from a rendered-pixel event, and it also checks that fatal structured runtime diagnostics are rejected before a replacement scene is applied. A failed replacement must leave the previous valid scene intact.
+The native visual commit signal is emitted only after `applyObjects` and the visual ABI store commit succeed. The browser test requires both that scene commit and a change in real Vela plot screenshot pixels, and it also checks that fatal structured runtime diagnostics are rejected before a replacement scene is applied. A failed replacement must leave the previous valid scene intact.
 
 The canonical market-data plane remains the source of truth. The acceptance work does not add an independent OHLCV history store: deterministic test fixtures are owned by tests and benchmark tools, not by the live runtime. Stateful kernels use bounded runtime state and confirmed-bar snapshots; append/forming-bar execution must still match a clean replay of the same final bar. Historical corrections, script changes, model changes, input changes and secondary data revisions must be measured separately because not all of them can safely use the same incremental range.
 
