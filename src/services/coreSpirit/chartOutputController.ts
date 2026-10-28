@@ -133,18 +133,26 @@ export class CoreSpiritChartOutputController {
    * the correctness fallback for genuine historical rewrites.
    */
   private applyPlotPoints(series: ISeriesApi<'Line'>, points: readonly { time: number; value: number | null }[]): void {
-    if (!points.length) return;
     const valid = (point: { time: number; value: number | null }): boolean =>
       Number.isFinite(point.time) && (point.value == null || Number.isFinite(point.value));
 
     const current = series instanceof VelaNativeSeriesKernel ? series.snapshotPoints() : [];
+    // An empty series is a real output state (e.g. a lookback has not warmed up
+    // after a symbol/timeframe change). Leaving the previous data in place makes
+    // an indicator look valid while its current computation emitted no points.
+    if (!points.length) {
+      if (current.length) series.setData([]);
+      return;
+    }
     if (!current.length) {
       const initial = points.filter(valid).map((p) =>
         p.value == null
           ? ({ time: p.time as Time } as any)
           : ({ time: p.time as Time, value: p.value } as any),
       );
-      if (initial.length) series.setData(initial as any);
+      // Commit even an empty filtered result so malformed/NaN-only snapshots
+      // cannot leave stale chart pixels behind.
+      series.setData(initial as any);
       return;
     }
 
@@ -171,6 +179,8 @@ export class CoreSpiritChartOutputController {
         ? ({ time: p.time as Time } as any)
         : ({ time: p.time as Time, value: p.value } as any),
     );
+    // Full replacement is also the recovery path for a snapshot whose points
+    // all became invalid; an empty result must clear, not preserve, old data.
     series.setData(replacement as any);
   }
 
