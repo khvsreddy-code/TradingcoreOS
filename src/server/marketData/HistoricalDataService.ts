@@ -235,7 +235,7 @@ async function fetchProviderBars(
 ): Promise<ProviderBarsAttempt> {
   const resource = mapping.instrumentId + ':' + timeframe;
   if (!fetcher) return { bars: [], status: { status: 'not-configured' } };
-  if (!marketDataAutoFixer.canAttempt(source, 'history', resource)) {
+  if (!(await marketDataAutoFixer.canAttempt(source, 'history', resource))) {
     return { bars: [], status: { status: 'circuit-open', health: marketDataAutoFixer.snapshot(source, 'history', resource)[0] || null } };
   }
   try {
@@ -243,12 +243,12 @@ async function fetchProviderBars(
     if (!Array.isArray(raw)) throw Object.assign(new Error(source + ' returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
     const bars = normalizeRows(raw, source).filter(bar => bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs);
     if (!bars.length) throw Object.assign(new Error(source + ' returned no validated candles'), { code: 'EMPTY_VALIDATED_HISTORY' });
-    const health = marketDataAutoFixer.recordSuccess(source, 'history', resource);
+    const health = await marketDataAutoFixer.recordSuccess(source, 'history', resource);
     return { bars, status: { status: 'ok', rawCount: raw.length, validatedCount: bars.length, health } };
   } catch (error) {
     const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
     if (value.code === 'INVESTINY_SYMBOL_UNMAPPED') return { bars: [], status: { status: 'unmapped', error: errorText(error) } };
-    const health = marketDataAutoFixer.recordFailure(source, 'history', resource, error);
+    const health = await marketDataAutoFixer.recordFailure(source, 'history', resource, error);
     return { bars: [], status: { status: 'error', error: errorText(error), health } };
   }
 }
