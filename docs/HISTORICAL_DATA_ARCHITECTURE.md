@@ -1,33 +1,30 @@
-# Historical data source policy
+# Historical market-data architecture
 
-TradingCoreOS has one historical data coordinator. The browser, Vela, CoreSpirit indicator execution, replay and research must consume its normalized candle timeline rather than independently fetching data.
+TradingCoreOS uses one canonical historical coordinator. Vela, CoreSpirit, replay, analytics and research consume the same normalized candle timeline; provider adapters do not publish to separate chart stores.
 
-## Request flow
+## Source routing
 
-1. Resolve an instrument only through an exact FYERS-symbol or canonical instrument-ID mapping. The mapping includes the TradingView symbol/exchange, instrument type, expiry/contract identity, exchange timezone/session, holiday calendar and adjustment policy. Display-name or fuzzy symbol matching is not allowed.
-2. Read the server cache first. A fresh cache response returns quickly; stale data can be retained if both sources temporarily fail.
-3. Request a session-aware recent window from FYERS. The service selects the newest three observed trading-session dates in the mapped timezone, not a rolling 72-hour span. Mark the exchange calendar complete only when the holiday list is actually maintained; otherwise the service uses a ten-calendar-day request safety window and filters to the newest three observed sessions.
-4. Ask the protected Python service for up to 5,000 tvdatafeed candidates when an exact mapping and service credentials exist. The fetcher interface provides no arbitrary historical end timestamp, so this is a bounded latest-window source—not an unlimited backward pager.
-5. Validate OHLC geometry and volumes, deduplicate on normalized candle timestamp, remove TV rows from recent sessions supplied by FYERS, merge and sort, then cap the returned dataset at 5,000 bars total. The limit includes recent FYERS bars.
-6. Return columnar data with a monotonic revision and source-health metadata. A quote is an independent snapshot object, never a synthetic candle. Empty history remains empty so chart/replay/model warm-up can show an error instead of training on a quote.
+1. **Authorized NSE adapter (primary).** Configure \`NSE_MARKET_DATA_SERVICE_URL\` and \`NSE_MARKET_DATA_SERVICE_TOKEN\` for a private gateway backed by an NSE subscription or authorized data vendor. The adapter contract is \`POST /v1/history\`, bearer-authenticated, with \`instrument_id\`, \`symbol\`, \`timeframe\`, \`from_ms\`, \`to_ms\`, \`max_bars\`, \`timezone\`, and \`session_open\`. It returns a \`bars\` array of normalized OHLCV rows. No NSE endpoint or credentials are bundled; routing is inactive until configured. Do not scrape NSE's public website, spoof clients, or rotate proxies to evade access controls.
+2. **Investiny (historical-only backup).** Set \`INVESTINY_ENABLED=true\`, configure its private service URL/token, and provide exact verified numeric IDs in server-only \`INVESTINY_SYMBOL_MAP\`. No fuzzy resolution or \`search_assets\` lookup is done on demand. The package is unofficial, last published in 2022, and can fail or change; only use it where terms and data-use rights permit your intended use. It is not a live stream.
+3. **FYERS broker fallback.** If NSE is unavailable, F&O/options skip Investiny and use the existing authenticated FYERS adapter and central plan-aware quota gate. Option-chain requests remain on the existing FYERS route. Other instrument types retain the quota-aware FYERS history fallback if preferred sources fail.
+4. **Legacy tvdatafeed fallback.** Existing exact mappings remain usable only when derivative contract identity and adjustment policy are compatible.
 
-## Server configuration
+## Automatic recovery
 
-Apply migration 20261019070000_historical_data_sources_and_cache.sql through the project's normal migration/deployment workflow. That migration creates server-only instrument mappings and a revisioned durable dataset cache, with RLS enabled and table privileges revoked from browser roles.
+\`MarketDataAutoFixer\` is a bounded runtime circuit breaker keyed by source, capability, instrument and timeframe. It opens after a failed/empty/invalid response, suppresses retries during cooldown, permits a single half-open probe and automatically restores NSE following a validated response. Authentication/configuration errors use a longer cooldown; HTTP 429 honors \`Retry-After\` and a minimum wait; transport failures use capped exponential backoff. It does not rewrite application code. Source-code repairs should go through tests, review and CI.
 
-Deploy historical-data-service as a private service. Set TVDATAFEED_SERVICE_URL and the same high-entropy TVDATAFEED_SERVICE_TOKEN on the TradingCoreOS server and the Python service. TVDATAFEED_USERNAME and TVDATAFEED_PASSWORD are optional server-only credentials inside the Python service. Do not put any of these under a VITE_ variable.
+## Cache, validation and precedence
 
-Populate historical_instrument_mappings with verified exact pairs, or use the server-only TVDATAFEED_SYMBOL_MAP JSON environment variable. The environment variable is useful for initial rollout, while Supabase mappings are the durable operator-managed catalog. Do not populate derivatives by underlying name alone: a specific-expiry FYERS contract and a continuous/other TradingView future require different instrument identities and must not be merged unless their exact contract identity and adjustment policy match. Configure fyers_adjustment_policy and tv_adjustment_policy separately; the coordinator declines to merge feeds when those policies differ because it does not silently rewrite split/dividend or continuous-futures adjustments.
+- Resolve instruments through exact mappings, including instrument type, expiry/contract identity, timezone, session, holiday calendar and adjustment policy.
+- The server cache is read before fetching; the existing in-flight promise map deduplicates identical history refreshes within one server process.
+- Overlapping candle precedence is NSE, FYERS, Investiny, then tvdatafeed. A new correction from the same source supersedes that source's cached row.
+- Validate timestamp, OHLC geometry, duplicate candles and volume before acceptance. Keep source provenance on each candle.
+- Keep event time distinct from receive time. A quote snapshot with no valid trade timestamp must never become a synthetic candle.
+- Keep one canonical path: historical service -> chart data plane/revision fences -> Vela/CoreSpirit. Corrections/backfills must invalidate the correct dirty range.
 
-## Bounded paging
+## Limits and failure policy
 
-The merged server dataset is capped at 5,000 total bars. The endpoint can return a page older than a supplied timestamp only when those rows exist in its cached merged window. It reports historyExhausted when no older cached bars exist and explicitly sets paginationSupported=false. Do not describe the current tvdatafeed integration as unlimited history paging.
-
-10-minute bars are aggregated from tvdatafeed's 5-minute series because the upstream library does not document a native 10-minute interval. This may produce fewer than 5,000 output bars. All timestamps are returned as UTC ISO timestamps for row transport or epoch milliseconds for column transport.
-
-## Failure semantics
-
-- FYERS recent history fails, tvdatafeed works: return the validated tvdatafeed window, mark it degraded and preserve the source error in metadata.
-- tvdatafeed fails, FYERS works: return the recent FYERS session bars, mark the older portion unavailable/degraded when the TV source was configured for that mapping.
-- Both sources fail with a stale cache: return stale validated bars and mark stale/degraded.
-- Both sources fail without a cache: return an error and an optional separate quote snapshot; never convert that quote into an OHLCV bar.
+- Canonical historical datasets cap at 5,000 bars. Each chart request is currently capped at 2,000 bars; the existing FYERS page loop retains its bounded page budget and quota gate.
+- Investiny's documented interval and historical-depth limitations are based on old documentation. Empty, 403 or malformed responses trigger fallback; never loop or rotate network identity to get around restrictions.
+- NSE real-time feeds, snapshot files and historical data are distinct products/protocols. This change wires a historical gateway contract, not NSE multicast/SFTP decoding. Investiny must never be used for live ticks.
+- The existing FYERS WebSocket remains the live-data transport in this change. FYERS REST requests stay behind \`FyersApiClient\` and shared request admission. Never bypass entitlement checks or treat stale prices as trading truth.
