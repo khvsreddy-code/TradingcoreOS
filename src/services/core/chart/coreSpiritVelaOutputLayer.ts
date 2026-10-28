@@ -3,6 +3,7 @@ import { CORE_SPIRIT_VISUAL_ABI_VERSION, CORE_SPIRIT_VELA_COORDINATE_SYSTEM } fr
 import { registerRendererLayer, type RendererLayerArgs } from '../../../../vendor/vela/src/renderers/native/layers';
 
 export const CORE_SPIRIT_VELA_OUTPUT_LAYER_ID = 'tco-corespirit-output';
+export const CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID = 'tco-corespirit-output-underlay';
 
 export type CoreSpiritVelaOutputLayerData = Readonly<{
   /** Legacy frame revision retained for Vela's layer contract. */
@@ -13,6 +14,7 @@ export type CoreSpiritVelaOutputLayerData = Readonly<{
   outputRevision: number;
   coordinateSystem: typeof CORE_SPIRIT_VELA_COORDINATE_SYSTEM;
   paneId: string;
+  layerRole: 'underlay' | 'overlay';
   visible: boolean;
   drawings: readonly CoreSpiritObject[];
   visuals: readonly CoreSpiritObject[];
@@ -510,15 +512,23 @@ export function paintCoreSpiritVelaOutputLayer(
   ctx.clip();
 
   const allVisuals = [...data.drawings, ...data.visuals] as readonly Record<string, any>[];
-  // Paint range tints and bands first. Detailed geometry and text then sit above
-  // them, which makes overlays legible without letting a fill cover labels.
-  for (const obj of allVisuals) {
-    if (obj.kind === 'background' || obj.kind === 'barcolor') drawBarTint(ctx, args, obj);
+  if (data.layerRole === 'underlay') {
+    // Range fills live below the data canvas; candles and native price lines keep
+    // their natural contrast instead of being covered by a same-z overlay canvas.
+    for (const obj of allVisuals) {
+      if (obj.kind === 'background' || obj.kind === 'barcolor') drawBarTint(ctx, args, obj);
+      else if (obj.kind === 'zone' && obj.domain === 'viewport') drawRect(ctx, args, obj);
+    }
+    drawBands(ctx, args, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
+    ctx.restore();
+    return;
   }
-  drawBands(ctx, args, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
 
+  // The overlay layer contains only detailed objects that belong above the data
+  // canvas: footprint/market structure geometry and custom authored primitives.
   for (const obj of allVisuals) {
-    if (obj.kind === 'background' || obj.kind === 'barcolor' || obj.kind === 'band') continue;
+    if (obj.kind === 'background' || obj.kind === 'barcolor' || obj.kind === 'band' ||
+        (obj.kind === 'zone' && obj.domain === 'viewport')) continue;
     if (obj.kind === 'line') continue; // ordinary lines are Vela-native drawing collections
     if (obj.kind === 'zone' || obj.kind === 'box') drawRect(ctx, args, obj);
     else if (obj.kind === 'arrow') drawArrow(ctx, args, obj);
@@ -533,33 +543,43 @@ export function paintCoreSpiritVelaOutputLayer(
   ctx.restore();
 }
 
-registerRendererLayer({
-  id: CORE_SPIRIT_VELA_OUTPUT_LAYER_ID,
-  placement: 'above-data',
-  create() {
-    let canvas: HTMLCanvasElement | undefined;
-    return {
-      mount(nextCanvas: HTMLCanvasElement) { canvas = nextCanvas; },
-      render(args: RendererLayerArgs) {
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const data = args.data as CoreSpiritVelaOutputLayerData | undefined;
-        if (!data ||
-            data.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
-            data.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
-            !data.scriptInstanceId ||
-            !Number.isSafeInteger(data.datasetRevision) ||
-            !Number.isSafeInteger(data.outputRevision) ||
-            !Number.isSafeInteger(data.revision) ||
-            !data.paneId.trim() ||
-            data.visible !== true) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          return;
-        }
-        paintCoreSpiritVelaOutputLayer(ctx, args, data);
-      },
-      destroy() { canvas = undefined; },
-    };
-  },
-});
+function registerCoreSpiritVelaOutputLayer(
+  id: string,
+  placement: 'below-data' | 'above-data',
+  layerRole: 'underlay' | 'overlay',
+): void {
+  registerRendererLayer({
+    id,
+    placement,
+    create() {
+      let canvas: HTMLCanvasElement | undefined;
+      return {
+        mount(nextCanvas: HTMLCanvasElement) { canvas = nextCanvas; },
+        render(args: RendererLayerArgs) {
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          const data = args.data as CoreSpiritVelaOutputLayerData | undefined;
+          if (!data ||
+              data.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
+              data.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
+              !data.scriptInstanceId ||
+              !Number.isSafeInteger(data.datasetRevision) ||
+              !Number.isSafeInteger(data.outputRevision) ||
+              !Number.isSafeInteger(data.revision) ||
+              !data.paneId.trim() ||
+              data.layerRole !== layerRole ||
+              data.visible !== true) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            return;
+          }
+          paintCoreSpiritVelaOutputLayer(ctx, args, data);
+        },
+        destroy() { canvas = undefined; },
+      };
+    },
+  });
+}
+
+registerCoreSpiritVelaOutputLayer(CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, 'above-data', 'overlay');
+registerCoreSpiritVelaOutputLayer(CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID, 'below-data', 'underlay');
