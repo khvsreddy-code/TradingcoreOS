@@ -14,6 +14,9 @@ import {
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
 import { createGraphResolver, graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
+import { structureCoreSpiritRuntimeDiagnostics } from './runtimeDiagnostics';
+import type { CoreSpiritExecutionDiagnostic } from './runtimeDiagnostics';
+export type { CoreSpiritExecutionDiagnostic } from './runtimeDiagnostics';
 
 export type CoreSpiritWorkerRuntimeOptions = Pick<CoreSpiritRuntimeOptions,
   'symbol'|'timeframe'|'executionMode'|'layer'|'executionTarget'|'executionTier'|'inputValues'|'propValues'|'visibleRange'|'suppressExternalEffects'|'modelTrainingMode'>;
@@ -51,14 +54,6 @@ function cloneGraphSnapshot(snapshot:CoreSpiritGraphSnapshot):CoreSpiritGraphSna
   };
 }
 
-export type CoreSpiritExecutionDiagnostic = Readonly<{
-  severity: 'error' | 'warning';
-  code: string;
-  message: string;
-  barIndex?: number;
-  outputKind?: string;
-}>;
-
 export type CoreSpiritWorkerRunResult = {
   outputs: CoreSpiritObject[];
   /** Backward-compatible message list for existing UI consumers. */
@@ -67,41 +62,6 @@ export type CoreSpiritWorkerRunResult = {
   diagnosticDetails?: CoreSpiritExecutionDiagnostic[];
   state?: unknown;
 };
-
-/**
- * Runtime currently exposes legacy diagnostic strings at its public VM boundary.
- * Convert only the known exception-origin prefixes into stable codes; unknown
- * messages fail closed instead of guessing severity from words in their prose.
- */
-function structureRuntimeDiagnostics(messages: readonly string[]): CoreSpiritExecutionDiagnostic[] {
-  return messages.map((raw): CoreSpiritExecutionDiagnostic => {
-    const message = String(raw);
-    const barError = message.match(/^bar (\d+):\s*(.*)$/s);
-    if (barError) {
-      return Object.freeze({
-        severity: 'error',
-        code: 'RUNTIME_BAR_EXECUTION',
-        barIndex: Number(barError[1]),
-        message: barError[2] || 'Runtime bar execution failed.',
-      });
-    }
-    const outputError = message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\d+):\s*(.*)$/s);
-    if (outputError) {
-      return Object.freeze({
-        severity: 'error',
-        code: 'RUNTIME_OUTPUT_VALIDATION',
-        outputKind: outputError[1],
-        barIndex: Number(outputError[2]),
-        message: outputError[3] || 'Runtime output validation failed.',
-      });
-    }
-    return Object.freeze({
-      severity: 'error',
-      code: 'RUNTIME_DIAGNOSTIC_UNCLASSIFIED',
-      message,
-    });
-  });
-}
 
 type DirtyRange = { from:number; to:number };
 const MAX_QUEUED_WORKER_JOBS = 64;
@@ -170,7 +130,7 @@ function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
   return {
     outputs: requireCoreSpiritOutputs([...(Array.isArray(value.outputs) ? value.outputs : []), ...sharedOutputs]),
     diagnostics,
-    diagnosticDetails: structureRuntimeDiagnostics(diagnostics),
+    diagnosticDetails: structureCoreSpiritRuntimeDiagnostics(diagnostics),
     state: value.state,
   };
 }
@@ -590,7 +550,7 @@ export class CoreSpiritWorkerPool {
     return {
       outputs:result.outputs,
       diagnostics:result.diagnostics,
-      diagnosticDetails:structureRuntimeDiagnostics(result.diagnostics),
+      diagnosticDetails:structureCoreSpiritRuntimeDiagnostics(result.diagnostics),
       state:result.state,
     };
   }
