@@ -76,6 +76,9 @@ includes(visualLayer, '__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__', 'pixel readback is
 includes(smcBrowser, 'tco:corespirit:visual-paint', 'browser acceptance waits for renderer paint evidence, not just scene commit');
 includes(smcBrowser, 'nonTransparentPixels', 'browser acceptance requires non-transparent pixels from the CoreSpirit render layer');
 includes(smcBrowser, 'sourceDraftRestoredAfterReload', 'browser acceptance checks exact local source-draft restoration after reload');
+includes(smcBrowser, 'zoomWheelDelta', 'SMC renderer acceptance exercises Vela zoom interactions');
+includes(smcBrowser, 'horizontalPanPixels', 'SMC renderer acceptance exercises Vela pan interactions');
+includes(smcBrowser, 'rendererPaintAfterGesture', 'SMC drawing paint evidence is required again after viewport gestures');
 includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
