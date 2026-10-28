@@ -2,7 +2,15 @@ import { IChartApi, ISeriesApi, VelaNativeSeriesKernel, LineSeries, Time, create
 import { CoreSpiritOutputFrame } from './outputDispatcher';
 import { CoreSpiritObject } from './types';
 import { CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, type CoreSpiritVelaOutputLayerData } from '../core/chart/coreSpiritVelaOutputLayer';
-import { CoreSpiritVelaOutputRevisionGate, type CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
+import type { CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
+import {
+  CoreSpiritVisualAbiStore,
+  createCoreSpiritVisualSnapshot,
+  createCoreSpiritVisualPatch,
+  isCoreSpiritCustomLayerObject,
+  normalizeCoreSpiritVisualObjects,
+  projectCoreSpiritObjectsToVela,
+} from '../core/chart/coreSpiritVisualAbi';
 
 /**
  * Thin CoreSpirit → Vela adapter.
@@ -16,13 +24,15 @@ let coreSpiritOutputControllerSerial = 0;
 
 export class CoreSpiritChartOutputController {
   private plotSeries = new Map<string, ISeriesApi<'Line'>>();
-  private lineSeries = new Map<string, ISeriesApi<'Line'>>();
   private markerPlugin: any = null;
   private candle?: ISeriesApi<'Candlestick'>;
   private lastFrame?: CoreSpiritOutputFrame;
   private committedObjects: readonly CoreSpiritObject[] = [];
   private disposed = false;
-  private readonly outputRevisionGate = new CoreSpiritVelaOutputRevisionGate();
+  private readonly visualAbiStore = new CoreSpiritVisualAbiStore();
+  private latestStreamId?: string;
+  private latestDatasetRevision = 0;
+  private latestOutputRevision = 0;
   private readonly overlayChannel = `tco-corespirit-output:${++coreSpiritOutputControllerSerial}`;
   private overlayHandle: { readonly id: string };
   private renderRevision = 0;
@@ -52,19 +62,26 @@ export class CoreSpiritChartOutputController {
 
   reset(): void {
     for (const series of this.plotSeries.values()) this.remove(series);
-    for (const series of this.lineSeries.values()) this.remove(series);
     this.plotSeries.clear();
-    this.lineSeries.clear();
     try { this.markerPlugin?.setMarkers?.([]); this.markerPlugin?.detach?.(); } catch {}
     this.markerPlugin = null;
     this.lastFrame = undefined;
     this.committedObjects = [];
+    this.visualAbiStore.clearObjects(this.latestStreamId);
+    this.clearNativeDrawingCollections();
     this.chart.renderer.setNativeData(this.overlayChannel, undefined);
   }
 
-  applyFrame(frame: CoreSpiritOutputFrame): void {
-    const previousFrame = this.lastFrame;
+  applyFrame(frame: CoreSpiritOutputFrame, revision?: CoreSpiritVelaOutputRevision): void {
     this.lastFrame = frame;
+    const activeRevision: CoreSpiritVelaOutputRevision = revision ?? {
+      streamId: this.latestStreamId ?? this.overlayChannel,
+      datasetRevision: this.latestDatasetRevision,
+      outputRevision: ++this.renderRevision,
+    };
+    this.latestStreamId = activeRevision.streamId;
+    this.latestDatasetRevision = activeRevision.datasetRevision;
+    this.latestOutputRevision = activeRevision.outputRevision;
     const seenPlots = new Set<string>();
     for (const [id, points] of frame.plots) {
       seenPlots.add(id);
@@ -100,30 +117,9 @@ export class CoreSpiritChartOutputController {
       this.markerPlugin?.setMarkers?.(markers as any);
     } catch (error) { console.warn('[CoreSpirit] marker render skipped', error); }
 
-    const seenLines = new Set<string>();
-    for (const drawing of frame.drawings as any[]) {
-      if (drawing.kind !== 'line') continue;
-      const id = drawing.id || `${drawing.kind}:${JSON.stringify(drawing)}`;
-      seenLines.add(id);
-      let series = this.lineSeries.get(id);
-      if (!series) {
-        series = this.chart.addSeries(LineSeries, {
-          lineWidth: Math.max(1, Math.min(6, Number(drawing.style?.lineWidth || 1))) as any,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          color: drawing.style?.color || '#f59e0b',
-          lineStyle: Number(drawing.style?.lineStyle || 0) as any,
-        });
-        this.lineSeries.set(id, series);
-      }
-      const nextLine = [{ time: drawing.start.time as Time, value: drawing.start.price }, { time: drawing.end.time as Time, value: drawing.end.price }] as any[];
-      const previousDrawing = (previousFrame?.drawings as any[] | undefined)?.find((candidate) => candidate.id === id);
-      const previousLine = previousDrawing ? [{ time: previousDrawing.start.time as Time, value: previousDrawing.start.price }, { time: previousDrawing.end.time as Time, value: previousDrawing.end.price }] : [];
-      this.patchSeriesValues(series, previousLine, nextLine);
-
-    }
-    for (const [id, series] of this.lineSeries) if (!seenLines.has(id)) { this.remove(series); this.lineSeries.delete(id); }
-
+    // Standard lines/boxes/labels are committed through Vela's retained drawing
+    // collections below; the SDK renderer owns their transforms, clipping and style.
+    this.publishNativeDrawingCollections(frame, activeRevision);
     this.publishVelaOutputLayer(frame);
   }
 
@@ -184,36 +180,109 @@ export class CoreSpiritChartOutputController {
     series.setData(replacement as any);
   }
 
-  private publishVelaOutputLayer(frame: CoreSpiritOutputFrame): void {
-    const drawings = (frame.drawings || []).filter(item => item.kind !== 'line');
+  private publishNativeDrawingCollections(
+    frame: CoreSpiritOutputFrame,
+    revision: CoreSpiritVelaOutputRevision,
+  ): void {
+    const objects = [
+      ...(frame.drawings || []),
+      ...(frame.visuals || []),
+      ...(frame.labels || []),
+      ...(frame.tables || []),
+    ];
+    const projected = projectCoreSpiritObjectsToVela(objects, 'price');
+    // Replacing the Vela collection arrays is a full collection snapshot. Vela's
+    // own scene patch path now manages object lifetime and redraw invalidation.
+    const timestamps = objects.flatMap(object => {
+      const item = object as unknown as Record<string, any>;
+      const values: unknown[] = [];
+      if (item.time != null) values.push(item.time);
+      if (item.start?.time != null) values.push(item.start.time);
+      if (item.end?.time != null) values.push(item.end.time);
+      if (item.left != null && item.domain !== 'viewport') values.push(item.left);
+      if (item.right != null && item.domain !== 'viewport') values.push(item.right);
+      for (const point of Array.isArray(item.points) ? item.points : []) if (point?.time != null) values.push(point.time);
+      return values.map(Number).filter(Number.isFinite);
+    });
+    const from = timestamps.length ? Math.min(...timestamps) : 0;
+    const to = timestamps.length ? Math.max(...timestamps) + 1 : 0;
+    this.chart.renderer.updateIndicator(this.overlayHandle, {
+      kind: 'value',
+      indicatorId: this.overlayHandle.id,
+      revision: {
+        streamId: revision.streamId,
+        datasetRevision: revision.datasetRevision,
+        outputRevision: revision.outputRevision,
+      },
+      dirty: { from, to },
+      series: [],
+      lines: projected.lines,
+      boxes: projected.boxes,
+      labels: projected.labels,
+      polylines: projected.polylines,
+      backgrounds: projected.backgrounds,
+      priceLines: projected.priceLines,
+      tables: projected.tables,
+      barColors: projected.barColors,
+    });
+  }
+
+  private publishVelaOutputLayer(frame: CoreSpiritOutputFrame, revision: CoreSpiritVelaOutputRevision): void {
+    const objects = [
+      ...(frame.drawings || []),
+      ...(frame.visuals || []),
+      ...(frame.labels || []),
+      ...(frame.tables || []),
+    ];
+    const customObjects = objects.filter(isCoreSpiritCustomLayerObject);
+    const drawings = customObjects.filter(item => item.kind === 'zone') as CoreSpiritObject[];
+    const visuals = customObjects.filter(item => item.kind !== 'zone') as CoreSpiritObject[];
     const data: CoreSpiritVelaOutputLayerData = Object.freeze({
       revision: ++this.renderRevision,
-      drawings: Object.freeze([...drawings]),
-      visuals: Object.freeze([...(frame.visuals || [])]),
-      labels: Object.freeze([...(frame.labels || [])]),
-      tables: Object.freeze([...(frame.tables || [])]),
+      schemaVersion: 1,
+      scriptInstanceId: this.overlayChannel,
+      datasetRevision: revision.datasetRevision,
+      outputRevision: revision.outputRevision,
+      coordinateSystem: 'vela-epoch-milliseconds-price+tagged-visual-space',
+      paneId: 'price',
+      visible: true,
+      drawings: Object.freeze(drawings),
+      visuals: Object.freeze(visuals),
+      labels: Object.freeze([]),
+      tables: Object.freeze([]),
     });
-    // Vela stores this immutable output snapshot and repaints it from its own
-    // frame scheduler, using Vela's shared coordinate system and layer canvas.
+    // Only advanced primitives remain on the custom layer. Standard chart
+    // objects now live in Vela's retained drawing/marker/series collections.
     this.chart.renderer.setNativeData(this.overlayChannel, data);
+  }
+
+  private clearNativeDrawingCollections(): void {
+    this.chart.renderer.updateIndicator(this.overlayHandle, {
+      kind: 'value',
+      indicatorId: this.overlayHandle.id,
+      dirty: { from: 0, to: 0 },
+      series: [],
+      lines: [], boxes: [], labels: [], polylines: [], linefills: [],
+      backgrounds: [], priceLines: [], tables: [], barColors: [],
+    });
   }
 
   scheduleObjects(
     objects: readonly CoreSpiritObject[],
     revision: CoreSpiritVelaOutputRevision,
   ): Promise<boolean> {
-    if (this.disposed || !this.outputRevisionGate.accept(revision)) return Promise.resolve(false);
+    if (this.disposed) return Promise.resolve(false);
+    const mutation = createCoreSpiritVisualSnapshot(objects, revision, this.overlayChannel);
+    const prepared = this.visualAbiStore.prepare(mutation);
+    if (!prepared) return Promise.resolve(false);
     const previousObjects = [...this.committedObjects];
     try {
-      // One synchronous state commit. NativeRenderer owns frame timing, so a
-      // second scheduled frame here would only add avoidable latency.
-      // applyFrame diffs against the current retained series and replaces the
-      // layer's immutable payload. Avoid tearing down native series on every run.
-      this.applyObjects([...objects]);
+      this.applyObjects([...prepared.objects], revision, true);
+      this.visualAbiStore.commit(prepared);
       return Promise.resolve(true);
     } catch (error) {
       try {
-        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[]);
+        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true);
       } catch (restoreError) {
         return Promise.reject(new AggregateError([error, restoreError], 'Vela output commit and rollback both failed'));
       }
@@ -221,7 +290,32 @@ export class CoreSpiritChartOutputController {
     }
   }
 
-  applyObjects(objects: CoreSpiritObject[]): void {
+  /** Incremental scene mutation. Replaying a patch is idempotent by revision and stable object id. */
+  schedulePatch(
+    upsert: readonly CoreSpiritObject[],
+    removeIds: readonly string[],
+    revision: CoreSpiritVelaOutputRevision,
+  ): Promise<boolean> {
+    if (this.disposed) return Promise.resolve(false);
+    const mutation = createCoreSpiritVisualPatch(upsert, removeIds, revision, this.overlayChannel);
+    const prepared = this.visualAbiStore.prepare(mutation);
+    if (!prepared) return Promise.resolve(false);
+    const previousObjects = [...this.committedObjects];
+    try {
+      this.applyObjects([...prepared.objects], revision, true);
+      this.visualAbiStore.commit(prepared);
+      return Promise.resolve(true);
+    } catch (error) {
+      try {
+        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true);
+      } catch (restoreError) {
+        return Promise.reject(new AggregateError([error, restoreError], 'Vela output patch and rollback both failed'));
+      }
+      return Promise.reject(error);
+    }
+  }
+
+  applyObjects(objects: CoreSpiritObject[], revision?: CoreSpiritVelaOutputRevision, alreadyNormalized = false): void {
     const frame: CoreSpiritOutputFrame = { plots: new Map(), plotStyles: new Map(), drawingCount: 0, signals: [], drawings: [], visuals: [], labels: [], tables: [] };
     const groups = new Map<string, Array<{ time: number; value: number | null }>>();
     for (const o of objects) {
@@ -234,14 +328,53 @@ export class CoreSpiritChartOutputController {
       else if (o.kind === 'box' || o.kind === 'band' || o.kind === 'arrow' || o.kind === 'shape' || o.kind === 'background' || o.kind === 'barcolor' || o.kind === 'customVisual') frame.visuals.push(o);
     }
     frame.plots = groups;
-    this.applyFrame(frame);
-    this.committedObjects = Object.freeze([...objects]);
+    const activeRevision = revision ?? {
+      streamId: this.latestStreamId ?? this.overlayChannel,
+      datasetRevision: this.latestDatasetRevision,
+      outputRevision: this.latestOutputRevision + 1,
+    };
+    const normalized = alreadyNormalized
+      ? objects
+      : normalizeCoreSpiritVisualObjects(objects, this.overlayChannel, activeRevision);
+    // applyFrame receives the same normalized objects used by the ABI store, so the
+    // native drawing collection and custom renderer layer share object IDs/provenance.
+    if (!alreadyNormalized) {
+      const normalizedById = new Map<string, CoreSpiritObject>();
+      for (const object of normalized) {
+        const metadata = object.metadata as Record<string, unknown> | undefined;
+        const abi = metadata?.coreSpiritVisualAbi as Record<string, unknown> | undefined;
+        if (abi?.objectId) normalizedById.set(String(abi.objectId), object);
+      }
+      // Rebuild groups from the validated ABI objects, preventing raw seconds or
+      // unnamespaced ids from bypassing the boundary through direct applyObjects().
+      return this.applyObjects([...normalizedById.values()], activeRevision, true);
+    }
+    const normalizedFrame: CoreSpiritOutputFrame = { plots: new Map(), plotStyles: new Map(), drawingCount: 0, signals: [], drawings: [], visuals: [], labels: [], tables: [] };
+    for (const object of normalized) {
+      if (object.kind === 'series') {
+        const id = object.seriesId || object.name || 'coreSpirit:plot:0';
+        const arr = normalizedFrame.plots.get(id) || [];
+        arr.push({ time: object.time, value: object.value });
+        normalizedFrame.plots.set(id, arr);
+        if (object.style) normalizedFrame.plotStyles.set(id, object.style);
+      } else if (object.kind === 'signal') normalizedFrame.signals.push(object);
+      else if (object.kind === 'label') normalizedFrame.labels.push(object);
+      else if (object.kind === 'table') normalizedFrame.tables.push(object);
+      else if (object.kind === 'footprint' || object.kind === 'band' || object.kind === 'background' ||
+               object.kind === 'barcolor' || object.kind === 'shape' || object.kind === 'customVisual') normalizedFrame.visuals.push(object);
+      else if (object.kind === 'line' || object.kind === 'zone' || object.kind === 'box' ||
+               object.kind === 'arrow' || object.kind === 'hline' || object.kind === 'polyline' ||
+               object.kind === 'polygon' || object.kind === 'marker') normalizedFrame.drawings.push(object);
+    }
+    normalizedFrame.drawingCount = normalizedFrame.drawings.length + normalizedFrame.visuals.length + normalizedFrame.labels.length + normalizedFrame.tables.length;
+    this.applyFrame(normalizedFrame, activeRevision);
+    this.committedObjects = Object.freeze([...normalized]);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.outputRevisionGate.clear();
+    this.visualAbiStore.clear();
     this.reset();
     try { this.chart.renderer.removeIndicator(this.overlayHandle); } catch {}
   }
