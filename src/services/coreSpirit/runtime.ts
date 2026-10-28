@@ -1852,24 +1852,38 @@ export class CoreSpiritRuntime {
         if(Number.isFinite(price)) outputs.push({kind:'marker',id:`${this.options.sourceId}:marker:${barIndex}:${outputId||'marker'}`,time:Number(args[0])||time,price,metadata:{source:this.options.sourceId,barIndex}});
       }
       else if(kind==='label'||kind==='labelAt'){
-        const isAt=kind==='labelAt'; const price=Number(isAt?args[0]:(String(args[1]??'above')==='below'?bar.low:bar.high));
-        const text=String(isAt?args[1]:args[0]??''); const position=String(isAt?args[2]??'price':args[1]??'above') as any;
-        const background=String(isAt?args[3]??'#2563eb':args[2]??'#2563eb'); const textColor=String(isAt?args[4]??'#ffffff':args[3]??'#ffffff');
-        const fontSize=Number(isAt?args[5]??12:args[4]??12); const shape=String(isAt?args[6]??'pill':args[5]??'pill') as any;
-        const fontWeight=String(isAt?args[7]??'600':args[6]??'600'); const fontStyle=String(isAt?args[8]??'normal':args[7]??'normal') as any;
-        if(Number.isFinite(price)&&text) outputs.push({kind:'label',id:`${this.options.sourceId}:label:${barIndex}:${outputId||text}`,time,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},metadata:{source:this.options.sourceId,barIndex}});
+        const isAt=kind==='labelAt';
+        // labelAt retains the original price-first form: labelAt(price, text, ...).
+        // A time-first overload supports confirmed historical anchors:
+        // labelAt(timeSeconds, price, text, position, background, color, size, shape, weight).
+        // Its second argument is numeric and its third is text, keeping the legacy form unambiguous.
+        const timeAnchored=isAt&&args.length>=3&&Number.isFinite(Number(args[0]))&&Number.isFinite(Number(args[1]))&&typeof args[2]==='string';
+        const labelTime=timeAnchored?num(args[0]):time;
+        const price=Number(isAt?(timeAnchored?args[1]:args[0]):(String(args[1]??'above')==='below'?bar.low:bar.high));
+        const text=String(isAt?args[timeAnchored?2:1]:args[0]??'');
+        const position=String(isAt?args[timeAnchored?3:2]??'price':args[1]??'above') as any;
+        const background=String(isAt?args[timeAnchored?4:3]??'#2563eb':args[2]??'#2563eb');
+        const textColor=String(isAt?args[timeAnchored?5:4]??'#ffffff':args[3]??'#ffffff');
+        const fontSize=Number(isAt?args[timeAnchored?6:5]??12:args[4]??12);
+        const shape=String(isAt?args[timeAnchored?7:6]??'pill':args[5]??'pill') as any;
+        const fontWeight=String(isAt?args[timeAnchored?8:7]??'600':args[6]??'600');
+        const fontStyle=String(isAt&&!timeAnchored?args[8]??'normal':args[7]??'normal') as any;
+        const id=timeAnchored
+          ? `${this.options.sourceId}:labelAt:${outputId||'label'}:${labelTime}`
+          : `${this.options.sourceId}:label:${barIndex}:${outputId||text}`;
+        if(Number.isFinite(labelTime)&&Number.isFinite(price)&&text) outputs.push({kind:'label',id,time:labelTime,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},metadata:{source:this.options.sourceId,barIndex,...(timeAnchored?{anchor:'time-price'}:{})}});
       }
       else if(kind==='line'){
         const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
-        if(Number.isFinite(a.price)&&Number.isFinite(b.price)) { const md=(typeof args.at(-1)==='object'&&args.at(-1))?(args.at(-1) as Record<string,unknown>):{}; outputs.push({kind:'line',id:`${this.options.sourceId}:line:${outputId||'line'}:${barIndex}`,start:a,end:b,style:{source:this.options.sourceId,color:color(args[4],'#f59e0b'),lineWidth:Math.max(1,Math.min(6,num(args[5])||1))},metadata:{source:this.options.sourceId,barIndex,...md}}); }
+        if(Number.isFinite(a.price)&&Number.isFinite(b.price)) { const md=(typeof args.at(-1)==='object'&&args.at(-1))?(args.at(-1) as Record<string,unknown>):{}; outputs.push({kind:'line',id:`${this.options.sourceId}:line:${outputId||'line'}:${a.time}`,start:a,end:b,style:{source:this.options.sourceId,color:color(args[4],'#f59e0b'),lineWidth:Math.max(1,Math.min(6,num(args[5])||1))},metadata:{source:this.options.sourceId,barIndex,...md}}); }
       }
       else if(kind==='zone'){
         const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
-        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${outputId||'zone'}:${barIndex}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
+        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${outputId||'zone'}:${left}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
       }
       else if(kind==='box'){
         const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
-        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'box',id:`${this.options.sourceId}:box:${outputId||'box'}:${barIndex}`,left,right,top,bottom,style:{fillColor:color(args[4],'#2563eb'),color:color(args[5],'#2563eb'),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.16,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
+        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'box',id:`${this.options.sourceId}:box:${outputId||'box'}:${left}`,left,right,top,bottom,style:{fillColor:color(args[4],'#2563eb'),color:color(args[5],'#2563eb'),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.16,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
       }
       else if(kind==='band'||kind==='fill'||kind==='gradient'){
         const top=num(args[0]),bottom=num(args[1]);
@@ -1882,7 +1896,7 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='arrow'){
         const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
-        if([a.time,a.price,b.time,b.price].every(Number.isFinite)) outputs.push({kind:'arrow',id:`${this.options.sourceId}:arrow:${outputId||'arrow'}:${barIndex}`,start:a,end:b,style:{color:color(args[4],'#f59e0b'),lineWidth:Number.isFinite(Number(args[5]))?Math.max(1,Math.min(8,num(args[5]))):2}});
+        if([a.time,a.price,b.time,b.price].every(Number.isFinite)) outputs.push({kind:'arrow',id:`${this.options.sourceId}:arrow:${outputId||'arrow'}:${a.time}`,start:a,end:b,style:{color:color(args[4],'#f59e0b'),lineWidth:Number.isFinite(Number(args[5]))?Math.max(1,Math.min(8,num(args[5]))):2}});
       }
       else if(kind==='shape'||kind==='heatmap'){
         const price=num(args[0]),shape=kind==='heatmap'?'square':String(args[1]||'circle') as any;
@@ -1892,10 +1906,10 @@ export class CoreSpiritRuntime {
         const points: {time:number;price:number}[]=[]; let i=0;
         while(i+1<args.length && typeof args[i] !== 'string' && Number.isFinite(num(args[i])) && Number.isFinite(num(args[i+1])) && points.length<8){ points.push({time:num(args[i]),price:num(args[i+1])}); i+=2; }
         const stroke=color(args[i],'#38bdf8'); const width=Number.isFinite(num(args[i+1]))?Math.max(1,Math.min(8,num(args[i+1]))):2;
-        if(points.length>=2) outputs.push({kind:'polyline',id:`${this.options.sourceId}:polyline:${outputId||'polyline'}:${barIndex}`,points,style:{color:stroke,lineWidth:width,pattern:(typeof args[i+2]==='string'?args[i+2]:'solid') as any}});
+        if(points.length>=2) outputs.push({kind:'polyline',id:`${this.options.sourceId}:polyline:${outputId||'polyline'}:${points[0]?.time ?? time}`,points,style:{color:stroke,lineWidth:width,pattern:(typeof args[i+2]==='string'?args[i+2]:'solid') as any}});
       }
       else if(kind==='hline'){
-        const price=num(args[0]); if(Number.isFinite(price)) outputs.push({kind:'hline',id:`${this.options.sourceId}:hline:${outputId||'hline'}:${barIndex}`,price,style:{color:color(args[1],'#64748b'),lineWidth:Number.isFinite(num(args[2]))?Math.max(1,Math.min(6,num(args[2]))):1,lineStyle:Number.isFinite(num(args[3]))?num(args[3]):0}});
+        const price=num(args[0]); if(Number.isFinite(price)) outputs.push({kind:'hline',id:`${this.options.sourceId}:hline:${outputId||'hline'}`,price,style:{color:color(args[1],'#64748b'),lineWidth:Number.isFinite(num(args[2]))?Math.max(1,Math.min(6,num(args[2]))):1,lineStyle:Number.isFinite(num(args[3]))?num(args[3]):0}});
       }
       else if(kind==='bg' || kind==='barcolor'){
         if(kind==='bg' && args.length>=3 && args[0]==null) return;
@@ -1904,7 +1918,7 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='table'){
         const position=String(args[0]||'topRight') as any, row=Math.max(0,Math.floor(num(args[1]))), column=Math.max(0,Math.floor(num(args[2]))), text=String(args[3]??'');
-        outputs.push({kind:'table',id:`${this.options.sourceId}:table:${position}:${row}:${column}:${outputId||'table'}:${barIndex}`,position,row,column,text,style:{background:color(args[4],'rgba(15,23,42,.88)'),color:color(args[5],'#fff'),fontSize:Number.isFinite(num(args[6]))?Math.max(8,Math.min(32,num(args[6]))):12},metadata:{source:this.options.sourceId}});
+        outputs.push({kind:'table',id:`${this.options.sourceId}:table:${position}:${row}:${column}:${outputId||'table'}`,position,row,column,text,style:{background:color(args[4],'rgba(15,23,42,.88)'),color:color(args[5],'#fff'),fontSize:Number.isFinite(num(args[6]))?Math.max(8,Math.min(32,num(args[6]))):12},metadata:{source:this.options.sourceId}});
       }
       else if(kind==='scanCandidate'){
         const score=Number(args[0]??0); const label=typeof args[1]==='string'?args[1]:undefined; const metadata=typeof args[2]==='object'&&args[2] ? args[2] as Record<string,unknown> : {};
