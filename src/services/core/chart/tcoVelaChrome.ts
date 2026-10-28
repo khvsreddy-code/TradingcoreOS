@@ -947,14 +947,14 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       onFullscreenChange: (fullscreen: boolean) => {
         panel?.toggleAttribute('data-maximized', fullscreen);
       },
-      onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact) => {
+      onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => {
         const addToChart = (window as Window & {
-          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
+          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
         }).__TCO_ADD_CORESPIRIT_TO_CHART__;
         if (typeof addToChart !== 'function') {
           throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
         }
-        await addToChart(scriptName, scriptSource, artifact);
+        await addToChart(scriptName, scriptSource, artifact, scriptId);
       },
     }));
     return {
