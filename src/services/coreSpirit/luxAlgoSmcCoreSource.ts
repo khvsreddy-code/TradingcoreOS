@@ -229,37 +229,37 @@ if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 
     bullObExists := true
     bullObActive := true
     bullObLeft := lastBearishTime
-    bullObRight := time
+    bullObRight := time[0]
     bullObTop := lastBearishHigh
     bullObBottom := lastBearishLow
-    bullObCreatedAt := time
+    bullObCreatedAt := time[0]
     bullObOpacity := 0.16
 }
 if showOrderBlockZones == true and swingBearBreak == true and lastBullishTime > 0 {
     bearObExists := true
     bearObActive := true
     bearObLeft := lastBullishTime
-    bearObRight := time
+    bearObRight := time[0]
     bearObTop := lastBullishHigh
     bearObBottom := lastBullishLow
-    bearObCreatedAt := time
+    bearObCreatedAt := time[0]
     bearObOpacity := 0.16
 }
 if bullObActive == true and time > bullObCreatedAt and low < bullObBottom {
     bullObActive := false
-    bullObRight := time
+    bullObRight := time[0]
     bullObOpacity := 0.04
 }
 if bearObActive == true and time > bearObCreatedAt and high > bearObTop {
     bearObActive := false
-    bearObRight := time
+    bearObRight := time[0]
     bearObOpacity := 0.04
 }
 if bullObActive == true {
-    bullObRight := time
+    bullObRight := time[0]
 }
 if bearObActive == true {
-    bearObRight := time
+    bearObRight := time[0]
 }
 if showOrderBlockZones == true and bullObExists == true {
     zone(bullObLeft, bullObRight, bullObTop, bullObBottom, "#1848CC", "#1848CC", bullObOpacity)
@@ -292,37 +292,37 @@ if showFairValueGaps == true and low > high[2] {
     bullFvgExists := true
     bullFvgActive := true
     bullFvgLeft := time[2]
-    bullFvgRight := time
+    bullFvgRight := time[0]
     bullFvgTop := low[0]
     bullFvgBottom := high[2]
-    bullFvgCreatedAt := time
+    bullFvgCreatedAt := time[0]
     bullFvgOpacity := 0.12
 }
 if showFairValueGaps == true and high < low[2] {
     bearFvgExists := true
     bearFvgActive := true
     bearFvgLeft := time[2]
-    bearFvgRight := time
+    bearFvgRight := time[0]
     bearFvgTop := low[2]
     bearFvgBottom := high[0]
-    bearFvgCreatedAt := time
+    bearFvgCreatedAt := time[0]
     bearFvgOpacity := 0.12
 }
 if bullFvgActive == true and time > bullFvgCreatedAt and low <= bullFvgBottom {
     bullFvgActive := false
-    bullFvgRight := time
+    bullFvgRight := time[0]
     bullFvgOpacity := 0.03
 }
 if bearFvgActive == true and time > bearFvgCreatedAt and high >= bearFvgTop {
     bearFvgActive := false
-    bearFvgRight := time
+    bearFvgRight := time[0]
     bearFvgOpacity := 0.03
 }
 if bullFvgActive == true {
-    bullFvgRight := time
+    bullFvgRight := time[0]
 }
 if bearFvgActive == true {
-    bearFvgRight := time
+    bearFvgRight := time[0]
 }
 if showFairValueGaps == true and bullFvgExists == true {
     zone(bullFvgLeft, bullFvgRight, bullFvgTop, bullFvgBottom, "#00FF68", "#00FF68", bullFvgOpacity)
