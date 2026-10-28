@@ -78,6 +78,37 @@ assert.ok(prepared.objects.every(object => object.metadata?.coreSpiritVisualAbi?
 
 const zoneId = coreSpiritVisualObjectId(zone, instanceId);
 const labelId = coreSpiritVisualObjectId(label, instanceId);
+// Repeated emissions from the same AST node can create multiple drawings. IDs
+// must include an immutable creation anchor, but not fields that legitimately change
+// while an existing object is retained (right boundary or label text).
+const implicitZoneA = {
+  kind: 'zone', left: t0 * 1000, right: (t0 + 300) * 1000, top: 104, bottom: 101,
+  metadata: { sourceNodeId: 'source:zone-node' },
+};
+const implicitZoneB = {
+  ...implicitZoneA, left: (t0 + 300) * 1000, right: (t0 + 600) * 1000,
+};
+const extendedImplicitZone = { ...implicitZoneA, right: (t0 + 900) * 1000 };
+assert.notEqual(
+  coreSpiritVisualObjectId(implicitZoneA, instanceId),
+  coreSpiritVisualObjectId(implicitZoneB, instanceId),
+  'the same source node emitting zones at different anchors must not collapse them into one ID',
+);
+assert.equal(
+  coreSpiritVisualObjectId(implicitZoneA, instanceId),
+  coreSpiritVisualObjectId(extendedImplicitZone, instanceId),
+  'extending a zone boundary must retain the original object ID',
+);
+const implicitLabelA = {
+  kind: 'label', time: t0 * 1000, price: 104, text: 'BOS', position: 'above',
+  metadata: { sourceNodeId: 'source:label-node' },
+};
+const implicitLabelB = { ...implicitLabelA, text: 'CHoCH' };
+assert.equal(
+  coreSpiritVisualObjectId(implicitLabelA, instanceId),
+  coreSpiritVisualObjectId(implicitLabelB, instanceId),
+  'changing label text at the same source anchor updates the existing label instead of duplicating it',
+);
 assert.equal(prepared.objects.find(object => object.kind === 'zone').metadata.coreSpiritVisualAbi.objectId, zoneId);
 assert.equal(prepared.objects.find(object => object.kind === 'label').metadata.coreSpiritVisualAbi.objectId, labelId);
 
