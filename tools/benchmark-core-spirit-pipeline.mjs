@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { performance } from 'node:perf_hooks';
+import { writeFile } from 'node:fs/promises';
 import { CoreSpiritCompiler } from '../src/services/coreSpirit/compiler.ts';
 import { CoreSpiritIncrementalCompiler } from '../src/services/coreSpirit/incrementalCompiler.ts';
 import { CoreSpiritRuntime } from '../src/services/coreSpirit/runtime.ts';
@@ -198,6 +199,7 @@ async function main() {
   const report = {
     benchmark: 'CoreSpirit compiler + reference/optimized runtime + live output pipeline',
     version: '1',
+    capturedAt: new Date().toISOString(),
     environment: { node: process.version, platform: process.platform, arch: process.arch },
     barCounts: sizes,
     liveUpdateSamples: updateCount,
@@ -367,7 +369,13 @@ async function main() {
     report.workloads.push(workloadReport);
   }
 
-  console.log(JSON.stringify(report, null, 2));
+  const serializedReport = JSON.stringify(report, null, 2);
+  console.log(serializedReport);
+  const outputFile = process.env.TCO_BENCH_OUTPUT_FILE?.trim();
+  if (outputFile) {
+    await writeFile(outputFile, serializedReport + '\\n', 'utf8');
+    console.error(`[pipeline] machine-readable report saved to ${outputFile}`);
+  }
 }
 
 main().catch(error => {
