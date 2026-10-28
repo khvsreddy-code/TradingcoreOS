@@ -4,6 +4,7 @@ import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 export type CoreSpiritChartRunResult = {
   barsProcessed:number;plotsEmitted:number;signalsEmitted:number;diagnostics:string[];
+  diagnosticDetails?:readonly import('./coreSpiritWorkerPool').CoreSpiritExecutionDiagnostic[];
   runId?:string;outputs?:readonly import('./types').CoreSpiritObject[];
   state?:{uiState?:CoreSpiritUiState;workspaceState?:CoreSpiritWorkspaceState};
 };
