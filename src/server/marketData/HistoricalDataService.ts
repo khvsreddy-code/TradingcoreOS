@@ -836,8 +836,7 @@ export class HistoricalDataService {
       // older portion of a previously validated dataset for this same, explicitly
       // compatible instrument mapping. Never reuse cached bars from recent Fyers
       // sessions, and never present the fallback as a fresh source response.
-      const cachedOlderBars = cached?.sourcePolicy === HISTORICAL_SOURCE_POLICY &&
-        cached.bars.length > 0 && tvBars.length === 0 && this.tvContractCompatible(mapping)
+      const cachedOlderBars = cached?.bars.length > 0 && tvBars.length === 0 && this.tvContractCompatible(mapping)
         ? cached.bars.filter(bar => !firstRecentDate || zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate)
         : [];
 
@@ -887,14 +886,23 @@ export class HistoricalDataService {
         revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
         expiresAt: Date.now() + CACHE_TTL_MS, updatedAt: Date.now(), quote,
       };
-      if (!merged.length && cached?.bars.length && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY) {
-        return {
+      if (!merged.length && cached?.bars.length) {
+        const staleRecord: CacheRecord = {
           ...cached,
+          sourcePolicy: HISTORICAL_SOURCE_POLICY,
           expiresAt: Date.now(),
-          sourceStatus: { ...sourceStatus, staleCacheFallback: true },
+          updatedAt: Date.now(),
+          sourceStatus: {
+            ...sourceStatus,
+            staleCacheFallback: true,
+            previousSourcePolicy: cached.sourcePolicy,
+          },
           degraded: true,
           quote: quote || null,
         };
+        // Preserve previously validated candles during a total source outage,
+        // including cache records written by the previous source policy.
+        return this.writeCache(staleRecord);
       }
       record = await this.writeCache(record);
       return record;
