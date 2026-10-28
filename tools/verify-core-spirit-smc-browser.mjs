@@ -111,6 +111,7 @@ try {
     window.__TCO_SMC_VISUAL_COMMITS__ = [];
     window.__TCO_SMC_VISUAL_PAINTS__ = [];
     window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = false;
+    window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = false;
     window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
     window.addEventListener('tco:corespirit:visual-commit', event => {
       const detail = event.detail || {};
@@ -181,6 +182,7 @@ try {
       run(['mouse', 'up', 'left']);
       evaluate(`(() => {
         window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = true;
+        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_DONE__ = false;
         window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
         return 'SMC_VIEWPORT_PAINT_PROBE_REARMED';
       })()`);
