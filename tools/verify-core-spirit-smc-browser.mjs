@@ -360,18 +360,27 @@ try {
       const freshCommits = replayState.commits.slice(commitsBeforeReplay)
         .filter(item => Number(item.objectCount) > 0 &&
           Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind)));
-      if (freshCommits.length) {
-        const recompileCommit = freshCommits[freshCommits.length - 1];
-        assert.equal(recompileCommit.objectCount, commit.objectCount,
-          'Recompiling identical SMC source/data must not increase the number of retained drawing objects.');
-        assert.deepEqual(recompileCommit.kindCounts, commit.kindCounts,
-          'Recompiling identical SMC source/data must preserve the native object-kind inventory.');
-      }
+      assert(freshCommits.length > 0,
+        'The second SMC Compile & Run must publish a fresh native Vela scene commit.');
+      const recompileCommit = freshCommits[freshCommits.length - 1];
+      assert.equal(recompileCommit.objectCount, commit.objectCount,
+        'Recompiling identical SMC source/data must not increase the number of retained drawing objects.');
+      assert.deepEqual(recompileCommit.kindCounts, commit.kindCounts,
+        'Recompiling identical SMC source/data must preserve the native object-kind inventory.');
+      const outputRevisionAdvanced = recompileCommit.streamId !== commit.streamId ||
+        !Number.isFinite(Number(recompileCommit.outputRevision)) ||
+        !Number.isFinite(Number(commit.outputRevision)) ||
+        Number(recompileCommit.outputRevision) > Number(commit.outputRevision);
+      assert(outputRevisionAdvanced,
+        'A same-stream SMC recompilation must advance its output revision instead of replaying a stale scene.');
       const recompileIdempotency = {
         instanceCountBefore: initialInstanceState.count,
         instanceCountAfter: replayState.count,
         stableInstanceIdsBefore: initialInstanceState.ids,
         stableInstanceIdsAfter: replayState.ids,
+        recompileObjectCount: recompileCommit.objectCount,
+        recompileKindCounts: recompileCommit.kindCounts,
+        outputRevisionAdvanced,
         freshNativeSceneCommits: freshCommits.length,
         passed: true,
       };
