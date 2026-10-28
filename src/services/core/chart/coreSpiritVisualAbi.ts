@@ -81,36 +81,46 @@ function rawStableSeed(object: CoreSpiritObject, index: number): string {
   const metadata = record(item.metadata);
   const existing = metadata.visualId ?? metadata.outputId ?? metadata.objectId ?? metadata.drawingId;
   if (existing != null && String(existing).trim()) return String(existing).trim();
-  if (metadata.sourceNodeId != null && String(metadata.sourceNodeId).trim()) {
-    return `node:${String(metadata.sourceNodeId).trim()}`;
-  }
+
+  // Source identity scopes a visual-producing AST node, but it is not enough by
+  // itself: the same node commonly emits one drawing per bar. Combine it with an
+  // immutable creation anchor so distinct drawings do not collide, while changing
+  // geometry (e.g. an FVG's right edge or label text) does not mint new identities.
+  const sourcePrefix = metadata.sourceNodeId != null && String(metadata.sourceNodeId).trim()
+    ? `node:${String(metadata.sourceNodeId).trim()}:`
+    : '';
+  const customGeometry = record(item.geometry);
+  const customPoint = record(customGeometry.point);
+  const nestedPoint = record(customPoint.point ?? customGeometry.from ?? customGeometry.points?.[0]);
+  const customAnchor = item.time ?? customPoint.x ?? nestedPoint.x ?? item.start?.time ?? item.points?.[0]?.time ?? 'static';
+  const position = item.position ?? metadata.position ?? metadata.placement ?? '';
 
   switch (object.kind) {
-    case 'series': return `series:${String(object.seriesId ?? object.name ?? 'plot')}:${String(object.time)}`;
-    case 'signal': return `signal:${String(object.type)}:${String(object.time)}`;
-    case 'line': return `line:${String(object.start.time)}:${String(object.start.price)}`;
-    case 'arrow': return `arrow:${String(object.start.time)}:${String(object.start.price)}`;
-    case 'zone': return `zone:${String(object.left)}:${String(object.top)}:${String(object.bottom)}`;
-    case 'box': return `box:${String(object.left)}:${String(object.top)}:${String(object.bottom)}`;
-    case 'label': return `label:${String(object.time)}:${String(object.price)}:${String(object.text)}`;
-    case 'marker': return `marker:${String(object.time)}:${String(object.price)}:${String(metadata.shape ?? '')}`;
-    case 'shape': return `shape:${String(object.time)}:${String(object.price)}:${String(object.shape)}`;
+    case 'series': return `${sourcePrefix}series:${String(object.seriesId ?? object.name ?? 'plot')}:${String(object.time)}`;
+    case 'signal': return `${sourcePrefix}signal:${String(object.time)}`;
+    case 'line': return `${sourcePrefix}line:${String(object.start.time)}:${String(object.start.price)}`;
+    case 'arrow': return `${sourcePrefix}arrow:${String(object.start.time)}:${String(object.start.price)}`;
+    case 'zone': return `${sourcePrefix}zone:${String(object.left)}`;
+    case 'box': return `${sourcePrefix}box:${String(object.left)}:${String(object.top)}:${String(object.bottom)}`;
+    case 'label': return `${sourcePrefix}label:${String(object.time)}:${String(object.price)}:${String(position)}`;
+    case 'marker': return `${sourcePrefix}marker:${String(object.time)}:${String(object.price)}:${String(metadata.shape ?? '')}`;
+    case 'shape': return `${sourcePrefix}shape:${String(object.time)}:${String(object.price)}:${String(object.shape)}`;
     case 'polyline':
     case 'polygon': {
       const first = object.points[0];
-      return `${object.kind}:${String(first?.time ?? 'empty')}:${String(first?.price ?? 'empty')}`;
+      return `${sourcePrefix}${object.kind}:${String(first?.time ?? 'empty')}:${String(first?.price ?? 'empty')}`;
     }
-    case 'hline': return `hline:${String(object.price)}`;
+    case 'hline': return `${sourcePrefix}hline:${String(object.price)}`;
     case 'background':
-    case 'barcolor': return `${object.kind}:${String(object.time)}`;
-    case 'band': return `band:${String(object.time)}`;
-    case 'footprint': return `footprint:${String(object.time)}`;
-    case 'customVisual': return `custom:${String(object.time ?? 'static')}:${String(record(object.geometry).kind ?? 'geometry')}`;
-    case 'table': return `table:${String(object.id)}:${String(object.row)}:${String(object.column)}`;
-    case 'event': return `event:${String(object.name)}:${String(object.time)}`;
-    case 'orderIntent': return `order:${String(object.time)}:${String(object.side)}:${String(object.tag ?? '')}`;
-    case 'scanCandidate': return `candidate:${String(object.time ?? 'static')}:${String(object.score ?? '')}:${String(object.label ?? '')}`;
-    default: return `${String(item.kind ?? 'unknown')}:${index}`;
+    case 'barcolor': return `${sourcePrefix}${object.kind}:${String(object.time)}`;
+    case 'band': return `${sourcePrefix}band:${String(object.time)}`;
+    case 'footprint': return `${sourcePrefix}footprint:${String(object.time)}`;
+    case 'customVisual': return `${sourcePrefix}custom:${String(customAnchor)}:${String(customGeometry.kind ?? 'geometry')}`;
+    case 'table': return `${sourcePrefix}table:${String(object.id)}:${String(object.row)}:${String(object.column)}`;
+    case 'event': return `${sourcePrefix}event:${String(object.name)}:${String(object.time)}`;
+    case 'orderIntent': return `${sourcePrefix}order:${String(object.time)}:${String(object.side)}:${String(object.tag ?? '')}`;
+    case 'scanCandidate': return `${sourcePrefix}candidate:${String(object.time ?? 'static')}:${String(object.score ?? '')}:${String(object.label ?? '')}`;
+    default: return `${sourcePrefix}${String(item.kind ?? 'unknown')}:${index}`;
   }
 }
 
