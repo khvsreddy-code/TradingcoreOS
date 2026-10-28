@@ -28,7 +28,9 @@ export function applyCoreSpiritPlotSnapshot(
 ): void {
   const valid = points.filter(validPoint);
   if (points.length === 0 || valid.length === 0) {
-    if (current.length || points.length === 0) series.setData([]);
+    // setData([]) is intentional even before the first successful population:
+    // the caller must commit the empty snapshot, not keep an uncommitted prior frame.
+    series.setData([]);
     return;
   }
 
