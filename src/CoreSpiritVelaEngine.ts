@@ -6,7 +6,9 @@ import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSp
 import { normalizeCoreSpiritSource as normalizeCoreSpirit } from './services/coreSpirit/syntax.ts';
 import type { CoreSpiritIrProgram } from './services/coreSpirit/ir.ts';
 import { runCoreSpiritArtifactInWorker } from './services/coreSpirit/chartRunner.ts';
-import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact.ts';
+import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact.ts';
+import { consumeCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff.ts';
+import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from './services/coreSpirit/capabilitySandbox.ts';
 import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGraph.ts';
 import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
@@ -111,10 +113,34 @@ export class CoreSpiritVelaEngine {
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
     const normalized = normalizeCoreSpirit(source);
-    const artifact = await loadOrCompileCoreSpiritArtifact(source, instanceId, {
-      backend:'worker-vm',
-      compileInWorker:(input, sourceId, options)=>compileCoreSpiritArtifactOffThread(input,sourceId,options),
-    });
+    // Reuse the exact artifact compiled by the live dock when (and only when)
+    // its source hash and artifact envelope still match. Vela keeps source as
+    // the persisted external-indicator contract; this handoff is one-shot and
+    // deliberately does not leak into chart or undo serialization.
+    const handedOff = consumeCoreSpiritPrecompiledArtifact(source);
+    const artifact = handedOff && validateExecutableArtifact(handedOff)
+      ? handedOff
+      : await loadOrCompileCoreSpiritArtifact(source, instanceId, {
+          backend:'worker-vm',
+          compileInWorker:(input, sourceId, options)=>compileCoreSpiritArtifactOffThread(input,sourceId,options),
+        });
+    if (!validateExecutableArtifact(artifact)) {
+      throw new Error('CoreSpirit refused an invalid executable artifact before chart preparation.');
+    }
+    // A cached artifact never bypasses the chart's capability policy. Keep the
+    // same compiler/sandbox contract regardless of which compile path supplied it.
+    const chartSandbox = createCoreSpiritSandbox({layer:'script',target:'chart'});
+    const architectureFailures = validateCoreSpiritSandboxArchitecture();
+    const capabilityFailures = validateCoreScriptCapabilitiesAgainstSandbox(
+      chartSandbox,
+      artifact.ir.requiredCapabilities ?? [],
+    );
+    if (architectureFailures.length || capabilityFailures.length) {
+      throw new Error([
+        ...architectureFailures.map(message => `Sandbox architecture: ${message}`),
+        ...capabilityFailures.map(message => `Capability denied: ${message}`),
+      ].join('\\n'));
+    }
     const ir = artifact.ir;
     const metadata = resolveCoreSpiritVelaMetadata(source, ir);
     const token: PreparedToken = { sourceId: instanceId, source: normalized, ir, artifact };
