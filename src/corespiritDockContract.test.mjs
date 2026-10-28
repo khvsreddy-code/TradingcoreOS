@@ -44,7 +44,12 @@ includes(smc, 'bullFvgLeft := time[2]', 'fair-value gaps retain the time of the 
 includes(smc, 'bullFvgBottom := high[2]', 'bullish gap boundaries retain the correct earlier-candle high');
 includes(smc, 'input swingLength: int = 50 min=10 max=100', 'SMC swing lookback defaults to the Pine script 50-bar setting');
 includes(smc, 'input internalLength: int = 5 min=2 max=20', 'SMC internal structure has a configurable lookback with a five-bar default');
-includes(smc, 'highest(high[internalLength], internalLength)', 'SMC confirmation compares a causal delayed left window');
+includes(smc, 'let swingRollingHigh = highest(high, swingLength)', 'swing confirmation reuses the retained rolling-high series');
+includes(smc, 'let swingLeftWindowHigh = swingRollingHigh[swingLength + 1]', 'swing pivot compares against a disjoint left-side window without rescanning history');
+includes(smc, 'let internalRollingHigh = highest(high, internalLength)', 'internal confirmation reuses the retained rolling-high series');
+includes(smc, 'let internalLeftWindowHigh = internalRollingHigh[internalLength + 1]', 'internal pivot compares against a disjoint left-side window without rescanning history');
+includes(smc, 'let swingRollingLow = lowest(low, swingLength)', 'swing-low confirmation reuses the retained rolling-low series');
+includes(smc, 'let internalRollingLow = lowest(low, internalLength)', 'internal-low confirmation reuses the retained rolling-low series');
 includes(smc, 'Swing CHoCH', 'converted source emits swing structure labels');
 includes(smc, 'swingBearBreak == true and swingBias > 0', 'SMC bearish CHoCH requires a one-shot confirmed swing-low break against retained bias');
 includes(smc, 'Swing BOS', 'converted source emits swing structure labels');
