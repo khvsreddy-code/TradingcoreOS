@@ -133,6 +133,44 @@ export function coreSpiritVisualObjectId(object: CoreSpiritObject, scriptInstanc
   return `${scriptInstanceId}:${object.kind}:${seed}`;
 }
 
+function validateVisualPoint(value: unknown, label: string): void {
+  const point = record(value);
+  const x = finiteNumber(point.x), y = finiteNumber(point.y);
+  if (x === undefined || y === undefined) throw new Error(`CoreSpirit visual ABI rejected ${label}: expected finite x/y coordinates.`);
+  const space = String(point.space ?? 'time');
+  if (space === 'time' || space === 'price') {
+    assertVelaEpochMillis(x, `${label}.x`);
+    return;
+  }
+  if (space === 'normalized' && (x < 0 || x > 1 || y < 0 || y > 1)) {
+    throw new Error(`CoreSpirit visual ABI rejected ${label}: normalized coordinates must be within [0, 1].`);
+  }
+  if (space === 'percentage' && (x < 0 || x > 100 || y < 0 || y > 100)) {
+    throw new Error(`CoreSpirit visual ABI rejected ${label}: percentage coordinates must be within [0, 100].`);
+  }
+  if (!['time', 'price', 'bar', 'screen', 'normalized', 'percentage'].includes(space)) {
+    throw new Error(`CoreSpirit visual ABI rejected ${label}: unsupported coordinate space '${space}'.`);
+  }
+}
+
+function validateCustomGeometry(geometry: unknown): void {
+  const shape = record(geometry);
+  if (!shape.kind) return; // A host-specific geometry payload is passed only to the specialized layer.
+  if (shape.kind === 'point') {
+    validateVisualPoint(shape.point, 'custom geometry point');
+  } else if (shape.kind === 'line' || shape.kind === 'box') {
+    validateVisualPoint(shape.from, `custom geometry ${shape.kind}.from`);
+    validateVisualPoint(shape.to, `custom geometry ${shape.kind}.to`);
+  } else if (shape.kind === 'polygon') {
+    if (!Array.isArray(shape.points) || shape.points.length < 3) {
+      throw new Error('CoreSpirit visual ABI rejected custom polygon: expected at least three points.');
+    }
+    shape.points.forEach((point: unknown, index: number) => validateVisualPoint(point, `custom geometry polygon[${index}]`));
+  } else {
+    throw new Error(`CoreSpirit visual ABI rejected unsupported custom geometry kind '${String(shape.kind)}'.`);
+  }
+}
+
 function validateObjectCoordinates(object: CoreSpiritObject): void {
   const item = object as unknown as Record<string, any>;
   const requirePrice = (value: unknown, label: string) => {
@@ -190,8 +228,11 @@ function validateObjectCoordinates(object: CoreSpiritObject): void {
       if (item.top != null) requirePrice(item.top, 'top');
       if (item.bottom != null) requirePrice(item.bottom, 'bottom');
       break;
-    case 'table':
     case 'customVisual':
+      if (item.time != null) requireTime(item.time, 'time');
+      if (item.geometry != null) validateCustomGeometry(item.geometry);
+      break;
+    case 'table':
     case 'scanCandidate':
       if (item.time != null) requireTime(item.time, 'time');
       break;
