@@ -5,7 +5,7 @@ import {
   zScore, dotProduct, matrixMultiply, matrixDecomposition, softmax, logSumExp,
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
-import { RollingMean, RollingSum, RollingVariance, RollingMinMax } from './statefulIndicatorKernel.ts';
+import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState } from './statefulIndicatorKernel.ts';
 
 const close = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, received ${actual}`);
 const values = Float64Array.from([1, 2, 3, 4]);
@@ -61,6 +61,41 @@ assert.deepEqual(incrementalExtrema.update(Number.NaN), { count: 0, min: null, m
 incrementalExtrema.update(4); incrementalExtrema.update(5);
 assert.deepEqual(incrementalExtrema.update(6), { count: 3, min: 4, max: 6 },
   'rolling high/low must rewarm over consecutive finite prices after a gap');
+
+const incrementalEma = new EMAState(3);
+incrementalEma.update(1); incrementalEma.update(2);
+assert.equal(incrementalEma.update(3), 2);
+assert.equal(incrementalEma.update(Number.NaN), null,
+  'EMA must not carry a stale recursive output across a missing input');
+incrementalEma.update(4); incrementalEma.update(5);
+close(incrementalEma.update(6), 5);
+
+const incrementalRma = new WilderState(3);
+incrementalRma.update(1); incrementalRma.update(2);
+close(incrementalRma.update(3), 2);
+assert.equal(incrementalRma.update(Number.POSITIVE_INFINITY), null,
+  'Wilder/RMA must reset its recursive state on non-finite input');
+incrementalRma.update(4); incrementalRma.update(5);
+close(incrementalRma.update(6), 5);
+
+const incrementalWma = new WMAState(3);
+incrementalWma.update(1); incrementalWma.update(2);
+close(incrementalWma.update(3), 14 / 6);
+assert.equal(incrementalWma.update(Number.NaN), null,
+  'WMA must invalidate its rolling state when a missing candle arrives');
+incrementalWma.update(4); incrementalWma.update(5);
+close(incrementalWma.update(6), 32 / 6);
+
+const incrementalAtr = new ATRState(3);
+incrementalAtr.update(10, 8, 9);
+incrementalAtr.update(12, 9, 11);
+close(incrementalAtr.update(13, 11, 12), 7 / 3);
+assert.equal(incrementalAtr.update(Number.NaN, 10, 11), null,
+  'ATR must clear its recursive state and previous-close dependency across missing OHLC');
+incrementalAtr.update(14, 12, 13);
+incrementalAtr.update(15, 13, 14);
+close(incrementalAtr.update(16, 14, 15), 2,
+  'ATR must reinitialize from an independent post-gap true-range history');
 assert.deepEqual(Array.from(rollingSum(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingSum(values, 2)[3], 7);
 close(rollingVariance(Float64Array.from([1, 2, 3]), 2)[1], 0.25);
