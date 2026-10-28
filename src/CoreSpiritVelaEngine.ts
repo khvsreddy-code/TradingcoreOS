@@ -12,6 +12,7 @@ import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, 
 import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGraph.ts';
 import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
+import { coreSpiritLifecycleDiagnostic, publishCoreSpiritLifecycle } from './services/coreSpirit/coreSpiritExecutionLifecycle.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import { normalizeCoreSpiritTimeframe, timeframeSeconds } from './services/core/data/marketDataGraph.ts';
 import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarToCoreSpirit, normalizeVelaBarsToCoreSpirit, safeVelaNormalizationStart, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
@@ -113,6 +114,7 @@ export class CoreSpiritVelaEngine {
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
     const normalized = normalizeCoreSpirit(source);
+    publishCoreSpiritLifecycle({stage:'validating-capabilities',scriptId:instanceId,sourceHash:undefined,message:'Validating the chart artifact and its required capabilities.'});
     // Reuse the exact artifact compiled by the live dock when (and only when)
     // its source hash and artifact envelope still match. Vela keeps source as
     // the persisted external-indicator contract; this handoff is one-shot and
@@ -125,7 +127,11 @@ export class CoreSpiritVelaEngine {
           compileInWorker:(input, sourceId, options)=>compileCoreSpiritArtifactOffThread(input,sourceId,options),
         });
     if (!validateExecutableArtifact(artifact)) {
-      throw new Error('CoreSpirit refused an invalid executable artifact before chart preparation.');
+      const error = new Error('CoreSpirit refused an invalid executable artifact before chart preparation.') as Error & { code?: string };
+      error.code = 'CORESPIRIT_ARTIFACT_INVALID';
+      const diagnostic=coreSpiritLifecycleDiagnostic(error,'compile-failed',{previousOutputPreserved:true});
+      publishCoreSpiritLifecycle({stage:'compile-failed',scriptId:instanceId,scriptName:undefined,diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
+      throw error;
     }
     // A cached artifact never bypasses the chart's capability policy. Keep the
     // same compiler/sandbox contract regardless of which compile path supplied it.
@@ -136,10 +142,15 @@ export class CoreSpiritVelaEngine {
       artifact.ir.requiredCapabilities ?? [],
     );
     if (architectureFailures.length || capabilityFailures.length) {
-      throw new Error([
-        ...architectureFailures.map(message => `Sandbox architecture: ${message}`),
-        ...capabilityFailures.map(message => `Capability denied: ${message}`),
-      ].join('\n'));
+      const messages=[
+        ...architectureFailures.map(message => 'Sandbox architecture: '+message),
+        ...capabilityFailures.map(message => 'Capability denied: '+message),
+      ];
+      const error = new Error(messages.join('\n')) as Error & { code?: string };
+      error.code = 'CHART_CAPABILITY_DENIED';
+      const diagnostic=coreSpiritLifecycleDiagnostic(error,'capability-denied',{previousOutputPreserved:true});
+      publishCoreSpiritLifecycle({stage:'capability-denied',scriptId:instanceId,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,diagnostics:[diagnostic],previousOutputPreserved:true,message:diagnostic.message});
+      throw error;
     }
     const ir = artifact.ir;
     const metadata = resolveCoreSpiritVelaMetadata(source, ir);
@@ -179,6 +190,9 @@ export class CoreSpiritVelaEngine {
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
     let stopped = false;
+    let initialExecutionStagePublished = false;
+    let initialOutputValidationStagePublished = false;
+    let initialRenderPublished = false;
     // Keep async settings updates latest-wins too: older update callbacks must
     // not rebuild the runtime or emit a scene after a newer update takes over.
     let updateVersion = 0;
@@ -425,6 +439,10 @@ export class CoreSpiritVelaEngine {
       visibleRange?:VelaTimeRange,
       suppressExternalEffectsForRun=false,
     )=>{
+      if(!initialExecutionStagePublished){
+        initialExecutionStagePublished=true;
+        publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Running CoreSpirit against canonical chart history.'});
+      }
       const previousController=workerAbortControllers.get(contextKey);previousController?.abort();
       const controller=new AbortController();workerAbortControllers.set(contextKey,controller);
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
@@ -457,6 +475,10 @@ export class CoreSpiritVelaEngine {
         // One adapter owns the CoreSpirit(epoch-seconds) → Vela(epoch-milliseconds)
         // boundary. Validate plot timestamps against the exact input timeline before
         // the retained scene is mutated; a stale/misaligned point must never be rendered.
+        if(!initialOutputValidationStagePublished){
+          initialOutputValidationStagePublished=true;
+          publishCoreSpiritLifecycle({stage:'validating-outputs',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Validating output objects and aligning plot timestamps to canonical bars.'});
+        }
         const adapted = adaptCoreSpiritOutputsForVela(result.outputs, currentBars);
         for (const warning of adapted.warnings) {
           handlers.onWarning?.({ message: warning, method: 'output-alignment', bar: Math.max(0, currentBars.length - 1) });
@@ -472,6 +494,9 @@ export class CoreSpiritVelaEngine {
 
     const emitModel = (dirty?: VelaTimeRange): void => {
       const snapshot = scene.snapshot();
+      if(!initialRenderPublished){
+        publishCoreSpiritLifecycle({stage:'applying-chart-output',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Applying the validated CoreSpirit scene through Vela.'});
+      }
       handlers.onModel(buildCoreSpiritVelaIndicatorModel(
         token.sourceId,
         currentMetadata.meta,
@@ -502,6 +527,10 @@ export class CoreSpiritVelaEngine {
           barColors: snapshot.barColors,
         },
       ));
+      if(!initialRenderPublished){
+        initialRenderPublished=true;
+        publishCoreSpiritLifecycle({stage:'rendered',scriptId:token.sourceId,scriptName:currentMetadata.meta.title,sourceHash:token.artifact.abi?.sourceHash,artifactHash:token.artifact.abi?.artifactHash,symbol:req.market.symbol,timeframe:req.market.timeframe,message:'Vela accepted and applied the initial CoreSpirit chart model.'});
+      }
     };
 
     const emitScenePatches = (
