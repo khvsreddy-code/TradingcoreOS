@@ -4,7 +4,7 @@ import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { canonicalFyersSymbol } from '../fyers/symbols/canonicalFyersSymbol.js';
-import { historicalDataService, type HistoricalInstrumentMapping } from './HistoricalDataService.js';
+import { historicalDataService, type HistoricalInstrumentMapping, type PreferredHistorySourceFetcher } from './HistoricalDataService.js';
 import type { HistoricalCandle, HistoricalCandleColumns, HistoricalQuoteSnapshot } from '../../services/brokers/BrokerAdapter.js';
 
 export class CanonicalHistoryError extends Error {
@@ -85,6 +85,21 @@ function parseEpochMs(raw: unknown): number {
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 
+function parseServerMap(raw: unknown): Record<string, Record<string, unknown>> {
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, Record<string, unknown>> : {};
+  } catch { return {}; }
+}
+function parseRetryAfterMs(value: string | null): number | undefined {
+  const raw = String(value || '').trim();
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const date = Date.parse(raw);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+}
 function safeError(error: unknown): string {
   const value = error as { message?: string } | null;
   return String(value?.message || 'Unable to load validated historical candles').replace(/[\r\n\t]+/g, ' ').slice(0, 240);
@@ -176,6 +191,54 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       }
     : undefined;
 
+  const nseBase = String(process.env.NSE_MARKET_DATA_SERVICE_URL || '').trim().replace(/\/+$/, '');
+  const nseToken = String(process.env.NSE_MARKET_DATA_SERVICE_TOKEN || '').trim();
+  const nseMap = parseServerMap(process.env.NSE_MARKET_DATA_SYMBOL_MAP);
+  const investinyBase = String(process.env.INVESTINY_SERVICE_URL || process.env.TVDATAFEED_SERVICE_URL || '').trim().replace(/\/+$/, '');
+  const investinyToken = String(process.env.INVESTINY_SERVICE_TOKEN || process.env.TVDATAFEED_SERVICE_TOKEN || '').trim();
+  const investinyMap = parseServerMap(process.env.INVESTINY_SYMBOL_MAP);
+  const fetchNseHistory: PreferredHistorySourceFetcher | undefined = nseBase && nseToken
+    ? async (mapping, timeframe, range) => {
+        const mapped = nseMap[mapping.instrumentId] || nseMap[mapping.fyersSymbol];
+        const symbol = typeof mapped?.symbol === 'string' && mapped.symbol.trim() ? mapped.symbol.trim() : mapping.fyersSymbol;
+        const response = await fetch(nseBase + '/v1/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + nseToken, Accept: 'application/json' },
+          signal: timeoutSignal(API_LATENCY_BUDGET_MS.history),
+          body: JSON.stringify({ instrument_id: mapping.instrumentId, symbol, timeframe, from_ms: range.fromMs, to_ms: range.toMs, max_bars: range.requestedBars, timezone: mapping.timezone, session_open: mapping.sessionOpen }),
+        });
+        if (!response.ok) throw Object.assign(new Error('NSE gateway returned HTTP ' + response.status), { status: response.status, retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')) });
+        const payload: unknown = await response.json();
+        const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+        const nested = record.data && typeof record.data === 'object' ? record.data as Record<string, unknown> : {};
+        const rows = Array.isArray(record.bars) ? record.bars : Array.isArray(nested.bars) ? nested.bars : Array.isArray(record.data) ? record.data : null;
+        if (!rows) throw Object.assign(new Error('NSE gateway returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
+        return rows;
+      }
+    : undefined;
+  const fetchInvestinyHistory: PreferredHistorySourceFetcher | undefined =
+    process.env.INVESTINY_ENABLED !== 'false' && investinyBase && investinyToken
+      ? async (mapping, timeframe, range) => {
+          const mapped = investinyMap[mapping.instrumentId] || investinyMap[mapping.fyersSymbol];
+          const rawId = mapped?.investingId ?? mapped?.investing_id ?? mapped?.id;
+          const investingId = Number(rawId);
+          if (!Number.isSafeInteger(investingId) || investingId <= 0) {
+            throw Object.assign(new Error('No exact Investing.com asset ID is configured for this instrument'), { code: 'INVESTINY_SYMBOL_UNMAPPED' });
+          }
+          const response = await fetch(investinyBase + '/v1/investiny/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + investinyToken, Accept: 'application/json' },
+            signal: timeoutSignal(API_LATENCY_BUDGET_MS.history),
+            body: JSON.stringify({ instrument_id: mapping.instrumentId, investing_id: investingId, timeframe, from_ms: range.fromMs, to_ms: range.toMs, max_bars: range.requestedBars, timezone: mapping.timezone, session_open: mapping.sessionOpen }),
+          });
+          if (!response.ok) throw Object.assign(new Error('Investiny service returned HTTP ' + response.status), { status: response.status, retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')) });
+          const payload: unknown = await response.json();
+          const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+          if (!Array.isArray(record.bars)) throw Object.assign(new Error('Investiny service returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
+          return record.bars;
+        }
+      : undefined;
+
   const loaded = await historicalDataService.load({
     instrumentId,
     timeframe: spec.interval,
@@ -185,6 +248,8 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       : capabilities.historyDepth.intradayYears,
     ...(request.beforeTimestamp !== undefined ? { beforeTimestamp: request.beforeTimestamp } : {}),
     fetchFyersRecent,
+    fetchNseHistory,
+    fetchInvestinyHistory,
   });
   const metadata = {
     ...loaded.metadata,
@@ -210,7 +275,7 @@ export function historicalBarsToColumns(rows: readonly HistoricalCandle[], metad
     close: rows.map(row => row.close),
     volume: rows.map(row => row.volume),
     timeUnit: 'milliseconds',
-    source: rows.map(row => row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
+    source: rows.map(row => row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
     phase: rows.map(row => row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical'),
     confirmed: rows.map(row => row.confirmed === true),
     availableAt: rows.map(row => availableAtMs(row.availableAt)),

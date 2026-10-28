@@ -14,7 +14,7 @@ export function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
       timestamp: new Date(time * 1000).toISOString(),
       open: values[0], high: values[1], low: values[2], close: values[3],
       volume: Number.isFinite(volume) ? volume : 0,
-      ...(row.source === 'fyers' || row.source === 'tvdatafeed' || row.source === 'unknown' ? { source: row.source } : {}),
+      ...(row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' || row.source === 'unknown' ? { source: row.source } : {}),
       ...(row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? { phase: row.phase } : {}),
       ...(typeof row.confirmed === 'boolean' ? { confirmed: row.confirmed } : {}),
       ...(typeof row.availableAt === 'string' || typeof row.availableAt === 'number' ? { availableAt: row.availableAt } : {}),
@@ -49,7 +49,7 @@ export function columnarHistoryToCandles(columns: {
     const revision = typeof revisionRaw === 'number' ? revisionRaw : Number.NaN;
     out[written++] = {
       timestamp: new Date(time).toISOString(), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0,
-      ...(source === 'fyers' || source === 'tvdatafeed' || source === 'unknown' ? { source } : {}),
+      ...(source === 'nse' || source === 'investiny' || source === 'fyers' || source === 'tvdatafeed' || source === 'unknown' ? { source } : {}),
       ...(phase === 'historical' || phase === 'confirmed' || phase === 'developing' || phase === 'realtime' || phase === 'forecast' ? { phase } : {}),
       ...(typeof confirmed === 'boolean' ? { confirmed } : {}),
       ...(Number.isFinite(availableAtMs) && availableAtMs > 0 ? { availableAt: new Date(availableAtMs).toISOString() } : {}),

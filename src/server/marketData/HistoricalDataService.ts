@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { HistoricalCandle, HistoricalDataMetadata, HistoricalQuoteSnapshot } from '../../services/brokers/BrokerAdapter.js';
+import { marketDataAutoFixer, type MarketDataFixerSource } from './MarketDataAutoFixer.js';
 
 export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'fyers-plan-bounded-pages+tvdatafeed-gap-fill-5000/v2';
+export const HISTORICAL_SOURCE_POLICY = 'nse-first+investiny-history-fallback+fyers-quota-aware-fno-fallback-5000/v3';
 const CACHE_TTL_MS = 60_000;
 const SOURCE_TIMEOUT_MS = 10_000;
 const CACHE_TABLE = 'historical_dataset_cache';
@@ -24,7 +25,8 @@ export interface BoundedHistoryPageRange extends RecentHistoryRange {
 }
 export interface FyersRecentResult { bars: unknown[]; quote?: HistoricalQuoteSnapshot | null; status?: Record<string, unknown>; }
 export type FyersRecentFetcher = (mapping: HistoricalInstrumentMapping, range: RecentHistoryRange) => Promise<FyersRecentResult>;
-interface StoredBar extends HistoricalCandle { source: 'fyers' | 'tvdatafeed'; timestampMs: number; }
+export type PreferredHistorySourceFetcher = (mapping: HistoricalInstrumentMapping, timeframe: string, range: BoundedHistoryPageRange) => Promise<unknown[]>;
+interface StoredBar extends HistoricalCandle { source: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed'; timestampMs: number; }
 interface CacheRecord {
   instrumentId: string; timeframe: string; bars: StoredBar[]; revision: number;
   sourcePolicy: string; sourceStatus: Record<string, unknown>; degraded: boolean;
@@ -39,6 +41,10 @@ export interface HistoricalLoadRequest {
   /** FYERS plan history cap for this timeframe; null means no artificial cutoff. */
   historyMaxLookbackYears?: number | null;
   fetchFyersRecent?: FyersRecentFetcher;
+  /** Private, authorized NSE historical-data gateway. */
+  fetchNseHistory?: PreferredHistorySourceFetcher;
+  /** Historical-only Investiny adapter; exact asset mapping is required. */
+  fetchInvestinyHistory?: PreferredHistorySourceFetcher;
 }
 
 const memoryCache = new Map<string, CacheRecord>();
@@ -196,7 +202,7 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
         volume < 0 || high < low || high < Math.max(open, close) || low > Math.min(open, close)) continue;
     const bar: StoredBar = { timestamp: new Date(timestampMs).toISOString(), timestampMs, open, high, low, close, volume, source };
     const old = byTime.get(timestampMs);
-    if (!old || (source === 'fyers' && old.source !== 'fyers')) byTime.set(timestampMs, bar);
+    if (!old || sourcePriority(source) >= sourcePriority(old.source)) byTime.set(timestampMs, bar);
   }
   return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 }
@@ -204,6 +210,49 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
 export function normalizeHistoricalCandles(rows: unknown[], source: 'fyers' | 'tvdatafeed'): StoredBar[] {
   return normalizeRows(rows, source);
 }
+function sourcePriority(source: StoredBar['source']): number {
+  switch (source) { case 'nse': return 4; case 'fyers': return 3; case 'investiny': return 2; case 'tvdatafeed': return 1; default: return 0; }
+}
+function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
+  const byTime = new Map<number, StoredBar>();
+  for (const bar of [...existing, ...incoming]) {
+    const old = byTime.get(bar.timestampMs);
+    if (!old || sourcePriority(bar.source) >= sourcePriority(old.source)) byTime.set(bar.timestampMs, bar);
+  }
+  return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
+}
+function isFnoInstrument(mapping: HistoricalInstrumentMapping): boolean {
+  const kind = String(mapping.instrumentType || '').toLowerCase();
+  if (/(option|future|futures|derivative|fno)/.test(kind)) return true;
+  const symbol = String(mapping.fyersSymbol || mapping.instrumentId || '');
+  return /(?:\d{4,}(?:CE|PE)|FUT(?:URES?)?)$/i.test(symbol)
+    || /(?:^|:)NSE_FO:/i.test(symbol) || /(?:^|:)BSE_FO:/i.test(symbol);
+}
+type ProviderBarsAttempt = { bars: StoredBar[]; status: Record<string, unknown> };
+async function fetchProviderBars(
+  source: 'nse' | 'investiny', fetcher: PreferredHistorySourceFetcher | undefined,
+  mapping: HistoricalInstrumentMapping, timeframe: string, range: BoundedHistoryPageRange,
+): Promise<ProviderBarsAttempt> {
+  const resource = mapping.instrumentId + ':' + timeframe;
+  if (!fetcher) return { bars: [], status: { status: 'not-configured' } };
+  if (!marketDataAutoFixer.canAttempt(source, 'history', resource)) {
+    return { bars: [], status: { status: 'circuit-open', health: marketDataAutoFixer.snapshot(source, 'history', resource)[0] || null } };
+  }
+  try {
+    const raw = await fetcher(mapping, timeframe, range);
+    if (!Array.isArray(raw)) throw Object.assign(new Error(source + ' returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
+    const bars = normalizeRows(raw, source).filter(bar => bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs);
+    if (!bars.length) throw Object.assign(new Error(source + ' returned no validated candles'), { code: 'EMPTY_VALIDATED_HISTORY' });
+    const health = marketDataAutoFixer.recordSuccess(source, 'history', resource);
+    return { bars, status: { status: 'ok', rawCount: raw.length, validatedCount: bars.length, health } };
+  } catch (error) {
+    const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+    if (value.code === 'INVESTINY_SYMBOL_UNMAPPED') return { bars: [], status: { status: 'unmapped', error: errorText(error) } };
+    const health = marketDataAutoFixer.recordFailure(source, 'history', resource, error);
+    return { bars: [], status: { status: 'error', error: errorText(error), health } };
+  }
+}
+
 function sessionDates(bars: StoredBar[], timezone: string): string[] { return [...new Set(bars.map(b => zonedDate(b.timestampMs, timezone)))].sort(); }
 function dateOffset(date: string, offsetDays: number): string {
   return new Date(Date.parse(date + 'T12:00:00Z') + offsetDays * 86_400_000).toISOString().slice(0, 10);
@@ -483,7 +532,8 @@ export class HistoricalDataService {
         if (result.data && Array.isArray(result.data.bars)) {
           const bars = (result.data.bars as unknown[]).map((row) => {
             if (!isRecord(row)) return null;
-            return normalizeRows([row], row.source === 'fyers' ? 'fyers' : 'tvdatafeed')[0] || null;
+            const source = row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'tvdatafeed';
+            return normalizeRows([row], source)[0] || null;
           }).filter((bar): bar is StoredBar => bar !== null).slice(-HISTORICAL_MAX_BARS);
           const updatedAt = Date.parse(String(result.data.updated_at || ''));
           const expiresAt = Date.parse(String(result.data.expires_at || ''));
@@ -562,12 +612,69 @@ export class HistoricalDataService {
     fetchFyersRecent: FyersRecentFetcher | undefined,
     requestedBars: number,
     historyMaxLookbackYears: number | null,
+    fetchNseHistory?: PreferredHistorySourceFetcher,
+    fetchInvestinyHistory?: PreferredHistorySourceFetcher,
   ): Promise<CacheRecord> {
     const key = cacheKey(mapping.instrumentId, timeframe);
     const existing = inflight.get(key);
     if (existing) return existing;
     const task = (async (): Promise<CacheRecord> => {
       const range = getBoundedHistoryPageRange(mapping, timeframe, requestedBars, historyMaxLookbackYears);
+      const sourceRoutingStatus: Record<string, Record<string, unknown>> = {
+        nse: { status: fetchNseHistory ? 'pending' : 'not-configured' },
+        investiny: { status: fetchInvestinyHistory ? 'pending' : 'not-configured' },
+      };
+      const preferredTarget = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+      const nseAttempt = await fetchProviderBars('nse', fetchNseHistory, mapping, timeframe, range);
+      sourceRoutingStatus.nse = nseAttempt.status;
+      const writePreferred = async (activeSource: 'nse' | 'investiny', freshBars: StoredBar[], investinyStatus?: Record<string, unknown>) => {
+        if (investinyStatus) sourceRoutingStatus.investiny = investinyStatus;
+        const merged = mergeStoredBars(cached?.bars || [], freshBars).slice(-HISTORICAL_MAX_BARS);
+        const now = Date.now();
+        const sourceStatus: Record<string, unknown> = {
+          nse: sourceRoutingStatus.nse,
+          investiny: sourceRoutingStatus.investiny,
+          fyers: { status: 'not-needed', reason: activeSource + ' returned validated history' },
+          tvdatafeed: { status: 'not-needed', reason: activeSource + ' returned validated history' },
+          cache: { status: cached?.bars.length ? 'merged-with-validated-cache' : 'miss' },
+          route: { activeSource, capability: 'historical-ohlcv', automaticFailback: true },
+          autoFixer: {
+            nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+            investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+          },
+          historyCompleteness: {
+            status: merged.length >= preferredTarget ? 'page-target-reached' : 'partial-page',
+            requestedBars: preferredTarget, returnedBars: Math.min(merged.length, preferredTarget),
+            datasetComplete: false, paginationSupported: false,
+          },
+          calendarPolicy: range.calendarPolicy,
+        };
+        return this.writeCache({
+          instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
+          revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus,
+          degraded: activeSource !== 'nse' || merged.length < preferredTarget,
+          expiresAt: now + CACHE_TTL_MS, updatedAt: now, quote: null,
+        });
+      };
+      if (nseAttempt.bars.length) {
+        let preferredBars = nseAttempt.bars;
+        let investinyStatus: Record<string, unknown> = { status: fetchInvestinyHistory ? 'not-needed' : 'not-configured' };
+        const mergedNse = mergeStoredBars(cached?.bars || [], nseAttempt.bars);
+        if (!isFnoInstrument(mapping) && fetchInvestinyHistory && mergedNse.length < preferredTarget) {
+          const investinyAttempt = await fetchProviderBars('investiny', fetchInvestinyHistory, mapping, timeframe, range);
+          investinyStatus = { ...investinyAttempt.status, role: 'older-history-gap-fill' };
+          preferredBars = mergeStoredBars(investinyAttempt.bars, preferredBars);
+        }
+        return writePreferred('nse', preferredBars, investinyStatus);
+      }
+      // Investiny is a historical-only backup for cash/index data. For options and
+      // futures, fall through to the existing FYERS plan-aware quota gate.
+      sourceRoutingStatus.investiny = { status: isFnoInstrument(mapping) ? 'skipped-fno-uses-fyers' : fetchInvestinyHistory ? 'pending' : 'not-configured' };
+      if (!isFnoInstrument(mapping)) {
+        const investinyAttempt = await fetchProviderBars('investiny', fetchInvestinyHistory, mapping, timeframe, range);
+        sourceRoutingStatus.investiny = investinyAttempt.status;
+        if (investinyAttempt.bars.length) return writePreferred('investiny', investinyAttempt.bars);
+      }
       const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
       const tvCompatible = Boolean(mapping.tvSymbol && mapping.tvExchange && this.tvContractCompatible(mapping));
       const tvEnabled = tvConfigured && tvCompatible;
@@ -691,6 +798,12 @@ export class HistoricalDataService {
         ? Number(fyersPageStats[0]!.toMs)
         : range.toMs;
       const sourceStatus: Record<string, unknown> = {
+        nse: sourceRoutingStatus.nse,
+        investiny: sourceRoutingStatus.investiny,
+        autoFixer: {
+          nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+          investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
+        },
         fyers: {
           status: fyersRows.length ? fyersFailed ? 'partial-error' : 'ok' : fyersFailed ? 'error' : fetchFyersRecent ? 'empty' : 'unavailable',
           rawCount: fyersPageStats.reduce((sum, page) => sum + Number(page.rawCount || 0), 0),
@@ -729,8 +842,7 @@ export class HistoricalDataService {
       const byTime = new Map<number, StoredBar>();
       for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars]) {
         const old = byTime.get(bar.timestampMs);
-        if (!old || (bar.source === 'fyers' && old.source !== 'fyers') ||
-            (bar.source === 'tvdatafeed' && old.source === 'tvdatafeed' && !cachedOlderBars.includes(old))) {
+        if (!old || sourcePriority(bar.source) >= sourcePriority(old.source)) {
           byTime.set(bar.timestampMs, bar);
         }
       }
@@ -829,7 +941,7 @@ export class HistoricalDataService {
               const mergedOlder = new Map<number, StoredBar>();
               for (const bar of [...older, ...pageBars]) {
                 const existing = mergedOlder.get(bar.timestampMs);
-                if (!existing || bar.source === 'fyers') mergedOlder.set(bar.timestampMs, bar);
+                if (!existing || sourcePriority(bar.source) >= sourcePriority(existing.source)) mergedOlder.set(bar.timestampMs, bar);
               }
               older = [...mergedOlder.values()].sort((a, b) => a.timestampMs - b.timestampMs);
               paginationStatus = pageBars.length ? 'fyers-page-fetched' : 'no-validated-bars-in-page';
@@ -848,7 +960,7 @@ export class HistoricalDataService {
               const allBars = new Map<number, StoredBar>();
               for (const bar of [...currentRecord.bars, ...pageBars]) {
                 const existing = allBars.get(bar.timestampMs);
-                if (!existing || (bar.source === 'fyers' && existing.source !== 'fyers')) allBars.set(bar.timestampMs, bar);
+                if (!existing || sourcePriority(bar.source) >= sourcePriority(existing.source)) allBars.set(bar.timestampMs, bar);
               }
               const combined = [...allBars.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
               const sourceStatus = {
@@ -948,6 +1060,8 @@ export class HistoricalDataService {
         request.fetchFyersRecent,
         Math.min(2_000, maxBars),
         request.historyMaxLookbackYears ?? null,
+        request.fetchNseHistory,
+        request.fetchInvestinyHistory,
       ));
     } catch (error) {
       if (!cached?.bars.length) throw error;

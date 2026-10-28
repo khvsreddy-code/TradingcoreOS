@@ -27,4 +27,10 @@ assert.equal(converted[1]?.timestamp, '2026-10-24T10:05:00.000Z');
 assert.equal(converted[1]?.phase, 'realtime');
 assert.equal(converted[1]?.confirmed, false);
 assert.equal(converted[1]?.revision, 2);
+const sourceRows = normalizeHistory([
+  { timestamp: '2026-10-26T09:15:00.000Z', open: 100, high: 102, low: 99, close: 101, volume: 10, source: 'nse' },
+  { timestamp: '2026-10-26T09:20:00.000Z', open: 101, high: 103, low: 100, close: 102, volume: 15, source: 'investiny' },
+] as any);
+assert.equal(sourceRows[0]?.source, 'nse');
+assert.equal(sourceRows[1]?.source, 'investiny');
 console.log('CHART_HISTORY_NORMALIZATION_CONTRACT_OK');

@@ -81,7 +81,7 @@ export interface HistoricalCandle {
   close: number;
   volume: number;
   /** Source of this validated bar. Unknown for legacy/caller-supplied rows. */
-  source?: 'fyers' | 'tvdatafeed' | 'unknown';
+  source?: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'unknown';
   /** Historical/confirmed rows are separate from developing/live quote updates. */
   phase?: 'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast';
   confirmed?: boolean;
@@ -131,7 +131,7 @@ export interface HistoricalCandleColumns {
   volume: number[];
   timeUnit: 'milliseconds' | 'seconds';
   /** Per-bar lineage sidecars; availableAt contains epoch milliseconds (NaN means unavailable). */
-  source?: Array<'fyers' | 'tvdatafeed' | 'unknown'>;
+  source?: Array<'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'unknown'>;
   phase?: Array<'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast'>;
   confirmed?: boolean[];
   availableAt?: number[];
