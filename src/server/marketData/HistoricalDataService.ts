@@ -890,7 +890,9 @@ export class HistoricalDataService {
         const staleRecord: CacheRecord = {
           ...cached,
           sourcePolicy: HISTORICAL_SOURCE_POLICY,
-          expiresAt: Date.now(),
+          // Suppress repeated provider retries during an outage, but keep the
+          // snapshot visibly stale in metadata while this cooldown is active.
+          expiresAt: Date.now() + CACHE_TTL_MS,
           updatedAt: Date.now(),
           sourceStatus: {
             ...sourceStatus,
@@ -1094,7 +1096,12 @@ export class HistoricalDataService {
 
     if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && cached.bars.length) {
       const bars = cached.bars.slice(-maxBars);
-      return { bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays), metadata: this.metadata(cached, bars, { cacheHit: true }), quote: null };
+      const staleFallback = Boolean(cached.sourceStatus.staleCacheFallback);
+      return {
+        bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
+        metadata: this.metadata(cached, bars, { cacheHit: true, stale: staleFallback, degraded: cached.degraded || staleFallback }),
+        quote: null,
+      };
     }
 
     const key = cacheKey(cacheInstrumentId, timeframe);
@@ -1113,9 +1120,18 @@ export class HistoricalDataService {
       ));
     } catch (error) {
       if (!cached?.bars.length) throw error;
-      refreshed = { ...cached, expiresAt: Date.now(), degraded: true, quote: null, sourceStatus: { ...cached.sourceStatus, refreshError: errorText(error) } };
+      const now = Date.now();
+      refreshed = await this.writeCache({
+        ...cached,
+        sourcePolicy: HISTORICAL_SOURCE_POLICY,
+        expiresAt: now + CACHE_TTL_MS,
+        updatedAt: now,
+        degraded: true,
+        quote: null,
+        sourceStatus: { ...cached.sourceStatus, staleCacheFallback: true, refreshError: errorText(error), previousSourcePolicy: cached.sourcePolicy },
+      });
     }
-    const bars = refreshed.bars.slice(-maxBars), stale = refreshed.expiresAt <= Date.now();
+    const bars = refreshed.bars.slice(-maxBars), stale = refreshed.expiresAt <= Date.now() || Boolean(refreshed.sourceStatus.staleCacheFallback);
     return {
       bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
       metadata: this.metadata(refreshed, bars, { stale, degraded: refreshed.degraded || stale }),
