@@ -92,14 +92,19 @@ export class MarketDataAutoFixer {
   }
   canAttempt(source: MarketDataFixerSource, capability: MarketDataFixerCapability, resource: string): boolean {
     const key = this.key(source, capability, resource);
-    const entry = this.entries.get(key);
-    if (!entry) return true;
+    const entry = this.getOrCreate(source, capability, resource);
     this.touch(key, entry);
-    if (entry.state === 'healthy') return true;
+    if (entry.state === 'healthy') {
+      entry.attempts += 1;
+      entry.lastAttemptAt = this.now();
+      return true;
+    }
     if (entry.state === 'half-open') return false;
     if (entry.nextProbeAt != null && this.now() < entry.nextProbeAt) return false;
     entry.state = 'half-open';
     entry.probeInFlight = true;
+    entry.attempts += 1;
+    entry.lastAttemptAt = this.now();
     entry.lastAction = 'cooldown-expired-single-probe';
     return true;
   }
@@ -122,7 +127,6 @@ export class MarketDataAutoFixer {
     const entry = this.getOrCreate(source, capability, resource);
     const status = statusOf(error);
     entry.failures += 1;
-    entry.attempts += 1;
     entry.lastStatus = status;
     entry.lastError = safeError(error);
     entry.lastAttemptAt = this.now();
