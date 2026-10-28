@@ -15,7 +15,7 @@ import {
 } from './sharedMarketBuffer';
 import { createGraphResolver, graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 import { structureCoreSpiritRuntimeDiagnostics } from './runtimeDiagnostics';
-import type { CoreSpiritExecutionDiagnostic } from './runtimeDiagnostics';
+import type { CoreSpiritExecutionDiagnostic as CoreSpiritExecutionDiagnosticType } from './runtimeDiagnostics';
 export type { CoreSpiritExecutionDiagnostic } from './runtimeDiagnostics';
 
 export type CoreSpiritWorkerRuntimeOptions = Pick<CoreSpiritRuntimeOptions,
@@ -59,7 +59,7 @@ export type CoreSpiritWorkerRunResult = {
   /** Backward-compatible message list for existing UI consumers. */
   diagnostics: string[];
   /** Typed diagnostics are the authority for deciding whether a frame may commit. */
-  diagnosticDetails?: CoreSpiritExecutionDiagnostic[];
+  diagnosticDetails?: CoreSpiritExecutionDiagnosticType[];
   state?: unknown;
 };
 
