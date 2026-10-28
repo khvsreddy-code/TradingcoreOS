@@ -98,10 +98,17 @@ includes(smcBrowser, 'instanceCountAfter: replayState.count', 'recompilation acc
 includes(smcBrowser, 'assert.deepEqual(replayState.ids, initialInstanceState.ids)', 'same-source recompile retains its stable Vela instance ID');
 includes(smcBrowser, 'Recompiling the identical SMC source must leave exactly one attached CoreSpirit instance', 'recompilation acceptance prevents duplicate retained chart instances');
 includes(backendBenchmark, 'executeCoreSpiritSeriesFusionGroupDispatched', 'backend benchmark exercises the real series dispatcher instead of a stand-alone kernel alone');
-includes(backendBenchmark, 'short/gap WASM parity', 'backend acceptance tests missing values and short-history semantics');
+includes(backendBenchmark, 'short-history-and-missing-values', 'backend acceptance tests missing values and short-history semantics');
 includes(backendBenchmark, 'synthetic test failure after partial write', 'backend acceptance proves staged accelerator failure cannot corrupt output');
 includes(backendBenchmark, 'realtimeStaysOnCpu', 'backend benchmark verifies live execution remains CPU-only');
 includes(backendBenchmark, 'actualExecutedBackends', 'backend timings report the backend that really executed');
+includes(backendBenchmark, "'rollingMean'", 'dispatcher acceptance includes rolling mean');
+includes(backendBenchmark, "'rollingSum'", 'dispatcher acceptance includes rolling sum');
+includes(backendBenchmark, "'rollingVariance'", 'dispatcher acceptance includes rolling variance');
+includes(backendBenchmark, "'rollingStd'", 'dispatcher acceptance includes rolling standard deviation');
+includes(backendBenchmark, "'rollingMin'", 'dispatcher acceptance includes rolling minimum');
+includes(backendBenchmark, "'rollingMax'", 'dispatcher acceptance includes rolling maximum');
+includes(backendBenchmark, "assert.equal(result, 'wasm'", 'measured timings fail unless WASM actually executes');
 includes(smcBenchmark, 'cleanCorrectionFingerprint', 'historical correction performance is accepted only after parity with a clean full replay');
 includes(packageJson, '"benchmark:corespirit:backends"', 'actual backend-path performance benchmarking is available through npm scripts');
 includes(smcBrowser, 'getBoundingClientRect()', 'browser acceptance requires a visible Vela chart surface');
