@@ -17,7 +17,7 @@ TradingCoreOS uses one canonical historical coordinator. Vela, CoreSpirit, repla
 
 - Resolve instruments through exact mappings, including instrument type, expiry/contract identity, timezone, session, holiday calendar and adjustment policy.
 - The server cache is read before fetching; the existing in-flight promise map deduplicates identical history refreshes within one server process.
-- Overlapping candle precedence is NSE, FYERS, Investiny, then tvdatafeed. A new correction from the same source supersedes that source's cached row.
+- Overlapping candle precedence is NSE, Investiny, FYERS, then tvdatafeed; F&O/options skip Investiny entirely and use the existing quota-gated FYERS path. A new correction from the same source supersedes that source's cached row.
 - Validate timestamp, OHLC geometry, duplicate candles and volume before acceptance. Keep source provenance on each candle.
 - Keep event time distinct from receive time. A quote snapshot with no valid trade timestamp must never become a synthetic candle.
 - Keep one canonical path: historical service -> chart data plane/revision fences -> Vela/CoreSpirit. Corrections/backfills must invalidate the correct dirty range.
