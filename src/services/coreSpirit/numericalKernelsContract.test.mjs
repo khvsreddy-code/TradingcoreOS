@@ -5,6 +5,7 @@ import {
   zScore, dotProduct, matrixMultiply, matrixDecomposition, softmax, logSumExp,
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
+import { RollingMean, RollingSum, RollingVariance, RollingMinMax } from './statefulIndicatorKernel.ts';
 
 const close = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, received ${actual}`);
 const values = Float64Array.from([1, 2, 3, 4]);
@@ -12,7 +13,6 @@ assert.deepEqual(Array.from(rollingMean(values, 2), Number.isNaN), [true, false,
 close(rollingMean(values, 2)[1], 1.5);
 close(rollingMean(values, 2)[3], 3.5);
 
-const { RollingMean } = await import('./statefulIndicatorKernel.ts');
 const incrementalMean = new RollingMean(3);
 assert.equal(incrementalMean.update(1).value, null, 'rolling mean must remain NaN until a full window forms');
 assert.equal(incrementalMean.update(2).value, null, 'rolling mean warm-up must require consecutive finite observations');
@@ -30,6 +30,36 @@ correctedMean.update(Number.NaN);
 correctedMean.update(4); correctedMean.update(5);
 assert.equal(correctedMean.update(6, 'replace').value, null,
   'a forming-bar replacement must preserve the fresh-window warm-up boundary');
+
+const incrementalSum = new RollingSum(3);
+incrementalSum.update(1); incrementalSum.update(2);
+assert.equal(incrementalSum.update(3).value, 6);
+assert.equal(incrementalSum.update(Number.NaN).value, null,
+  'rolling sum must invalidate its window when a market-data gap appears');
+incrementalSum.update(4); incrementalSum.update(5);
+assert.equal(incrementalSum.update(6).value, 15,
+  'rolling sum must recover only after a complete finite post-gap window');
+
+const incrementalVariance = new RollingVariance(3);
+incrementalVariance.update(1); incrementalVariance.update(2);
+incrementalVariance.update(3);
+close(incrementalVariance.variance(), 2 / 3);
+assert.equal(incrementalVariance.update(Number.POSITIVE_INFINITY).value, null,
+  'rolling variance and standard deviation must reset across non-finite observations');
+incrementalVariance.update(4); incrementalVariance.update(5);
+assert.equal(incrementalVariance.update(6).value, null,
+  'rolling variance standard deviation must remain in warm-up until its entire window is finite');
+incrementalVariance.update(7);
+close(incrementalVariance.variance(), 2 / 3);
+
+const incrementalExtrema = new RollingMinMax(3);
+incrementalExtrema.update(1); incrementalExtrema.update(2);
+assert.deepEqual(incrementalExtrema.update(3), { count: 3, min: 1, max: 3 });
+assert.deepEqual(incrementalExtrema.update(Number.NaN), { count: 0, min: null, max: null },
+  'rolling high/low must invalidate old extrema instead of retaining a stale price window');
+incrementalExtrema.update(4); incrementalExtrema.update(5);
+assert.deepEqual(incrementalExtrema.update(6), { count: 3, min: 4, max: 6 },
+  'rolling high/low must rewarm over consecutive finite prices after a gap');
 assert.deepEqual(Array.from(rollingSum(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingSum(values, 2)[3], 7);
 close(rollingVariance(Float64Array.from([1, 2, 3]), 2)[1], 0.25);
