@@ -33,6 +33,12 @@ function makeCloseSeries(length) {
   }
   return out;
 }
+function makeGappedSeries(length) {
+  const output = makeCloseSeries(length);
+  if (length > 5) output[Math.floor(length / 3)] = Number.NaN;
+  if (length > 12) output[Math.floor((length * 2) / 3)] = Number.POSITIVE_INFINITY;
+  return output;
+}
 function median(values) {
   const sorted = values.slice().sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -119,6 +125,61 @@ async function main() {
       });
     }
   }
+  // Correctness gate across every operation exposed by the bundled WASM
+  // manifest: warm-up/short history, missing values, corrections and forming-bar
+  // replacement are compared against the canonical CPU typed-array functions.
+  const edgeCaseResults = [];
+  const correctionResults = [];
+  const formingBarResults = [];
+  const edgeBarCounts = [...new Set([1, DEFAULT_PERIOD - 1, DEFAULT_PERIOD, DEFAULT_PERIOD + 1, 257])];
+  for (const kernel of KERNELS) {
+    for (const bars of edgeBarCounts) {
+      const input = makeGappedSeries(bars);
+      const expected = kernel.reference(input, DEFAULT_PERIOD);
+      const output = new Float64Array(bars);
+      const execution = await wasm.execute({
+        kernel: kernel.name,
+        inputs: [input],
+        outputs: [output],
+        params: kernel.params(DEFAULT_PERIOD),
+      });
+      assertEquivalent(output, expected, `${kernel.name} short/gap parity ${bars} bars`);
+      edgeCaseResults.push({
+        operation: kernel.name,
+        bars,
+        actualKernelVariant: execution.variant,
+        missingInputCount: Array.from(input).filter(value => !Number.isFinite(value)).length,
+        parity: 'passed',
+      });
+    }
+
+    const correctedInput = makeGappedSeries(257);
+    correctedInput[127] = Number(correctedInput[127]) + 0.333;
+    const correctedExpected = kernel.reference(correctedInput, DEFAULT_PERIOD);
+    const correctedOutput = new Float64Array(correctedInput.length);
+    await wasm.execute({
+      kernel: kernel.name,
+      inputs: [correctedInput],
+      outputs: [correctedOutput],
+      params: kernel.params(DEFAULT_PERIOD),
+    });
+    assertEquivalent(correctedOutput, correctedExpected, kernel.name + ' historical-correction parity');
+    correctionResults.push({ operation: kernel.name, bars: correctedInput.length, parity: 'passed' });
+
+    const formingInput = makeGappedSeries(257);
+    formingInput[formingInput.length - 1] = Number(formingInput[formingInput.length - 1]) + 0.217;
+    const formingExpected = kernel.reference(formingInput, DEFAULT_PERIOD);
+    const formingOutput = new Float64Array(formingInput.length);
+    await wasm.execute({
+      kernel: kernel.name,
+      inputs: [formingInput],
+      outputs: [formingOutput],
+      params: kernel.params(DEFAULT_PERIOD),
+    });
+    assertEquivalent(formingOutput, formingExpected, kernel.name + ' forming-bar replacement parity');
+    formingBarResults.push({ operation: kernel.name, bars: formingInput.length, parity: 'passed' });
+  }
+  console.log('[wasm] all supported kernels passed short-history, gap, correction and forming-bar parity');
   console.table(rows);
   const report = {
     capturedAt: new Date().toISOString(),
@@ -135,6 +196,12 @@ async function main() {
     measurements: ['CPU typed-array reference', 'WASM kernel-only time', 'WASM end-to-end time including transfer/allocation'],
     policy: 'Performance ratios are measured per environment; the benchmark never labels WASM as a win unless end-to-end speedup exceeds 1.0x.',
     results: rows,
+    correctness: {
+      shortHistoriesAndMissingValues: edgeCaseResults,
+      historicalCorrections: correctionResults,
+      formingBarReplacements: formingBarResults,
+      canonicalReference: 'numericalKernels.ts typed-array CPU implementations',
+    },
   };
   const serializedReport = JSON.stringify(report, null, 2);
   console.log(serializedReport);
