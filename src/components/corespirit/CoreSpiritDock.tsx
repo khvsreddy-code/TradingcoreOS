@@ -8,9 +8,10 @@ import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
 import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
 import {
-  coreSpiritLifecycleDiagnostic, coreSpiritLifecycleLabel, coreSpiritLifecycleStageForError,
+  CORE_SPIRIT_LIFECYCLE_STEPS, coreSpiritLifecycleDiagnostic, coreSpiritLifecycleLabel, coreSpiritLifecycleStageForError,
   publishCoreSpiritLifecycle, validateCoreSpiritChartCapabilities,
-  type CoreSpiritLifecycleDiagnostic, type CoreSpiritLifecycleStage,
+  type CoreSpiritChartManagedField, type CoreSpiritChartManagedIndicator, type CoreSpiritChartManagerBridge,
+  type CoreSpiritLifecycleDiagnostic, type CoreSpiritLifecycleStage, type CoreSpiritChartManagedValue,
 } from '../../services/coreSpirit/coreSpiritExecutionLifecycle';
 
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
@@ -49,6 +50,16 @@ function localSource(): string {
     return saved && !isBundledLegacyStarter(saved) ? saved : '';
   } catch { return ''; }
 }
+type CoreSpiritChartManagerWindow = Window & { __TCO_CORESPIRIT_CHART_MANAGER__?: CoreSpiritChartManagerBridge };
+
+function chartManagerFromWindow(): CoreSpiritChartManagerBridge | undefined {
+  return typeof window === 'undefined' ? undefined : (window as CoreSpiritChartManagerWindow).__TCO_CORESPIRIT_CHART_MANAGER__;
+}
+
+function displayManagerValue(value: CoreSpiritChartManagedValue): string {
+  return typeof value === 'boolean' ? (value ? 'On' : 'Off') : String(value);
+}
+
 function persistLocalSource(source: string, name: string, scriptId?: string | null): void {
   try {
     localStorage.setItem(versionedStorageKey('editor'), source);
@@ -95,6 +106,9 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
   const [lifecycleStage, setLifecycleStage] = useState<CoreSpiritLifecycleStage>('editing');
   const [lifecycleDiagnostics, setLifecycleDiagnostics] = useState<CoreSpiritLifecycleDiagnostic[]>([]);
+  const [chartIndicators, setChartIndicators] = useState<readonly CoreSpiritChartManagedIndicator[]>([]);
+  const [chartManagerOpen, setChartManagerOpen] = useState(true);
+  const [managerError, setManagerError] = useState('');
   const sourceVersion = useRef(0);
 
   const reportStage = (stage: CoreSpiritLifecycleStage, message?: string, extra: Partial<CoreSpiritLifecycleDiagnostic> = {}) => {
@@ -180,6 +194,61 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     }
     reportStage('compiled', 'Compiled · chart capabilities validated · artifact identity verified.');
     return result;
+  };
+
+  useEffect(() => {
+    const refreshChartManager = () => {
+      try {
+        setChartIndicators(chartManagerFromWindow()?.list() ?? []);
+        setManagerError('');
+      } catch (error) {
+        setManagerError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    refreshChartManager();
+    window.addEventListener('tco:corespirit:chart-manager-changed', refreshChartManager);
+    window.addEventListener('tco:corespirit:lifecycle', refreshChartManager);
+    return () => {
+      window.removeEventListener('tco:corespirit:chart-manager-changed', refreshChartManager);
+      window.removeEventListener('tco:corespirit:lifecycle', refreshChartManager);
+    };
+  }, []);
+
+  const updateManagedField = (instance: CoreSpiritChartManagedIndicator, field: CoreSpiritChartManagedField, value: CoreSpiritChartManagedValue, prop = false) => {
+    const manager = chartManagerFromWindow();
+    if (!manager) { setManagerError('The active Vela chart manager is not available.'); return; }
+    const ok = prop ? manager.setProp(instance.id, field.key, value) : manager.setInput(instance.id, field.key, value);
+    if (!ok) { setManagerError('Could not update ' + field.title + '. The indicator may have been removed or its input schema changed.'); return; }
+    setStatus('Input accepted · executing ' + instance.name + ' against current chart history…');
+    setLifecycleStage('executing-historical');
+    window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
+  };
+
+  const loadManagedSource = (instance: CoreSpiritChartManagedIndicator) => {
+    setSource(instance.source);
+    sourceVersion.current += 1;
+    setName(instance.name);
+    setNameDraft(instance.name);
+    setCompileResult(null);
+    setDiagnostics([]);
+    setLifecycleDiagnostics([]);
+    setSelectedVersion('');
+    reportStage('editing', 'Loaded the running chart version into the editor. Compile & Run to apply changes.');
+    persistLocalSource(instance.source, instance.name, scriptId);
+  };
+
+  const toggleManagedVisibility = (instance: CoreSpiritChartManagedIndicator) => {
+    const ok = chartManagerFromWindow()?.setVisible(instance.id, !instance.visible);
+    if (!ok) { setManagerError('Could not change visibility. Refresh the chart manager and retry.'); return; }
+    setChartIndicators(chartManagerFromWindow()?.list() ?? []);
+  };
+
+  const removeManagedInstance = (instance: CoreSpiritChartManagedIndicator) => {
+    if (!window.confirm('Remove ' + instance.name + ' from the active Vela chart? This does not delete its saved source.')) return;
+    const ok = chartManagerFromWindow()?.remove(instance.id);
+    if (!ok) { setManagerError('Could not remove ' + instance.name + '. It may already have been removed.'); return; }
+    setChartIndicators(chartManagerFromWindow()?.list() ?? []);
+    setStatus('Removed ' + instance.name + ' from the active chart. Saved source remains available.');
   };
 
   const refreshVersions = async (id: string, userId: string) => {
@@ -440,14 +509,77 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         <textarea value={source} onChange={event => changeSource(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="CoreSpirit source editor" className="min-h-[200px] flex-1 resize-none rounded-lg border border-[#263249] bg-[#070b12] p-3 font-mono text-[12px] leading-[1.65] text-[#c6ddf8] outline-none focus:border-sky-500/70" />
       </div>
 
+      <div className="mx-3 mb-2 rounded-lg border border-[#263249] bg-[#0a101a] px-3 py-2" aria-label="CoreSpirit execution lifecycle">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Execution pipeline</span>
+          <span className="text-[9px] text-slate-300">{coreSpiritLifecycleLabel(lifecycleStage)}</span>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {CORE_SPIRIT_LIFECYCLE_STEPS.map((stage, index) => {
+            const currentIndex = CORE_SPIRIT_LIFECYCLE_STEPS.indexOf(lifecycleStage);
+            const terminalError = ['compile-failed','capability-denied','execution-failed','output-rejected','rendering-failed'].includes(lifecycleStage);
+            const active = stage === lifecycleStage;
+            const complete = currentIndex >= 0 && index < currentIndex || lifecycleStage === 'rendered';
+            return <span key={stage} className={'rounded border px-1.5 py-1 text-[8px] ' + (active ? (terminalError ? 'border-rose-500/50 text-rose-200' : 'border-sky-400/50 text-sky-200') : complete ? 'border-emerald-500/30 text-emerald-200' : 'border-[#293244] text-slate-600')}>{coreSpiritLifecycleLabel(stage)}</span>;
+          })}
+        </div>
+      </div>
+      {lifecycleDiagnostics.length > 0 && (
+        <div className="mx-3 mb-2 max-h-28 overflow-auto rounded-lg border border-rose-900/70 bg-rose-950/30 px-3 py-2" role="log" aria-label="CoreSpirit structured diagnostics" aria-live="polite">
+          {lifecycleDiagnostics.map((item, index) => <div key={item.code + ':' + index} className="mb-2 last:mb-0">
+            <div className="font-mono text-[9px] text-rose-200">[{item.code}] {item.line == null ? '' : 'Line ' + item.line + (item.column == null ? '' : ':' + item.column) + ' · '}{item.outputId ? 'Output ' + item.outputId + ' · ' : ''}{item.message}</div>
+            {item.suggestedCorrection && <div className="mt-1 text-[9px] text-slate-300">Suggested correction: {item.suggestedCorrection}</div>}
+            {item.previousOutputPreserved != null && <div className="mt-1 text-[8px] text-slate-500">Previous chart state {item.previousOutputPreserved ? 'preserved' : 'not preserved'}.</div>}
+          </div>)}
+        </div>
+      )}
       {diagnostics.length > 0 && (
-        <div className="mx-3 mb-2 max-h-24 overflow-auto rounded-lg border border-rose-900/70 bg-rose-950/30 px-3 py-2 text-[10px] text-rose-200" role="status" aria-live="polite">
+        <div className="mx-3 mb-2 max-h-20 overflow-auto rounded-lg border border-[#263249] bg-[#090d14] px-3 py-2 text-[10px] text-slate-300" role="status" aria-live="polite">
           {diagnostics.map((message, index) => <div key={index}>{message}</div>)}
         </div>
       )}
       <div className="mx-3 mb-2 truncate text-[10px] text-slate-400" role="status" aria-live="polite">{busyText || status}</div>
+      <div className="mx-3 mb-2 rounded-lg border border-[#263249] bg-[#0a1018]">
+        <button type="button" onClick={() => { setChartManagerOpen(value => !value); setChartIndicators(chartManagerFromWindow()?.list() ?? []); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-[9px] font-semibold uppercase tracking-wider text-slate-300" aria-expanded={chartManagerOpen}>
+          <span>Chart-side indicator manager · {chartIndicators.length}</span><span>{chartManagerOpen ? '−' : '+'}</span>
+        </button>
+        {chartManagerOpen && <div className="max-h-64 space-y-2 overflow-auto px-3 pb-3">
+          {managerError && <div className="text-[9px] text-rose-300">{managerError}</div>}
+          {chartIndicators.length === 0 && <div className="py-2 text-[9px] text-slate-500">No CoreSpirit scripts are attached to the active Vela chart.</div>}
+          {chartIndicators.map(instance => {
+            const editorDiffers = instance.name === (nameDraft.trim() || name) && instance.source !== source;
+            const renderField = (field: CoreSpiritChartManagedField, prop: boolean) => {
+              const value = field.value;
+              const controlClass = 'min-w-0 rounded border border-[#29364a] bg-[#070b12] px-2 py-1 text-[9px] text-slate-200';
+              const onValue = (raw: string | boolean) => {
+                const next: CoreSpiritChartManagedValue = typeof raw === 'boolean' ? raw :
+                  field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time' ? Number(raw) : raw;
+                updateManagedField(instance, field, next, prop);
+              };
+              if (field.type === 'bool') return <label key={field.key} className="flex items-center gap-2 text-[9px] text-slate-300"><input type="checkbox" checked={Boolean(value)} onChange={event => onValue(event.target.checked)}/>{field.title}</label>;
+              if (field.options?.length) return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><select className={controlClass} value={String(value)} onChange={event => onValue(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+              if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type="number" value={Number(value)} min={field.min} max={field.max} step={field.step ?? (field.type === 'int' ? 1 : 'any')} onChange={event => onValue(event.target.value)}/></label>;
+              return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type={field.type === 'color' ? 'color' : 'text'} value={String(value)} onChange={event => onValue(event.target.value)}/></label>;
+            };
+            return <div key={instance.id} className="rounded-md border border-[#263249] bg-[#0c121d] p-2">
+              <div className="flex items-start gap-2">
+                <button type="button" onClick={() => loadManagedSource(instance)} className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-[10px] font-semibold text-slate-100">{instance.name}</span>
+                  <span className="mt-0.5 block text-[8px] text-slate-500">{editorDiffers ? 'Editor differs · chart still runs this saved source' : 'Editor matches running source'}</span>
+                </button>
+                <button type="button" onClick={() => toggleManagedVisibility(instance)} className="rounded border border-[#29364a] px-2 py-1 text-[8px] text-slate-300">{instance.visible ? 'Hide' : 'Show'}</button>
+                <button type="button" onClick={() => removeManagedInstance(instance)} className="rounded border border-rose-900/60 px-2 py-1 text-[8px] text-rose-200">Remove</button>
+              </div>
+              <div className="mt-2 space-y-1">
+                {instance.inputs.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-slate-500">Inputs · {instance.inputs.length}</summary><div className="mt-2 space-y-2">{instance.inputs.map(field => renderField(field, false))}</div></details>}
+                {instance.props.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-slate-500">Appearance · {instance.props.length}</summary><div className="mt-2 space-y-2">{instance.props.map(field => renderField(field, true))}</div></details>}
+              </div>
+            </div>;
+          })}
+        </div>}
+      </div>
       <footer className="flex flex-wrap gap-2 border-t border-[#293244] p-3">
-        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); setStatus('Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); await onAddToChart(cleanName, source, artifact, scriptId); setName(cleanName); persistLocalSource(source, cleanName, scriptId); setStatus(`Compile passed · “${cleanName}” is now running on the active Vela chart.`); }).catch(error => setStatus(error instanceof Error ? error.message : String(error))).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
+        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); reportStage('compiling', 'Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); reportStage('applying-chart-output', 'Submitting the validated artifact to the active Vela chart…'); await onAddToChart(cleanName, source, artifact, scriptId); setName(cleanName); persistLocalSource(source, cleanName, scriptId); reportStage('rendered', 'Rendered · “' + cleanName + '” is running on the active Vela chart.'); }).catch(error => { const stage = coreSpiritLifecycleStageForError(error, lifecycleStage); const diagnostic = coreSpiritLifecycleDiagnostic(error, stage, { previousOutputPreserved: true }); setLifecycleDiagnostics([diagnostic]); reportStage(stage, diagnostic.message, diagnostic); }).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
         <button type="button" onClick={() => void save()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Save size={13}/> Save</button>
         <button type="button" onClick={() => void publish()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><UploadCloud size={13}/> Publish</button>
         <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-orange-400 disabled:opacity-50"><Check size={13}/> Add to chart</button>
