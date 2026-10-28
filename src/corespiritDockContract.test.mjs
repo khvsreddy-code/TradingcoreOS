@@ -19,6 +19,12 @@ const wasmBenchmark = read('../tools/benchmark-core-spirit-wasm.mjs');
 const backendBenchmark = read('../tools/benchmark-core-spirit-backends.mjs');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const packageJson = read('../package.json');
+const executionLifecycle = read('./services/coreSpirit/coreSpiritExecutionLifecycle.ts');
+const plotSnapshot = read('./services/coreSpirit/coreSpiritPlotSnapshot.ts');
+const lifecycleController = read('./services/core/chart/controllers/ChartCoreSpiritController.ts');
+const coreSpiritEngine = read('./CoreSpiritVelaEngine.ts');
+const plotSnapshotTest = read('./services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs');
+const lifecycleTest = read('./services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
 const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const editorPage = read('./pages/CoreSpiritEditorPage.tsx');
@@ -73,6 +79,34 @@ includes(dock, "category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 
 includes(indicatorsPage, 'Staged acceptance target', 'the bundled SMC conversion is not represented as release-certified before browser visual acceptance');
 includes(indicatorsPage, 'authenticated browser visual acceptance passes', 'SMC limitations and the missing browser acceptance gate remain visible to users');
 includes(outputController, 'tco:corespirit:visual-commit', 'Vela visual acceptance is observable only after native scene commit');
+includes(plotSnapshot, 'if (points.length === 0 || valid.length === 0)', 'empty and all-invalid plot snapshots are explicit output states');
+includes(plotSnapshot, 'series.setData([])', 'empty and all-invalid snapshots clear the prior native plot');
+includes(plotSnapshot, 'hasStablePrefix(current.length - 1)', 'forming-bar updates require a stable historical prefix');
+includes(plotSnapshot, 'series.setData(valid.map(asSeriesPoint))', 'historical corrections and malformed tails take the full replacement path');
+includes(plotSnapshotTest, 'CORESPIRIT_PLOT_SNAPSHOT_CONTRACT_OK', 'empty plot and correction scenarios have an executable regression contract');
+includes(packageJson, 'coreSpiritPlotSnapshotContract.test.mjs', 'empty plot regressions run in the critical verification suite');
+includes(executionLifecycle, 'CORE_SPIRIT_LIFECYCLE_STEPS', 'editor and chart share one ordered lifecycle contract');
+includes(executionLifecycle, 'validateCoreSpiritChartCapabilities', 'dock and full-page editor share one capability policy gate');
+includes(executionLifecycle, 'suggestedCorrection', 'structured lifecycle diagnostics carry concrete correction guidance');
+includes(lifecycleTest, 'CORESPIRIT_EXECUTION_LIFECYCLE_CONTRACT_OK', 'shared lifecycle failure classification has an executable contract');
+includes(packageJson, 'coreSpiritExecutionLifecycleContract.test.mjs', 'lifecycle status regressions run in critical verification');
+includes(lifecycleController, 'publishCoreSpiritLifecycle({stage:lifecycleStage', 'the chart controller reports runtime stages before applying output');
+includes(lifecycleController, 'previousOutputPreserved:true', 'fatal output/execution failures explicitly preserve the prior chart output');
+includes(coreSpiritEngine, "stage:'executing-historical'", 'the Vela runtime reports the historical execution stage');
+includes(coreSpiritEngine, "stage:'validating-outputs'", 'the Vela runtime reports output validation before projection');
+includes(coreSpiritEngine, "stage:'applying-chart-output'", 'the Vela runtime reports chart submission separately from compile success');
+includes(coreSpiritEngine, "stage:'rendered'", 'the Vela runtime reports rendered only after the model was applied');
+includes(dock, 'Execution pipeline', 'live dock presents the ordered execution-stage rail');
+includes(dock, 'Suggested correction:', 'live dock presents structured diagnostic fixes and previous-output status');
+includes(dock, 'Chart-side indicator manager', 'live dock exposes a chart-side script manager');
+includes(dock, 'manager.setInput(instance.id, field.key, next)', 'chart-manager input changes use Vela indicator handles');
+includes(dock, 'manager.setProp(instance.id, field.key, next)', 'chart-manager appearance changes use Vela indicator handles');
+includes(dock, 'manager.setVisible(instance.id, !instance.visible)', 'chart-manager visibility is backed by the Vela indicator handle');
+includes(dock, 'manager.remove(instance.id)', 'chart-manager removal uses Vela lifecycle rather than deleting renderer objects directly');
+includes(dock, 'Editor differs · chart still runs this saved source', 'the editor distinguishes source edits from the source currently running on the chart');
+includes(editorPage, 'UNAPPLIED EDITS · CHART RUNS PREVIOUS SOURCE', 'full-page editor clearly distinguishes unsaved edits from running chart source');
+includes(live, '__TCO_CORESPIRIT_CHART_MANAGER__', 'the live Vela workspace exposes an active-cell indicator-manager bridge');
+includes(live, 'watchManagerRun', 'indicator input and appearance changes report whether the runtime actually reaches ready or errors');
 
 
 
