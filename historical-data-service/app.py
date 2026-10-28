@@ -234,7 +234,10 @@ def parse_investiny_timestamp(value: Any, timezone: ZoneInfo) -> Optional[pd.Tim
             # but round-trip intraday wall time through the host zone to avoid a UTC
             # container silently shifting Indian candles by 5h30m.
             if len(raw) <= 10 and ":" not in raw:
-                stamp = pd.Timestamp(raw, format="mixed")
+                parsed_date = pd.to_datetime(raw, format="mixed", dayfirst=False, errors="coerce")
+                if pd.isna(parsed_date):
+                    return None
+                stamp = pd.Timestamp(parsed_date)
                 if stamp.tzinfo is None:
                     stamp = stamp.tz_localize(timezone, ambiguous="NaT", nonexistent="shift_forward")
             else:
