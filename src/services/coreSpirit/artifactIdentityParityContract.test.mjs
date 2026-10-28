@@ -5,6 +5,7 @@ import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity.
 import { loadOrCompileCoreSpiritArtifact } from './artifactCache.ts';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents.ts';
 import { compileCoreSpiritArtifactOffThread } from './coreSpiritCompilerClient.ts';
+import { stageCoreSpiritPrecompiledArtifact, consumeCoreSpiritPrecompiledArtifact } from './precompiledArtifactHandoff.ts';
 
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
 const sourceId = 'corespirit-artifact-identity-parity';
@@ -29,6 +30,21 @@ assert.equal(cached.abi.semanticHash, lookup.semanticHash,
   'the persistent cache/active-chart path must accept the freshly compiled artifact');
 assert.equal(cached.abi.artifactHash, compiled.artifact.abi.artifactHash,
   'cache handoff must preserve the exact compiled artifact identity');
+
+const staged = stageCoreSpiritPrecompiledArtifact(source, compiled.artifact);
+assert.equal(staged.sourceHash, compiled.artifact.abi.sourceHash,
+  'the dock-to-chart handoff must be bound to the exact source hash');
+assert.equal(staged.artifactHash, compiled.artifact.abi.artifactHash,
+  'the staged handoff must identify the exact validated executable artifact');
+assert.equal(consumeCoreSpiritPrecompiledArtifact(source), compiled.artifact,
+  'the Vela prepare path must consume the source-matched artifact without recompiling');
+assert.equal(consumeCoreSpiritPrecompiledArtifact(source), undefined,
+  'a precompiled artifact handoff is one-shot and cannot be reused accidentally');
+assert.throws(
+  () => stageCoreSpiritPrecompiledArtifact(source + '\n// changed source', compiled.artifact),
+  /does not match the exact editor source/,
+  'an artifact cannot be staged under a source that was not compiled',
+);
 
 
 const unrelatedComponent = {
