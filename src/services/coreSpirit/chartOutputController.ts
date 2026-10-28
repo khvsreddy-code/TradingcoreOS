@@ -13,7 +13,9 @@ import {
   coreSpiritPaneIdOf,
   normalizeCoreSpiritVisualObjects,
   projectCoreSpiritObjectsToVela,
+  type CoreSpiritVelaDrawingCollections,
 } from '../core/chart/coreSpiritVisualAbi';
+import type { CollectionPatchName, CollectionValueDelta } from '../../../vendor/vela/src/core/model/patch';
 
 /**
  * Thin CoreSpirit → Vela adapter.
@@ -24,6 +26,33 @@ import {
  * coordinate transforms, and never invokes compilation or evaluation from a frame.
  */
 let coreSpiritOutputControllerSerial = 0;
+
+function stableVisualSignature(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(stableVisualSignature).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableVisualSignature(object[key])}`).join(',')}}`;
+}
+
+function visualCollectionDelta(
+  collection: CollectionPatchName,
+  previous: readonly unknown[],
+  current: readonly unknown[],
+): CollectionValueDelta | undefined {
+  const signature = (value: unknown) => stableVisualSignature(value);
+  const same = (left: unknown, right: unknown) => signature(left) === signature(right);
+  if (previous.length === current.length && previous.every((value, index) => same(value, current[index]))) return undefined;
+
+  let prefix = 0;
+  while (prefix < previous.length && prefix < current.length && same(previous[prefix], current[prefix])) prefix += 1;
+  let suffix = 0;
+  while (suffix < previous.length - prefix && suffix < current.length - prefix &&
+         same(previous[previous.length - 1 - suffix], current[current.length - 1 - suffix])) suffix += 1;
+
+  const remove = previous.length - prefix - suffix;
+  const values = current.slice(prefix, current.length - suffix);
+  return { collection, values: [...values], op: 'replace-range', start: prefix, remove };
+}
 
 export class CoreSpiritChartOutputController {
   private plotSeries = new Map<string, ISeriesApi<'Line'>>();
@@ -41,6 +70,7 @@ export class CoreSpiritChartOutputController {
   private overlayHandle: { readonly id: string };
   private readonly paneLayerHandles = new Map<string, { paneId: string; role: 'underlay' | 'overlay'; channel: string; handle: { readonly id: string } }>();
   private renderRevision = 0;
+  private nativeDrawingCollections?: CoreSpiritVelaDrawingCollections;
 
   constructor(private readonly chart: IChartApi, candle?: ISeriesApi<'Candlestick'>, _host?: HTMLElement) {
     this.candle = candle;
@@ -243,6 +273,16 @@ export class CoreSpiritChartOutputController {
     });
     const from = timestamps.length ? Math.min(...timestamps) : 0;
     const to = timestamps.length ? Math.max(...timestamps) + 1 : 0;
+    const previous = this.nativeDrawingCollections;
+    const deltas: CollectionValueDelta[] = [];
+    if (revisioned && previous) {
+      const collectionNames: CollectionPatchName[] = ['lines', 'boxes', 'labels', 'polylines', 'backgrounds', 'priceLines', 'tables'];
+      for (const collection of collectionNames) {
+        const delta = visualCollectionDelta(collection, previous[collection], projected[collection]);
+        if (delta) deltas.push(delta);
+      }
+    }
+    this.nativeDrawingCollections = undefined;
     this.chart.renderer.updateIndicator(this.overlayHandle, {
       kind: 'value',
       indicatorId: this.overlayHandle.id,
@@ -253,15 +293,20 @@ export class CoreSpiritChartOutputController {
       } } : {}),
       dirty: { from, to },
       series: [],
-      lines: projected.lines,
-      boxes: projected.boxes,
-      labels: projected.labels,
-      polylines: projected.polylines,
-      backgrounds: projected.backgrounds,
-      priceLines: projected.priceLines,
-      tables: projected.tables,
+      ...(revisioned && previous
+        ? { collections: deltas }
+        : {
+            lines: projected.lines,
+            boxes: projected.boxes,
+            labels: projected.labels,
+            polylines: projected.polylines,
+            backgrounds: projected.backgrounds,
+            priceLines: projected.priceLines,
+            tables: projected.tables,
+          }),
       barColors: projected.barColors,
     });
+    this.nativeDrawingCollections = projected;
   }
 
   private publishVelaOutputLayer(frame: CoreSpiritOutputFrame, revision: CoreSpiritVelaOutputRevision): void {
