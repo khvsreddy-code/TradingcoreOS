@@ -464,12 +464,15 @@ const browserRuntimeMetrics = useRef({
           // A second Compile & Run for byte-identical source is an idempotent
           // no-op: never append another indicator row or another retained scene.
           try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
+          publishCoreSpiritLifecycle({stage:'rendered',scriptId:scriptId || sameSourceInstance.id,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol,timeframe:activeCell.timeframe,message:'This exact source is already running; no duplicate indicator was added.'});
+          window.dispatchEvent(new CustomEvent('tco:corespirit:chart-manager-changed'));
           return;
         }
         const previousInstanceIds = activeCell.instances
           .filter(sameLogicalScript)
           .map(instance => instance.id);
 
+        publishCoreSpiritLifecycle({stage:'applying-chart-output',scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol,timeframe:activeCell.timeframe,message:'Submitting the validated artifact to the active Vela chart.'});
         // Vela's external-indicator ledger persists source, not VM payloads. Stage
         // only for this immediate handoff; the receiver rechecks exact source and
         // artifact hashes before using the compiled artifact.
@@ -487,6 +490,7 @@ const browserRuntimeMetrics = useRef({
         }
         const handle = createdInstance.handle;
         if (!handle) throw new Error('Vela attached a row but did not create a runnable CoreSpirit indicator handle.');
+        publishCoreSpiritLifecycle({stage:'executing-historical',scriptId:scriptId || externalInstanceId,scriptName,sourceHash:artifact.abi?.sourceHash,artifactHash:artifact.abi?.artifactHash,chartId:activeCell.id,symbol:activeCell.symbol,timeframe:activeCell.timeframe,message:'Running the validated artifact against the current chart history.'});
 
         // Keep the previous source live until the replacement has emitted ready.
         // A compile/runtime failure removes only the new failed instance and leaves
