@@ -409,6 +409,7 @@ export class CoreSpiritChartOutputController {
       this.applyObjects([...prepared.objects], revision, true);
       this.visualAbiStore.commit(prepared);
       this.commitOutputRevision(revision);
+      this.emitVisualCommit(revision, prepared.objects);
       return Promise.resolve(true);
     } catch (error) {
       try {
@@ -435,6 +436,7 @@ export class CoreSpiritChartOutputController {
       this.applyObjects([...prepared.objects], revision, true);
       this.visualAbiStore.commit(prepared);
       this.commitOutputRevision(revision);
+      this.emitVisualCommit(revision, prepared.objects);
       return Promise.resolve(true);
     } catch (error) {
       try {
@@ -498,6 +500,35 @@ export class CoreSpiritChartOutputController {
     this.latestStreamId = revision.streamId;
     this.latestDatasetRevision = revision.datasetRevision;
     this.latestOutputRevision = revision.outputRevision;
+  }
+
+  /** Browser-level acceptance hook emitted only after Vela's native scene commit succeeds. */
+  private emitVisualCommit(
+    revision: CoreSpiritVelaOutputRevision,
+    objects: readonly CoreSpiritObject[],
+  ): void {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' ||
+        typeof CustomEvent === 'undefined') return;
+    const visible = objects.filter(object =>
+      isCoreSpiritChartTargetObject(object) && isCoreSpiritVisualVisibleObject(object),
+    );
+    const kindCounts: Record<string, number> = {};
+    const paneIds = new Set<string>();
+    for (const object of visible) {
+      kindCounts[object.kind] = (kindCounts[object.kind] ?? 0) + 1;
+      paneIds.add(coreSpiritPaneIdOf(object));
+    }
+    window.dispatchEvent(new CustomEvent('tco:corespirit:visual-commit', {
+      detail: {
+        schemaVersion: 1,
+        streamId: revision.streamId,
+        datasetRevision: revision.datasetRevision,
+        outputRevision: revision.outputRevision,
+        objectCount: visible.length,
+        kindCounts,
+        paneCount: paneIds.size,
+      },
+    }));
   }
   dispose(): void {
     if (this.disposed) return;
