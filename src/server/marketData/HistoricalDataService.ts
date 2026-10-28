@@ -894,9 +894,9 @@ export class HistoricalDataService {
         const staleRecord: CacheRecord = {
           ...cached,
           sourcePolicy: HISTORICAL_SOURCE_POLICY,
-          // Suppress repeated provider retries during an outage, but keep the
-          // snapshot visibly stale in metadata while this cooldown is active.
-          expiresAt: Date.now() + CACHE_TTL_MS,
+          // Let the breaker probe promptly after its normal cooldown rather than
+          // serving stale data for the full successful-cache TTL.
+          expiresAt: Date.now() + NEGATIVE_CACHE_TTL_MS,
           updatedAt: Date.now(),
           sourceStatus: {
             ...sourceStatus,
@@ -1136,7 +1136,7 @@ export class HistoricalDataService {
       refreshed = await this.writeCache({
         ...cached,
         sourcePolicy: HISTORICAL_SOURCE_POLICY,
-        expiresAt: now + CACHE_TTL_MS,
+        expiresAt: now + NEGATIVE_CACHE_TTL_MS,
         updatedAt: now,
         degraded: true,
         quote: null,
