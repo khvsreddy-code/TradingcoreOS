@@ -139,7 +139,7 @@ export class CoreSpiritVelaEngine {
       throw new Error([
         ...architectureFailures.map(message => `Sandbox architecture: ${message}`),
         ...capabilityFailures.map(message => `Capability denied: ${message}`),
-      ].join('\\n'));
+      ].join('\n'));
     }
     const ir = artifact.ir;
     const metadata = resolveCoreSpiritVelaMetadata(source, ir);
