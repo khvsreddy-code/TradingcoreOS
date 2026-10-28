@@ -355,6 +355,7 @@ export function createCoreSpiritVisualSnapshot(
   revision: CoreSpiritVelaOutputRevision,
   scriptInstanceId: string,
   paneId = 'price',
+  visible = true,
 ): CoreSpiritVisualAbiSnapshot {
   return Object.freeze({
     schemaVersion: CORE_SPIRIT_VISUAL_ABI_VERSION,
@@ -363,7 +364,7 @@ export function createCoreSpiritVisualSnapshot(
     outputRevision: revision.outputRevision,
     coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
     paneId,
-    visible: true,
+    visible,
     revision,
     operation: 'snapshot',
     objects,
@@ -376,6 +377,7 @@ export function createCoreSpiritVisualPatch(
   revision: CoreSpiritVelaOutputRevision,
   scriptInstanceId: string,
   paneId = 'price',
+  visible = true,
 ): CoreSpiritVisualAbiPatch {
   return Object.freeze({
     schemaVersion: CORE_SPIRIT_VISUAL_ABI_VERSION,
@@ -384,7 +386,7 @@ export function createCoreSpiritVisualPatch(
     outputRevision: revision.outputRevision,
     coordinateSystem: CORE_SPIRIT_VELA_COORDINATE_SYSTEM,
     paneId,
-    visible: true,
+    visible,
     revision,
     operation: 'patch',
     upsert,
