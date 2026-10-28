@@ -1,57 +1,45 @@
 # TradingCoreOS shared market-data flow
 
-This note documents the shared path used by FYERS, the canonical market data store, CoreSpirit computation, and Vela. It is an incremental architecture guide, not a proposed rewrite.
+Provider history sources feed one canonical history service. An authorized NSE gateway is primary, Investiny is a best-effort history-only fallback for explicitly mapped non-derivatives, FYERS is the quota-aware broker fallback (especially for options/F&O), and compatible tvdatafeed history remains a legacy fallback. Vela, CoreSpirit, replay and research must not make competing independent candle stores.
 
 ~~~mermaid
 flowchart TD
-  A[FYERS REST / streaming] --> B[Quota gate and broker adapters]
-  B --> C[Canonical market data]
-  C --> D[History reconciliation and revision control]
-  D --> E[Typed columnar series]
-  E --> F[CoreSpirit dependency graph]
-  F --> G[Incremental compute and validation]
-  G --> H[Signals, model outputs, visuals]
-  E --> I[Vela chart and indicators]
-  H --> I
-  H --> J[Order intent]
-  J --> K[Host-side risk and capability checks]
-  K --> L[Broker execution adapter]
+  A[Authorized NSE gateway] --> R[Capability router and source health]
+  R -->|NSE healthy| N[Validated NSE bars]
+  R -->|NSE down: historical data| I[Exact-ID Investiny adapter]
+  R -->|F&O / backup unavailable| F[FYERS plan-aware API gate]
+  N --> C[Canonical history normalization and cache]
+  I --> C
+  F --> C
+  C --> D[ChartDataPlane: generation/revision fences]
+  D --> E[Typed columnar market data]
+  E --> G[CoreSpirit incremental compute]
+  E --> H[Vela chart and indicators]
+  G --> H
+  R --> X[Auto-fixer: circuit, cooldown, half-open probe]
+  X --> R
 ~~~
 
-## Ownership boundaries
+## Boundaries
 
-- src/services/marketData/chartDataPlane.ts owns the lifecycle for one broker/instrument/timeframe dataset: history readiness, accepted trade events, canonical mutation, generation/revision fences, and subscriber publication.
-- src/services/marketData/chartHistoryNormalization.ts is a pure normalization boundary for object-history and columnar-history responses. It preserves the existing behavior: reject invalid rows, normalize timestamps, collapse whole-second duplicates, and retain only recognized provenance metadata.
-- src/services/marketData/chartHistoryCoordinator.ts owns shared history request scheduling and priority. src/services/marketData/HistoryStore.ts owns the bounded cache/reconciliation behavior.
-- src/services/marketData/chartCandleEvents.ts defines the mutation contract—dataset key, generation, revision, mutation kind and dirty range. Append/replace can update incrementally; corrections, backfills and resets require broader invalidation.
-- src/services/marketData/chartComputeCoordinator.ts fences stale indicator results by dataset generation/revision. Worker results must not be accepted after a newer correction or chart generation.
-- src/TcoVelaDataProvider.ts observes the same chart data plane and patches Vela. It must not open an independent market subscription or treat a partial history cache as proof that the requested history window is complete.
+- \`src/server/marketData/HistoricalDataService.ts\` owns source routing, normalized history, cache reconciliation, provenance and source metadata.
+- \`src/server/marketData/MarketDataAutoFixer.ts\` owns bounded runtime recovery. It never writes or patches application source code.
+- \`src/services/marketData/chartDataPlane.ts\` remains the only canonical lifecycle for a broker/instrument/timeframe dataset: accepted history, live trade events, mutations, revisions, generations and subscribers.
+- \`chartHistoryCoordinator.ts\` schedules shared history demand. \`HistoryStore.ts\` owns bounded browser-side caching.
+- \`chartCandleEvents.ts\` defines dataset key, generation, revision, mutation kind and dirty range. \`chartComputeCoordinator.ts\` fences stale indicator results.
+- \`TcoVelaDataProvider.ts\` observes the canonical data plane; it must not open independent subscriptions.
 
-## Revision and lifecycle rules
+## Rules
 
-1. Use the same canonical broker/instrument/timeframe key for mutation publication, downstream computation and Vela observation.
-2. Late history responses must be generation-checked before mutation. A response for a prior chart generation is discarded, not merged into the active dataset.
-3. Historical corrections/backfills publish the correct dirty range and trigger dependent invalidation/replay. A tail tick must not be promoted into a confirmed candle if its source timestamp/phase does not warrant that.
-4. Chart switches detach old subscriptions and fence callbacks/results by dataset generation and key.
-5. historyReady means an accepted baseline exists; it does not mean the entire requested history target has been satisfied. Keep the loading state and requested bar count explicit.
-6. CoreSpirit temporal semantics remain authoritative: developing/repainting values must not silently become confirmed causal inputs.
+1. Instrument and derivative contract identities must be exact; do not mix expiries or adjustment policies.
+2. Late history responses are generation-checked before mutation.
+3. Corrections/backfills publish dirty ranges and invalidate/replay dependent calculations.
+4. Only valid exchange trade timestamps may create or advance live candles; receive time is not trade time.
+5. \`historyReady\` means an accepted baseline exists, not that the requested window is complete.
+6. Quote snapshots never become fabricated OHLCV bars.
+7. Provider failures open a source-specific circuit; cooldown expires into one probe, and a validated NSE response automatically restores the primary route.
+8. Runtime auto-fixing must not evade provider access controls or mutate source code. Order intent still passes through host-side risk and capability checks.
 
-## Extracted history-normalization boundary
+## Deployment constraint
 
-The first maintainability extraction moved normalizeHistory and columnarHistoryToCandles from the large data-plane orchestrator into chartHistoryNormalization.ts. The orchestration API and data mutation order remain unchanged. chartHistoryNormalization.test.ts protects timestamp normalization, duplicate precedence, invalid-row rejection and provenance metadata. Continue with similarly small extractions only when the existing contract tests preserve the observable behavior.
-
-## Sampled tick-to-render trace
-
-src/services/core/performance/marketLatencyTrace.ts records sampled stages that share a timelineKey and chart revision:
-
-- feed: the accepted tick's processing interval up to the start of canonical mutation.
-- canonical: the actual typed-market append/replace interval.
-- compute: asynchronous indicator computation completion for that chart revision, including the validated fallback path.
-- patch: Vela's synchronous patch callback acceptance interval.
-- paint: the next animation-frame opportunity after the Vela callback.
-
-Tracing samples one revision in every 16 by default, stores at most 64 records for each of 32 recent dataset keys, and is diagnostic only. The records are attached to chartPerformanceTelemetry.snapshot(datasetKey).latencyTrace; align entries by timelineKey and sequence to compare stage timing. High-frequency frame coalescing can mean a sampled revision is superseded before patching; the existing aggregate tickToComputeP95Ms, tickToPatchP95Ms and tickToRenderP95Ms metrics remain useful for overall latency even when a sampled trace is incomplete. Do not use trace data as a trading or risk-control input.
-
-## Execution boundary
-
-Market data, indicator outputs, CoreSpirit signal/model outputs, and chart visuals are research/runtime outputs. Order intent must continue through host-side capability validation, pre-trade risk checks, idempotency and the broker adapter. Never let a Vela callback or model/AI response bypass these controls.
+NSE routing is a private adapter contract—not a bundled feed or scraper. Configure \`NSE_MARKET_DATA_SERVICE_URL\` and \`NSE_MARKET_DATA_SERVICE_TOKEN\` for an authorized gateway implementing \`POST /v1/history\`. Investiny requires explicit opt-in, an exact ID map and permitted data usage. The existing FYERS transport remains the live-feed fallback; a true NSE live adapter needs the licensed provider's actual stream protocol.
