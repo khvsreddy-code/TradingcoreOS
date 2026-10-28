@@ -32,7 +32,6 @@ export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [C
 }
 
 let barDuration = time[1] - time[2]
-let projectedRight = time + barDuration * 20
 
 // A pivot candidate is not usable until swingLength bars have arrived after it.
 // The left-side comparison is read at the candidate bar; the right-side window
@@ -120,11 +119,11 @@ if showSwingPoints == true and swingPivotLowConfirmed == true and priorSwingPivo
 
 // EQH/EQL is an ATR-free, price-relative tolerance rule. Both candidate levels
 // are confirmed pivots, so these labels never use a future unconfirmed extreme.
-if showEqualHighsLows == true and swingPivotHighConfirmed == true and priorSwingPivotHigh > 0 and abs(swingCandidateHigh - priorSwingPivotHigh) <= abs(priorSwingPivotHigh) * equalLevelTolerance {
+if showEqualHighsLows == true and swingPivotHighConfirmed == true and priorSwingPivotHigh > 0 and abs((swingCandidateHigh / priorSwingPivotHigh) - 1) <= equalLevelTolerance {
     line(priorSwingPivotHighTime, priorSwingPivotHigh, time[swingLength], swingCandidateHigh, "#F23645", 1)
     labelAt(time[swingLength], swingCandidateHigh, "EQH", "above", "#F23645", "#FFFFFF", 9, "pill", "600")
 }
-if showEqualHighsLows == true and swingPivotLowConfirmed == true and priorSwingPivotLow > 0 and abs(swingCandidateLow - priorSwingPivotLow) <= abs(priorSwingPivotLow) * equalLevelTolerance {
+if showEqualHighsLows == true and swingPivotLowConfirmed == true and priorSwingPivotLow > 0 and abs((swingCandidateLow / priorSwingPivotLow) - 1) <= equalLevelTolerance {
     line(priorSwingPivotLowTime, priorSwingPivotLow, time[swingLength], swingCandidateLow, "#089981", 1)
     labelAt(time[swingLength], swingCandidateLow, "EQL", "below", "#089981", "#FFFFFF", 9, "pill", "600")
 }
@@ -230,7 +229,7 @@ if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 
     bullObExists := true
     bullObActive := true
     bullObLeft := lastBearishTime
-    bullObRight := projectedRight
+    bullObRight := time
     bullObTop := lastBearishHigh
     bullObBottom := lastBearishLow
     bullObCreatedAt := time
@@ -240,7 +239,7 @@ if showOrderBlockZones == true and swingBearBreak == true and lastBullishTime > 
     bearObExists := true
     bearObActive := true
     bearObLeft := lastBullishTime
-    bearObRight := projectedRight
+    bearObRight := time
     bearObTop := lastBullishHigh
     bearObBottom := lastBullishLow
     bearObCreatedAt := time
@@ -257,10 +256,10 @@ if bearObActive == true and time > bearObCreatedAt and high > bearObTop {
     bearObOpacity := 0.04
 }
 if bullObActive == true {
-    bullObRight := projectedRight
+    bullObRight := time
 }
 if bearObActive == true {
-    bearObRight := projectedRight
+    bearObRight := time
 }
 if showOrderBlockZones == true and bullObExists == true {
     zone(bullObLeft, bullObRight, bullObTop, bullObBottom, "#1848CC", "#1848CC", bullObOpacity)
@@ -293,7 +292,7 @@ if showFairValueGaps == true and low > high[2] {
     bullFvgExists := true
     bullFvgActive := true
     bullFvgLeft := time[2]
-    bullFvgRight := projectedRight
+    bullFvgRight := time
     bullFvgTop := low[0]
     bullFvgBottom := high[2]
     bullFvgCreatedAt := time
@@ -303,7 +302,7 @@ if showFairValueGaps == true and high < low[2] {
     bearFvgExists := true
     bearFvgActive := true
     bearFvgLeft := time[2]
-    bearFvgRight := projectedRight
+    bearFvgRight := time
     bearFvgTop := low[2]
     bearFvgBottom := high[0]
     bearFvgCreatedAt := time
@@ -320,10 +319,10 @@ if bearFvgActive == true and time > bearFvgCreatedAt and high >= bearFvgTop {
     bearFvgOpacity := 0.03
 }
 if bullFvgActive == true {
-    bullFvgRight := projectedRight
+    bullFvgRight := time
 }
 if bearFvgActive == true {
-    bearFvgRight := projectedRight
+    bearFvgRight := time
 }
 if showFairValueGaps == true and bullFvgExists == true {
     zone(bullFvgLeft, bullFvgRight, bullFvgTop, bullFvgBottom, "#00FF68", "#00FF68", bullFvgOpacity)
