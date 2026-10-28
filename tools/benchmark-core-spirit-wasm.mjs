@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
+import { dirname, resolve } from 'node:path';
 import {
   CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH,
   rollingMean, rollingSum, rollingVariance, rollingStd, rollingMin, rollingMax,
@@ -119,7 +120,9 @@ async function main() {
     }
   }
   console.table(rows);
-  console.log(JSON.stringify({
+  const report = {
+    capturedAt: new Date().toISOString(),
+    environment: { node: process.version, platform: process.platform, arch: process.arch },
     benchmark: 'CoreSpirit bundled numerical kernel backend comparison',
     wasmAbi: 2,
     wasmLifecycle: lifecycle,
@@ -132,6 +135,15 @@ async function main() {
     measurements: ['CPU typed-array reference', 'WASM kernel-only time', 'WASM end-to-end time including transfer/allocation'],
     policy: 'Performance ratios are measured per environment; the benchmark never labels WASM as a win unless end-to-end speedup exceeds 1.0x.',
     results: rows,
-  }, null, 2));
+  };
+  const serializedReport = JSON.stringify(report, null, 2);
+  console.log(serializedReport);
+  const outputFile = process.env.TCO_WASM_BENCH_OUTPUT_FILE?.trim();
+  if (outputFile) {
+    const resolvedOutputFile = resolve(outputFile);
+    await fs.mkdir(dirname(resolvedOutputFile), { recursive: true });
+    await fs.writeFile(resolvedOutputFile, serializedReport + '\n', 'utf8');
+    console.error('[wasm] machine-readable report saved to ' + resolvedOutputFile);
+  }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
