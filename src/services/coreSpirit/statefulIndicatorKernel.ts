@@ -128,7 +128,12 @@ export class RollingVariance extends RollingBase {
   private sumSquares = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
-    if (!Number.isFinite(v)) return { count: this.count, value: this.value() };
+    // Keep stateful rolling variance/std aligned with the batch kernel's
+    // right-aligned, all-finite-window contract after missing observations.
+    if (!Number.isFinite(v)) {
+      this.reset();
+      return { count: this.count, value: this.value() };
+    }
     if (mode === 'replace' && this.count) {
       const old = this.buffer[this.slotForCurrent()]; this.sum += v - old; this.sumSquares += v * v - old * old; this.replaceCurrentSlot(v);
     } else {
@@ -467,7 +472,12 @@ export class RollingMinMax extends RollingBase {
   constructor(period:number){super(period);this.tree=new RollingExtremaTree(this.capacity);}
   update(value:number,mode:'append'|'replace'='append'){
     const v=Number(value);
-    if(!Number.isFinite(v)) return {count:this.count,min:this.min(),max:this.max()};
+    // Extrema are invalid while any member of the rolling window is missing.
+    // Resetting here makes the incremental and batch implementations agree.
+    if(!Number.isFinite(v)) {
+      this.reset();
+      return {count:this.count,min:this.min(),max:this.max()};
+    }
 
     if(mode==='replace'&&this.count){
       // A forming-bar revision changes the current slot; it is not a new bar.
@@ -494,7 +504,12 @@ export class RollingSum extends RollingBase {
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
-    if (!Number.isFinite(v)) return { count: this.count, value: this.value() };
+    // Rolling kernels use complete finite windows. Do not silently retain the
+    // previous window when a market-data gap is observed.
+    if (!Number.isFinite(v)) {
+      this.reset();
+      return { count: this.count, value: this.value() };
+    }
     if (mode === 'replace' && this.count) { const old = this.buffer[this.slotForCurrent()]; this.sum += v - old; this.replaceCurrentSlot(v); }
     else { if (this.count === this.capacity) this.sum -= this.buffer[this.cursor]; this.appendSlot(v); this.sum += v; }
     return { count: this.count, value: this.value() };
