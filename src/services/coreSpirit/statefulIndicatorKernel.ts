@@ -102,7 +102,13 @@ export class RollingMean extends RollingBase {
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
-    if (!Number.isFinite(v)) return { count: this.count, value: this.value() };
+    // A finite rolling window must not bridge missing market observations. The
+    // batch CPU kernels and WASM ABI both yield NaN until a complete new window
+    // has formed; keep the incremental stateful path on that same contract.
+    if (!Number.isFinite(v)) {
+      this.reset();
+      return { count: this.count, value: this.value() };
+    }
     if (mode === 'replace' && this.count) {
       const old = this.buffer[this.slotForCurrent()]; this.sum += v - old; this.replaceCurrentSlot(v);
     } else {
