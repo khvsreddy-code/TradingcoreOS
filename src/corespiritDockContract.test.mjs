@@ -11,6 +11,7 @@ const engine = read('./CoreSpiritVelaEngine.ts');
 const handoff = read('./services/coreSpirit/precompiledArtifactHandoff.ts');
 const chartController = read('./services/core/chart/controllers/ChartCoreSpiritController.ts');
 const workerPool = read('./services/coreSpirit/coreSpiritWorkerPool.ts');
+const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
 const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
 const contributions = read('../vendor/vela/src/widget/contributions.ts');
 
@@ -61,11 +62,11 @@ includes(handoff, 'entry.artifact.abi?.sourceHash !== sourceHash', 'the handoff 
 includes(handoff, 'HANDOFF_TTL_MS = 30_000', 'the transient handoff expires and is not persisted in the workspace');
 includes(chartController, "diagnosticDetails.find(diagnostic=>diagnostic.severity==='error')", 'chart commits are gated by structured diagnostic severity');
 excludes(chartController, 'isFatalCoreSpiritDiagnostic', 'chart execution does not infer fatal errors from message wording');
-includes(workerPool, 'RUNTIME_BAR_EXECUTION', 'worker results carry typed runtime bar failure codes');
-includes(workerPool, 'RUNTIME_OUTPUT_VALIDATION', 'worker results carry typed output validation failure codes');
-includes(workerPool, 'RUNTIME_DIAGNOSTIC_UNCLASSIFIED', 'unrecognized runtime diagnostics fail closed with an explicit code');
-includes(workerPool, String.raw`message.match(/^bar (\d+):\s*(.*)$/s)`, 'known bar execution failures are recognized by the diagnostic parser');
-includes(workerPool, String.raw`message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\d+):\s*(.*)$/s)`, 'known output failures preserve kind and bar index');
+includes(diagnostics, 'RUNTIME_BAR_EXECUTION', 'worker results carry typed runtime bar failure codes');
+includes(diagnostics, 'RUNTIME_OUTPUT_VALIDATION', 'worker results carry typed output validation failure codes');
+includes(diagnostics, 'RUNTIME_DIAGNOSTIC_UNCLASSIFIED', 'unrecognized runtime diagnostics fail closed with an explicit code');
+includes(diagnostics, String.raw`message.match(/^bar (\d+):\s*(.*)$/s)`, 'known bar execution failures are recognized by the diagnostic parser');
+includes(diagnostics, String.raw`message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\d+):\s*(.*)$/s)`, 'known output failures preserve kind and bar index');
 includes(engine, String.raw`.join('\n')`, 'capability diagnostics are separated with real line breaks');
 includes(dock, 'Fullscreen CoreSpirit editor', 'terminal provides a fullscreen control');
 includes(dock, 'Minimize CoreSpirit editor', 'terminal provides a minimize control');
