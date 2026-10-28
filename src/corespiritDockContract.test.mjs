@@ -13,6 +13,7 @@ const chartController = read('./services/core/chart/controllers/ChartCoreSpiritC
 const workerPool = read('./services/coreSpirit/coreSpiritWorkerPool.ts');
 const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
 const outputController = read('./services/coreSpirit/chartOutputController.ts');
+const smcBrowser = read('../tools/verify-core-spirit-smc-browser.mjs');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
 const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
@@ -67,6 +68,11 @@ includes(dock, 'publishUserIndicator', 'Publish uses the existing publication se
 includes(dock, "category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 'CoreSpirit Indicators'", 'published scripts use the dedicated CoreSpirit catalog category');
 includes(indicatorsPage, 'Staged acceptance target', 'the bundled SMC conversion is not represented as release-certified before browser visual acceptance');
 includes(indicatorsPage, 'authenticated browser visual acceptance passes', 'SMC limitations and the missing browser acceptance gate remain visible to users');
+includes(outputController, 'tco:corespirit:visual-commit', 'Vela visual acceptance is observable only after native scene commit');
+includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser acceptance runner emits a machine-readable success marker');
+includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
+includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
+includes(smcBrowser, 'getBoundingClientRect()', 'browser acceptance requires a visible Vela chart surface');
 includes(dock, 'await onAddToChart(cleanName, source, artifact)', 'Add to Chart reuses the executable artifact from the exact successful compile');
 includes(dock, 'requestedVersion !== sourceVersion.current', 'a source edit during compilation blocks stale artifact application');
 includes(live, 'stageCoreSpiritPrecompiledArtifact(scriptSource, artifact)', 'the active chart bridge stages the compiled artifact with exact source identity');
