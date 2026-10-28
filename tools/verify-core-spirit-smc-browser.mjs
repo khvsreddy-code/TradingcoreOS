@@ -117,7 +117,7 @@ function countChartPixelDiff(beforeBytes, afterBytes, beforeViewport, afterViewp
 }
 
 function getLargestChartCanvasRegion() {
-  return evaluateJson(\`(() => {
+  return evaluateJson(`(() => {
     const regions = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
       const rect = canvas.getBoundingClientRect();
       return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, area: rect.width * rect.height };
@@ -127,7 +127,7 @@ function getLargestChartCanvasRegion() {
     const rect = regions[0];
     return { viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
       rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
-  })()\`);
+  })()`);
 }
 function assert(condition, message) {
   if (!condition) throw new Error(message);
