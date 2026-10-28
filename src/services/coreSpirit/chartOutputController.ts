@@ -278,7 +278,7 @@ export class CoreSpiritChartOutputController {
     const previous = this.nativeDrawingCollections;
     const deltas: CollectionValueDelta[] = [];
     if (revisioned && previous) {
-      const collectionNames: CollectionPatchName[] = ['lines', 'boxes', 'labels', 'polylines', 'backgrounds', 'priceLines', 'tables'];
+      const collectionNames: Array<keyof Pick<CoreSpiritVelaDrawingCollections, 'lines' | 'boxes' | 'labels' | 'polylines' | 'backgrounds' | 'priceLines' | 'tables'>> = ['lines', 'boxes', 'labels', 'polylines', 'backgrounds', 'priceLines', 'tables'];
       for (const collection of collectionNames) {
         const delta = visualCollectionDelta(collection, previous[collection], projected[collection]);
         if (delta) deltas.push(delta);
