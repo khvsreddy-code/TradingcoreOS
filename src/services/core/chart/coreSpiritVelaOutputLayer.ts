@@ -1,10 +1,19 @@
 import type { CoreSpiritObject } from '../../coreSpirit/types';
+import { CORE_SPIRIT_VISUAL_ABI_VERSION, CORE_SPIRIT_VELA_COORDINATE_SYSTEM } from './coreSpiritVisualAbi';
 import { registerRendererLayer, type RendererLayerArgs } from '../../../../vendor/vela/src/renderers/native/layers';
 
 export const CORE_SPIRIT_VELA_OUTPUT_LAYER_ID = 'tco-corespirit-output';
 
 export type CoreSpiritVelaOutputLayerData = Readonly<{
+  /** Legacy frame revision retained for Vela's layer contract. */
   revision: number;
+  schemaVersion: typeof CORE_SPIRIT_VISUAL_ABI_VERSION;
+  scriptInstanceId: string;
+  datasetRevision: number;
+  outputRevision: number;
+  coordinateSystem: typeof CORE_SPIRIT_VELA_COORDINATE_SYSTEM;
+  paneId: string;
+  visible: boolean;
   drawings: readonly CoreSpiritObject[];
   visuals: readonly CoreSpiritObject[];
   labels: readonly CoreSpiritObject[];
@@ -17,13 +26,11 @@ function objectValue(value: unknown): Record<string, any> | undefined {
 
 function timeMillis(value: unknown): number {
   if (value == null || value === '') return Number.NaN;
-  if (typeof value === 'string' && !Number.isFinite(Number(value))) {
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : Number.NaN;
-  }
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return Number.NaN;
-  return Math.abs(numeric) >= 1e11 ? numeric : numeric * 1000;
+  const numeric = typeof value === 'number' ? value : Number(value);
+  // Output normalization occurs before a visual reaches this layer. Do not guess
+  // seconds vs milliseconds during every paint; that is how mixed-unit shifts survive.
+  if (!Number.isFinite(numeric) || Math.abs(numeric) < 100_000_000_000) return Number.NaN;
+  return numeric;
 }
 
 function timeX(args: RendererLayerArgs, value: unknown): number | null {
@@ -496,19 +503,31 @@ export function paintCoreSpiritVelaOutputLayer(
   ctx.save();
   ctx.setTransform(args.coords.dpr, 0, 0, args.coords.dpr, 0, 0);
   ctx.clearRect(0, 0, canvasWidth(args), args.coords.height);
-  const visuals = [...data.drawings, ...data.visuals] as readonly Record<string, any>[];
-  for (const obj of visuals) {
-    if (obj.kind === 'line') continue; // native Vela series already renders ordinary trend lines
+  // Explicit pane-local clip: oversized zone/footprint/custom geometry can never
+  // bleed into the time axis, price scale or a neighboring pane.
+  ctx.beginPath();
+  ctx.rect(0, 0, canvasWidth(args), Math.max(0, args.coords.height));
+  ctx.clip();
+
+  const allVisuals = [...data.drawings, ...data.visuals] as readonly Record<string, any>[];
+  // Paint range tints and bands first. Detailed geometry and text then sit above
+  // them, which makes overlays legible without letting a fill cover labels.
+  for (const obj of allVisuals) {
+    if (obj.kind === 'background' || obj.kind === 'barcolor') drawBarTint(ctx, args, obj);
+  }
+  drawBands(ctx, args, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
+
+  for (const obj of allVisuals) {
+    if (obj.kind === 'background' || obj.kind === 'barcolor' || obj.kind === 'band') continue;
+    if (obj.kind === 'line') continue; // ordinary lines are Vela-native drawing collections
     if (obj.kind === 'zone' || obj.kind === 'box') drawRect(ctx, args, obj);
     else if (obj.kind === 'arrow') drawArrow(ctx, args, obj);
     else if (obj.kind === 'shape') drawShape(ctx, args, obj);
     else if (obj.kind === 'polyline' || obj.kind === 'polygon') drawPolyline(ctx, args, obj, obj.kind === 'polygon');
     else if (obj.kind === 'hline') drawHLine(ctx, args, obj);
-    else if (obj.kind === 'background' || obj.kind === 'barcolor') drawBarTint(ctx, args, obj);
     else if (obj.kind === 'footprint') drawFootprint(ctx, args, obj);
     else if (obj.kind === 'customVisual') drawCustomVisual(ctx, args, obj);
   }
-  drawBands(ctx, args, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
   for (const label of data.labels) drawLabel(ctx, args, label as unknown as Record<string, any>);
   drawTables(ctx, args, data.tables as readonly Record<string, any>[]);
   ctx.restore();
@@ -526,7 +545,15 @@ registerRendererLayer({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         const data = args.data as CoreSpiritVelaOutputLayerData | undefined;
-        if (!data || !Number.isSafeInteger(data.revision)) {
+        if (!data ||
+            data.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
+            data.coordinateSystem !== CORE_SPIRIT_VELA_COORDINATE_SYSTEM ||
+            !data.scriptInstanceId ||
+            data.paneId !== 'price' ||
+            !Number.isSafeInteger(data.datasetRevision) ||
+            !Number.isSafeInteger(data.outputRevision) ||
+            !Number.isSafeInteger(data.revision) ||
+            data.visible !== true) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           return;
         }
