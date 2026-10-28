@@ -15,7 +15,7 @@ import {
   projectCoreSpiritObjectsToVela,
   type CoreSpiritVelaDrawingCollections,
 } from '../core/chart/coreSpiritVisualAbi';
-import type { CollectionPatchName, CollectionValueDelta } from '../../../vendor/vela/src/core/model/patch';
+import type { CollectionValueDelta } from '../../../vendor/vela/src/core/model/patch';
 
 /**
  * Thin CoreSpirit → Vela adapter.
