@@ -2477,10 +2477,14 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.indicators.set(model.id, model);
         this.refreshAnchorOffset(model);
         this.scene.syncIndicatorNodes(model, this.scene.zOf(model.id), SceneDirty.All);
-        // Default z = mount order (later ⇒ in front) — except a native that paints through
-        // an SDK layer: its canvas stacks ABOVE the data canvas by default, so its key must
-        // say so or the recorded order (object tree, seriesOrder reads) starts out a lie.
-        if (model.native && this.extLayers.some((l) => l.def.id === model.native!.type)) this.scene.assignIndicatorZTop(model.id);
+        // A native that paints through an SDK renderer layer inherits its layer's declared
+        // data placement. Promoting every layer-backed owner to the top silently puts a
+        // `placement: 'below-data'` layer over the candle canvas.
+        const ownedRendererLayer = model.native
+            ? this.extLayers.find((layer) => layer.def.id === model.native!.type)
+            : undefined;
+        if (ownedRendererLayer?.def.placement === 'below-data') this.scene.assignIndicatorZ(model.id);
+        else if (ownedRendererLayer) this.scene.assignIndicatorZTop(model.id);
         else this.scene.assignIndicatorZ(model.id);
         this.ensureInstanceLayer(model);
         // The legend chip, the settings dialog and the object tree's rows all show the compact
