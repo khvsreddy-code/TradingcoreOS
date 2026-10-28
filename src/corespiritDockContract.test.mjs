@@ -64,6 +64,9 @@ excludes(chartController, 'isFatalCoreSpiritDiagnostic', 'chart execution does n
 includes(workerPool, 'RUNTIME_BAR_EXECUTION', 'worker results carry typed runtime bar failure codes');
 includes(workerPool, 'RUNTIME_OUTPUT_VALIDATION', 'worker results carry typed output validation failure codes');
 includes(workerPool, 'RUNTIME_DIAGNOSTIC_UNCLASSIFIED', 'unrecognized runtime diagnostics fail closed with an explicit code');
+includes(workerPool, String.raw`message.match(/^bar (\d+):\s*(.*)$/s)`, 'known bar execution failures are recognized by the diagnostic parser');
+includes(workerPool, String.raw`message.match(/^output ([a-zA-Z][a-zA-Z0-9_-]*) at bar (\d+):\s*(.*)$/s)`, 'known output failures preserve kind and bar index');
+includes(engine, String.raw`.join('\n')`, 'capability diagnostics are separated with real line breaks');
 includes(dock, 'Fullscreen CoreSpirit editor', 'terminal provides a fullscreen control');
 includes(dock, 'Minimize CoreSpirit editor', 'terminal provides a minimize control');
 includes(dock, 'Close CoreSpirit terminal', 'terminal provides a close control');
