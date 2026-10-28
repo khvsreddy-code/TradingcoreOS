@@ -367,12 +367,17 @@ try {
         'Recompiling identical SMC source/data must not increase the number of retained drawing objects.');
       assert.deepEqual(recompileCommit.kindCounts, commit.kindCounts,
         'Recompiling identical SMC source/data must preserve the native object-kind inventory.');
-      const outputRevisionAdvanced = recompileCommit.streamId !== commit.streamId ||
-        !Number.isFinite(Number(recompileCommit.outputRevision)) ||
-        !Number.isFinite(Number(commit.outputRevision)) ||
-        Number(recompileCommit.outputRevision) > Number(commit.outputRevision);
-      assert(outputRevisionAdvanced,
-        'A same-stream SMC recompilation must advance its output revision instead of replaying a stale scene.');
+      const revisionsComparable =
+        recompileCommit.streamId === commit.streamId &&
+        Number.isFinite(Number(recompileCommit.outputRevision)) &&
+        Number.isFinite(Number(commit.outputRevision));
+      const outputRevisionAdvanced = revisionsComparable
+        ? Number(recompileCommit.outputRevision) > Number(commit.outputRevision)
+        : null;
+      if (revisionsComparable) {
+        assert(outputRevisionAdvanced,
+          'A same-stream SMC recompilation must advance its output revision instead of replaying a stale scene.');
+      }
       const recompileIdempotency = {
         instanceCountBefore: initialInstanceState.count,
         instanceCountAfter: replayState.count,
