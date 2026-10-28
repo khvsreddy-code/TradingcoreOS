@@ -655,6 +655,11 @@ export class CoreSpiritVelaEngine {
     // array snapshot so queued worker jobs never observe later cache mutations.
     const normalizedBarsCache:CoreSpiritMarketBar[]=[];
     let normalizedInputLength=-1;
+    // If an unannounced provider snapshot invalidates the cache, the next candle
+    // notification must also invalidate recursive worker state and replay history.
+    // Keep this signal until notifyBars consumes it; other readers may notice the
+    // cache mismatch before the event handler runs.
+    let normalizationCacheInvalidated = false;
     const getCurrentBars=(forceFullNormalization=false,isolateSnapshot=true):CoreSpiritMarketBar[]=>{
       if(!req.getBars)return bars;
       const rows=req.getBars() as unknown as readonly VelaOhlcv[];
@@ -662,8 +667,12 @@ export class CoreSpiritVelaEngine {
       const length=rows.length;
       // A same-length snapshot may be a forming-bar replacement, while a
       // longer snapshot may still be a historical prepend. Reuse the prefix only
-      // when stable opening-time anchors prove the old absolute indices survived.
+      // when stable opening-time anchors and all completed OHLCV values still match.
+      const hadReusableCache=normalizedInputLength>=0&&normalizedBarsCache.length===normalizedInputLength;
       const safeStart=safeVelaNormalizationStart(rows,normalizedBarsCache,normalizedInputLength,forceFullNormalization);
+      if(safeStart===null&&hadReusableCache&&length>0&&!forceFullNormalization){
+        normalizationCacheInvalidated=true;
+      }
       const start=safeStart===null?0:safeStart;
       if(safeStart===null)normalizedBarsCache.length=0;
       else normalizedBarsCache.length=start;
@@ -905,6 +914,8 @@ export class CoreSpiritVelaEngine {
         // hot path. Normalize a full immutable bar snapshot so a same-length historical edit
         // cannot be hidden by the stable-prefix cache.
         const currentBars=getCurrentBars(reason==='backfill'||hasValidDirtyRange,false);
+        const normalizationCacheInvalidatedForEvent=normalizationCacheInvalidated;
+        normalizationCacheInvalidated=false;
         const firstBarTime=currentBars.length?barTimeMillis(currentBars[0]?.timestamp):Number.NaN;
         const latestBarTime=currentBars.length?barTimeMillis(currentBars.at(-1)?.timestamp):Number.NaN;
         const dirtyIntersectsLoadedHistory=hasValidDirtyRange&&currentBars.length>0&&
@@ -914,7 +925,7 @@ export class CoreSpiritVelaEngine {
         // correction gets a full canonical replay with external side effects suppressed.
         const dirtyRangeTouchesHistoryBeforeTail=reason!=='complete'&&dirtyIntersectsLoadedHistory&&
           dirtyFromMs<latestBarTime;
-        const historicalCorrection=reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail;
+        const historicalCorrection=reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail||normalizationCacheInvalidatedForEvent;
         const previousCanonicalRevision=canonicalDatasetRevision;
         const previousDatasetLength=canonicalDatasetLength;
         if(historicalCorrection||reason==='complete'){
