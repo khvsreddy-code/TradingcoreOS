@@ -260,7 +260,9 @@ export class CoreSpiritChartOutputController {
     const projected = projectCoreSpiritObjectsToVela(objects, 'price');
     // Replacing the Vela collection arrays is a full collection snapshot. Vela's
     // own scene patch path now manages object lifetime and redraw invalidation.
-    const timestamps = objects.flatMap(object => {
+    const dirtyObjects = revisioned ? [...this.committedObjects, ...objects] : objects;
+    const hasViewportGeometry = dirtyObjects.some(object => object.kind === 'zone' && object.domain === 'viewport');
+    const timestamps = dirtyObjects.flatMap(object => {
       const item = object as unknown as Record<string, any>;
       const values: unknown[] = [];
       if (item.time != null) values.push(item.time);
@@ -271,8 +273,8 @@ export class CoreSpiritChartOutputController {
       for (const point of Array.isArray(item.points) ? item.points : []) if (point?.time != null) values.push(point.time);
       return values.map(Number).filter(Number.isFinite);
     });
-    const from = timestamps.length ? Math.min(...timestamps) : 0;
-    const to = timestamps.length ? Math.max(...timestamps) + 1 : 0;
+    const from = hasViewportGeometry ? 0 : timestamps.length ? Math.min(...timestamps) : 0;
+    const to = hasViewportGeometry ? Number.MAX_SAFE_INTEGER : timestamps.length ? Math.max(...timestamps) + 1 : 0;
     const previous = this.nativeDrawingCollections;
     const deltas: CollectionValueDelta[] = [];
     if (revisioned && previous) {
@@ -282,7 +284,6 @@ export class CoreSpiritChartOutputController {
         if (delta) deltas.push(delta);
       }
     }
-    this.nativeDrawingCollections = undefined;
     this.chart.renderer.updateIndicator(this.overlayHandle, {
       kind: 'value',
       indicatorId: this.overlayHandle.id,
@@ -361,6 +362,7 @@ export class CoreSpiritChartOutputController {
   }
 
   private clearNativeDrawingCollections(): void {
+    this.nativeDrawingCollections = undefined;
     this.chart.renderer.updateIndicator(this.overlayHandle, {
       kind: 'value',
       indicatorId: this.overlayHandle.id,
