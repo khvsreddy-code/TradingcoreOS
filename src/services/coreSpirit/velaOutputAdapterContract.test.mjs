@@ -310,8 +310,9 @@ assert.match(chartController, /adaptCoreSpiritOutputsForVela\(result\.outputs,\s
   'chart-indicator execution must share the exact same output adapter');
 assert.match(chartController, /scheduleObjects\(adapted\.outputs/,
   'chart indicator result commits must go through a latest-wins render boundary');
-assert.ok(outputController.includes('chart.renderer.setNativeData(this.overlayChannel, data)'),
-  'CoreSpirit publishes immutable rich-output data into Vela native state');
+assert.ok(outputController.includes('chart.renderer.setNativeData(channel, data)') &&
+  outputController.includes('this.visualAbiStore.prepare(mutation)'),
+  'CoreSpirit publishes immutable ABI-validated output into pane-scoped Vela native state');
 assert.ok(outputController.includes('chart.renderer.mountIndicator('),
   'the rich-output layer must be attached to Vela as a renderer-owned model');
 assert.ok(!outputController.includes('runCoreSpiritArtifactInWorker') && !outputController.includes('compileCoreSpirit'),
