@@ -8,6 +8,8 @@ import {
   createCoreSpiritVisualSnapshot,
   createCoreSpiritVisualPatch,
   isCoreSpiritCustomLayerObject,
+  isCoreSpiritChartTargetObject,
+  coreSpiritPaneIdOf,
   normalizeCoreSpiritVisualObjects,
   projectCoreSpiritObjectsToVela,
 } from '../core/chart/coreSpiritVisualAbi';
@@ -36,6 +38,7 @@ export class CoreSpiritChartOutputController {
   private committedRevision?: CoreSpiritVelaOutputRevision;
   private readonly overlayChannel = `tco-corespirit-output:${++coreSpiritOutputControllerSerial}`;
   private overlayHandle: { readonly id: string };
+  private readonly paneLayerHandles = new Map<string, { channel: string; handle: { readonly id: string } }>();
   private renderRevision = 0;
 
   constructor(private readonly chart: IChartApi, candle?: ISeriesApi<'Candlestick'>, _host?: HTMLElement) {
@@ -55,6 +58,32 @@ export class CoreSpiritChartOutputController {
       inputs: [],
       inputValues: {},
     });
+    this.paneLayerHandles.set('price', { channel: this.overlayChannel, handle: this.overlayHandle });
+  }
+
+  private ensurePaneLayerHandle(paneId: string): { channel: string; handle: { readonly id: string } } {
+    const pane = paneId.trim() || 'price';
+    const existing = this.paneLayerHandles.get(pane);
+    if (existing) return existing;
+    const channel = `${this.overlayChannel}:pane:${encodeURIComponent(pane)}`;
+    const handle = this.chart.renderer.mountIndicator({
+      id: channel,
+      title: `CoreSpirit visuals · ${pane}`,
+      overlay: pane === 'price',
+      paneHint: pane === 'price' ? 'price' : 'new',
+      paneId: pane,
+      native: { type: CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, channel },
+      legend: false,
+      series: [],
+      fills: [],
+      backgrounds: [],
+      priceLines: [],
+      inputs: [],
+      inputValues: {},
+    });
+    const entry = { channel, handle };
+    this.paneLayerHandles.set(pane, entry);
+    return entry;
   }
 
   setCandleSeries(candle: ISeriesApi<'Candlestick'>) { this.candle = candle; }
@@ -70,7 +99,7 @@ export class CoreSpiritChartOutputController {
     this.committedObjects = [];
     this.visualAbiStore.clearObjects(this.latestStreamId);
     this.clearNativeDrawingCollections();
-    this.chart.renderer.setNativeData(this.overlayChannel, undefined);
+    for (const { channel } of this.paneLayerHandles.values()) this.chart.renderer.setNativeData(channel, undefined);
   }
 
   applyFrame(frame: CoreSpiritOutputFrame, revision?: CoreSpiritVelaOutputRevision): void {
@@ -188,7 +217,7 @@ export class CoreSpiritChartOutputController {
       ...(frame.visuals || []),
       ...(frame.labels || []),
       ...(frame.tables || []),
-    ];
+    ].filter(isCoreSpiritChartTargetObject);
     const projected = projectCoreSpiritObjectsToVela(objects, 'price');
     // Replacing the Vela collection arrays is a full collection snapshot. Vela's
     // own scene patch path now manages object lifetime and redraw invalidation.
@@ -232,27 +261,42 @@ export class CoreSpiritChartOutputController {
       ...(frame.visuals || []),
       ...(frame.labels || []),
       ...(frame.tables || []),
-    ];
-    const customObjects = objects.filter(isCoreSpiritCustomLayerObject);
-    const drawings = customObjects.filter(item => item.kind === 'zone') as CoreSpiritObject[];
-    const visuals = customObjects.filter(item => item.kind !== 'zone') as CoreSpiritObject[];
-    const data: CoreSpiritVelaOutputLayerData = Object.freeze({
-      revision: ++this.renderRevision,
-      schemaVersion: 1,
-      scriptInstanceId: this.overlayChannel,
-      datasetRevision: revision.datasetRevision,
-      outputRevision: revision.outputRevision,
-      coordinateSystem: 'vela-epoch-milliseconds-price+tagged-visual-space',
-      paneId: 'price',
-      visible: true,
-      drawings: Object.freeze(drawings),
-      visuals: Object.freeze(visuals),
-      labels: Object.freeze([]),
-      tables: Object.freeze([]),
-    });
-    // Only advanced primitives remain on the custom layer. Standard chart
-    // objects now live in Vela's retained drawing/marker/series collections.
-    this.chart.renderer.setNativeData(this.overlayChannel, data);
+    ].filter(isCoreSpiritChartTargetObject).filter(isCoreSpiritCustomLayerObject);
+    const grouped = new Map<string, CoreSpiritObject[]>();
+    for (const object of objects) {
+      const paneId = coreSpiritPaneIdOf(object, 'price');
+      const group = grouped.get(paneId) ?? [];
+      group.push(object);
+      grouped.set(paneId, group);
+    }
+
+    for (const [paneId, paneObjects] of grouped) {
+      const { channel } = this.ensurePaneLayerHandle(paneId);
+      const drawings = paneObjects.filter(item => item.kind === 'zone') as CoreSpiritObject[];
+      const visuals = paneObjects.filter(item => item.kind !== 'zone') as CoreSpiritObject[];
+      const data: CoreSpiritVelaOutputLayerData = Object.freeze({
+        revision: ++this.renderRevision,
+        schemaVersion: 1,
+        scriptInstanceId: this.overlayChannel,
+        datasetRevision: revision.datasetRevision,
+        outputRevision: revision.outputRevision,
+        coordinateSystem: 'vela-epoch-milliseconds-price+tagged-visual-space',
+        paneId,
+        visible: true,
+        drawings: Object.freeze(drawings),
+        visuals: Object.freeze(visuals),
+        labels: Object.freeze([]),
+        tables: Object.freeze([]),
+      });
+      this.chart.renderer.setNativeData(channel, data);
+    }
+
+    // A full snapshot with no object in a previously used pane is an explicit
+    // deletion. Clear its channel; the retained native collections are updated
+    // separately and keep their own revision contract.
+    for (const [paneId, { channel }] of this.paneLayerHandles) {
+      if (!grouped.has(paneId)) this.chart.renderer.setNativeData(channel, undefined);
+    }
   }
 
   private clearNativeDrawingCollections(): void {
@@ -308,7 +352,7 @@ export class CoreSpiritChartOutputController {
       return Promise.resolve(true);
     } catch (error) {
       try {
-        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true);
+        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[], undefined, true, true);
       } catch (restoreError) {
         return Promise.reject(new AggregateError([error, restoreError], 'Vela output patch and rollback both failed'));
       }
@@ -339,6 +383,9 @@ export class CoreSpiritChartOutputController {
       signals:[], drawings:[], visuals:[], labels:[], tables:[],
     };
     for (const object of normalized) {
+      // Program UI visuals (panel/side-panel/floating) are not chart objects.
+      // They remain in the ABI snapshot but must never be projected over candles.
+      if (!isCoreSpiritChartTargetObject(object)) continue;
       if (object.kind === 'series') {
         const id = object.seriesId || object.name || 'coreSpirit:plot:0';
         const points = frame.plots.get(id) || [];
@@ -371,7 +418,10 @@ export class CoreSpiritChartOutputController {
     this.disposed = true;
     this.visualAbiStore.clear();
     this.reset();
-    try { this.chart.renderer.removeIndicator(this.overlayHandle); } catch {}
+    for (const { handle } of this.paneLayerHandles.values()) {
+      try { this.chart.renderer.removeIndicator(handle); } catch {}
+    }
+    this.paneLayerHandles.clear();
   }
 
   private patchSeriesValues(
