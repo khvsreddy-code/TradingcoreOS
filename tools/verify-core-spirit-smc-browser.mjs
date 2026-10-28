@@ -60,9 +60,9 @@ try {
     localStorage.setItem('tradingcore:corespirit:chart-source', source);
     localStorage.setItem('tradingcore:corespirit:editor-name', 'Smart Money Concepts [CoreSpirit]');
     localStorage.setItem('tradingcore:corespirit:editor-category', 'CoreSpirit Indicators');
-    location.reload();
-    return 'RELOADING_SMC_SOURCE';
+    return 'SMC_SOURCE_STAGED';
   })()`);
+  run(['open', baseUrl]);
   run(['wait', '--load', 'networkidle']);
 
   evaluate(`(() => {
