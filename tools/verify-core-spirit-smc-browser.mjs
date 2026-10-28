@@ -149,6 +149,56 @@ try {
       })`);
       assert(persisted.versionedDraft && persisted.legacyDraft && persisted.chartDraft,
         'Successful Compile & Run did not persist the SMC source into all compatibility draft keys.');
+      // Exercise both viewport gestures before accepting the chart overlay.
+      // The probe is re-armed for one paint so the test verifies the overlay
+      // still paints after Vela applies new time/price transforms.
+      const canvasCenter = evaluateJson(`(() => {
+        const boxes = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
+          const rect = canvas.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height };
+        }).filter(box => box.width > 80 && box.height > 80).sort((a, b) => b.width * b.height - a.width * a.height);
+        return boxes[0] || null;
+      })()`);
+      assert(canvasCenter, 'Cannot exercise Vela viewport: no usable chart canvas was found.');
+      const paintCountBeforeViewportGestures = last.paints.length;
+      run(['mouse', 'move', String(Math.round(canvasCenter.x)), String(Math.round(canvasCenter.y))]);
+      run(['mouse', 'wheel', '-120', '0']);
+      run(['mouse', 'move', String(Math.round(canvasCenter.x)), String(Math.round(canvasCenter.y))]);
+      run(['mouse', 'down', 'left']);
+      run(['mouse', 'move', String(Math.round(canvasCenter.x - 54)), String(Math.round(canvasCenter.y)), '--duration', '180', '--steps', '8']);
+      run(['mouse', 'up', 'left']);
+      evaluate(`(() => {
+        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE__ = true;
+        window.__TCO_CORESPIRIT_VISUAL_ACCEPTANCE_LAST_PROBE__ = 0;
+        return 'SMC_VIEWPORT_PAINT_PROBE_REARMED';
+      })()`);
+      let viewportPaint = null;
+      const viewportDeadline = Date.now() + 8_000;
+      while (Date.now() < viewportDeadline) {
+        const viewportState = evaluateJson(`({
+          paints: window.__TCO_SMC_VISUAL_PAINTS__ || [],
+          canvases: Array.from(document.querySelectorAll('.vela-workspace canvas')).filter(canvas => {
+            const rect = canvas.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          }).length,
+          errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
+        })`);
+        if (viewportState.errorOverlay) throw new Error('Framework error overlay appeared after Vela zoom/pan gestures.');
+        viewportPaint = viewportState.paints.slice(paintCountBeforeViewportGestures)
+          .find(item => Number(item.nonTransparentPixels) > 0 && Number(item.visualObjectCount) > 0) || null;
+        if (viewportPaint && viewportState.canvases > 0) break;
+        await pause(200);
+      }
+      assert(viewportPaint, 'CoreSpirit drawings stopped producing visible pixels after Vela zoom/pan gestures.');
+      visualEvidence.viewportInteraction = {
+        zoomWheelDelta: -120,
+        horizontalPanPixels: 54,
+        rendererPaintAfterGesture: {
+          nonTransparentPixels: viewportPaint.nonTransparentPixels,
+          paneId: viewportPaint.paneId,
+          layerRole: viewportPaint.layerRole,
+        },
+      };
       const visualEvidence = {
         url: baseUrl,
         acceptance: 'compile-and-run + committed visible native Vela drawing objects + visible chart canvas',
