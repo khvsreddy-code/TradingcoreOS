@@ -268,13 +268,29 @@ async function main() {
         let liveBar = syntheticBar(count);
         const append = timeMs(() => runtime.executeBar(liveBar));
         const liveTicks = [];
+        let lastLiveResult = append.value;
         let visibleLatencyMs = append.elapsedMs;
         for (let tick = 0; tick < updateCount; tick += 1) {
           liveBar = { ...liveBar, close: liveBar.close + (tick % 2 ? -0.015 : 0.021), high: Math.max(liveBar.high, liveBar.close + 0.04), low: Math.min(liveBar.low, liveBar.close - 0.04) };
           const update = timeMs(() => runtime.executeBar(liveBar));
           liveTicks.push(update.elapsedMs);
+          lastLiveResult = update.value;
           visibleLatencyMs = update.elapsedMs;
         }
+
+        // Correctness is measured alongside latency: repeatedly replacing the
+        // forming bar must equal a clean runtime that saw only the final candle
+        // version. This catches stale state/checkpoint reuse that a fast timer
+        // would otherwise hide.
+        const liveReferenceRuntime = makeRuntime(tier, workload);
+        const liveReferenceHistory = liveReferenceRuntime.executeIr(ir, inputBars);
+        assertSame(outputFingerprint(liveReferenceHistory.outputs), coldFingerprint,
+          `${workload.id} ${count} ${tier} live-prefix output`);
+        const finalLiveReference = liveReferenceRuntime.executeBar(liveBar);
+        assertSame(outputFingerprint(lastLiveResult.outputs), outputFingerprint(finalLiveReference.outputs),
+          `${workload.id} ${count} ${tier} forming-bar replacement outputs`);
+        assertSame(JSON.stringify(lastLiveResult.state.locals), JSON.stringify(finalLiveReference.state.locals),
+          `${workload.id} ${count} ${tier} forming-bar replacement state`);
 
         const correctedBars = inputBars.slice();
         const correctionIndex = Math.floor(count * 0.55);
@@ -300,10 +316,14 @@ async function main() {
           inputChangedByTier[tier] = inputChangedFingerprint;
           inputChangeReport = {
             inputChangeReplayMs: Number(inputChangedRun.elapsedMs.toFixed(3)),
+            inputChangeBarsPerSecond: Math.round(count * 1000 / Math.max(inputChangedRun.elapsedMs, 0.001)),
             inputChangeOutputCount: inputChangedRun.value.outputs.length,
             inputChangeOutputFingerprint: inputChangedFingerprint,
             inputChangeChangedOutput: inputChangedFingerprint !== coldFingerprint,
           };
+          if (inputChangeReport.inputChangeChangedOutput !== true) {
+            throw new Error(`${workload.id} ${count} ${tier} changing swingLength failed to change the SMC output`);
+          }
         }
         tierReports.push({
           tier,
@@ -312,8 +332,12 @@ async function main() {
           historicalOutputFingerprint: coldFingerprint,
           liveAppendOutputReadyMs: Number(append.elapsedMs.toFixed(3)),
           liveTickOutputReady: summary(liveTicks),
+          liveTickThroughputPerSecond: Math.round(updateCount * 1000 / Math.max(liveTicks.reduce((sum, value) => sum + value, 0), 0.001)),
+          formingBarReplacementParity: 'passed',
           lastObservedOutputReadyMs: Number(visibleLatencyMs.toFixed(3)),
           historicalCorrectionReplayMs: Number(correction.elapsedMs.toFixed(3)),
+          historicalBarsPerSecond: Math.round(count * 1000 / Math.max(coldRun.elapsedMs, 0.001)),
+          historicalCorrectionBarsPerSecond: Math.round(count * 1000 / Math.max(correction.elapsedMs, 0.001)),
           correctedOutputFingerprint: correctedFingerprint,
           retainedHeapDeltaBytes: afterMemory.heapUsed - beforeMemory.heapUsed,
           retainedArrayBufferDeltaBytes: afterMemory.arrayBuffers - beforeMemory.arrayBuffers,
