@@ -5,7 +5,7 @@ import hmac
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -225,16 +225,27 @@ def parse_investiny_timestamp(value: Any, timezone: ZoneInfo) -> Optional[pd.Tim
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
             stamp = pd.Timestamp(float(value), unit="s", tz="UTC")
         else:
-            parsed = pd.to_datetime(str(value), format="mixed", dayfirst=False, errors="coerce")
-            if pd.isna(parsed):
+            raw = str(value).strip()
+            if not raw:
                 return None
-            stamp = pd.Timestamp(parsed)
-            if stamp.tzinfo is None:
-                stamp = stamp.tz_localize(timezone, ambiguous="NaT", nonexistent="shift_forward")
+            # Investiny 0.7.2 formats intraday epochs with datetime.fromtimestamp(),
+            # which emits the *service host's local timezone* without an offset.
+            # Reinterpret date-only daily/weekly/monthly values in the exchange zone,
+            # but round-trip intraday wall time through the host zone to avoid a UTC
+            # container silently shifting Indian candles by 5h30m.
+            if len(raw) <= 10 and ":" not in raw:
+                stamp = pd.Timestamp(raw, format="mixed")
+                if stamp.tzinfo is None:
+                    stamp = stamp.tz_localize(timezone, ambiguous="NaT", nonexistent="shift_forward")
             else:
-                stamp = stamp.tz_convert(timezone)
+                parsed_dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if parsed_dt.tzinfo is None:
+                    parsed_dt = parsed_dt.astimezone(ZoneInfo("UTC"))
+                stamp = pd.Timestamp(parsed_dt)
         if pd.isna(stamp):
             return None
+        if stamp.tzinfo is None:
+            stamp = stamp.tz_localize(timezone, ambiguous="NaT", nonexistent="shift_forward")
         return stamp.tz_convert("UTC")
     except (TypeError, ValueError, OverflowError):
         return None
