@@ -92,6 +92,18 @@ assert.equal(projected.lines[0].id, coreSpiritVisualObjectId(line, instanceId), 
 assert.equal(projected.boxes[0].bgColor, 'rgba(37, 99, 235, 0.12)', 'zone alpha maps to the native drawing fill');
 assert.equal(projected.lines[0].style, 'dashed', 'CoreSpirit line style maps to Vela native line style');
 
+// Pane assignment is carried into Vela's own drawings rather than forcing every
+// object over the price chart.
+const studyOutput = adaptCoreSpiritOutputsForVela([{
+  kind: 'line', id: 'study-line',
+  start: { time: t0, price: 50 }, end: { time: t0 + 300, price: 55 },
+  visual: { version: 1, area: { kind: 'chart', area: 'indicator', id: 'study-pane' }, coordinateSpace: 'time', visible: true, clip: 'area' },
+}], bars).outputs[0];
+const studyLine = normalizeCoreSpiritVisualObjects([studyOutput], instanceId, revision)[0];
+const studyProjection = projectCoreSpiritObjectsToVela([studyLine]);
+assert.equal(studyProjection.lines[0].paneId, 'study-pane', 'native drawings retain the declared pane id');
+assert.equal(studyProjection.lines[0].overlay, false, 'non-price pane drawings are not force-overlaid on candles');
+
 const panelVisual = prepared.objects.find(object => object.metadata?.coreSpiritVisualAbi?.renderTarget === 'panel');
 assert.ok(panelVisual, 'panel visual remains represented in the ABI snapshot');
 assert.equal(isCoreSpiritChartTargetObject(panelVisual), false, 'panel visuals are excluded from chart painting');
@@ -118,6 +130,14 @@ assert.throws(
   () => normalizeCoreSpiritVisualObjects([{ kind: 'line', id: 'bad', start: { time: t0, price: 100 }, end: { time: t0 + 300, price: 101 } }], instanceId, revision),
   /expected epoch milliseconds/,
   'the rendering ABI rejects seconds that bypassed the canonical adapter',
+);
+assert.throws(
+  () => normalizeCoreSpiritVisualObjects([{
+    kind: 'customVisual', id: 'bad-geometry',
+    geometry: { kind: 'point', point: { kind: 'point', space: 'time', x: t0, y: 100 } },
+  }], instanceId, revision),
+  /expected epoch milliseconds/,
+  'nested time-space geometry cannot bypass the strict visual ABI boundary',
 );
 
 assert.equal(isCoreSpiritCustomLayerObject(prepared.objects.find(object => object.metadata?.sourceNodeId === 'visual:20')), true, 'custom chart geometry remains on Vela native renderer layers');
