@@ -229,12 +229,15 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     sourceVersion.current += 1;
     setName(instance.name);
     setNameDraft(instance.name);
+    // Vela's instance ID is not the user's cloud script ID. Keep this as a local
+    // working copy so Save cannot accidentally overwrite a different cloud script.
+    setScriptId(null);
     setCompileResult(null);
     setDiagnostics([]);
     setLifecycleDiagnostics([]);
     setSelectedVersion('');
-    reportStage('editing', 'Loaded the running chart version into the editor. Compile & Run to apply changes.');
-    persistLocalSource(instance.source, instance.name, scriptId);
+    reportStage('editing', 'Loaded the running chart source into a local working copy. The chart keeps running this version until Compile & Run succeeds.');
+    persistLocalSource(instance.source, instance.name, null);
   };
 
   const toggleManagedVisibility = (instance: CoreSpiritChartManagedIndicator) => {
