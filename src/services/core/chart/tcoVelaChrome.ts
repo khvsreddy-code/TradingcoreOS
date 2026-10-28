@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CoreSpiritDock } from '../../../components/corespirit/CoreSpiritDock';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
+import type { CoreSpiritExecutableArtifact } from '../../coreSpirit/artifact';
 import {
   registerLegendAction,
   registerLegendCallout,
@@ -946,14 +947,14 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       onFullscreenChange: (fullscreen: boolean) => {
         panel?.toggleAttribute('data-maximized', fullscreen);
       },
-      onAddToChart: async (scriptName: string, scriptSource: string) => {
+      onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact) => {
         const addToChart = (window as Window & {
-          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string) => Promise<void>;
+          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
         }).__TCO_ADD_CORESPIRIT_TO_CHART__;
         if (typeof addToChart !== 'function') {
           throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
         }
-        await addToChart(scriptName, scriptSource);
+        await addToChart(scriptName, scriptSource, artifact);
       },
     }));
     return {
