@@ -217,7 +217,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       }
     : undefined;
   const fetchInvestinyHistory: PreferredHistorySourceFetcher | undefined =
-    process.env.INVESTINY_ENABLED !== 'false' && investinyBase && investinyToken
+    process.env.INVESTINY_ENABLED === 'true' && investinyBase && investinyToken
       ? async (mapping, timeframe, range) => {
           const mapped = investinyMap[mapping.instrumentId] || investinyMap[mapping.fyersSymbol];
           const rawId = mapped?.investingId ?? mapped?.investing_id ?? mapped?.id;
