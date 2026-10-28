@@ -125,6 +125,7 @@ const contracts = [
   ['corespirit-architecture-1-to-8-production', ['src/coreSpiritArchitecture1to8ProductionContract.test.mjs', true]],
   ['corespirit-exact-dirty-span', ['src/coreSpiritExactDirtySpanContract.test.mjs', true]],
   ['corespirit-visual-object-lifecycle', ['src/services/coreSpirit/visualIdentityProductionContract.test.mjs', true]],
+  ['corespirit-smc-deterministic-acceptance', ['src/services/coreSpirit/luxAlgoSmcDeterministicAcceptance.test.mjs', true]],
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
   ['tco-vela-performance-telemetry', ['src/tcoVelaPerformanceTelemetryContract.test.mjs', false]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
