@@ -56,7 +56,18 @@ TCO_BENCH_OUTPUT_FILE=artifacts/corespirit-pipeline.json \
 npm run benchmark:corespirit:pipeline
 ```
 
-The report includes a capture timestamp and environment; cold/warm compilation and cache hits; historical replay and same-bar live-update p50/p95/p99; output-ready throughput; forming-bar replacement correctness; historical-correction throughput; changed-input and changed-source runs; reference-versus-optimized output fingerprints; output-kind counts; and retained heap/ArrayBuffer deltas. The report's retained-memory measurements are deltas, not allocation counts.
+The report includes a capture timestamp and environment; cold/warm compilation and cache hits; historical replay and same-bar live-update p50/p95/p99; output-ready throughput; forming-bar replacement correctness; historical-correction throughput; changed-input and changed-source runs; reference-versus-optimized output fingerprints; output-kind counts; and retained heap/ArrayBuffer deltas. The report's retained-memory measurements are deltas, not allocation counts. Historical-correction latency is now also checked against a clean runtime replay of the exact corrected input; the benchmark fails on output mismatch instead of reporting that timing as valid.
+
+For the actual fused-series dispatcher path (rather than only invoking the WASM kernel directly), run:
+
+```sh
+TCO_BENCH_BAR_COUNTS=50000,250000 \\
+TCO_BENCH_ITERATIONS=5 \\
+TCO_BENCH_OUTPUT_FILE=artifacts/corespirit-backends.json \\
+npm run benchmark:corespirit:backends
+```
+
+This compiles a two-stage rolling-mean graph, finds the corresponding real fused IR group, loads the bundled WASM backend and benchmarks the CPU reference against the production dispatcher. It reports the backend that actually executed, includes end-to-end dispatch/allocation cost, and checks numerical parity with missing values. The correctness section additionally exercises histories shorter than the warm-up period, NaN/Infinity gaps, a historical correction, forming-bar replacement, the live-context CPU-only rule, unavailable executors, and a simulated accelerator failure after a partial write. A missing or failed accelerator must fall back to CPU and must never expose partially-written output.
 
 For the numerical-kernel CPU/WASM comparison:
 
