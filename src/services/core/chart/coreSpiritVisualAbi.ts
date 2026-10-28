@@ -111,6 +111,12 @@ function rawStableSeed(object: CoreSpiritObject, index: number): string {
 /** Return the canonical identity for a visual, scoped to its script instance. */
 export function coreSpiritVisualObjectId(object: CoreSpiritObject, scriptInstanceId: string, index = 0): string {
   const item = object as unknown as Record<string, any>;
+  const existingAbi = record(record(object.metadata).coreSpiritVisualAbi);
+  if (existingAbi.schemaVersion === CORE_SPIRIT_VISUAL_ABI_VERSION &&
+      existingAbi.scriptInstanceId === scriptInstanceId &&
+      typeof existingAbi.objectId === 'string' && existingAbi.objectId.trim()) {
+    return existingAbi.objectId;
+  }
   const originalId = item.id == null ? undefined : String(item.id).trim();
   // A table emits cells as multiple outputs. Its retained identity is per cell while
   // metadata retains the table-level id for projection into Vela's single table model.
@@ -217,7 +223,7 @@ export function normalizeCoreSpiritVisualObjects(
       sourceSpan: metadata.sourceSpan ?? (metadata.start != null || metadata.end != null
         ? { start: metadata.start, end: metadata.end }
         : undefined),
-      tableId: object.kind === 'table' ? String(source.id ?? 'CoreSpirit Table') : undefined,
+      tableId: object.kind === 'table' ? `${scriptInstanceId}:${String(source.id ?? 'CoreSpirit Table')}` : undefined,
     });
     const normalized = {
       ...source,
