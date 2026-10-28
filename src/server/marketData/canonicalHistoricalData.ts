@@ -5,6 +5,7 @@ import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { canonicalFyersSymbol } from '../fyers/symbols/canonicalFyersSymbol.js';
 import { historicalDataService, type HistoricalInstrumentMapping, type PreferredHistorySourceFetcher } from './HistoricalDataService.js';
+import { marketDataAutoFixer } from './MarketDataAutoFixer.js';
 import type { HistoricalCandle, HistoricalCandleColumns, HistoricalQuoteSnapshot } from '../../services/brokers/BrokerAdapter.js';
 
 export class CanonicalHistoryError extends Error {
@@ -166,7 +167,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
     fyersUnavailableReason = safeError(error);
   }
 
-  const fetchFyersRecent = client
+  const fetchFyersRecentRaw = client
     ? async (mapping: HistoricalInstrumentMapping, range: { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string }) => {
         const signal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
         const payload = await client!.dataGet<any>('/history', {
@@ -188,6 +189,29 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
           quote,
           status: { recentSessionRangeFrom: range.fromDate, rangeTo: new Date(range.toMs).toISOString(), calendarPolicy: range.calendarPolicy },
         };
+      }
+    : undefined;
+
+  const fetchFyersRecent = fetchFyersRecentRaw
+    ? async (mapping: HistoricalInstrumentMapping, range: { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string }) => {
+        const resource = mapping.instrumentId + ':' + spec.interval;
+        if (!(await marketDataAutoFixer.canAttempt('fyers', 'history', resource))) {
+          throw Object.assign(new Error('FYERS history circuit is open; waiting for a bounded recovery probe'), {
+            status: 503,
+            code: 'MARKET_DATA_CIRCUIT_OPEN',
+          });
+        }
+        try {
+          const result = await fetchFyersRecentRaw(mapping, range);
+          if (!result || !Array.isArray(result.bars)) {
+            throw Object.assign(new Error('FYERS returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
+          }
+          await marketDataAutoFixer.recordSuccess('fyers', 'history', resource);
+          return result;
+        } catch (error) {
+          await marketDataAutoFixer.recordFailure('fyers', 'history', resource, error);
+          throw error;
+        }
       }
     : undefined;
 
