@@ -37,6 +37,6 @@ assert.equal(coreSpiritLifecycleStageForError(renderError, 'applying-chart-outpu
 const event = publishCoreSpiritLifecycle({ stage: 'rendered', scriptId: 'lifecycle-contract', sourceHash: 'src-hash', artifactHash: 'artifact-hash', previousOutputPreserved: false });
 assert.equal(event.stage, 'rendered');
 assert.equal(event.scriptId, 'lifecycle-contract');
-assert.ok(Number.isFinite(event.at), 'lifecycle events carry a monotonic-wall-clock timestamp for diagnostics');
+assert.ok(Number.isFinite(event.at), 'lifecycle events carry a wall-clock timestamp for diagnostics');
 
 console.log('CORESPIRIT_EXECUTION_LIFECYCLE_CONTRACT_OK');
