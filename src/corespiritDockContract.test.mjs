@@ -80,7 +80,9 @@ includes(smcBenchmark, 'historicalCorrectionBarsPerSecond', 'pipeline benchmark 
 includes(smcBenchmark, 'TCO_BENCH_OUTPUT_FILE', 'benchmark results can be persisted as machine-readable evidence');
 includes(smcBenchmark, 'inputChangeReport.inputChangeChangedOutput !== true', 'SMC input-change benchmark fails closed if settings do not change results');
 includes(chartController, 'existing chart output was preserved', 'fatal runtime diagnostics preserve the last valid chart scene');
-assert.ok(chartController.indexOf('if(fatalDiagnostic)throw new Error(') < chartController.indexOf('output.scheduleObjects('),
+const fatalDiagnosticGate = chartController.indexOf('if(fatalDiagnostic)throw new Error(');
+const nativeSceneCommit = chartController.indexOf('output.scheduleObjects(');
+assert.ok(fatalDiagnosticGate >= 0 && nativeSceneCommit >= 0 && fatalDiagnosticGate < nativeSceneCommit,
   'fatal runtime diagnostics must be rejected before the native Vela output commit is attempted');
 includes(dock, 'await onAddToChart(cleanName, source, artifact)', 'Add to Chart reuses the executable artifact from the exact successful compile');
 includes(dock, 'requestedVersion !== sourceVersion.current', 'a source edit during compilation blocks stale artifact application');
