@@ -14,6 +14,7 @@ const workerPool = read('./services/coreSpirit/coreSpiritWorkerPool.ts');
 const diagnostics = read('./services/coreSpirit/runtimeDiagnostics.ts');
 const outputController = read('./services/coreSpirit/chartOutputController.ts');
 const smcBrowser = read('../tools/verify-core-spirit-smc-browser.mjs');
+const smcBenchmark = read('../tools/benchmark-core-spirit-pipeline.mjs');
 const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
 const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
@@ -73,6 +74,14 @@ includes(smcBrowser, 'CORESPIRIT_SMC_BROWSER_ACCEPTANCE_OK', 'the SMC browser ac
 includes(smcBrowser, 'is now running on the active Vela chart', 'browser acceptance requires successful active-chart execution, not a compile-only pass');
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
 includes(smcBrowser, 'getBoundingClientRect()', 'browser acceptance requires a visible Vela chart surface');
+includes(smcBenchmark, 'formingBarReplacementParity', 'performance measurement is gated on forming-bar correctness parity');
+includes(smcBenchmark, 'liveTickThroughputPerSecond', 'pipeline benchmark reports incremental live-update throughput');
+includes(smcBenchmark, 'historicalCorrectionBarsPerSecond', 'pipeline benchmark reports correction replay throughput');
+includes(smcBenchmark, 'TCO_BENCH_OUTPUT_FILE', 'benchmark results can be persisted as machine-readable evidence');
+includes(smcBenchmark, 'inputChangeReport.inputChangeChangedOutput !== true', 'SMC input-change benchmark fails closed if settings do not change results');
+includes(chartController, 'existing chart output was preserved', 'fatal runtime diagnostics preserve the last valid chart scene');
+assert.ok(chartController.indexOf('if(fatalDiagnostic)throw new Error(') < chartController.indexOf('output.scheduleObjects('),
+  'fatal runtime diagnostics must be rejected before the native Vela output commit is attempted');
 includes(dock, 'await onAddToChart(cleanName, source, artifact)', 'Add to Chart reuses the executable artifact from the exact successful compile');
 includes(dock, 'requestedVersion !== sourceVersion.current', 'a source edit during compilation blocks stale artifact application');
 includes(live, 'stageCoreSpiritPrecompiledArtifact(scriptSource, artifact)', 'the active chart bridge stages the compiled artifact with exact source identity');
