@@ -220,13 +220,14 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       const { data, error } = await getSupabaseClient().auth.getUser();
       const user = data.user;
       if (error || !user) throw new Error('Sign in to publish a CoreSpirit script.');
+      const scriptKind = /\bstrategy\b/i.test(source) ? 'strategy' : 'indicator';
       const published = await publishUserIndicator({
         scriptId,
         title: cleanName,
-        description: 'A CoreSpirit indicator published from the TradingCoreOS live terminal.',
+        description: 'A CoreSpirit script published from the TradingCoreOS live terminal. Verify its documented semantics and chart visuals before relying on trading signals.',
         source,
         compile: compiled,
-        category: 'CoreSpirit',
+        category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 'CoreSpirit Indicators',
         tags: ['corespirit', 'custom'],
         profile: {
           name: String(user.user_metadata?.full_name || user.email || 'TradingCore Trader'),
@@ -235,7 +236,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         openSource: false,
         visibility: 'public',
         license: 'All Rights Reserved',
-        scriptKind: /\bstrategy\b/i.test(source) ? 'strategy' : 'indicator',
+        scriptKind,
       });
       setScriptId(published.script.id);
       setName(published.script.name);
