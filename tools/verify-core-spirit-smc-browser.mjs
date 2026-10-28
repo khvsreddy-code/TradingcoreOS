@@ -41,9 +41,10 @@ async function waitForPageContent(timeout = 20_000) {
     const state = evaluateJson(`({
       hasText: (document.body?.innerText || '').trim().length > 0,
       workspace: !!document.querySelector('.vela-workspace'),
+      loginVisible: /sign\\s*in|log\\s*in|authentication required/i.test(document.body?.innerText || ''),
       errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
     })`);
-    if (state.errorOverlay || state.hasText || state.workspace) return state;
+    if (state.errorOverlay || state.workspace || state.loginVisible) return state;
     await pause(200);
   }
   throw new Error(`No page content became available at ${baseUrl} within ${timeout} ms.`);
@@ -59,9 +60,9 @@ try {
     supabaseKeys: Object.keys(localStorage || {}).filter(key => /supabase|auth/i.test(key)).length
   })`);
   assert(!initial.errorOverlay, `Framework error overlay detected at ${baseUrl}.`);
-  assert(initial.workspace, `Vela workspace did not mount at ${baseUrl}.`);
   if (requireAuth) assert(!initial.loginVisible && initial.supabaseKeys > 0,
     'Authenticated SMC browser acceptance requested, but no authenticated Supabase session was detected.');
+  assert(initial.workspace, `Vela workspace did not mount at ${baseUrl}.`);
 
   // Put the known bundled source into the editor's existing persisted draft,
   // then reload so editor bootstrap and active-chart integration follow the
@@ -234,19 +235,19 @@ try {
       // saved by the real Compile & Run path is the source restored by the dock.
       run(['open', baseUrl]);
       run(['wait', '--load', 'domcontentloaded']);
-      evaluate(`(() => {
-        if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
-        const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
-        if (toggle) toggle.click();
-        return 'EDITOR_REOPEN_REQUESTED';
-      })()`);
       let restored = false;
       const restoreDeadline = Date.now() + 8_000;
       while (Date.now() < restoreDeadline) {
         const restoreState = evaluateJson(`(() => {
           const editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
+          const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
+          if (!editor && toggle && window.__TCO_SMC_RESTORE_TOGGLE_CLICKED__ !== true) {
+            toggle.click();
+            window.__TCO_SMC_RESTORE_TOGGLE_CLICKED__ = true;
+          }
+          const restoredEditor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
           return {
-            sourceMatches: !!editor && editor.value === ${JSON.stringify(smcSource)},
+            sourceMatches: !!restoredEditor && restoredEditor.value === ${JSON.stringify(smcSource)},
             workspace: !!document.querySelector('.vela-workspace'),
             errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
           };
