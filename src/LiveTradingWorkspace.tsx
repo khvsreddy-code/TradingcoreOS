@@ -424,51 +424,111 @@ const browserRuntimeMetrics = useRef({
         scriptName: string,
         scriptSource: string,
         artifact: CoreSpiritExecutableArtifact,
+        scriptId?: string | null,
       ): Promise<void> => {
         const activeWorkspace = workspaceRef.current;
         if (!activeWorkspace) throw new Error('The Vela chart is not ready yet.');
         const activeCell = activeWorkspace.active;
         if (!activeCell) throw new Error('Select an active Vela chart before adding a CoreSpirit script.');
-        // Vela's external-indicator ledger intentionally persists source, not compiled
-        // VM payloads. Stage the artifact only for the immediate prepare() handoff;
-        // the receiver rechecks exact source hash, artifact hash and schema.
+
+        // One logical script owns one instance on this cell. Use a saved script id
+        // whenever available; local drafts use the name until they are published.
+        // The source fingerprint changes on edits so the replacement can start while
+        // the previous valid instance stays alive.
+        const identitySeed = scriptId?.trim()
+          ? 'script:' + scriptId.trim()
+          : 'local-name:' + scriptName.trim().toLocaleLowerCase();
+        const stableHash = (value: string): string => {
+          let hash = 0x811c9dc5;
+          for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 0x01000193);
+          }
+          return (hash >>> 0).toString(36);
+        };
+        const instancePrefix = 'tco-corespirit-' + stableHash(identitySeed) + '-';
+        const externalInstanceId = instancePrefix + stableHash(scriptSource);
+        const sameLogicalScript = (instance: (typeof activeCell.instances)[number]) =>
+          instance.entry.language === 'corespirit' &&
+          (instance.id.startsWith(instancePrefix) ||
+            instance.entry.name.trim().toLocaleLowerCase() === scriptName.trim().toLocaleLowerCase());
+        const sameSourceInstance = activeCell.instances.find(instance =>
+          sameLogicalScript(instance) && instance.entry.script === scriptSource,
+        );
+        if (sameSourceInstance) {
+          // A second Compile & Run for byte-identical source is an idempotent
+          // no-op: never append another indicator row or another retained scene.
+          try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
+          return;
+        }
+        const previousInstanceIds = activeCell.instances
+          .filter(sameLogicalScript)
+          .map(instance => instance.id);
+
+        // Vela's external-indicator ledger persists source, not VM payloads. Stage
+        // only for this immediate handoff; the receiver rechecks exact source and
+        // artifact hashes before using the compiled artifact.
         stageCoreSpiritPrecompiledArtifact(scriptSource, artifact);
         const before = activeCell.indicatorCount;
         activeCell.addExternalIndicator({
+          id: externalInstanceId,
           name: scriptName,
           script: scriptSource,
           language: 'corespirit',
         });
-        if (activeCell.indicatorCount <= before) {
-          throw new Error('Vela did not attach this script to the active chart. Check the compiler diagnostics and try again.');
+        const createdInstance = activeCell.instances.find(instance => instance.id === externalInstanceId);
+        if (!createdInstance || activeCell.indicatorCount <= before) {
+          throw new Error('Vela did not attach the CoreSpirit script instance. The chart may already contain an instance with this id.');
         }
-        const handle = activeCell.instances.at(-1)?.handle;
+        const handle = createdInstance.handle;
         if (!handle) throw new Error('Vela attached a row but did not create a runnable CoreSpirit indicator handle.');
-        // A legend row is not a successful run: await the first model or surface the actual engine error.
-        await new Promise<void>((resolve, reject) => {
-          let settled = false;
-          let removeReady: (() => void) | undefined;
-          let removeError: (() => void) | undefined;
-          let timer: number | undefined;
-          const finish = (error?: Error) => {
-            if (settled) return;
-            settled = true;
-            if (timer !== undefined) window.clearTimeout(timer);
-            removeReady?.();
-            removeError?.();
-            if (error) reject(error); else resolve();
-          };
-          timer = window.setTimeout(() => finish(new Error('CoreSpirit did not finish compiling and drawing within 25 seconds. Check the indicator error details and worker status.')), 25_000);
-          removeReady = handle.on('ready', () => finish());
-          removeError = handle.on('error', payload => finish(payload.error));
-        });
+
+        // Keep the previous source live until the replacement has emitted ready.
+        // A compile/runtime failure removes only the new failed instance and leaves
+        // the last known-good chart output visible.
+        try {
+          await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            let removeReady: (() => void) | undefined;
+            let removeError: (() => void) | undefined;
+            let timer: number | undefined;
+            const finish = (error?: Error) => {
+              if (settled) return;
+              settled = true;
+              if (timer !== undefined) window.clearTimeout(timer);
+              removeReady?.();
+              removeError?.();
+              if (error) reject(error); else resolve();
+            };
+            timer = window.setTimeout(() => finish(new Error('CoreSpirit did not finish compiling and drawing within 25 seconds. Check the indicator error details and worker status.')), 25_000);
+            removeReady = handle.on('ready', () => finish());
+            removeError = handle.on('error', payload => finish(payload.error));
+          });
+        } catch (error) {
+          const failedIndex = activeCell.instances.findIndex(instance => instance.id === externalInstanceId);
+          if (failedIndex >= 0) {
+            try {
+              const nativeCount = activeCell.indicatorCount - activeCell.instances.length;
+              activeCell.removeFromChart(nativeCount + failedIndex);
+            } catch { /* preserve the original runtime error */ }
+          }
+          throw error;
+        }
+
+        // Promote the new source only after the chart runtime confirms it is ready.
+        for (const previousId of previousInstanceIds) {
+          const staleIndex = activeCell.instances.findIndex(instance => instance.id === previousId);
+          if (staleIndex < 0) continue;
+          const nativeCount = activeCell.indicatorCount - activeCell.instances.length;
+          activeCell.removeFromChart(nativeCount + staleIndex);
+        }
         try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, scriptSource); } catch {}
         window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', {
           detail: { name: scriptName, source: scriptSource },
         }));
       };
       const tcoWindow = window as Window & {
-        __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact) => Promise<void>;
+        __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
       };
       tcoWindow.__TCO_ADD_CORESPIRIT_TO_CHART__ = addCoreSpiritToChart;
       workspaceListenerDisposers.push(() => {
