@@ -12,10 +12,6 @@ import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis } from '../..
 
 type Ref<T>={current:T};
 
-function isFatalCoreSpiritDiagnostic(message:string):boolean {
-  return /\b(?:error|failed|failure|invalid|denied|exception|unsupported|unknown (?:identifier|function|variable)|not found)\b/i.test(message);
-}
-
 export type ChartCoreSpiritControllerDeps={
   chartId:string;
   chart:Ref<IChartApi|null>;
@@ -55,10 +51,16 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
         ? await runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options)
         : await runCoreSpiritInWorker(source,bars,sourceId,options);
       if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
-      // A resolved worker promise can still carry runtime diagnostics. Do not
-      // commit partial output when the replacement failed semantically/runtime-wise.
-      const fatalDiagnostic=result.diagnostics.find(isFatalCoreSpiritDiagnostic);
-      if(fatalDiagnostic)throw new Error(`CoreSpirit replacement failed; existing chart output was preserved. ${fatalDiagnostic}`);
+      // The worker boundary supplies structured runtime diagnostics. Commit policy
+      // follows severity/code, never incidental words in an error message. Older or
+      // unclassified diagnostic payloads fail closed to preserve the previous scene.
+      const diagnosticDetails=result.diagnosticDetails ?? result.diagnostics.map(message=>({
+        severity:'error' as const,code:'RUNTIME_DIAGNOSTIC_UNCLASSIFIED',message,
+      }));
+      const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity==='error');
+      if(fatalDiagnostic)throw new Error(
+        `CoreSpirit replacement rejected [${fatalDiagnostic.code}${fatalDiagnostic.barIndex==null?'':` · bar ${fatalDiagnostic.barIndex}`}]; existing chart output was preserved. ${fatalDiagnostic.message}`,
+      );
       // Validate timestamps and translate into Vela's millisecond scene contract
       // before touching visible state. A bad series timestamp preserves the old scene.
       const adapted=adaptCoreSpiritOutputsForVela(result.outputs,bars);
@@ -70,7 +72,7 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
       coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:coreSpiritTimeToVelaMillis(bars[bars.length-1]!.timestamp),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
       publishLifecycle('ready');
-      return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
+      return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,diagnosticDetails,runId:`${sourceId}:${runId}`,outputs:result.outputs};
     }catch(error){
       // A superseded worker snapshot is expected during rapid edits/ticks. Never
       // let an obsolete run flip the current chart lifecycle to an error state.
@@ -138,8 +140,12 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       const run=target.updateCode
         ? await target.updateCode(source,validated.result.artifact,'chart-indicator')
         : await target.run(source,'chart-indicator');
-      if(run.diagnostics.some(d=>/failed|invalid|denied/i.test(d))) {
-        store.setDiagnostics(run.diagnostics);
+      const fatalRunDiagnostic=run.diagnosticDetails?.find(diagnostic=>diagnostic.severity==='error');
+      if(fatalRunDiagnostic) {
+        store.setDiagnostics([
+          ...run.diagnostics,
+          `[${fatalRunDiagnostic.code}${fatalRunDiagnostic.barIndex==null?'':` · bar ${fatalRunDiagnostic.barIndex}`}]: ${fatalRunDiagnostic.message}`,
+        ]);
         store.setStatus('Deploy needs attention');
         return;
       }
