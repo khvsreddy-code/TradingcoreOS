@@ -165,4 +165,80 @@ assert.deepEqual(corrected.diagnostics, [], 'historical correction replay must r
 assert.equal(semanticFingerprint(corrected.outputs), semanticFingerprint(cleanCorrected.outputs),
   'corrected history must equal a clean full replay; no stale drawing objects may survive correction');
 
+
+function epochSeconds(bar) {
+  return Date.parse(bar.timestamp) / 1000;
+}
+
+// Confirm that swing pivots are not back-filled before the right-hand
+// confirmation window closes. The label is anchored to the candidate candle,
+// but must only become observable after the full 50-bar confirmation delay.
+const pivotCandidateTime = epochSeconds(bars[55]);
+const beforePivotConfirmation = executeCoreSpirit(source, bars.slice(0, 105), SOURCE_ID + '-pivot-before-confirmation');
+assert.ok(!beforePivotConfirmation.outputs.some(item =>
+  item.kind === 'label' && ['SH', 'HH', 'LH'].includes(item.text) && item.time === pivotCandidateTime
+), 'a swing-high label must not appear before its right-side confirmation bars exist');
+const atPivotConfirmation = executeCoreSpirit(source, bars.slice(0, 106), SOURCE_ID + '-pivot-at-confirmation');
+assert.ok(atPivotConfirmation.outputs.some(item =>
+  item.kind === 'label' && item.text === 'SH' && item.time === pivotCandidateTime
+), 'the first swing high must appear on the original pivot candle exactly when confirmation becomes available');
+
+// Equal-level fixtures are deliberately exact matches: validate the anchor and
+// price rather than only checking that some EQH/EQL label was emitted.
+assert.ok(outputs.some(item => item.kind === 'label' && item.text === 'EQH' &&
+  item.time === epochSeconds(bars[110]) && item.price === bars[110].high),
+  'EQH must attach to the second confirmed high candle and its actual price');
+assert.ok(outputs.some(item => item.kind === 'label' && item.text === 'EQL' &&
+  item.time === epochSeconds(bars[125]) && item.price === bars[125].low),
+  'EQL must attach to the second confirmed low candle and its actual price');
+
+// The fixed three-candle bullish imbalance at bar 170 must not exist before
+// that candle closes. At creation, its coordinates are exactly the prior
+// candle's high at the left and the current candle's low at the right bound.
+const bullishGapLeft = epochSeconds(bars[168]);
+const bullishGapRight = epochSeconds(bars[170]);
+const beforeBullishGap = executeCoreSpirit(source, bars.slice(0, 170), SOURCE_ID + '-before-bull-fvg');
+assert.ok(!beforeBullishGap.outputs.some(item => item.kind === 'zone' &&
+  item.style?.fillColor === '#00FF68' && item.left === bullishGapLeft),
+  'a bullish FVG must not be emitted before the third candle establishes the imbalance');
+const atBullishGap = executeCoreSpirit(source, bars.slice(0, 171), SOURCE_ID + '-at-bull-fvg');
+const bullishGap = atBullishGap.outputs.find(item => item.kind === 'zone' &&
+  item.style?.fillColor === '#00FF68' && item.left === bullishGapLeft);
+assert.ok(bullishGap, 'the fixture bullish FVG should be emitted on its third candle');
+assert.equal(bullishGap.right, bullishGapRight, 'new FVG starts at the third candle, not at a future viewport edge');
+assert.equal(bullishGap.top, bars[170].low, 'bullish FVG top must equal the third candle low');
+assert.equal(bullishGap.bottom, bars[168].high, 'bullish FVG bottom must equal the first candle high');
+
+// Mirror the exact-boundary check for a bearish three-candle gap.
+const bearishGapLeft = epochSeconds(bars[183]);
+const bearishGapRight = epochSeconds(bars[185]);
+const atBearishGap = executeCoreSpirit(source, bars.slice(0, 186), SOURCE_ID + '-at-bear-fvg');
+const bearishGap = atBearishGap.outputs.find(item => item.kind === 'zone' &&
+  item.style?.fillColor === '#FF0008' && item.left === bearishGapLeft);
+assert.ok(bearishGap, 'the fixture bearish FVG should be emitted on its third candle');
+assert.equal(bearishGap.right, bearishGapRight, 'bearish FVG must preserve the actual third-candle boundary');
+assert.equal(bearishGap.top, bars[183].low, 'bearish FVG top must equal the first candle low');
+assert.equal(bearishGap.bottom, bars[185].high, 'bearish FVG bottom must equal the third candle high');
+
+// Input switches are part of the indicator's public surface. A setting change
+// must remove disabled visual families rather than leaving stale historical
+// drawings behind in a newly evaluated output snapshot.
+const hiddenFvgRuntime = new CoreSpiritRuntime({
+  sourceId: SOURCE_ID + '-hide-fvg',
+  inputValues: { showFairValueGaps: false },
+});
+const hiddenFvgRun = hiddenFvgRuntime.executeIr(compiled.ir, bars);
+assert.deepEqual(hiddenFvgRun.diagnostics, [], 'disabling FVG visuals must remain runtime-valid');
+assert.ok(!hiddenFvgRun.outputs.some(item => item.kind === 'zone' &&
+  ['#00FF68', '#FF0008'].includes(item.style?.fillColor)),
+  'disabled FVG input must remove both bullish and bearish FVG zones from the replacement output');
+
+// A forming-bar revision must not create duplicate event objects while state is
+// restored. Stable identities should let Vela update the same objects in-place.
+const formingVisualIds = revisedLive.outputs
+  .map(item => item.id)
+  .filter(id => typeof id === 'string' && id.length > 0);
+assert.equal(new Set(formingVisualIds).size, formingVisualIds.length,
+  'forming-bar replacement must not duplicate retained CoreSpirit drawing IDs');
+
 console.log('CORESPIRIT_SMC_DETERMINISTIC_ACCEPTANCE_OK');
