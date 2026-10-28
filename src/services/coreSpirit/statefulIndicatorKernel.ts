@@ -529,7 +529,7 @@ export class EMAState {
   protected currentInput: number | null = null;
   constructor(period: number) { this.period = Math.max(1, Math.floor(period)); this.seed = new RollingMean(this.period); }
   update(value: number, mode: 'append' | 'replace' = 'append') {
-    const v = Number(value); if (!Number.isFinite(v)) return this.valueState;
+    const v = Number(value); if (!Number.isFinite(v)) { this.reset(); return null; }
     if (mode === 'replace' && this.currentInput != null) {
       this.seed.update(v, 'replace'); this.currentInput = v;
       if (this.seed.size < this.period) { this.valueState = null; this.stableBeforeCurrent = null; }
@@ -558,7 +558,7 @@ export class WilderState {
   private currentInput: number | null = null;
   constructor(period: number) { this.period = Math.max(1, Math.floor(period)); this.seed = new RollingMean(this.period); }
   updateWilder(value: number, mode: 'append' | 'replace' = 'append') {
-    const v = Number(value); if (!Number.isFinite(v)) return this.valueState;
+    const v = Number(value); if (!Number.isFinite(v)) { this.reset(); return null; }
     if (mode === 'replace' && this.currentInput != null) {
       this.seed.update(v, 'replace'); this.currentInput = v;
       if (this.seed.size < this.period) { this.valueState = null; this.stableBeforeCurrent = null; }
@@ -587,7 +587,13 @@ export class ATRState {
   private latestTR: number | null = null;
   constructor(period: number) { this.wilder = new WilderState(period); }
   update(high: number, low: number, close: number, mode: 'append' | 'replace' = 'append') {
-    const h = Number(high), l = Number(low), c = Number(close); if (![h,l,c].every(Number.isFinite)) return null;
+    const h = Number(high), l = Number(low), c = Number(close);
+    if (![h,l,c].every(Number.isFinite) || h < l) {
+      // Match batch ATR's invalid true-range semantics: clear both Wilder
+      // smoothing state and the prior-close dependency across a missing candle.
+      this.reset();
+      return null;
+    }
 
     // New bars use the prior bar's close. A forming-bar replacement must keep
     // using that same prior close rather than accidentally using the current
@@ -628,7 +634,8 @@ export class WMAState extends RollingBase {
   private sum = 0;
   private currentInput: number | null = null;
   update(value: number, mode: 'append' | 'replace' = 'append') {
-    const v = Number(value); if (!Number.isFinite(v)) return null;
+    const v = Number(value);
+    if (!Number.isFinite(v)) { this.reset(); return null; }
     const p = this.capacity;
     if (mode === 'replace' && this.count) {
       const old = this.buffer[this.slotForCurrent()];
