@@ -17,6 +17,7 @@ const visualLayer = read('./services/core/chart/coreSpiritVelaOutputLayer.ts');
 const visualAbi = read('./services/core/chart/coreSpiritVisualAbi.ts');
 const velaNativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const editorPage = read('./pages/CoreSpiritEditorPage.tsx');
+const indicatorsPage = read('./pages/IndicatorsPage.tsx');
 const copilotRoute = read('./server/routes/coreSpirit-copilot.routes.ts');
 const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
 const contributions = read('../vendor/vela/src/widget/contributions.ts');
@@ -63,6 +64,9 @@ includes(dock, 'saveUserIndicatorDraft', 'Save creates a versioned cloud draft')
 includes(dock, ".from('corespirit_script_versions')", 'version history is read from the script version table');
 includes(dock, 'onClick={() => void rename()}', 'rename button is wired');
 includes(dock, 'publishUserIndicator', 'Publish uses the existing publication service');
+includes(dock, "category: scriptKind === 'strategy' ? 'CoreSpirit Strategies' : 'CoreSpirit Indicators'", 'published scripts use the dedicated CoreSpirit catalog category');
+includes(indicatorsPage, 'Staged acceptance target', 'the bundled SMC conversion is not represented as release-certified before browser visual acceptance');
+includes(indicatorsPage, 'authenticated browser visual acceptance passes', 'SMC limitations and the missing browser acceptance gate remain visible to users');
 includes(dock, 'await onAddToChart(cleanName, source, artifact)', 'Add to Chart reuses the executable artifact from the exact successful compile');
 includes(dock, 'requestedVersion !== sourceVersion.current', 'a source edit during compilation blocks stale artifact application');
 includes(live, 'stageCoreSpiritPrecompiledArtifact(scriptSource, artifact)', 'the active chart bridge stages the compiled artifact with exact source identity');
