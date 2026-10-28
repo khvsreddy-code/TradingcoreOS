@@ -6,7 +6,12 @@ import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
-import type { CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
+import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
+import {
+  coreSpiritLifecycleDiagnostic, coreSpiritLifecycleLabel, coreSpiritLifecycleStageForError,
+  publishCoreSpiritLifecycle, validateCoreSpiritChartCapabilities,
+  type CoreSpiritLifecycleDiagnostic, type CoreSpiritLifecycleStage,
+} from '../../services/coreSpirit/coreSpiritExecutionLifecycle';
 
 const LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const DEFAULT_SOURCE = CORESPIRIT_LUXALGO_SMC_SOURCE;
@@ -88,27 +93,92 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const [busy, setBusy] = useState<'compile' | 'save' | 'rename' | 'publish' | 'add' | null>(null);
   const [compileResult, setCompileResult] = useState<CoreSpiritOffThreadCompileResult | null>(null);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const [lifecycleStage, setLifecycleStage] = useState<CoreSpiritLifecycleStage>('editing');
+  const [lifecycleDiagnostics, setLifecycleDiagnostics] = useState<CoreSpiritLifecycleDiagnostic[]>([]);
   const sourceVersion = useRef(0);
+
+  const reportStage = (stage: CoreSpiritLifecycleStage, message?: string, extra: Partial<CoreSpiritLifecycleDiagnostic> = {}) => {
+    setLifecycleStage(stage);
+    if (message) setStatus(message);
+    publishCoreSpiritLifecycle({
+      stage, scriptId, scriptName: nameDraft.trim() || name,
+      sourceHash: compileResult?.artifact?.abi?.sourceHash,
+      artifactHash: compileResult?.artifact?.abi?.artifactHash,
+      diagnostics: extra.code ? [{ severity: extra.severity || 'error', stage, code: extra.code, message: extra.message || message || coreSpiritLifecycleLabel(stage), ...extra }] : undefined,
+      previousOutputPreserved: extra.previousOutputPreserved,
+      message: message || coreSpiritLifecycleLabel(stage),
+    });
+  };
+
+  useEffect(() => {
+    const onLifecycle = (event: Event) => {
+      const detail = (event as CustomEvent<{ stage?: CoreSpiritLifecycleStage; scriptId?: string | null; scriptName?: string; message?: string; diagnostics?: CoreSpiritLifecycleDiagnostic[] }>).detail;
+      if (!detail?.stage) return;
+      const matches = (detail.scriptId && scriptId && detail.scriptId === scriptId) ||
+        (detail.scriptName && detail.scriptName === (nameDraft.trim() || name));
+      if (!matches) return;
+      setLifecycleStage(detail.stage);
+      if (detail.message) setStatus(detail.message);
+      if (detail.diagnostics?.length) {
+        setLifecycleDiagnostics(detail.diagnostics);
+        setDiagnostics(detail.diagnostics.map(item =>
+          (item.code ? '[' + item.code + '] ' : '') +
+          (item.line == null ? '' : 'Line ' + item.line + (item.column == null ? '' : ':' + item.column) + ': ') +
+          item.message,
+        ).slice(0, 10));
+      }
+    };
+    window.addEventListener('tco:corespirit:lifecycle', onLifecycle);
+    return () => window.removeEventListener('tco:corespirit:lifecycle', onLifecycle);
+  }, [scriptId, name, nameDraft]);
 
   const compileSource = async (value: string) => {
     const requestedVersion = ++sourceVersion.current;
-    const result = await compileCoreSpiritSourceOffThread(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
+    reportStage('compiling', 'Compiling the current source revision…');
+    const initial = await compileCoreSpiritSourceOffThread(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
     // The textarea remains editable while workers run. Never publish diagnostics
     // or apply an artifact from a compile whose source was superseded in the editor.
     if (requestedVersion !== sourceVersion.current) {
-      throw new Error('The source changed while CoreSpirit was compiling. Compile the latest source before applying it to the chart.');
+      const error = new Error('The source changed while CoreSpirit was compiling. Compile the latest source before applying it to the chart.');
+      reportStage('stale', error.message);
+      throw error;
     }
-    if (result.sourceVersion !== requestedVersion) {
-      throw new Error('CoreSpirit compiler returned a result for a different source revision.');
+    if (initial.sourceVersion !== requestedVersion) {
+      const error = new Error('CoreSpirit compiler returned a result for a different source revision.');
+      reportStage('compile-failed', error.message, { code: 'CORESPIRIT_SOURCE_VERSION_MISMATCH' });
+      throw error;
     }
+    reportStage('validating-capabilities', 'Validating the compiled artifact and chart capabilities…');
+    const policyDiagnostics = validateCoreSpiritChartCapabilities(initial.ir);
+    const result: CoreSpiritOffThreadCompileResult = {
+      ...initial,
+      diagnostics: [...(initial.diagnostics || []), ...policyDiagnostics],
+    };
     setCompileResult(result);
     const errors = result.diagnostics.filter(item => item.severity === 'error');
     setDiagnostics(result.diagnostics.map(item => {
-      const location = item.line == null ? '' : `L${item.line}${item.column == null ? '' : `:${item.column}`}: `;
-      return `${location}${item.message}`;
+      const location = item.line == null ? '' : 'L' + item.line + (item.column == null ? '' : ':' + item.column) + ': ';
+      return (item.code ? '[' + item.code + '] ' : '') + location + item.message;
     }).slice(0, 10));
-    if (errors.length) throw new Error(errors[0]?.message || 'CoreSpirit compilation failed.');
-    if (!result.artifact || !result.ir) throw new Error('CoreSpirit did not produce an executable artifact.');
+    setLifecycleDiagnostics(result.diagnostics.map(item => ({
+      severity: item.severity === 'warning' ? 'warning' as const : item.severity === 'info' ? 'info' as const : 'error' as const,
+      stage: item.code === 'CHART_CAPABILITY_DENIED' || item.code === 'CHART_SANDBOX_ARCHITECTURE' ? 'capability-denied' as const : errors.length ? 'compile-failed' as const : 'compiled' as const,
+      code: item.code || 'CORESPIRIT_COMPILE_DIAGNOSTIC', message: item.message,
+      ...(item.line == null ? {} : { line: item.line }), ...(item.column == null ? {} : { column: item.column }),
+      previousOutputPreserved: true,
+    })).slice(0, 10));
+    if (errors.length) {
+      const capabilityDenied = errors.some(item => item.code === 'CHART_CAPABILITY_DENIED' || item.code === 'CHART_SANDBOX_ARCHITECTURE');
+      const stage: CoreSpiritLifecycleStage = capabilityDenied ? 'capability-denied' : 'compile-failed';
+      reportStage(stage, errors[0]?.message || 'CoreSpirit compilation failed.', { code: errors[0]?.code || (capabilityDenied ? 'CHART_CAPABILITY_DENIED' : 'CORESPIRIT_COMPILE_FAILED'), previousOutputPreserved: true });
+      throw new Error(errors[0]?.message || 'CoreSpirit compilation failed.');
+    }
+    if (!result.artifact || !result.ir || !validateExecutableArtifact(result.artifact)) {
+      const error = new Error('CoreSpirit did not produce a valid executable artifact.');
+      reportStage('compile-failed', error.message, { code: 'CORESPIRIT_ARTIFACT_VALIDATION_FAILED', previousOutputPreserved: true });
+      throw error;
+    }
+    reportStage('compiled', 'Compiled · chart capabilities validated · artifact identity verified.');
     return result;
   };
 
@@ -286,6 +356,8 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     setSelectedVersion('');
     setCompileResult(null);
     setDiagnostics([]);
+    setLifecycleDiagnostics([]);
+    reportStage('editing', 'Unsaved source edits · the active chart continues running its last valid version.');
     persistLocalSource(value, nameDraft, scriptId);
   };
 
