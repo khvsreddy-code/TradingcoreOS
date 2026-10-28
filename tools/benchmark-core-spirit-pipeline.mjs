@@ -373,7 +373,7 @@ async function main() {
   console.log(serializedReport);
   const outputFile = process.env.TCO_BENCH_OUTPUT_FILE?.trim();
   if (outputFile) {
-    await writeFile(outputFile, serializedReport + '\\n', 'utf8');
+    await writeFile(outputFile, serializedReport + '\n', 'utf8');
     console.error(`[pipeline] machine-readable report saved to ${outputFile}`);
   }
 }
