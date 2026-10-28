@@ -6,7 +6,7 @@ const baseUrl = (process.env.TCO_BROWSER_URL || 'http://localhost:5173/live').tr
 const requireAuth = process.env.TCO_REQUIRE_AUTH === 'true';
 const timeoutMs = Math.max(10_000, Math.min(90_000, Number(process.env.TCO_SMC_BROWSER_TIMEOUT_MS || 38_000)));
 const sourceFile = await readFile(new URL('../src/services/coreSpirit/luxAlgoSmcCoreSource.ts', import.meta.url), 'utf8');
-const match = sourceFile.match(/export const CORESPIRIT_LUXALGO_SMC_SOURCE = \x60([\\s\\S]*?)\x60;\\s*$/);
+const match = sourceFile.match(/export const CORESPIRIT_LUXALGO_SMC_SOURCE = \x60([\s\S]*?)\x60;\s*$/);
 if (!match) throw new Error('Could not load the bundled SMC acceptance source from luxAlgoSmcCoreSource.ts.');
 const smcSource = match[1];
 
