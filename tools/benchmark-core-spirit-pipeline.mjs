@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { CoreSpiritCompiler } from '../src/services/coreSpirit/compiler.ts';
 import { CoreSpiritIncrementalCompiler } from '../src/services/coreSpirit/incrementalCompiler.ts';
 import { CoreSpiritRuntime } from '../src/services/coreSpirit/runtime.ts';
+import { CoreSpiritGaussianHMM } from '../src/services/coreSpirit/quantMath.ts';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../src/services/coreSpirit/luxAlgoSmcCoreSource.ts';
 
 const DEFAULT_BAR_COUNTS = [2_000, 5_000, 20_000, 50_000];
@@ -192,6 +193,82 @@ function makeRuntime(tier, workload, inputValues = {}) {
     dataResolver: fixtureResolver(),
     inputValues,
   });
+}
+
+function trainInferenceFixtureHmm() {
+  const model = new CoreSpiritGaussianHMM({
+    states: 3,
+    maxObservations: 512,
+    fitEvery: 65_536,
+    fitIterations: 1,
+    refreshPosteriorOnObserve: true,
+  });
+  const fields = ['return', 'volatility'];
+  for (let index = 0; index < 512; index += 1) {
+    const returns = Math.sin(index * 0.071) * 0.02 +
+      Math.cos(index * 0.013) * 0.006 + (index % 17 === 0 ? -0.035 : 0);
+    const volatility = 0.008 + Math.abs(Math.sin(index * 0.033)) * 0.05 +
+      (index > 256 ? 0.003 : 0);
+    model.observe([returns, volatility], START_MS + index * 60_000, fields);
+  }
+  model.fitFinal();
+  if (model.decodeLatest() === null || !model.posterior()) {
+    throw new Error('fixed HMM fixture failed to produce a fitted inference state');
+  }
+  return model;
+}
+
+function benchmarkModelInference(iterations) {
+  const setup = timeMs(() => trainInferenceFixtureHmm());
+  const model = setup.value;
+  const cleanReference = trainInferenceFixtureHmm();
+  const latencySamples = [];
+  const beforeMemory = process.memoryUsage();
+  const fields = ['return', 'volatility'];
+  let finalState = null;
+  for (let index = 0; index < iterations; index += 1) {
+    const timestamp = START_MS + (512 + index) * 60_000;
+    const row = [
+      Math.sin((512 + index) * 0.071) * 0.02 +
+        Math.cos((512 + index) * 0.013) * 0.006 + ((512 + index) % 17 === 0 ? -0.035 : 0),
+      0.008 + Math.abs(Math.sin((512 + index) * 0.033)) * 0.05 +
+        ((512 + index) > 256 ? 0.003 : 0),
+    ];
+    const measured = timeMs(() => model.observe(row, timestamp, fields));
+    const referenceState = cleanReference.observe(row, timestamp, fields);
+    if (measured.value !== referenceState) {
+      throw new Error(`HMM incremental inference state mismatch at update ${index}: ${measured.value} !== ${referenceState}`);
+    }
+    const posterior = model.posterior()?.data;
+    const referencePosterior = cleanReference.posterior()?.data;
+    if (!posterior || !referencePosterior || posterior.length !== referencePosterior.length) {
+      throw new Error('HMM inference parity failed: posterior is missing or has a different state count');
+    }
+    for (let state = 0; state < posterior.length; state += 1) {
+      if (Math.abs(posterior[state] - referencePosterior[state]) > 1e-10) {
+        throw new Error(`HMM inference posterior mismatch at update ${index}, state ${state}`);
+      }
+    }
+    latencySamples.push(measured.elapsedMs);
+    finalState = measured.value;
+  }
+  const afterMemory = process.memoryUsage();
+  const totalMs = latencySamples.reduce((sum, value) => sum + value, 0);
+  return {
+    component: 'CoreSpiritGaussianHMM frozen-parameter observe/filter/decode path',
+    inferenceOnly: true,
+    fitIterationsDuringMeasuredSamples: 0,
+    measuredUpdates: latencySamples.length,
+    setupAndFinalFitMs: Number(setup.elapsedMs.toFixed(3)),
+    incrementalInference: summary(latencySamples),
+    updatesPerSecond: Math.round(latencySamples.length * 1000 / Math.max(totalMs, 0.001)),
+    finalState: finalState,
+    finalPosterior: Array.from(model.posterior()?.data ?? []),
+    outputParityAgainstIndependentSame-historyModel: 'passed',
+    retainedHeapDeltaBytes: afterMemory.heapUsed - beforeMemory.heapUsed,
+    retainedArrayBufferDeltaBytes: afterMemory.arrayBuffers - beforeMemory.arrayBuffers,
+    note: 'This isolates model inference after one bounded fit; it is not a substitute for measuring a full compiled model-backed chart indicator.',
+  };
 }
 
 async function main() {
@@ -384,6 +461,7 @@ async function main() {
     report.workloads.push(workloadReport);
   }
 
+  report.modelInference = benchmarkModelInference(updateCount);
   const serializedReport = JSON.stringify(report, null, 2);
   console.log(serializedReport);
   const outputFile = process.env.TCO_BENCH_OUTPUT_FILE?.trim();
