@@ -127,9 +127,14 @@ try {
     const commit = last.commits.find(item => Number(item.objectCount) > 0 &&
       Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind)));
     if (last.success && commit && last.canvases > 0) {
-      status = 'accepted';
-      console.log(JSON.stringify({
-        status,
+      const persisted = evaluateJson(`({
+        versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
+        legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)},
+        chartDraft: localStorage.getItem('tradingcore:corespirit:chart-source') === ${JSON.stringify(smcSource)}
+      })`);
+      assert(persisted.versionedDraft && persisted.legacyDraft && persisted.chartDraft,
+        'Successful Compile & Run did not persist the SMC source into all compatibility draft keys.');
+      const visualEvidence = {
         url: baseUrl,
         acceptance: 'compile-and-run + committed visible native Vela drawing objects + visible chart canvas',
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },
@@ -137,7 +142,36 @@ try {
         kindCounts: commit.kindCounts,
         paneCount: commit.paneCount,
         visibleChartCanvases: last.canvases,
-      }, null, 2));
+        persistedDraftKeys: Object.keys(persisted).filter(key => persisted[key]),
+      };
+      // Reload after the successful chart commit and confirm that the source
+      // saved by the real Compile & Run path is the source restored by the dock.
+      run(['open', baseUrl]);
+      run(['wait', '--load', 'networkidle']);
+      evaluate(`(() => {
+        if (document.querySelector('textarea[aria-label="CoreSpirit source editor"]')) return 'EDITOR_ALREADY_VISIBLE';
+        const toggle = document.querySelector('[aria-label="Toggle CoreSpirit coding terminal"]');
+        if (toggle) toggle.click();
+        return 'EDITOR_REOPEN_REQUESTED';
+      })()`);
+      let restored = false;
+      const restoreDeadline = Date.now() + 8_000;
+      while (Date.now() < restoreDeadline) {
+        const restoreState = evaluateJson(`(() => {
+          const editor = document.querySelector('textarea[aria-label="CoreSpirit source editor"]');
+          return {
+            sourceMatches: !!editor && editor.value === ${JSON.stringify(smcSource)},
+            workspace: !!document.querySelector('.vela-workspace'),
+            errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')
+          };
+        })()`);
+        if (restoreState.errorOverlay) throw new Error('Framework error overlay appeared while restoring the SMC source draft.');
+        if (restoreState.sourceMatches && restoreState.workspace) { restored = true; break; }
+        await pause(200);
+      }
+      assert(restored, 'The SMC source saved by Compile & Run did not restore exactly after page reload.');
+      status = 'accepted';
+      console.log(JSON.stringify({ status, ...visualEvidence, sourceDraftRestoredAfterReload: true }, null, 2));
       break;
     }
     await pause(500);
