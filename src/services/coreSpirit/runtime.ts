@@ -1867,7 +1867,7 @@ export class CoreSpiritRuntime {
         const fontSize=Number(isAt?args[timeAnchored?6:5]??12:args[4]??12);
         const shape=String(isAt?args[timeAnchored?7:6]??'pill':args[5]??'pill') as any;
         const fontWeight=String(isAt?args[timeAnchored?8:7]??'600':args[6]??'600');
-        const fontStyle=String(isAt&&!timeAnchored?args[8]??'normal':args[7]??'normal') as any;
+        const fontStyle=String(isAt?(timeAnchored?'normal':args[8]??'normal'):args[7]??'normal') as any;
         const id=timeAnchored
           ? `${this.options.sourceId}:labelAt:${outputId||'label'}:${labelTime}`
           : `${this.options.sourceId}:label:${barIndex}:${outputId||text}`;
