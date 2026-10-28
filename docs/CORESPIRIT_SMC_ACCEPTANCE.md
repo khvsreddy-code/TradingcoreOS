@@ -1,0 +1,79 @@
+# CoreSpirit Smart Money Concepts acceptance
+
+## Why SMC is the acceptance indicator
+
+The bundled Smart Money Concepts conversion is deliberately treated as a staged acceptance target, not as a declaration of source-equivalence to LuxAlgo Pine v5. It exercises stateful swing/internal structure, confirmed BOS/CHoCH, EQH/EQL labels, order-block/FVG zones, price/time anchoring, scene replacement and Vela renderer lifecycle.
+
+The known conversion boundary remains explicit: multi-timeframe `request.security` alignment, the full original historical order-block/mitigation model, strong/weak swing rules, the original display modes, and exchange-calendar session semantics are not yet a parity claim. Do not promote it as an exact LuxAlgo replacement until those semantics have matching fixtures.
+
+## Deterministic acceptance
+
+Run:
+
+```sh
+npm run verify:critical-contracts
+```
+
+The SMC acceptance test compiles the bundled source into an executable artifact and executes it against fixed synthetic history with planted structure/gap events. It checks:
+
+- no compile errors or fatal runtime diagnostics, and worker-boundary output validation;
+- deterministic full replay and reference-versus-optimized output parity;
+- BOS/CHoCH, confirmed swing labels, equal-high/equal-low output, order-block zones, FVGs and premium/discount zones;
+- pivot confirmation delay, actual pivot anchor time/price, and exact bullish/bearish FVG left/right/top/bottom boundaries;
+- FVG visibility input behavior, forming-bar replacement, unique drawing IDs and historical-correction replay;
+- Vela timestamp adaptation and native visual-ABI projection.
+
+These fixtures test the port's documented contract. They do **not** prove parity with every behavior in the original LuxAlgo source.
+
+## Browser visual acceptance
+
+Start the app with chart history available, then run:
+
+```sh
+TCO_BROWSER_URL=http://localhost:5173/live npm run verify:corespirit:smc:browser
+```
+
+For an authenticated workspace, set `TCO_REQUIRE_AUTH=true` and use an existing logged-in `agent-browser` session. The browser test writes the bundled SMC source to the browser's existing local editor-draft keys, opens the CoreSpirit dock, clicks **Compile & Run**, and fails unless all of the following occur:
+
+1. the active Vela chart accepts the runnable indicator;
+2. the post-commit native scene contains visible chart-target drawing objects;
+3. the CoreSpirit layer paint probe observes non-transparent pixels from its own canvas;
+4. the drawing layer paints pixels again after a wheel zoom and horizontal drag;
+5. the source written by the actual Compile & Run path is restored exactly after a page reload.
+
+The paint probe is opt-in and one-shot. It uses `getImageData` only after the browser acceptance runner enables the flag, and it disables itself when it records non-transparent pixels. Production chart frames do not read back canvas pixels.
+
+This is a rendered-pixel smoke gate, not a screenshot-diff suite. It does not yet provide baseline image comparisons for every viewport size, pane, color scheme or instrument.
+
+## Performance baseline
+
+Run a comparable pipeline sample and persist its JSON report:
+
+```sh
+TCO_BENCH_BAR_COUNTS=2000,5000 \
+TCO_BENCH_UPDATE_ITERATIONS=100 \
+TCO_BENCH_OUTPUT_FILE=artifacts/corespirit-pipeline.json \
+npm run benchmark:corespirit:pipeline
+```
+
+The report includes a capture timestamp and environment; cold/warm compilation and cache hits; historical replay and same-bar live-update p50/p95/p99; output-ready throughput; forming-bar replacement correctness; historical-correction throughput; changed-input and changed-source runs; reference-versus-optimized output fingerprints; output-kind counts; and retained heap/ArrayBuffer deltas. The report's retained-memory measurements are deltas, not allocation counts.
+
+For the numerical-kernel CPU/WASM comparison:
+
+```sh
+TCO_BENCH_BAR_COUNTS=50000,250000 TCO_BENCH_ITERATIONS=5 npm run benchmark:corespirit:wasm
+```
+
+The WASM benchmark checks numerical parity and reports both kernel-only and end-to-end latency. A kernel is not counted as a speed win merely because its inner WASM loop is faster than CPU; transfer and allocation cost are included in the end-to-end comparison.
+
+Compare reports only on the same machine/runtime with the same workload, settings and bar counts. Do not turn one machine's result into an unsupported Pine Script speed claim or loosen correctness checks to make a backend look faster.
+
+## Commit and runtime safety gates
+
+The native visual commit signal is emitted only after `applyObjects` and the visual ABI store commit succeed. The browser test distinguishes that event from a rendered-pixel event, and it also checks that fatal structured runtime diagnostics are rejected before a replacement scene is applied. A failed replacement must leave the previous valid scene intact.
+
+The canonical market-data plane remains the source of truth. The acceptance work does not add an independent OHLCV history store: deterministic test fixtures are owned by tests and benchmark tools, not by the live runtime. Stateful kernels use bounded runtime state and confirmed-bar snapshots; append/forming-bar execution must still match a clean replay of the same final bar. Historical corrections, script changes, model changes, input changes and secondary data revisions must be measured separately because not all of them can safely use the same incremental range.
+
+## Remaining release gates
+
+Do not call the SMC conversion source-equivalent or production-certified until there are explicit semantic fixtures against the original Pine behavior for the documented missing features, a passing authenticated browser run in the target deployment, and repeatable screenshot-diff evidence for pan/zoom/resize and at least one multi-pane layout. The normal build and browser run must also complete successfully; a deployment-provider rate-limit failure is not evidence that the test suite passed or failed.
