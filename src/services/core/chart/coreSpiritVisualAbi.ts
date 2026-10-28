@@ -585,7 +585,6 @@ export function projectCoreSpiritObjectsToVela(
   for (const table of tables.values()) {
     const columns = Math.max(1, ...table.cells.map(row => row.length));
     while (table.cells.length && table.cells[table.cells.length - 1]!.length < columns) table.cells[table.cells.length - 1]!.push(null);
-    tables.push as any;
     (table as any).columns = columns;
     (table as any).rows = Math.max(1, table.cells.length);
   }
@@ -599,6 +598,6 @@ export function projectCoreSpiritObjectsToVela(
 
 export function isCoreSpiritCustomLayerObject(object: CoreSpiritObject): boolean {
   if (object.kind === 'zone' && object.domain === 'viewport') return true;
-  return object.kind === 'band' || object.kind === 'background' || object.kind === 'footprint' ||
-    object.kind === 'customVisual';
+  if (object.kind === 'background') return finiteNumber(record(object.metadata).endTime) === undefined;
+  return object.kind === 'band' || object.kind === 'footprint' || object.kind === 'customVisual';
 }
