@@ -37,7 +37,7 @@ const stateProbeRun = executeCoreSpirit(stateProbeSource, [
 assert.ok(stateProbeRun.outputs.some(item => item.kind === 'label' && item.text === 'State CHoCH'),
   'typed state initializer must not overwrite the state updated on the previous bar');
 const bars = [];
-for (let i = 0; i < 110; i += 1) {
+for (let i = 0; i < 140; i += 1) {
   let base;
   if (i < 25) base = 100 + Math.sin(i * 0.7) * 2;
   else if (i < 35) base = 111 + Math.sin((i - 26) * 0.7);
@@ -47,11 +47,13 @@ for (let i = 0; i < 110; i += 1) {
   const close = base + 0.2;
   bars.push(candle(i, open, Math.max(open, close) + 0.5, Math.min(open, close) - 0.5, close));
 }
-bars[25] = candle(25, 108, 113, 107.5, 112); // bullish imbalance and upward structure break
+bars[25] = candle(25, 108, 113, 107.5, 112); // bullish imbalance, still below the later confirmed swing high
 bars[35] = candle(35, 82, 83, 78, 80); // confirmed swing low; later break exercises bearish structure output
-bars[52] = candle(52, 102, 107, 101.5, 106); // bullish reversal through the prior range
-bars[85] = candle(85, 116.4, 122, 116.2, 120); // break the already-confirmed swing high after its 50-bar confirmation delay
-bars[95] = candle(95, 72, 73, 68, 70); // break the already-confirmed swing low against bullish bias, producing CHoCH
+bars[52] = candle(52, 102, 107, 101.5, 106); // bullish retracement before the confirmed pivot
+bars[55] = candle(55, 112, 115, 111.5, 114); // pivot high dominates the prior 50 bars and confirms at bar 105
+bars[75] = candle(75, 64, 67, 62, 63); // pivot low dominates the prior 50 bars and confirms at bar 125
+bars[115] = candle(115, 116.4, 122, 116.2, 120); // break the confirmed swing high, producing BOS after confirmation
+bars[135] = candle(135, 58, 61, 56, 58); // break the confirmed swing low against bullish bias, producing CHoCH
 
 const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
