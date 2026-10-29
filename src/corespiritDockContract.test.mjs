@@ -63,7 +63,7 @@ includes(smc, 'let internalLeftWindowHigh = internalRollingHigh[internalLength +
 includes(smc, 'let swingRollingLow = lowest(low, swingLength)', 'swing-low confirmation reuses the retained rolling-low series');
 includes(smc, 'let internalRollingLow = lowest(low, internalLength)', 'internal-low confirmation reuses the retained rolling-low series');
 includes(smc, 'Swing CHoCH', 'converted source emits swing structure labels');
-includes(smc, 'swingBearBreak == true and swingBias > 0', 'SMC bearish CHoCH requires a one-shot confirmed swing-low break against retained bias');
+includes(smc, 'swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true and swingBias > 0', 'SMC bearish CHoCH uses the confirmed swing-low crossing directly against retained bias');
 includes(smc, 'Swing BOS', 'converted source emits swing structure labels');
 includes(smc, 'Internal CHoCH', 'converted source emits internal structure labels');
 includes(smc, 'Internal BOS', 'converted source emits internal structure labels');
