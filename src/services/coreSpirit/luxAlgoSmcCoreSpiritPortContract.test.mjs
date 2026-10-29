@@ -5,11 +5,13 @@ import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 import { toCoreSpiritWorkerTransportValue } from './workerTransport.ts';
 
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
+console.log('SMC_PORT_STAGE_SOURCE_LOADED');
 const compiled = compileCoreSpirit(source, 'luxalgo-smc-port-contract', { layer: 'script' });
 const compileErrors = compiled.diagnostics.filter(item => item.severity === 'error');
 assert.deepEqual(compileErrors, [], 'the converted SMC source must compile without diagnostics');
 assert.ok(compiled.artifact, 'the converted SMC source must produce an executable artifact');
 assert.ok(compiled.ir, 'the converted SMC source must produce executable IR');
+console.log('SMC_PORT_STAGE_COMPILED');
 
 function candle(index, open, high, low, close) {
   return {
@@ -30,10 +32,12 @@ if close < 90 and bias > 0 {
     label("State CHoCH", "below", "#089981", "#FFFFFF", 10, "pill")
 }
 `;
+console.log('SMC_PORT_STAGE_STATE_PROBE_START');
 const stateProbeRun = executeCoreSpirit(stateProbeSource, [
   candle(0, 104, 106, 103, 105),
   candle(1, 90, 91, 88, 89),
 ], 'persistent-state-initializer');
+console.log('SMC_PORT_STAGE_STATE_PROBE_DONE');
 assert.ok(stateProbeRun.outputs.some(item => item.kind === 'label' && item.text === 'State CHoCH'),
   'typed state initializer must not overwrite the state updated on the previous bar');
 const bars = [];
@@ -55,7 +59,9 @@ bars[75] = candle(75, 64, 67, 62, 63); // confirmed swing low after sufficient l
 bars[115] = candle(115, 116.4, 122, 116.2, 120); // bullish break of confirmed swing high establishes bullish bias
 bars[135] = candle(135, 58, 61, 56, 58); // breaks confirmed swing low against bullish bias, producing CHoCH
 
+console.log('SMC_PORT_STAGE_HISTORY_EXECUTION_START', bars.length);
 const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
+console.log('SMC_PORT_STAGE_HISTORY_EXECUTION_DONE', execution.outputs.length);
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
@@ -108,4 +114,5 @@ const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fil
 assert.ok(fvgZones.length > 0, 'edge-triggered FVG transitions must keep real imbalance zones');
 assert.ok(fvgZones.every(item => item.right > item.left), 'FVGs must be forward-projected zones rather than zero-width rectangles');
 
+console.log('SMC_PORT_STAGE_ASSERTIONS_DONE');
 console.log('CORESPIRIT_LUXALGO_SMC_PORT_COMPILE_AND_CHART_OUTPUT_OK');
