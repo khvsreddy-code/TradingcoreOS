@@ -134,12 +134,13 @@ export function getBoundedHistoryPageRange(
   requestedToMs = Date.now(),
 ): BoundedHistoryPageRange {
   const targetBars = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
-  const normalizedTimeframe = String(timeframe || '').trim().toLowerCase();
+  const rawTimeframe = String(timeframe || '').trim();
+  const normalizedTimeframe = rawTimeframe.toLowerCase();
   const seconds = /^(\d+)s$/.exec(normalizedTimeframe);
   const minutes = /^(\d+)minute$/.exec(normalizedTimeframe);
   const daily = ['day','1day','daily','d','1d'].includes(normalizedTimeframe);
   const weekly = ['week','1week','weekly','w','1w'].includes(normalizedTimeframe);
-  const monthly = ['month','1month','monthly','m','1mth'].includes(normalizedTimeframe);
+  const monthly = rawTimeframe === '1M' || rawTimeframe === 'M' || ['month','1month','monthly','m','1mth'].includes(normalizedTimeframe);
   const secondsSize = seconds ? Math.max(1, Number(seconds[1])) : 1;
   const minuteSize = minutes ? Math.max(1, Number(minutes[1])) : 1;
   const barsPerSession = seconds ? (6.25 * 60 * 60) / secondsSize
@@ -167,6 +168,22 @@ export function getBoundedHistoryPageRange(
     requestedBars: targetBars,
     lookbackFloorMs,
   };
+}
+
+export function getPreferredHistoryPageRange(mapping: Pick<HistoricalInstrumentMapping, 'timezone'>, timeframe: string, requestedBars: number, requestedToMs = Date.now()): BoundedHistoryPageRange {
+  const target = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
+  const raw = String(timeframe || '').trim(), normalized = raw.toLowerCase();
+  const monthly = raw === '1M' || raw === 'M' || ['month','1month','monthly','m','1mth'].includes(normalized);
+  const weekly = raw.toUpperCase() === '1W' || ['week','1week','weekly','w','1w'].includes(normalized);
+  const daily = raw.toUpperCase() === 'D' || raw.toUpperCase() === '1D' || ['day','1day','daily','d','1d'].includes(normalized);
+  const seconds = /^(\d+)\s*s$/i.exec(raw);
+  const hours = /^(\d+)\s*(?:h|hr|hour|hours)$/i.exec(raw);
+  const minutes = /^(\d+)\s*(?:m|min|minute|minutes)?$/i.exec(raw);
+  const barsPerSession = seconds ? 22_500 / Math.max(1, Number(seconds[1])) : monthly ? 1/21 : weekly ? 0.2 : daily ? 1 : 375 / Math.max(1, hours ? Number(hours[1])*60 : Number(minutes?.[1] || 1));
+  const days = Math.ceil(target / Math.max(0.01, barsPerSession) * 1.5) + 1;
+  const now = Date.now(), toMs = Math.min(Math.max(1, Number(requestedToMs) || now), now);
+  const fromMs = Math.max(toMs - days * 86_400_000, Date.UTC(1990, 0, 1));
+  return { fromMs, toMs, fromDate: zonedDate(fromMs, mapping.timezone), calendarPolicy: 'preferred-source:' + target + '-bars;window:' + Math.ceil((toMs-fromMs)/86_400_000) + '-days;floor:1990-01-01', requestedBars: target, lookbackFloorMs: Date.UTC(1990,0,1) };
 }
 
 function parseTimestamp(value: unknown): number {
@@ -243,7 +260,8 @@ async function fetchProviderBars(
     const raw = await fetcher(mapping, timeframe, range);
     if (!Array.isArray(raw)) throw Object.assign(new Error(source + ' returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
     const bars = normalizeRows(raw, source).filter(bar => bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs);
-    if (!bars.length) throw Object.assign(new Error(source + ' returned no validated candles'), { code: 'EMPTY_VALIDATED_HISTORY' });
+    if (!bars.length && raw.length === 0) return { bars: [], status: { status: 'empty', rawCount: 0, validatedCount: 0 } };
+    if (!bars.length) throw Object.assign(new Error(source + ' returned no validated candles for the requested range'), { code: 'EMPTY_VALIDATED_HISTORY' });
     const health = await marketDataAutoFixer.recordSuccess(source, 'history', resource);
     return { bars, status: { status: 'ok', rawCount: raw.length, validatedCount: bars.length, health } };
   } catch (error) {
@@ -252,6 +270,35 @@ async function fetchProviderBars(
     const health = await marketDataAutoFixer.recordFailure(source, 'history', resource, error);
     return { bars: [], status: { status: 'error', error: errorText(error), health } };
   }
+}
+
+const MAX_PREFERRED_SOURCE_PAGES_PER_REFRESH = 24;
+async function fetchPreferredHistoryPages(source: 'nse' | 'investiny', fetcher: PreferredHistorySourceFetcher | undefined, mapping: HistoricalInstrumentMapping, timeframe: string, requestedBars: number, endMs = Date.now()): Promise<ProviderBarsAttempt> {
+  const target = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
+  if (!fetcher) return { bars: [], status: { status: 'not-configured', pagesFetched: 0 } };
+  const byTime = new Map<number, StoredBar>();
+  const pageBudget = Math.min(MAX_PREFERRED_SOURCE_PAGES_PER_REFRESH, Math.max(1, Math.ceil(target / 200) + 1));
+  let nextToMs = Math.min(Number(endMs) || Date.now(), Date.now()), pagesFetched = 0, rawCount = 0, failed = false, exhausted = false, lastError: string | undefined;
+  while (byTime.size < target && pagesFetched < pageBudget) {
+    const pageRange = getPreferredHistoryPageRange(mapping, timeframe, target - byTime.size, nextToMs);
+    if (pageRange.toMs <= pageRange.fromMs) { exhausted = true; break; }
+    const attempt = await fetchProviderBars(source, fetcher, mapping, timeframe, pageRange);
+    pagesFetched += 1;
+    rawCount += Number(attempt.status.rawCount || 0);
+    if (!attempt.bars.length) {
+      failed = ['error','circuit-open'].includes(String(attempt.status.status));
+      lastError = typeof attempt.status.error === 'string' ? attempt.status.error : undefined;
+      exhausted = !failed;
+      break;
+    }
+    let oldest = Number.POSITIVE_INFINITY;
+    for (const bar of attempt.bars) { byTime.set(bar.timestampMs, bar); oldest = Math.min(oldest, bar.timestampMs); }
+    if (!Number.isFinite(oldest) || oldest >= nextToMs) { exhausted = true; break; }
+    nextToMs = oldest - 1;
+    if (oldest <= Date.UTC(1990,0,1)) { exhausted = true; break; }
+  }
+  const bars = [...byTime.values()].sort((a,b)=>a.timestampMs-b.timestampMs).slice(-target);
+  return { bars, status: { status: failed ? (bars.length ? 'partial-error' : 'error') : bars.length >= target ? 'ok' : bars.length ? 'partial' : 'empty', rawCount, validatedCount: bars.length, pagesFetched, pageBudget, requestedBars: target, historyExhausted: exhausted, ...(lastError ? { error: lastError } : {}) } };
 }
 
 function sessionDates(bars: StoredBar[], timezone: string): string[] { return [...new Set(bars.map(b => zonedDate(b.timestampMs, timezone)))].sort(); }
@@ -342,7 +389,7 @@ export function historicalFallbackCacheTtlMs(
   now = Date.now(),
 ): number {
   const status = String(nseStatus.status || '');
-  if (activeSource === 'nse' || !['error', 'circuit-open'].includes(status)) return CACHE_TTL_MS;
+  if (!['error', 'partial-error', 'circuit-open'].includes(status)) return CACHE_TTL_MS;
   const rawHealth = nseStatus.health;
   const health = rawHealth && typeof rawHealth === 'object' ? rawHealth as Record<string, unknown> : null;
   const nextProbeAt = Number(health?.nextProbeAt);
@@ -648,7 +695,7 @@ export class HistoricalDataService {
         investiny: { status: fetchInvestinyHistory ? 'pending' : 'not-configured' },
       };
       const preferredTarget = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
-      const nseAttempt = await fetchProviderBars('nse', fetchNseHistory, mapping, timeframe, range);
+      const nseAttempt = await fetchPreferredHistoryPages('nse', fetchNseHistory, mapping, timeframe, preferredTarget);
       sourceRoutingStatus.nse = nseAttempt.status;
       const writePreferred = async (activeSource: 'nse' | 'investiny', freshBars: StoredBar[], investinyStatus?: Record<string, unknown>) => {
         if (investinyStatus) sourceRoutingStatus.investiny = investinyStatus;
@@ -660,7 +707,7 @@ export class HistoricalDataService {
           fyers: { status: 'not-needed', reason: activeSource + ' returned validated history' },
           tvdatafeed: { status: 'not-needed', reason: activeSource + ' returned validated history' },
           cache: { status: cached?.bars.length ? 'merged-with-validated-cache' : 'miss' },
-          route: { activeSource, capability: 'historical-ohlcv', automaticFailback: true },
+          route: { activeSource, contributingSources: [...new Set(merged.map(bar => bar.source))], capability: 'historical-ohlcv', automaticFailback: true },
           autoFixer: {
             nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
             investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
@@ -678,26 +725,28 @@ export class HistoricalDataService {
         return this.writeCache({
           instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
           revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus,
-          degraded: activeSource !== 'nse' || merged.length < preferredTarget,
+          degraded: activeSource !== 'nse' || merged.length < preferredTarget || ['error','partial-error','circuit-open'].includes(String(sourceRoutingStatus.nse.status)),
           expiresAt: now + historicalFallbackCacheTtlMs(activeSource, sourceRoutingStatus.nse, now), updatedAt: now, quote: null,
         });
       };
-      if (nseAttempt.bars.length) {
-        let preferredBars = nseAttempt.bars;
-        let investinyStatus: Record<string, unknown> = { status: fetchInvestinyHistory ? 'not-needed' : 'not-configured' };
-        const mergedNse = mergeStoredBars(cached?.bars || [], nseAttempt.bars);
-        if (!isFnoInstrument(mapping) && fetchInvestinyHistory && mergedNse.length < preferredTarget) {
-          const investinyAttempt = await fetchProviderBars('investiny', fetchInvestinyHistory, mapping, timeframe, range);
+      const nseBars = nseAttempt.bars;
+      const nseMerged = mergeStoredBars(cached?.bars || [], nseBars);
+      const isFno = isFnoInstrument(mapping);
+      const investinyFallbackStatus: Record<string, unknown> = { status: fetchInvestinyHistory ? 'not-needed' : 'not-configured' };
+      if (nseBars.length && (!isFno || nseMerged.length >= preferredTarget)) {
+        let selectedBars = nseBars;
+        let investinyStatus: Record<string, unknown> = investinyFallbackStatus;
+        if (!isFno && fetchInvestinyHistory && nseMerged.length < preferredTarget) {
+          const remaining = Math.max(1, preferredTarget - nseMerged.length);
+          const investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, remaining, nseBars[0]!.timestampMs - 1);
           investinyStatus = { ...investinyAttempt.status, role: 'older-history-gap-fill' };
-          preferredBars = mergeStoredBars(investinyAttempt.bars, preferredBars);
+          selectedBars = mergeStoredBars(investinyAttempt.bars, selectedBars);
         }
-        return writePreferred('nse', preferredBars, investinyStatus);
+        return writePreferred('nse', selectedBars, investinyStatus);
       }
-      // Investiny is a historical-only backup for cash/index data. For options and
-      // futures, fall through to the existing FYERS plan-aware quota gate.
-      sourceRoutingStatus.investiny = { status: isFnoInstrument(mapping) ? 'skipped-fno-uses-fyers' : fetchInvestinyHistory ? 'pending' : 'not-configured' };
-      if (!isFnoInstrument(mapping)) {
-        const investinyAttempt = await fetchProviderBars('investiny', fetchInvestinyHistory, mapping, timeframe, range);
+      sourceRoutingStatus.investiny = isFno ? { status: 'skipped-fno-uses-fyers' } : { status: fetchInvestinyHistory ? 'pending' : 'not-configured' };
+      if (!isFno) {
+        const investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, preferredTarget);
         sourceRoutingStatus.investiny = investinyAttempt.status;
         if (investinyAttempt.bars.length) return writePreferred('investiny', investinyAttempt.bars);
       }
@@ -866,7 +915,7 @@ export class HistoricalDataService {
         : [];
 
       const byTime = new Map<number, StoredBar>();
-      for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars]) {
+      for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars, ...nseBars]) {
         const old = byTime.get(bar.timestampMs);
         if (!old || historicalSourcePriority(bar.source) >= historicalSourcePriority(old.source)) {
           byTime.set(bar.timestampMs, bar);
@@ -876,7 +925,7 @@ export class HistoricalDataService {
       const pageTarget = Math.min(HISTORICAL_MAX_BARS, requestedBars);
       const targetReached = merged.length >= pageTarget;
       const tvNeededButUnavailable = !targetReached && (!tvEnabled || tvFailed || tvBars.length === 0);
-      const degraded = fyersFailed || fyersBars.length === 0 || tvNeededButUnavailable;
+      const degraded = fyersFailed || fyersBars.length === 0 || tvNeededButUnavailable || ['error','partial-error','circuit-open'].includes(String(sourceRoutingStatus.nse.status));
       sourceStatus.fyers = {
         ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}),
         validatedCount: fyersBars.length,
@@ -907,11 +956,13 @@ export class HistoricalDataService {
         requestRange: { from: new Date(range.fromMs).toISOString(), to: new Date(range.toMs).toISOString() },
       };
       sourceStatus.noValidatedBars = merged.length === 0;
-      const activeSource = fyersBars.length ? 'fyers'
-        : tvBars.length ? 'tvdatafeed'
-          : cachedOlderBars.length ? 'cache' : 'none';
+      const activeSource = nseBars.length ? 'nse'
+        : fyersBars.length ? 'fyers'
+          : tvBars.length ? 'tvdatafeed'
+            : cachedOlderBars.length ? 'cache' : 'none';
       sourceStatus.route = {
         activeSource,
+        contributingSources: [...new Set(merged.map(bar => bar.source))],
         capability: 'historical-ohlcv',
         automaticFailback: true,
       };
