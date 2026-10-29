@@ -35,6 +35,9 @@ assert.match(service, /fyersAdjustmentPolicy !== mapping\.tvAdjustmentPolicy/, '
 assert.match(service, /slice\(-HISTORICAL_MAX_BARS\)/);
 assert.match(service, /cachedOlderFallbackCount: cachedOlderBars\.length/);
 assert.match(service, /cached\.sourcePolicy === HISTORICAL_SOURCE_POLICY/);
+assert.match(service, /cachedReturnedBars = Math\.max\(0, Number\(completeness\.returnedBars\)/, '5k cache reuse must check returned bars, not requested bars');
+assert.match(service, /cached\.bars\.length >= maxBars \|\| cachedReturnedBars >= maxBars/);
+assert.doesNotMatch(service, /cachedRequestedBars >= maxBars/);
 assert.match(service, /const degraded = fyersFailed \|\| fyersBars\.length === 0 \|\| tvNeededButUnavailable/);
 assert.match(service, /getBoundedHistoryPageRange/);
 assert.match(service, /f\\s\*&\\s\*o/, 'F&O instrument type must skip Investiny and use the FYERS fallback when NSE history fails');

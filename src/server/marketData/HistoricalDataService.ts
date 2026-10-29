@@ -1139,12 +1139,14 @@ export class HistoricalDataService {
 
     if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && cached.bars.length) {
       const completeness = isRecord(cached.sourceStatus.historyCompleteness) ? cached.sourceStatus.historyCompleteness : {};
-      const cachedRequestedBars = Math.max(0, Number(completeness.requestedBars) || 0);
+      const cachedReturnedBars = Math.max(0, Number(completeness.returnedBars) || cached.bars.length);
       const datasetComplete = completeness.datasetComplete === true ||
         completeness.status === 'plan-lookback-exhausted' ||
         (isRecord(cached.sourceStatus.pagination) && cached.sourceStatus.pagination.status === 'plan-lookback-limit');
       const providerConfigured = Boolean(request.fetchNseHistory || request.fetchInvestinyHistory || request.fetchFyersRecent);
-      if (cached.bars.length >= maxBars || cachedRequestedBars >= maxBars || datasetComplete || !providerConfigured) {
+      // Only actual returned bars can satisfy the requested history depth. A large
+      // requestedBars value alone is not proof that the cache contains that many bars.
+      if (cached.bars.length >= maxBars || cachedReturnedBars >= maxBars || datasetComplete || !providerConfigured) {
         const bars = cached.bars.slice(-maxBars);
         const staleFallback = Boolean(cached.sourceStatus.staleCacheFallback);
         return {
