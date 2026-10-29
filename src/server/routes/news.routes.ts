@@ -1,149 +1,103 @@
 import { Router } from 'express';
 
-type JsonRecord = Record<string, unknown>;
 type NewsItem = { id: string; title: string; source: string; url: string; publishedAt: string; snippet?: string };
-type NewsBundle = { provider: 'Yahoo Finance RSS' | 'GDELT fallback' | 'GDELT topic search'; items: NewsItem[] };
+type NewsBundle = { provider: 'Investing.com India RSS' | 'Moneycontrol RSS' | 'Investing.com India + Moneycontrol RSS'; items: NewsItem[] };
 
 const router = Router();
 const cache = new Map<string, { expiresAt: number; bundle: NewsBundle }>();
 const inflight = new Map<string, Promise<NewsBundle>>();
 const NEWS_CACHE_TTL_MS = 90_000;
+const FETCH_TIMEOUT_MS = 7_000;
+const INDIA_RELEVANCE = /\b(india|indian|nifty|sensex|bank nifty|banknifty|nse|bse|rupee|inr|rbi|sebi|mumbai|delhi|reliance|tata|infosys|hdfc|icici|sbi|bharti|adani|zomato|eternal|paytm|indusind|axis bank|kotak|bajaj|larsen|ltimindtree|wipro|coal india|ongc|maruti|hindalco|vedanta|irctc|f&o|futures and options|indian markets)\b/i;
 
-const symbolAliases: Record<string, string[]> = {
-  NIFTY50: ['NIFTY 50', 'NIFTY50', 'Nifty 50'],
-  NIFTY: ['NIFTY 50', 'NIFTY50'],
-  BANKNIFTY: ['BANK NIFTY', 'NIFTY BANK', 'BANKNIFTY'],
-  SENSEX: ['SENSEX', 'BSE SENSEX'],
-};
-
-function queryFor(raw: string): string {
-  const value = String(raw || '').trim();
-  const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const aliases = symbolAliases[normalized];
-  if (aliases?.length) return `(${aliases.map(x => `\"${x}\"`).join(' OR ')})`;
-  const cleaned = value.replace(/[^A-Za-z0-9 .&-]/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned ? `\"${cleaned.slice(0, 80)}\"` : 'financial markets';
-}
-
-/** Map common India index/stock names to Yahoo Finance's published RSS ticker IDs. */
-function yahooSymbolsFor(raw: string): string {
-  const value = String(raw || '').trim().toUpperCase();
-  const normalized = value.replace(/[^A-Z0-9]/g, '');
-  if (/^(NIFTY|NIFTY50|NSE:NIFTY50-INDEX|NIFTY50-INDEX)$/.test(value) || ['NIFTY', 'NIFTY50', 'NIFTY50INDEX', 'NSENIFTY50INDEX'].includes(normalized)) return '^NSEI';
-  if (value.includes('BANKNIFTY') || value.includes('NIFTYBANK') || normalized === 'BANKNIFTY') return '^NSEBANK';
-  if (value.includes('SENSEX') || value.includes('BSESENSEX') || normalized === 'SENSEX') return '^BSESN';
-  if (value.includes('FINNIFTY') || value.includes('MIDCPNIFTY')) return '^NSEI,^NSEBANK,^BSESN';
-  const parts = value.split(':', 2);
-  if (parts.length === 2) {
-    const [exchange, rawTicker] = parts;
-    const ticker = String(rawTicker || '').replace(/-(EQ|INDEX)$/i, '').trim();
-    // Yahoo doesn't provide contract-level F&O news; use a market-wide RSS feed for derivatives.
-    // Require a strike/boundary so an ordinary equity like RELIANCE is not mistaken for an option.
-    const optionContract = /(?:\d{4,}(?:CE|PE)|(?:^|[-_:])(?:CE|PE)(?:[-_.]?\d{3,})?$)/i.test(ticker);
-    const futureContract = /(?:\d{2,}FUT(?:URES?)?|(?:^|[-_:])FUT(?:URES?)(?:[-_.]?\d{2,})?)$/i.test(ticker);
-    if (optionContract || futureContract || !/^[A-Z0-9.^=-]{1,24}$/.test(ticker)) return '^NSEI,^NSEBANK,^BSESN';
-    if (exchange === 'NSE') return `${ticker}.NS`;
-    if (exchange === 'BSE') return `${ticker}.BO`;
-  }
-  if (/^(\^NSEI|\^NSEBANK|\^BSESN|[A-Z0-9.^=-]+(?:\.NS|\.BO))$/.test(value)) return value;
-  if (/^[A-Z0-9.-]{1,20}$/.test(value) && !/^(MARKETS|FINANCIALMARKETS|INDIA|ALL)$/.test(normalized)) return `${value.replace(/-(EQ|INDEX)$/i, '')}.NS`;
-  return '^NSEI,^NSEBANK,^BSESN,RELIANCE.NS,HDFCBANK.NS,INFY.NS';
-}
+const FEEDS = [
+  { name: 'Investing.com India RSS', url: 'https://in.investing.com/rss/news_25.rss', host: 'investing.com' },
+  { name: 'Moneycontrol RSS', url: 'https://www.moneycontrol.com/rss/marketreports.xml', host: 'moneycontrol.com' },
+  { name: 'Moneycontrol RSS', url: 'https://www.moneycontrol.com/rss/latestnews.xml', host: 'moneycontrol.com' },
+] as const;
 
 function decodeXml(value: string): string {
-  return String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => { const code = Number.parseInt(hex, 16); return Number.isFinite(code) ? String.fromCodePoint(code) : ''; })
-    .replace(/&#(\d+);/g, (_match, dec: string) => { const code = Number.parseInt(dec, 10); return Number.isFinite(code) ? String.fromCodePoint(code) : ''; })
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&apos;|&#39;/g, '\'')
-    .replace(/<[^>]*>/g, '').trim();
+  return String(value || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+    })
+    .replace(/&#(\d+);/g, (_match, dec: string) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+    })
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'")
+    .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function readXmlTag(xml: string, tag: string): string {
-  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`<${escaped}\\b[^>]*>([\\s\\S]*?)</${escaped}>`, 'i').exec(xml);
+function tag(xml: string, name: string): string {
+  const escaped = name.replace(/[.*+?^\u0024{}()|[\]\\]/g, '\\$&');
+  const match = new RegExp('<' + escaped + '\\b[^>]*>([\\s\\S]*?)</' + escaped + '>', 'i').exec(xml);
   return match ? decodeXml(match[1] || '') : '';
 }
 
-async function fetchYahooFinanceRss(rawSymbol: string): Promise<NewsItem[]> {
-  const url = new URL('https://feeds.finance.yahoo.com/rss/2.0/headline');
-  url.searchParams.set('s', yahooSymbolsFor(rawSymbol));
-  url.searchParams.set('region', 'IN');
-  url.searchParams.set('lang', 'en-IN');
-  const response = await fetch(url, {
-    headers: { Accept: 'application/rss+xml, application/xml, text/xml;q=0.9', 'User-Agent': 'TradingCoreOS/1.0' },
-    signal: AbortSignal.timeout(8000),
+function safeFeedUrl(raw: string, allowedHost: string): string {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && (url.hostname === allowedHost || url.hostname.endsWith('.' + allowedHost)) ? url.toString() : '';
+  } catch { return ''; }
+}
+
+async function fetchFeed(feed: typeof FEEDS[number], topic: string): Promise<NewsItem[]> {
+  const response = await fetch(feed.url, {
+    headers: { Accept: 'application/rss+xml, application/xml, text/xml;q=0.9', 'User-Agent': 'TradingCoreOS/1.0 (+India market news RSS reader)' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Yahoo Finance RSS request failed (${response.status})`);
+  if (!response.ok) throw new Error(feed.name + ' returned HTTP ' + response.status);
   const xml = await response.text();
-  if (!/<(?:rss|feed)\b/i.test(xml)) throw new Error('Yahoo Finance returned an invalid RSS feed.');
-  const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(match => {
+  if (!/<(?:rss|feed)\b/i.test(xml)) throw new Error(feed.name + ' returned an invalid RSS document.');
+  const rows = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(match => {
     const item = match[1] || '';
-    const title = readXmlTag(item, 'title');
-    const link = readXmlTag(item, 'link') || readXmlTag(item, 'guid');
-    const published = readXmlTag(item, 'pubDate') || readXmlTag(item, 'dc:date');
-    const parsedDate = Date.parse(published);
-    const source = readXmlTag(item, 'source') || 'Yahoo Finance';
-    // Headlines are displayed exactly as delivered and link directly to the source article.
-    return { id: link || title, title, source, url: link, publishedAt: Number.isFinite(parsedDate) ? new Date(parsedDate).toISOString() : '' };
-  }).filter(item => item.title && /^https?:\/\//i.test(item.url));
-  const unique = new Map<string, NewsItem>();
-  for (const item of items) if (!unique.has(item.url)) unique.set(item.url, item);
-  return [...unique.values()].sort((a, b) => Date.parse(b.publishedAt || '') - Date.parse(a.publishedAt || '')).slice(0, 20);
+    const title = tag(item, 'title');
+    const rawUrl = tag(item, 'link') || tag(item, 'guid');
+    const url = safeFeedUrl(rawUrl, feed.host);
+    const description = tag(item, 'description') || tag(item, 'content:encoded');
+    const publishedRaw = tag(item, 'pubDate') || tag(item, 'dc:date') || tag(item, 'pubdate');
+    const publishedMs = Date.parse(publishedRaw);
+    const relevanceText = title + ' ' + description;
+    if (!title || !url || !INDIA_RELEVANCE.test(relevanceText)) return null;
+    if (topic && !relevanceText.toLowerCase().includes(topic.toLowerCase()) && !INDIA_RELEVANCE.test(topic)) return null;
+    return {
+      id: url,
+      title,
+      source: feed.name.startsWith('Investing') ? 'Investing.com' : 'Moneycontrol',
+      url,
+      publishedAt: Number.isFinite(publishedMs) ? new Date(publishedMs).toISOString() : '',
+      ...(description ? { snippet: description.slice(0, 320) } : {}),
+    } satisfies NewsItem;
+  }).filter((item): item is NewsItem => item !== null);
+  return rows;
 }
 
-async function fetchGdelt(rawSymbol: string): Promise<NewsItem[]> {
-  const query = encodeURIComponent(queryFor(rawSymbol));
-  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${query}&mode=artlist&format=json&maxrecords=12&sort=datedesc`;
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'TradingCoreOS/1.0' },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) throw new Error(`GDELT news request failed (${response.status})`);
-  const payload: unknown = await response.json();
-  const payloadRecord = payload && typeof payload === 'object' ? payload as JsonRecord : {};
-  const rows = Array.isArray(payloadRecord.articles) ? payloadRecord.articles : [];
-  return rows.map((row: unknown, index: number) => {
-    const item = row && typeof row === 'object' ? row as JsonRecord : {};
-    return { id: String(item.url || item.title || index), title: String(item.title || 'Untitled market article'),
-      source: String(item.domain || item.sourcecountry || 'GDELT'), url: String(item.url || ''),
-      publishedAt: String(item.seendate || item.date || '') };
-  }).filter((item: NewsItem) => item.title && /^https?:\/\//i.test(item.url));
-}
-
-async function getTopicNews(rawTopic: string): Promise<NewsBundle> {
-  const topic = String(rawTopic || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
-  if (!topic) throw new Error('A topic is required for topic-based news search.');
-  // Keep topic results separate from symbol RSS caches so one preset cannot
-  // accidentally return another preset's cached market headlines.
-  const key = `TOPIC:${topic.toUpperCase()}`;
+async function getNews(topic = ''): Promise<NewsBundle> {
+  const key = String(topic || 'INDIA_MARKETS').trim().toUpperCase().slice(0, 120);
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.bundle;
   const pending = inflight.get(key);
   if (pending) return pending;
-  const promise = fetchGdelt(topic).then(items => ({
-    provider: 'GDELT topic search' as const,
-    items,
-  })).then(bundle => {
-    cache.set(key, { bundle, expiresAt: Date.now() + NEWS_CACHE_TTL_MS });
-    return bundle;
-  }).finally(() => inflight.delete(key));
-  inflight.set(key, promise);
-  return promise;
-}
-
-async function getNews(symbol: string): Promise<NewsBundle> {
-  const key = String(symbol || 'financial markets').trim().toUpperCase();
-  const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.bundle;
-  const pending = inflight.get(key);
-  if (pending) return pending;
-  const promise = (async () => {
-    try {
-      const items = await fetchYahooFinanceRss(key);
-      if (items.length) return { provider: 'Yahoo Finance RSS' as const, items };
-    } catch { /* Use the existing independent source if Yahoo's RSS is unavailable. */ }
-    const items = await fetchGdelt(key);
-    return { provider: 'GDELT fallback' as const, items };
+  const promise = (async (): Promise<NewsBundle> => {
+    const results = await Promise.allSettled(FEEDS.map(feed => fetchFeed(feed, topic)));
+    const items = new Map<string, NewsItem>();
+    let investing = false, moneycontrol = false;
+    for (let i = 0; i < results.length; i += 1) {
+      const result = results[i]!;
+      if (result.status !== 'fulfilled') continue;
+      if (FEEDS[i]!.name.startsWith('Investing')) investing = true;
+      else moneycontrol = true;
+      for (const item of result.value) if (!items.has(item.url)) items.set(item.url, item);
+    }
+    const sorted = [...items.values()].sort((a, b) => Date.parse(b.publishedAt || '') - Date.parse(a.publishedAt || '')).slice(0, 30);
+    const provider: NewsBundle['provider'] = investing && moneycontrol ? 'Investing.com India + Moneycontrol RSS'
+      : investing ? 'Investing.com India RSS' : 'Moneycontrol RSS';
+    if (!sorted.length && !investing && !moneycontrol) throw new Error('India market news feeds are temporarily unavailable.');
+    return { provider, items: sorted };
   })().then(bundle => {
     cache.set(key, { bundle, expiresAt: Date.now() + NEWS_CACHE_TTL_MS });
     return bundle;
@@ -153,14 +107,14 @@ async function getNews(symbol: string): Promise<NewsBundle> {
 }
 
 router.get('/news', async (req, res) => {
-  const topic = String(req.query.topic || '').trim().slice(0, 120);
-  const symbol = String(req.query.symbol || req.query.q || 'financial markets').slice(0, 120);
+  const topic = String(req.query.topic || req.query.symbol || req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 120);
   try {
-    const bundle = topic ? await getTopicNews(topic) : await getNews(symbol);
-    res.json({ success: true, provider: bundle.provider, symbol: topic ? undefined : symbol, topic: topic || undefined, items: bundle.items, fetchedAt: new Date().toISOString() });
+    const bundle = await getNews(topic);
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    res.json({ success: true, provider: bundle.provider, topic: topic || 'India markets', region: 'IN', items: bundle.items, fetchedAt: new Date().toISOString() });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'News unavailable';
-    res.status(502).json({ success: false, provider: topic ? 'GDELT topic search' : 'Yahoo Finance RSS', symbol: topic ? undefined : symbol, topic: topic || undefined, items: [], error: message });
+    const message = error instanceof Error ? error.message : 'India market news unavailable';
+    res.status(502).json({ success: false, provider: 'Investing.com India + Moneycontrol RSS', topic: topic || 'India markets', region: 'IN', items: [], error: message });
   }
 });
 
