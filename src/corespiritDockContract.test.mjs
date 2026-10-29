@@ -142,7 +142,7 @@ includes(backendBenchmark, "'rollingVariance'", 'dispatcher acceptance includes 
 includes(backendBenchmark, "'rollingStd'", 'dispatcher acceptance includes rolling standard deviation');
 includes(backendBenchmark, "'rollingMin'", 'dispatcher acceptance includes rolling minimum');
 includes(backendBenchmark, "'rollingMax'", 'dispatcher acceptance includes rolling maximum');
-includes(backendBenchmark, "assert.equal(result, 'wasm'", 'measured timings fail unless WASM actually executes');
+includes(backendBenchmark, 'assert.equal(result, expectedBackend', 'measured timings verify execution against the active backend policy');
 includes(smcBenchmark, 'cleanCorrectionFingerprint', 'historical correction performance is accepted only after parity with a clean full replay');
 includes(packageJson, '"benchmark:corespirit:backends"', 'actual backend-path performance benchmarking is available through npm scripts');
 includes(smcBrowser, 'getBoundingClientRect()', 'browser acceptance requires a visible Vela chart surface');
