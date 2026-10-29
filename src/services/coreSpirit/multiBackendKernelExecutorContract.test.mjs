@@ -4,10 +4,10 @@ import { loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend.ts';
 import { executeCoreSpiritNumericalKernelPlanned } from './numericalKernelExecutor.ts';
 import { createCoreSpiritBackendRegistry } from './backendRegistry.ts';
 import { rollingMean, rollingSum, rollingVariance, rollingStd, rollingMin, rollingMax } from './numericalKernels.ts';
-import { makeCoreSpiritCompilerPipelineTrace, validateCoreSpiritCompilerPipelineTrace, CORE_SPIRIT_COMPILER_STAGE_ORDER } from './compilerPipeline.ts';
+import { makeCoreSpiritCompilerPipelineTrace, validateCoreSpiritCompilerPipelineTrace, CORE_SPIRIT_COMPILER_PIPELINE_VERSION, CORE_SPIRIT_COMPILER_STAGE_ORDER } from './compilerPipeline.ts';
 
 const trace=makeCoreSpiritCompilerPipelineTrace();
-assert.equal(trace.version,2);
+assert.equal(trace.version,CORE_SPIRIT_COMPILER_PIPELINE_VERSION, 'the emitted trace must match the current compiler pipeline version');
 assert.ok(trace.stages.includes('backend-planner'));
 assert.ok(trace.stages.indexOf('optimizer')<trace.stages.indexOf('backend-planner'));
 assert.ok(trace.stages.indexOf('backend-planner')<trace.stages.indexOf('execution-plan'));
