@@ -4,7 +4,7 @@ import { marketDataAutoFixer } from './MarketDataAutoFixer.js';
 
 export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'nse-first+investiny-history-fallback+fyers-quota-aware-fno-fallback-5000/v3';
+export const HISTORICAL_SOURCE_POLICY = 'nse-first+investiny-history-fallback+fyers-quota-aware-fno-fallback-5000/v4';
 const CACHE_TTL_MS = 60_000;
 const NEGATIVE_CACHE_TTL_MS = 15_000;
 const SOURCE_TIMEOUT_MS = 10_000;
@@ -133,7 +133,7 @@ export function getBoundedHistoryPageRange(
   historyMaxLookbackYears: number | null,
   requestedToMs = Date.now(),
 ): BoundedHistoryPageRange {
-  const targetBars = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+  const targetBars = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
   const normalizedTimeframe = String(timeframe || '').trim().toLowerCase();
   const seconds = /^(\d+)s$/.exec(normalizedTimeframe);
   const minutes = /^(\d+)minute$/.exec(normalizedTimeframe);
@@ -647,7 +647,7 @@ export class HistoricalDataService {
         nse: { status: fetchNseHistory ? 'pending' : 'not-configured' },
         investiny: { status: fetchInvestinyHistory ? 'pending' : 'not-configured' },
       };
-      const preferredTarget = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+      const preferredTarget = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
       const nseAttempt = await fetchProviderBars('nse', fetchNseHistory, mapping, timeframe, range);
       sourceRoutingStatus.nse = nseAttempt.status;
       const writePreferred = async (activeSource: 'nse' | 'investiny', freshBars: StoredBar[], investinyStatus?: Record<string, unknown>) => {
@@ -704,7 +704,7 @@ export class HistoricalDataService {
       const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
       const tvCompatible = Boolean(mapping.tvSymbol && mapping.tvExchange && this.tvContractCompatible(mapping));
       const tvEnabled = tvConfigured && tvCompatible;
-      const targetBars = Math.max(1, Math.min(2_000, Math.floor(Number(requestedBars) || 2_000)));
+      const targetBars = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
       const MAX_FYERS_PAGES_PER_REFRESH = 8;
       const fyersByTime = new Map<number, StoredBar>();
       const fyersPageStats: Array<Record<string, unknown>> = [];
@@ -873,7 +873,7 @@ export class HistoricalDataService {
         }
       }
       const merged = [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
-      const pageTarget = Math.min(2_000, requestedBars);
+      const pageTarget = Math.min(HISTORICAL_MAX_BARS, requestedBars);
       const targetReached = merged.length >= pageTarget;
       const tvNeededButUnavailable = !targetReached && (!tvEnabled || tvFailed || tvBars.length === 0);
       const degraded = fyersFailed || fyersBars.length === 0 || tvNeededButUnavailable;
@@ -1138,13 +1138,21 @@ export class HistoricalDataService {
     }
 
     if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && cached.bars.length) {
-      const bars = cached.bars.slice(-maxBars);
-      const staleFallback = Boolean(cached.sourceStatus.staleCacheFallback);
-      return {
-        bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
-        metadata: this.metadata(cached, bars, { cacheHit: true, stale: staleFallback, degraded: cached.degraded || staleFallback }),
-        quote: null,
-      };
+      const completeness = isRecord(cached.sourceStatus.historyCompleteness) ? cached.sourceStatus.historyCompleteness : {};
+      const cachedRequestedBars = Math.max(0, Number(completeness.requestedBars) || 0);
+      const datasetComplete = completeness.datasetComplete === true ||
+        completeness.status === 'plan-lookback-exhausted' ||
+        (isRecord(cached.sourceStatus.pagination) && cached.sourceStatus.pagination.status === 'plan-lookback-limit');
+      const providerConfigured = Boolean(request.fetchNseHistory || request.fetchInvestinyHistory || request.fetchFyersRecent);
+      if (cached.bars.length >= maxBars || cachedRequestedBars >= maxBars || datasetComplete || !providerConfigured) {
+        const bars = cached.bars.slice(-maxBars);
+        const staleFallback = Boolean(cached.sourceStatus.staleCacheFallback);
+        return {
+          bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
+          metadata: this.metadata(cached, bars, { cacheHit: true, stale: staleFallback, degraded: cached.degraded || staleFallback }),
+          quote: null,
+        };
+      }
     }
 
     const key = cacheKey(cacheInstrumentId, timeframe);
@@ -1156,7 +1164,7 @@ export class HistoricalDataService {
         mapping,
         cached,
         request.fetchFyersRecent,
-        Math.min(2_000, maxBars),
+        maxBars,
         request.historyMaxLookbackYears ?? null,
         request.fetchNseHistory,
         request.fetchInvestinyHistory,

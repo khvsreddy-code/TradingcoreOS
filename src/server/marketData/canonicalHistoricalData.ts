@@ -142,8 +142,8 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
   if (!userId) throw new CanonicalHistoryError('Authenticated user is required.', 401, 'AUTH_REQUIRED');
   const instrumentId = canonicalInstrument(request.symbol);
   const spec = normalizeCanonicalHistoryTimeframe(request.timeframe);
-  const rawLimit = Number(request.limit ?? 2_000);
-  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(2_000, Math.floor(rawLimit))) : 2_000;
+  const rawLimit = Number(request.limit ?? 5_000);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(5_000, Math.floor(rawLimit))) : 5_000;
   if (request.beforeTimestamp !== undefined && (!Number.isFinite(request.beforeTimestamp) || request.beforeTimestamp <= 0)) {
     throw new CanonicalHistoryError('beforeTimestamp must be a positive epoch-millisecond timestamp.');
   }

@@ -19,8 +19,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     beforeTimestamp = Number.isFinite(numeric) ? (numeric > 1e12 ? numeric : numeric * 1000) : Date.parse(beforeRaw);
     if (!Number.isFinite(beforeTimestamp) || beforeTimestamp <= 0) return res.status(400).json({ success: false, error: 'before must be a valid epoch or ISO timestamp.' });
   }
-  const requested = Number(req.query.limit || 2_000);
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(2_000, Math.floor(requested))) : 2_000;
+  const requested = Number(req.query.limit || 5_000);
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(5_000, Math.floor(requested))) : 5_000;
   const columnar = String(req.query.format || '').toLowerCase() === 'columns';
 
   try {
@@ -34,7 +34,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     if (!loaded.bars.length && beforeTimestamp === undefined) {
       return res.status(502).json({
         success: false,
-        error: 'No validated historical candles are available from FYERS or the configured TradingView datafeed.',
+        error: 'No validated historical candles are available from the configured NSE, Investiny, FYERS, or compatible historical sources.',
         data: columnar ? historicalBarsToColumns([], loaded.metadata, loaded.quote) : [],
         metadata: loaded.metadata,
         quote: loaded.quote,
