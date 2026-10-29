@@ -156,15 +156,21 @@ function isComputationalInstruction(instruction: CoreSpiritIrInstruction): boole
 function isSafeToSkipDirty(instruction: CoreSpiritIrInstruction): boolean {
   switch (instruction.op) {
     case 'const':
-    case 'loadSeries':
     case 'unary':
     case 'binary':
-    case 'index':
       return true;
     case 'call':
       return instruction.componentPure === true &&
         instruction.componentDeterministic === true &&
         instruction.componentStateful !== true;
+    // Market/history reads depend on the current bar index even when their
+    // source expression is unchanged. A loadSeries offset of 1 on bar N is
+    // a different candle than offset 1 on bar N-1; local-series indexes also
+    // move as their ring buffers advance. Reusing either result across bars
+    // can leave compound event predicates inconsistent with their operands.
+    // Keep these reads dirty so invalidation propagates into dependent logic.
+    case 'loadSeries':
+    case 'index':
     default:
       return false;
   }
