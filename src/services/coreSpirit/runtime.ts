@@ -400,6 +400,9 @@ export class CoreSpiritRuntime {
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
     this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear(); this.viewportMemo.clear();
     this.seriesRegistry.reset();
+    // A full execution/history replay must discard `var` and persistent state too;
+    // retaining it makes corrected history diverge from a fresh chronological run.
+    this.stateStore.clear();
     this.stateStore.bind(this.crossState);
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.hmmModels.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.commitRealtimeTransaction();
