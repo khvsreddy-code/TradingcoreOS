@@ -20,4 +20,11 @@ assert.ok(after.revision>before.revision,'cache revision advances on merge');
 assert.equal(after.estimatedBytes,merged.length*80,'estimated bytes track retained candle rows');
 assert.equal(store.estimatedBytesFor('fyers','NSE:HISTORY-TEST','5m'),merged.length*80);
 assert.equal(store.stats().candleCount,4);
+
+const untrusted = { ...candle(4, 104), source: 'unknown' } as HistoricalCandle;
+store.set('fyers','NSE:HISTORY-TEST','5m',[untrusted],5);
+assert.equal(store.get('fyers','NSE:HISTORY-TEST','5m')!.length,4,'unknown-source candles cannot enter the history cache');
+assert.equal(store.get('fyers','NSE:HISTORY-TEST','5m')!.some(row => row.timestamp === untrusted.timestamp),false,'unknown-source rows are excluded from merged cache data');
+store.upsertLatest('fyers','NSE:HISTORY-TEST','5m',untrusted,5);
+assert.equal(store.get('fyers','NSE:HISTORY-TEST','5m')!.length,4,'unknown-source latest bars cannot contaminate a valid cache');
 console.log('HISTORY_STORE_LATE_RESPONSE_MERGE_OK');

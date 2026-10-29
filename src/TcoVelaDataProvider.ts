@@ -278,6 +278,19 @@ function canonicalHistorySource(payload: CanonicalHistoryPayload): CanonicalHist
   const active = route && typeof route === 'object' ? String((route as Record<string, unknown>).activeSource || '').toLowerCase() : '';
   return ['nse', 'investiny', 'fyers', 'tvdatafeed', 'cache'].includes(active) ? active as CanonicalHistorySource : 'none';
 }
+function canonicalHistoryFailureMessage(payload: CanonicalHistoryPayload | undefined, httpStatus: number): string {
+  const fallback = payload?.error || `Canonical historical data request failed (HTTP ${httpStatus}).`;
+  const statuses = payload?.metadata?.sourceStatus;
+  if (!statuses) return fallback;
+  const providerStatus = (provider: string): string => {
+    const value = statuses[provider];
+    if (!value || typeof value !== 'object') return 'unknown';
+    const status = (value as Record<string, unknown>).status;
+    return typeof status === 'string' ? status : 'unknown';
+  };
+  const summary = String(fallback).replace(/[\r\n\t]+/g, ' ').slice(0, 72);
+  return `${summary} | NSE=${providerStatus('nse')}; Investiny=${providerStatus('investiny')}; FYERS=${providerStatus('fyers')}; TV=${providerStatus('tvdatafeed')}. Yahoo-delayed chart candles are disabled.`;
+}
 function rangeEpochMs(value: unknown): number | undefined {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return undefined;
@@ -309,7 +322,7 @@ async function loadCanonicalBarsForChart(symbol: string, timeframe: string, limi
     const response = await tradingApi('/api/trading/fyers/historical?' + params.toString(), { signal, cache: 'no-store' });
     const payload = await readTradingApiJson<CanonicalHistoryPayload>(response);
     const source = canonicalHistorySource(payload);
-    if (!response.ok || payload?.success !== true || !Array.isArray(payload.data)) throw new Error(payload?.error || `Canonical historical data request failed (HTTP ${response.status}).`);
+    if (!response.ok || payload?.success !== true || !Array.isArray(payload.data)) throw new Error(canonicalHistoryFailureMessage(payload, response.status));
     const rows = payload.data.filter((row): row is HistoricalCandle => Boolean(row && typeof row === 'object' && typeof (row as HistoricalCandle).timestamp === 'string'));
     const bars = filterHistoryToRange(historicalToVelaBars(rows), range, requested);
     publishChartDataSourceStatus(symbol, timeframe, bars.length ? 'ready' : 'empty', bars.length, undefined, source);

@@ -90,6 +90,8 @@ export class HistoryStore {
       if (!saved?.data.length) return undefined;
       const rows = saved.data.filter((row): row is HistoricalCandle => {
         if (!row || typeof row !== 'object') return false;
+        // Retired Yahoo fallback candles were tagged "unknown"; never hydrate them as history.
+        if (row.source === 'unknown') return false;
         const time = Date.parse(String(row.timestamp));
         const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
         const volume = Number(row.volume ?? 0);
@@ -161,6 +163,7 @@ export class HistoryStore {
     return this.set(broker, symbol, timeframe, this.merge(current, rows), target);
   }
   upsertLatest(broker: string, symbol: string, timeframe: string, row: HistoricalCandle, target = 25_000) {
+    if (row.source === 'unknown') return this.getStale(broker, symbol, timeframe) || [];
     const key = this.key(broker, symbol, timeframe);
     const bucket = this.buckets.get(key);
     if (!bucket) return this.set(broker, symbol, timeframe, [row], target);
@@ -182,7 +185,10 @@ export class HistoryStore {
     this.schedulePersist(key, bucket);
     return bucket.data;
   }
-  merge(a: HistoricalCandle[], b: HistoricalCandle[]) { return mergeCanonicalCandleRows(a, b, this.maxCandles); }
+  merge(a: HistoricalCandle[], b: HistoricalCandle[]) {
+    const trusted = (rows: HistoricalCandle[]) => rows.filter(row => row && row.source !== 'unknown');
+    return mergeCanonicalCandleRows(trusted(a), trusted(b), this.maxCandles);
+  }
   estimatedBytesFor(broker: string, symbol: string, timeframe: string): number {
     return this.buckets.get(this.key(broker, symbol, timeframe))?.estimatedBytes ?? 0;
   }

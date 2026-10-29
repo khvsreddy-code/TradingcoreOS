@@ -133,13 +133,15 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     if (Array.isArray(value)) {
       const rows = value as HistoricalCandle[];
       const time: number[] = [], open: number[] = [], high: number[] = [], low: number[] = [], close: number[] = [], volume: number[] = [];
+      const source: NonNullable<HistoricalCandleColumns['source']> = [];
       for (const row of rows.slice(-safeLimit)) {
         const parsed = Date.parse(String(row.timestamp));
         if (!Number.isFinite(parsed)) continue;
         time.push(parsed); open.push(Number(row.open)); high.push(Number(row.high)); low.push(Number(row.low)); close.push(Number(row.close)); volume.push(Number.isFinite(Number(row.volume)) ? Number(row.volume) : 0);
+        source.push(row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown');
       }
       if (!time.length) return null;
-      return { time, open, high, low, close, volume, timeUnit: 'milliseconds', ...(metadata ? { metadata } : {}), ...(quote ? { quote } : {}) };
+      return { time, open, high, low, close, volume, timeUnit: 'milliseconds', source, ...(metadata ? { metadata } : {}), ...(quote ? { quote } : {}) };
     }
     return null;
   }

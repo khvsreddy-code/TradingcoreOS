@@ -15,6 +15,9 @@ const python = read('historical-data-service/app.py');
 const migration = read('supabase/migrations/20261019070000_historical_data_sources_and_cache.sql');
 const discovery = read('historical-data-service/discover_symbols.py');
 const runtime = read('src/services/runtime/TradingCoreRuntime.ts');
+const historyStore = read('src/services/marketData/HistoryStore.ts');
+const chartHistoryNormalization = read('src/services/marketData/chartHistoryNormalization.ts');
+const chartDataProvider = read('src/TcoVelaDataProvider.ts');
 
 const initialBlock = policy.match(/export const INITIAL_HISTORY_CANDLES:[\s\S]*?\n};/)?.[0] || '';
 const policyValues = [...initialBlock.matchAll(/'[^']+':\s*([0-9_]+)/g)].map((match) => Number(match[1].replace(/_/g, '')));
@@ -64,6 +67,10 @@ assert.match(legacyRoute, /paginationSupported: false/);
 
 assert.match(runtime, /export type HistoricalProviderErrorCode/);
 assert.match(runtime, /'authentication'[\s\S]*'rate_limited'[\s\S]*'timeout'[\s\S]*'no_data'[\s\S]*'unsupported'[\s\S]*'invalid_dataset'/);
+assert.match(runtime, /row\.source === 'nse' \|\| row\.source === 'investiny'/, 'client columnar conversion preserves NSE and Investiny source lineage');
+assert.match(historyStore, /row\.source === 'unknown'/, 'persisted Yahoo-era rows are rejected during hydration');
+assert.match(chartHistoryNormalization, /row\.source === 'unknown'/, 'unknown-source candles are rejected by chart normalization');
+assert.match(chartDataProvider, /Yahoo-delayed chart candles are disabled/, 'the chart surfaces provider readiness and never silently substitutes Yahoo history');
 assert.match(runtime, /market\.history\.error/);
 assert.match(runtime, /fallbackAttempted: true/);
 assert.match(runtime, /classifyHistoricalProviderError/);

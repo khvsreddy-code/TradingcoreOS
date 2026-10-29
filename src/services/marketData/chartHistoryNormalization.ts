@@ -5,6 +5,7 @@ const MAX_HISTORY_CANDLES = 50_000;
 export function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
   const bySecond = new Map<number, HistoricalCandle>();
   for (const row of rows || []) {
+    if (row.source === 'unknown') continue;
     const raw = Date.parse(String(row.timestamp));
     const time = Math.floor(raw / 1000);
     const values = [Number(row.open), Number(row.high), Number(row.low), Number(row.close)];
@@ -38,9 +39,10 @@ export function columnarHistoryToCandles(columns: {
     const time = Number(columns.time[i]) * multiplier;
     const open = Number(columns.open[i]), high = Number(columns.high[i]), low = Number(columns.low[i]), close = Number(columns.close[i]), volume = Number(columns.volume[i]);
     if (!Number.isFinite(time) || time <= 0 || ![open, high, low, close].every(Number.isFinite)) continue;
+    const source = columns.source?.[i];
+    if (source === 'unknown') continue;
     if (time === previous) continue;
     previous = time;
-    const source = columns.source?.[i];
     const phase = columns.phase?.[i];
     const confirmed = columns.confirmed?.[i];
     const availableAtRaw = columns.availableAt?.[i];

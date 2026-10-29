@@ -281,6 +281,7 @@ export class TradingCoreRuntime {
           return Number.isFinite(parsed) ? parsed : 0;
         };
         for (const row of rows || []) {
+          if (row?.source === 'unknown') continue;
           const time = epochMs((row as any)?.timestamp);
           if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
           byTime.set(time, row);
@@ -326,7 +327,8 @@ export class TradingCoreRuntime {
     if (broker.getHistoricalDataColumns) {
       try {
         const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
-        if (columns && columns.time.length >= requestedLimit) return columns;
+        const hasUntrustedSource = Boolean(columns?.source?.some(source => source === 'unknown'));
+        if (columns && columns.time.length >= requestedLimit && !hasUntrustedSource) return columns;
         // Some adapters return a partial column snapshot. Fall through to row history
         // so a short response cannot masquerade as the complete requested window.
       } catch (error) {
@@ -370,6 +372,7 @@ export class TradingCoreRuntime {
             return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
           })();
       const ordered = [...rows]
+        .filter(row => row.source !== 'unknown')
         .sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp)))
         .filter((row) => Date.parse(String(row.timestamp)) < beforeMs)
         .slice(-requestedLimit);
@@ -394,7 +397,7 @@ export class TradingCoreRuntime {
         close: ordered.map(row => Number(row.close)),
         volume: ordered.map(row => Number(row.volume) || 0),
         timeUnit: 'milliseconds',
-        source: ordered.map(row => row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
+        source: ordered.map(row => row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
         phase: ordered.map(row => row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical'),
         confirmed: ordered.map(row => row.confirmed === true),
         availableAt: ordered.map(row => {
