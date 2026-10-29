@@ -322,7 +322,7 @@ if showFairValueGaps == true and low > high[2] {
     bullFvgActive := true
     bullFvgLeft := time[2]
     bullFvgRight := time()
-    bullFvgTop := low[0]
+    bullFvgTop := toNumber(low)
     bullFvgBottom := high[2]
     bullFvgCreatedAt := time()
     bullFvgOpacity := 0.12
@@ -333,7 +333,7 @@ if showFairValueGaps == true and high < low[2] {
     bearFvgLeft := time[2]
     bearFvgRight := time()
     bearFvgTop := low[2]
-    bearFvgBottom := high[0]
+    bearFvgBottom := toNumber(high)
     bearFvgCreatedAt := time()
     bearFvgOpacity := 0.12
 }
@@ -384,20 +384,20 @@ let runningSessionLow: state<number> = 0
 let priorSessionHigh: state<number> = 0
 let priorSessionLow: state<number> = 0
 if runningSessionHigh <= 0 {
-    runningSessionHigh := high[0]
-    runningSessionLow := low[0]
+    runningSessionHigh := toNumber(high)
+    runningSessionLow := toNumber(low)
 }
 if time > time[1] and barDuration > 0 and time - time[1] > barDuration * sessionGapBars and runningSessionHigh > 0 {
     priorSessionHigh := runningSessionHigh
     priorSessionLow := runningSessionLow
-    runningSessionHigh := high[0]
-    runningSessionLow := low[0]
+    runningSessionHigh := toNumber(high)
+    runningSessionLow := toNumber(low)
 }
 if high > runningSessionHigh {
-    runningSessionHigh := high[0]
+    runningSessionHigh := toNumber(high)
 }
 if low < runningSessionLow {
-    runningSessionLow := low[0]
+    runningSessionLow := toNumber(low)
 }
 if showPreviousSessionLevels == true and priorSessionHigh > 0 {
     hline(priorSessionHigh, "#F5A623", 1)

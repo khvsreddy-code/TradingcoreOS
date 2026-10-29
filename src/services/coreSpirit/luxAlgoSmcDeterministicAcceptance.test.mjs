@@ -140,6 +140,13 @@ assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor ===
   'discount range should be painted below equilibrium');
 assert.ok(outputs.some(item => item.kind === 'hline'),
   'gap-inferred previous-session high/low levels must be present when session transitions occur');
+const priorSessionBars = bars.slice(150, 225);
+const previousSessionHigh = outputs.find(item => item.kind === 'hline' && item.style?.color === '#F5A623');
+const previousSessionLow = outputs.find(item => item.kind === 'hline' && item.style?.color === '#3B82F6');
+assert.equal(previousSessionHigh?.price, Math.max(...priorSessionBars.map(bar => bar.high)),
+  'previous-session high must use the actual high from the completed prior session');
+assert.equal(previousSessionLow?.price, Math.min(...priorSessionBars.map(bar => bar.low)),
+  'previous-session low must use the actual low from the completed prior session');
 
 const visualIds = outputs.map(item => item.id).filter(id => typeof id === 'string' && id.length > 0);
 assert.equal(new Set(visualIds).size, visualIds.length,
