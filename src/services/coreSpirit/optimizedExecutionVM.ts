@@ -236,7 +236,8 @@ function compilePlan(
       if (instruction.op === 'setLocal' && instruction.series && instruction.seriesId < 0) {
         return { ...instruction, seriesId: seriesRegistry.idFor(instruction.name) };
       }
-      if (instruction.op === 'index' && instruction.seriesId < 0 && instruction.instruction.seriesName) {
+      if (instruction.op === 'index' && instruction.seriesId < 0 && instruction.instruction.seriesName &&
+          !['open','high','low','close','volume','time'].includes(instruction.instruction.seriesName)) {
         return { ...instruction, seriesId: seriesRegistry.idFor(instruction.instruction.seriesName) };
       }
       return instruction;

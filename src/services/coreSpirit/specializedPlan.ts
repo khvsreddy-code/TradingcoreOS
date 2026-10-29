@@ -97,7 +97,15 @@ export function buildCoreSpiritSpecializedPlan(
       case 'unary': return {op:'unary',dest:slot(instruction.dest),operator:instruction.operator,operand:slot(instruction.operand)};
       case 'binary': return {op:'binary',dest:slot(instruction.dest),operator:instruction.operator,left:slot(instruction.left),right:slot(instruction.right)};
       case 'call': return {op:'call',dest:slot(instruction.dest),name:instruction.name,args:instruction.args.map(slot),instruction};
-      case 'index': return {op:'index',dest:slot(instruction.dest),index:slot(instruction.index),target:slot(instruction.target),seriesId:instruction.seriesName && seriesRegistry ? seriesRegistry.idFor(instruction.seriesName) : -1,instruction};
+      case 'index': {
+        const marketSeries = ['open','high','low','close','volume','time'];
+        // Dynamic OHLCV history offsets must resolve through the canonical market-data reader,
+        // not the local-series registry (which intentionally does not store market columns).
+        const localSeriesId = instruction.seriesName && !marketSeries.includes(instruction.seriesName) && seriesRegistry
+          ? seriesRegistry.idFor(instruction.seriesName)
+          : -1;
+        return {op:'index',dest:slot(instruction.dest),index:slot(instruction.index),target:slot(instruction.target),seriesId:localSeriesId,instruction};
+      }
       case 'eventGate': return {op:'eventGate',eventName:instruction.eventName,target:instruction.target};
       case 'jumpIfFalse': return {op:'jumpIfFalse',condition:slot(instruction.condition),target:instruction.target};
       case 'jump': return {op:'jump',target:instruction.target};
