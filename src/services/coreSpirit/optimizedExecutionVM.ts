@@ -76,7 +76,13 @@ function validateSpecializedPlan(
         if (lowered.op !== 'loadState' || lowered.name !== original.name) throw new Error(`specialized state load is stale at instruction ${index}`);
         break;
       case 'move':
-        if (lowered.op !== 'move' || lowered.source !== original.source) throw new Error(`specialized move is stale at instruction ${index}`);
+        if (lowered.op !== 'move' || lowered.sourceKind !== (original.sourceKind ?? 'register')) throw new Error(`specialized move source kind is stale at instruction ${index}`);
+        if (original.sourceKind === 'local') {
+          if (lowered.source !== original.source) throw new Error(`specialized local move is stale at instruction ${index}`);
+        } else {
+          if (typeof lowered.source !== 'number') throw new Error(`specialized register move has no slot at instruction ${index}`);
+          assertSlot(plan, original.source, lowered.source, `instruction ${index} move source`);
+        }
         break;
       case 'setLocal':
         if (lowered.op !== 'setLocal' || lowered.name !== original.name || lowered.series !== (original.series !== false)) {
@@ -376,7 +382,7 @@ export class CoreSpiritOptimizedExecutionVM {
             case 'const': values.set(ins.dest, ins.value); pc += 1; break;
             case 'loadSeries': values.set(ins.dest, host.loadSeries(ins.name, ins.offset)); pc += 1; break;
             case 'loadState': values.set(ins.dest, host.loadState(ins.name)); pc += 1; break;
-            case 'move': values.set(ins.dest, values.get(ins.source)); pc += 1; break;
+            case 'move': values.set(ins.dest, ins.sourceKind === 'local' ? host.moveLocal(ins.source) : values.get(ins.source)); pc += 1; break;
             case 'setLocal':
               if (ins.series !== false && ins.seriesId >= 0 && host.setLocalBySeriesId) host.setLocalBySeriesId(ins.seriesId, ins.name, values.get(ins.source));
               else host.setLocal(ins.name, values.get(ins.source), ins.series !== false);

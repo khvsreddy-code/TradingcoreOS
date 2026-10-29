@@ -30,7 +30,7 @@ export type CoreSpiritIrInstruction =
   | { op:'const'; dest:string; value:number|string|boolean|null; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'loadSeries'; dest:string; name:string; offset:number; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'loadState'; dest:string; name:string; origin?:CoreSpiritIrInstructionOrigin }
-  | { op:'move'; dest:string; source:string; origin?:CoreSpiritIrInstructionOrigin }
+  | { op:'move'; dest:string; source:string; sourceKind?:'register'|'local'; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'unary'; dest:string; operator:'!'|'+'|'-'; operand:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'binary'; dest:string; operator:string; left:string; right:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; seriesSources?:Array<{ ref:string; field:'open'|'high'|'low'|'close'|'volume'|'time' }>; callId?:string; componentId?:string; componentPure?:boolean; componentStateful?:boolean; componentDeterministic?:boolean; origin?:CoreSpiritIrInstructionOrigin }

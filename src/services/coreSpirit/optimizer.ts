@@ -187,7 +187,7 @@ function commonSubexpressionEliminate(instructions: readonly CoreSpiritIrInstruc
     const key = dest ? cseKey(instruction) : undefined;
     const cached = key ? canonical.get(key) : undefined;
     if (key && dest && cached && cached.dest !== dest) {
-      out.push({ op:'move', dest, source:cached.dest, origin:instruction.origin });
+      out.push({ op:'move', dest, source:cached.dest, sourceKind:'register', origin:instruction.origin });
       eliminated += 1;
       continue;
     }

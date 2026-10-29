@@ -168,7 +168,7 @@ export class CoreSpiritCompiler {
           else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
-          else emitInstruction(n, { op:'move', dest, source:n.name });
+          else emitInstruction(n, { op:'move', dest, source:n.name, sourceKind:'local' });
           return dest;
         }
         case 'unary': { const operand=expr(n.operand), dest=`t${temp++}`; emitInstruction(n, {op:'unary',dest,operator:n.operator,operand}); return dest; }

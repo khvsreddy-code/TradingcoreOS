@@ -49,6 +49,16 @@ assert.equal(run(new CoreSpiritExecutionVM(), moveFromRegister).output[0]?.value
   'reference VM move must copy a temporary register, not look it up as a local');
 assert.equal(run(new CoreSpiritOptimizedExecutionVM(), moveFromRegister).output[0]?.value, 10,
   'optimized VM move must copy a temporary register, not look it up as a local');
+const moveFromLocal = [
+  { op:'const', dest:'seedValue', value:10 },
+  { op:'setLocal', name:'namedValue', source:'seedValue', series:false },
+  { op:'move', dest:'copiedLocal', source:'namedValue', sourceKind:'local' },
+  { op:'emit', kind:'plot', args:['copiedLocal'], outputId:'plot:move-local' },
+];
+assert.equal(run(new CoreSpiritExecutionVM(), moveFromLocal).output[0]?.value, 10,
+  'reference VM local move must resolve a named local through the host');
+assert.equal(run(new CoreSpiritOptimizedExecutionVM(), moveFromLocal).output[0]?.value, 10,
+  'optimized VM local move must resolve a named local through the host');
 console.log('CORESPIRIT_OPTIMIZED_EXECUTION_CONTRACT_OK');
 
 // Deterministic property-style differential coverage over reassignment, state, null,

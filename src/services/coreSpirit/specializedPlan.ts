@@ -6,7 +6,8 @@ export type CoreSpiritSpecializedInstruction =
   | { op:'const'; dest:number; value:number|string|boolean|null }
   | { op:'loadSeries'; dest:number; name:string; offset:number }
   | { op:'loadState'; dest:number; name:string }
-  | { op:'move'; dest:number; source:string }
+  | { op:'move'; dest:number; source:number; sourceKind:'register' }
+  | { op:'move'; dest:number; source:string; sourceKind:'local' }
   | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }
   | { op:'setState'; name:string; source:number; initialize?:boolean }
   | { op:'unary'; dest:number; operator:'!'|'+'|'-'; operand:number }
@@ -91,7 +92,9 @@ export function buildCoreSpiritSpecializedPlan(
       case 'loadSeries':
         return {op:'loadSeries',dest:slot(instruction.dest),name:instruction.name,offset:instruction.offset};
       case 'loadState': return {op:'loadState',dest:slot(instruction.dest),name:instruction.name};
-      case 'move': return {op:'move',dest:slot(instruction.dest),source:instruction.source};
+      case 'move': return instruction.sourceKind === 'local'
+        ? {op:'move',dest:slot(instruction.dest),source:instruction.source,sourceKind:'local'}
+        : {op:'move',dest:slot(instruction.dest),source:slot(instruction.source),sourceKind:'register'};
       case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
       case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source),...(instruction.initialize ? {initialize:true} : {})};
       case 'unary': return {op:'unary',dest:slot(instruction.dest),operator:instruction.operator,operand:slot(instruction.operand)};
