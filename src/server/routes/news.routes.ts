@@ -41,7 +41,12 @@ function tag(xml: string, name: string): string {
 function safeFeedUrl(raw: string, allowedHost: string): string {
   try {
     const url = new URL(raw);
-    return url.protocol === 'https:' && (url.hostname === allowedHost || url.hostname.endsWith('.' + allowedHost)) ? url.toString() : '';
+    if (!['https:', 'http:'].includes(url.protocol) ||
+        !(url.hostname === allowedHost || url.hostname.endsWith('.' + allowedHost))) return '';
+    // Some long-running publisher RSS feeds still emit HTTP article links.
+    // Keep the host allowlist strict while upgrading those links to HTTPS.
+    url.protocol = 'https:';
+    return url.toString();
   } catch { return ''; }
 }
 
