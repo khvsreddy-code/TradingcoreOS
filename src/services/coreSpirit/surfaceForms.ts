@@ -35,6 +35,35 @@ function indentation(raw: string): number {
   return raw.match(/^[ \t]*/)?.[0].replace(/\t/g, '  ').length ?? 0;
 }
 
+/** Return true only when the opening parenthesis encloses the complete condition. */
+function hasSingleOuterParentheses(value: string): boolean {
+  const text = value.trim();
+  if (!text.startsWith('(') || !text.endsWith(')')) return false;
+
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (quote) {
+      if (escaped) { escaped = false; continue; }
+      if (character === '\\') { escaped = true; continue; }
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'") { quote = character; continue; }
+    if (character === '(') depth += 1;
+    else if (character === ')') {
+      depth -= 1;
+      if (depth < 0) return false;
+      // A close of the outer pair before the end means the tail is also part
+      // of the condition (for example: "(a) == true" or "(a) and (b)").
+      if (depth === 0 && index < text.length - 1) return false;
+    }
+  }
+  return depth === 0 && quote === null;
+}
+
 function splitTopLevel(text: string): string[] {
   const out: string[] = [];
   let start = 0;
@@ -223,7 +252,12 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
         return { line, lines: [`${inlineIf[1]}if (${condition}) {`, `${inlineIf[1]}  ${body}`, `${inlineIf[1]}}`] };
       }
       const ifMatch = line.match(/^(\s*)if\s+(.+?)\s*\{\s*$/);
-      if (ifMatch && !ifMatch[2].startsWith('(')) return { line: `${ifMatch[1]}if (${ifMatch[2].trim()}) {` };
+      if (ifMatch) {
+        const condition = ifMatch[2].trim();
+        if (!hasSingleOuterParentheses(condition)) {
+          return { line: ifMatch[1] + 'if (' + condition + ') {' };
+        }
+      }
       return { line };
     },
   },

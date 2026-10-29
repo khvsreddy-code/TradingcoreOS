@@ -25,6 +25,7 @@ export class CoreSpiritParser {
     const body:CoreSpiritAstNode[]=[];
     const diagnostics:Array<{message:string;line:number;column:number;start:number;end:number}>=[];
     while(!this.check('eof')){
+      const statementStart = this.i;
       try { body.push(this.statement()); }
       catch(error){
         const e=error instanceof CoreSpiritSyntaxError
@@ -39,6 +40,10 @@ export class CoreSpiritParser {
         });
         this.synchronize();
       }
+      // Recovery must always advance. If synchronize() stops on an unexpected
+      // right brace at top level, retrying without consuming it grows diagnostics
+      // indefinitely and can exhaust the build worker's memory.
+      if (this.i === statementStart && !this.check('eof')) this.advance();
     }
     return {ast:{type:'program',body},diagnostics};
   }

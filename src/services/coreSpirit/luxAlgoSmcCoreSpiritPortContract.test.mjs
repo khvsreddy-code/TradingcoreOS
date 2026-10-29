@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from './luxAlgoSmcCoreSource.ts';
+import { normalizeCoreSpiritSource } from './syntax.ts';
 import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
 import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 import { toCoreSpiritWorkerTransportValue } from './workerTransport.ts';
 
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
+const parenthesizedConditionProbe = normalizeCoreSpiritSource([
+  'if (close > level) == true {',
+  '  let confirmed = true',
+  '}',
+].join('\n'));
+assert.match(parenthesizedConditionProbe, /if \(\(close > level\) == true\) \{/,
+  'the surface normalizer must wrap the complete condition when parentheses only cover a subexpression');
 console.log('SMC_PORT_STAGE_SOURCE_LOADED');
 const compiled = compileCoreSpirit(source, 'luxalgo-smc-port-contract', { layer: 'script' });
 const compileErrors = compiled.diagnostics.filter(item => item.severity === 'error');
