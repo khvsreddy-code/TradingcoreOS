@@ -63,7 +63,7 @@ export class CoreSpiritExecutionVM {
             pc += 1;
             break;
           case 'move':
-            values.set(ins.dest, host.moveLocal(ins.source));
+            values.set(ins.dest, values.get(ins.source));
             pc += 1;
             break;
           case 'setLocal':

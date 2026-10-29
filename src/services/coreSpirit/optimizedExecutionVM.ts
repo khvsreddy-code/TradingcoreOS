@@ -376,7 +376,7 @@ export class CoreSpiritOptimizedExecutionVM {
             case 'const': values.set(ins.dest, ins.value); pc += 1; break;
             case 'loadSeries': values.set(ins.dest, host.loadSeries(ins.name, ins.offset)); pc += 1; break;
             case 'loadState': values.set(ins.dest, host.loadState(ins.name)); pc += 1; break;
-            case 'move': values.set(ins.dest, host.moveLocal(ins.source)); pc += 1; break;
+            case 'move': values.set(ins.dest, values.get(ins.source)); pc += 1; break;
             case 'setLocal':
               if (ins.series !== false && ins.seriesId >= 0 && host.setLocalBySeriesId) host.setLocalBySeriesId(ins.seriesId, ins.name, values.get(ins.source));
               else host.setLocal(ins.name, values.get(ins.source), ins.series !== false);

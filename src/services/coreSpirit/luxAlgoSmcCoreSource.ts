@@ -217,14 +217,14 @@ let lastBullishTime: state<number> = 0
 let lastBullishHigh: state<number> = 0
 let lastBullishLow: state<number> = 0
 if close < open {
-    lastBearishTime := time()
-    lastBearishHigh := toNumber(high)
-    lastBearishLow := toNumber(low)
+    lastBearishTime := time[0]
+    lastBearishHigh := high[0]
+    lastBearishLow := low[0]
 }
 if close > open {
-    lastBullishTime := time()
-    lastBullishHigh := toNumber(high)
-    lastBullishLow := toNumber(low)
+    lastBullishTime := time[0]
+    lastBullishHigh := high[0]
+    lastBullishLow := low[0]
 }
 
 let bullObExists: state<bool> = false
@@ -248,20 +248,20 @@ if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 
     bullObExists := true
     bullObActive := true
     bullObLeft := lastBearishTime
-    bullObRight := time()
+    bullObRight := time[0]
     bullObTop := lastBearishHigh
     bullObBottom := lastBearishLow
-    bullObCreatedAt := time()
+    bullObCreatedAt := time[0]
     bullObOpacity := 0.16
 }
 if showOrderBlockZones == true and swingBearBreak == true and lastBullishTime > 0 {
     bearObExists := true
     bearObActive := true
     bearObLeft := lastBullishTime
-    bearObRight := time()
+    bearObRight := time[0]
     bearObTop := lastBullishHigh
     bearObBottom := lastBullishLow
-    bearObCreatedAt := time()
+    bearObCreatedAt := time[0]
     bearObOpacity := 0.16
 }
 // Commit swing structure state only after both same-bar order-block triggers have consumed the break event.
@@ -276,19 +276,19 @@ if swingBearBreak == true {
 
 if bullObActive == true and time > bullObCreatedAt and low < bullObBottom {
     bullObActive := false
-    bullObRight := time()
+    bullObRight := time[0]
     bullObOpacity := 0.04
 }
 if bearObActive == true and time > bearObCreatedAt and high > bearObTop {
     bearObActive := false
-    bearObRight := time()
+    bearObRight := time[0]
     bearObOpacity := 0.04
 }
 if bullObActive == true {
-    bullObRight := time()
+    bullObRight := time[0]
 }
 if bearObActive == true {
-    bearObRight := time()
+    bearObRight := time[0]
 }
 if showOrderBlockZones == true and bullObExists == true {
     zone(bullObLeft, bullObRight, bullObTop, bullObBottom, "#1848CC", "#1848CC", bullObOpacity)
@@ -321,37 +321,37 @@ if showFairValueGaps == true and low > high[2] {
     bullFvgExists := true
     bullFvgActive := true
     bullFvgLeft := time[2]
-    bullFvgRight := time()
-    bullFvgTop := toNumber(low)
+    bullFvgRight := time[0]
+    bullFvgTop := low[0]
     bullFvgBottom := high[2]
-    bullFvgCreatedAt := time()
+    bullFvgCreatedAt := time[0]
     bullFvgOpacity := 0.12
 }
 if showFairValueGaps == true and high < low[2] {
     bearFvgExists := true
     bearFvgActive := true
     bearFvgLeft := time[2]
-    bearFvgRight := time()
+    bearFvgRight := time[0]
     bearFvgTop := low[2]
-    bearFvgBottom := toNumber(high)
-    bearFvgCreatedAt := time()
+    bearFvgBottom := high[0]
+    bearFvgCreatedAt := time[0]
     bearFvgOpacity := 0.12
 }
 if bullFvgActive == true and time > bullFvgCreatedAt and low <= bullFvgBottom {
     bullFvgActive := false
-    bullFvgRight := time()
+    bullFvgRight := time[0]
     bullFvgOpacity := 0.03
 }
 if bearFvgActive == true and time > bearFvgCreatedAt and high >= bearFvgTop {
     bearFvgActive := false
-    bearFvgRight := time()
+    bearFvgRight := time[0]
     bearFvgOpacity := 0.03
 }
 if bullFvgActive == true {
-    bullFvgRight := time()
+    bullFvgRight := time[0]
 }
 if bearFvgActive == true {
-    bearFvgRight := time()
+    bearFvgRight := time[0]
 }
 if showFairValueGaps == true and bullFvgExists == true {
     zone(bullFvgLeft, bullFvgRight, bullFvgTop, bullFvgBottom, "#00FF68", "#00FF68", bullFvgOpacity)
@@ -384,20 +384,20 @@ let runningSessionLow: state<number> = 0
 let priorSessionHigh: state<number> = 0
 let priorSessionLow: state<number> = 0
 if runningSessionHigh <= 0 {
-    runningSessionHigh := toNumber(high)
-    runningSessionLow := toNumber(low)
+    runningSessionHigh := high[0]
+    runningSessionLow := low[0]
 }
 if time > time[1] and barDuration > 0 and time - time[1] > barDuration * sessionGapBars and runningSessionHigh > 0 {
     priorSessionHigh := runningSessionHigh
     priorSessionLow := runningSessionLow
-    runningSessionHigh := toNumber(high)
-    runningSessionLow := toNumber(low)
+    runningSessionHigh := high[0]
+    runningSessionLow := low[0]
 }
 if high > runningSessionHigh {
-    runningSessionHigh := toNumber(high)
+    runningSessionHigh := high[0]
 }
 if low < runningSessionLow {
-    runningSessionLow := toNumber(low)
+    runningSessionLow := low[0]
 }
 if showPreviousSessionLevels == true and priorSessionHigh > 0 {
     hline(priorSessionHigh, "#F5A623", 1)

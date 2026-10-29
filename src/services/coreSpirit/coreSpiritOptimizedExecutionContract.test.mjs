@@ -17,10 +17,10 @@ const instructions = [
   { op:'emit', kind:'plot', args:['t2'], outputId:'plot:fast' },
 ];
 
-function run(executor) {
+function run(executor, program = instructions) {
   const output = new CoreSpiritOutputCollector(32);
   const state = { locals:{} };
-  executor.run(instructions, 0, {
+  executor.run(program, 0, {
     maxStepsPerBar:100,
     throwIfAborted(){},
     loadSeries(){ return 10; },
@@ -40,6 +40,15 @@ function run(executor) {
 const reference=run(new CoreSpiritExecutionVM());
 const optimized=run(new CoreSpiritOptimizedExecutionVM());
 assert.deepEqual(optimized, reference);
+const moveFromRegister = [
+  { op:'loadSeries', dest:'seriesValue', name:'high', offset:0 },
+  { op:'move', dest:'copiedValue', source:'seriesValue' },
+  { op:'emit', kind:'plot', args:['copiedValue'], outputId:'plot:move-register' },
+];
+assert.equal(run(new CoreSpiritExecutionVM(), moveFromRegister).output[0]?.value, 10,
+  'reference VM move must copy a temporary register, not look it up as a local');
+assert.equal(run(new CoreSpiritOptimizedExecutionVM(), moveFromRegister).output[0]?.value, 10,
+  'optimized VM move must copy a temporary register, not look it up as a local');
 console.log('CORESPIRIT_OPTIMIZED_EXECUTION_CONTRACT_OK');
 
 // Deterministic property-style differential coverage over reassignment, state, null,
