@@ -153,14 +153,6 @@ if showSwingStructure == true and (swingPivotLow > 0 and swingLowBroken == false
 if showSwingStructure == true and (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true and swingBias <= 0 {
     label("Swing BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
-if (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true {
-    swingHighBroken := true
-    swingBias := 1
-}
-if (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true {
-    swingLowBroken := true
-    swingBias := -1
-}
 
 if showStructureLevels == true and showInternalStructure == true and (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true {
     line(internalPivotHighTime, internalPivotHigh, time, internalPivotHigh, "#3179F5", 1)
@@ -245,6 +237,16 @@ if showOrderBlockZones == true and (swingPivotLow > 0 and swingLowBroken == fals
     bearObCreatedAt := time[0]
     bearObOpacity := 0.16
 }
+// Commit swing structure state only after both same-bar order-block triggers have consumed the break event.
+if (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true {
+    swingHighBroken := true
+    swingBias := 1
+}
+if (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true {
+    swingLowBroken := true
+    swingBias := -1
+}
+
 if bullObActive == true and time > bullObCreatedAt and low < bullObBottom {
     bullObActive := false
     bullObRight := time[0]
