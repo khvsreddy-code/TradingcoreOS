@@ -215,32 +215,10 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       }
     : undefined;
 
-  const nseBase = String(process.env.NSE_MARKET_DATA_SERVICE_URL || '').trim().replace(/\/+$/, '');
-  const nseToken = String(process.env.NSE_MARKET_DATA_SERVICE_TOKEN || '').trim();
-  const nseMap = parseServerMap(process.env.NSE_MARKET_DATA_SYMBOL_MAP);
-  const investinyBase = String(process.env.INVESTINY_SERVICE_URL || process.env.TVDATAFEED_SERVICE_URL || '').trim().replace(/\/+$/, '');
-  const investinyToken = String(process.env.INVESTINY_SERVICE_TOKEN || process.env.TVDATAFEED_SERVICE_TOKEN || '').trim();
+  const investinyBase = String(process.env.INVESTINY_SERVICE_URL || '').trim().replace(/\/+$/, '');
+  const investinyToken = String(process.env.INVESTINY_SERVICE_TOKEN || '').trim();
   const investinyMap = parseServerMap(process.env.INVESTINY_SYMBOL_MAP);
-  const investinyEnabled = /^(?:1|true|yes|on)$/i.test(String(process.env.INVESTINY_ENABLED || '').trim());
-  const fetchNseHistory: PreferredHistorySourceFetcher | undefined = nseBase && nseToken
-    ? async (mapping, timeframe, range) => {
-        const mapped = nseMap[mapping.instrumentId] || nseMap[mapping.fyersSymbol];
-        const symbol = typeof mapped?.symbol === 'string' && mapped.symbol.trim() ? mapped.symbol.trim() : mapping.fyersSymbol;
-        const response = await fetch(nseBase + '/v1/history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + nseToken, Accept: 'application/json' },
-          signal: timeoutSignal(API_LATENCY_BUDGET_MS.history),
-          body: JSON.stringify({ instrument_id: mapping.instrumentId, symbol, timeframe, from_ms: range.fromMs, to_ms: range.toMs, max_bars: range.requestedBars, timezone: mapping.timezone, session_open: mapping.sessionOpen }),
-        });
-        if (!response.ok) throw Object.assign(new Error('NSE gateway returned HTTP ' + response.status), { status: response.status, retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')) });
-        const payload: unknown = await response.json();
-        const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-        const nested = record.data && typeof record.data === 'object' ? record.data as Record<string, unknown> : {};
-        const rows = Array.isArray(record.bars) ? record.bars : Array.isArray(nested.bars) ? nested.bars : Array.isArray(record.data) ? record.data : null;
-        if (!rows) throw Object.assign(new Error('NSE gateway returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
-        return rows;
-      }
-    : undefined;
+  const investinyEnabled = /^(?:0|false|no|off)$/i.test(String(process.env.INVESTINY_ENABLED || '').trim()) ? false : true;
   const fetchInvestinyHistory: PreferredHistorySourceFetcher | undefined =
     investinyEnabled && investinyBase && investinyToken
       ? async (mapping, timeframe, range) => {
@@ -268,12 +246,9 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
     instrumentId,
     timeframe: spec.interval,
     maxBars: limit,
-    historyMaxLookbackYears: ['D', '1W', '1M'].includes(spec.resolution.toUpperCase())
-      ? capabilities.historyDepth.dailyYears
-      : capabilities.historyDepth.intradayYears,
+    historyMaxLookbackYears: Math.max(2, Math.min(5, Number(process.env.INVESTINY_HISTORY_YEARS) || 5)),
     ...(request.beforeTimestamp !== undefined ? { beforeTimestamp: request.beforeTimestamp } : {}),
     fetchFyersRecent,
-    fetchNseHistory,
     fetchInvestinyHistory,
   });
   const metadata = {
@@ -300,7 +275,7 @@ export function historicalBarsToColumns(rows: readonly HistoricalCandle[], metad
     close: rows.map(row => row.close),
     volume: rows.map(row => row.volume),
     timeUnit: 'milliseconds',
-    source: rows.map(row => row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
+    source: rows.map(row => row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
     phase: rows.map(row => row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical'),
     confirmed: rows.map(row => row.confirmed === true),
     availableAt: rows.map(row => availableAtMs(row.availableAt)),
