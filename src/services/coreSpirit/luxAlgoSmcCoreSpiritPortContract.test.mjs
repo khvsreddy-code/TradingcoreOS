@@ -100,7 +100,7 @@ assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(structureLines.length < bars.length / 3,
   'structure drawings should be emitted on break transitions, not on every bar after the break');
-assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
+assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label; observed=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => ({text:item.text,time:item.time,price:item.price,barIndex:item.metadata?.barIndex}))) + '; lines=' + JSON.stringify(structureLines.map(item => ({start:item.start,end:item.end,metadata:item.metadata}))))
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'), 'bearish fair-value gaps must produce red chart zones');
 const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fillColor === '#00FF68' || item.style?.fillColor === '#FF0008'));
