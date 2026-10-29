@@ -54,7 +54,9 @@ export type CoreSpiritChartManagerBridge = Readonly<{
 }>;
 
 export type CoreSpiritChartCompileDiagnostic = {
-  severity: 'error' | 'warning' | 'info';
+  // This validator currently emits blocking capability/architecture errors only.
+  // Keep this aligned with CoreSpiritDiagnostic, which accepts error | warning.
+  severity: 'error' | 'warning';
   message: string;
   code?: string;
   line?: number;

@@ -175,7 +175,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       return (item.code ? '[' + item.code + '] ' : '') + location + item.message;
     }).slice(0, 10));
     setLifecycleDiagnostics(result.diagnostics.map(item => ({
-      severity: item.severity === 'warning' ? 'warning' as const : item.severity === 'info' ? 'info' as const : 'error' as const,
+      severity: item.severity === 'warning' ? 'warning' as const : 'error' as const,
       stage: item.code === 'CHART_CAPABILITY_DENIED' || item.code === 'CHART_SANDBOX_ARCHITECTURE' ? 'capability-denied' as const : errors.length ? 'compile-failed' as const : 'compiled' as const,
       code: item.code || 'CORESPIRIT_COMPILE_DIAGNOSTIC', message: item.message,
       ...(item.line == null ? {} : { line: item.line }), ...(item.column == null ? {} : { column: item.column }),
