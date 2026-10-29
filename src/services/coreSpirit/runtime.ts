@@ -1572,6 +1572,7 @@ export class CoreSpiritRuntime {
     if(name==='panel') { const title=String(args[0]??'Panel'); return finish({__coreSpiritVisualRef:'area',kind:'panel',id:title,title}); }
     if(name==='point') { const x=Number(args[0]), y=Number(args[1]), space=String(args[2]??'time'); return finish({__coreSpiritVisualRef:'point',kind:'point',x,y,space}); }
     if(name==='above_bar' || name==='below_bar' || name==='at_bar') { return finish({__coreSpiritVisualRef:'relative-position',kind:name==='above_bar'?'aboveBar':name==='below_bar'?'belowBar':'atBar',offset:Number(args[0]??0)}); }
+    if(name==='time') return finish(this.toEpoch(bar.timestamp));
     if(name==='bar_index') return finish(index);
     if (name==='nz') { const value=Number(args[0]); return finish(Number.isFinite(value) ? value : Number(args[1] ?? 0)); }
     if (name==='isNa') return finish(args[0] == null || (typeof args[0] === 'number' && !Number.isFinite(args[0])));
