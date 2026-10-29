@@ -69,10 +69,14 @@ if swingBullBreak == true { label("DEBUG_BULL_BREAK", "below", "#00FF00", "#0000
 if swingBearBreak == true { label("DEBUG_BEAR_BREAK", "above", "#FF0000", "#FFFFFF", 8, "pill") }
 if bar_index == 124 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_124", "below", "#00FF00", "#000000", 8, "pill", "600") }
 if close < 65 {
-  labelAt(time[0], swingPivotLow, "DEBUG_PIVOT_ON_DUMP", "below", "#00FF00", "#000000", 8, "pill", "600")
-  labelAt(time[0], close[1], "DEBUG_PREVIOUS_CLOSE", "below", "#00FF00", "#000000", 8, "pill", "600")
+  if swingPivotLow < 65 { label("DEBUG_PIVOT_LT_65", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingPivotLow >= 65 { label("DEBUG_PIVOT_GE_65", "below", "#00FF00", "#000000", 8, "pill") }
+  if close[1] >= swingPivotLow { label("DEBUG_PREV_CLOSE_GE_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
+  if close[1] < swingPivotLow { label("DEBUG_PREV_CLOSE_LT_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
   if swingLowBroken == true { label("DEBUG_LOW_BROKEN", "below", "#00FF00", "#000000", 8, "pill") }
   if swingLowBroken == false { label("DEBUG_LOW_OPEN", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingBearBreak == true { label("DEBUG_BEAR_BREAK_TRUE", "above", "#FF0000", "#FFFFFF", 8, "pill") }
+  if swingBearBreak == false { label("DEBUG_BEAR_BREAK_FALSE", "above", "#FF0000", "#FFFFFF", 8, "pill") }
   if swingBias > 0 { label("DEBUG_SWING_BIAS_BULL", "below", "#00FF00", "#000000", 8, "pill") }
   if swingBias < 0 { label("DEBUG_SWING_BIAS_BEAR", "below", "#00FF00", "#000000", 8, "pill") }
 }
