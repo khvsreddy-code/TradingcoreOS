@@ -69,6 +69,10 @@ if swingBullBreak == true { label("DEBUG_BULL_BREAK", "below", "#00FF00", "#0000
 if swingBearBreak == true { label("DEBUG_BEAR_BREAK", "above", "#FF0000", "#FFFFFF", 8, "pill") }
 if bar_index == 124 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_124", "below", "#00FF00", "#000000", 8, "pill", "600") }
 if close < 65 {
+  if swingPivotLow <= 0 { label("DEBUG_PIVOT_NONPOSITIVE", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingPivotLow > 0 { label("DEBUG_PIVOT_POSITIVE", "below", "#00FF00", "#000000", 8, "pill") }
+  if close < swingPivotLow { label("DEBUG_CLOSE_BELOW_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
+  if close >= swingPivotLow { label("DEBUG_CLOSE_NOT_BELOW_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
   if swingPivotLow < 65 { label("DEBUG_PIVOT_LT_65", "below", "#00FF00", "#000000", 8, "pill") }
   if swingPivotLow >= 65 { label("DEBUG_PIVOT_GE_65", "below", "#00FF00", "#000000", 8, "pill") }
   if close[1] >= swingPivotLow { label("DEBUG_PREV_CLOSE_GE_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
