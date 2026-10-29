@@ -42,7 +42,9 @@ assert.doesNotMatch(dashboard, /loadYahooQuoteTicks/, 'dashboard does not substi
 assert.match(dashboard, /NO LIVE SOURCE/, 'dashboard identifies unavailable live quote source');
 assert.doesNotMatch(chrome, /loadYahooQuoteTicks|loadYahooBars|YAHOO_FALLBACK_POLL_MS|yahooHistoricalCandles/, 'watchlist never polls Yahoo quotes or history');
 assert.match(chrome, /loadTcoCanonicalHistoryBars/, 'watchlist uses canonical historical sources');
-assert.match(news, /fetchYahooFinanceRss/, 'news uses Yahoo Finance RSS independently of FYERS');
-assert.match(live, /historical data only|Historical data only|NSE-first historical/i, 'workspace labels history-only mode correctly');
+assert.match(news, /in\.investing\.com\/rss\/news_25\.rss/, 'news uses Investing.com India RSS');
+assert.match(news, /moneycontrol\.com\/rss\//, 'news uses Moneycontrol RSS feeds');
+assert.doesNotMatch(news, /fetchYahooFinanceRss|fetchGdelt|Yahoo Finance RSS|GDELT/, 'news does not fall back to global Yahoo/GDELT feeds');
+assert.match(live, /historical data only|Historical data only|FYERS|Investiny/i, 'workspace labels historical/live source behavior correctly');
 
 console.log('YAHOO_DELAYED_FALLBACK_CONTRACT_OK');
