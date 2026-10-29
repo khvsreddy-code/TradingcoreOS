@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from './luxAlgoSmcCoreSource.ts';
 import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
-import { CoreSpiritRuntime } from './runtime.ts';
 import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 import { toCoreSpiritWorkerTransportValue } from './workerTransport.ts';
 
@@ -60,17 +59,6 @@ const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
-const referenceProbe = outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text))
-  ? null
-  : (() => {
-      const runtime = new CoreSpiritRuntime({ sourceId: 'luxalgo-smc-reference-probe', executionTier: 'reference' });
-      const result = runtime.executeIr(compiled.ir, bars);
-      return {
-        labels: result.outputs.filter(item => item.kind === 'label').map(item => ({ text: item.text, time: item.time, price: item.price, barIndex: item.metadata?.barIndex })),
-        diagnostics: result.diagnostics,
-        finalLocals: Object.fromEntries(['swingPivotLow','swingLowBroken','swingBias','swingBearBreak'].map(name => [name, result.state.locals[name]])),
-      };
-    })();
 // Incremental execution exposes proxy-backed compatibility views and extension
 // metadata can contain callbacks. The worker transport must turn these into
 // clone-safe data instead of failing DedicatedWorkerGlobalScope.postMessage.
@@ -113,7 +101,7 @@ assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(structureLines.length < bars.length / 3,
   'structure drawings should be emitted on break transitions, not on every bar after the break');
-assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'SMC CHoCH missing; optimized labels=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => ({text:item.text,time:item.time,price:item.price,barIndex:item.metadata?.barIndex}))) + '; optimizedLocals=' + JSON.stringify(Object.fromEntries(['swingPivotLow','swingLowBroken','swingBias','swingBearBreak'].map(name => [name, execution.state.locals[name]]))) + '; reference=' + JSON.stringify(referenceProbe));
+assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'), 'bearish fair-value gaps must produce red chart zones');
 const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fillColor === '#00FF68' || item.style?.fillColor === '#FF0008'));
