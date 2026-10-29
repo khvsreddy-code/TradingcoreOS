@@ -65,6 +65,11 @@ let swingPivotLowTime: state<number> = 0
 let swingHighBroken: state<bool> = false
 let swingLowBroken: state<bool> = false
 let swingBias: state<number> = 0
+// Per-bar break events are explicit state values. They are cleared every bar,
+// set once after the confirmed-level crossing test, and consumed by drawings
+// and order-block creation before the broken-level latch is committed.
+let swingBullBreak: state<bool> = false
+let swingBearBreak: state<bool> = false
 
 let internalPivotHigh: state<number> = 0
 let internalPivotLow: state<number> = 0
@@ -73,11 +78,20 @@ let internalPivotLowTime: state<number> = 0
 let internalHighBroken: state<bool> = false
 let internalLowBroken: state<bool> = false
 let internalBias: state<number> = 0
+let internalBullBreak: state<bool> = false
+let internalBearBreak: state<bool> = false
 
 let priorSwingPivotHigh = swingPivotHigh
 let priorSwingPivotHighTime = swingPivotHighTime
 let priorSwingPivotLow = swingPivotLow
 let priorSwingPivotLowTime = swingPivotLowTime
+
+// Clear transient event markers before processing this bar. A crossing can
+// then set each marker once and every consumer reads the same event value.
+swingBullBreak := false
+swingBearBreak := false
+internalBullBreak := false
+internalBearBreak := false
 
 if swingPivotHighConfirmed == true {
     swingPivotHigh := swingCandidateHigh
@@ -132,51 +146,64 @@ if showEqualHighsLows == true and swingPivotLowConfirmed == true and priorSwingP
     labelAt(time[swingLength], swingCandidateLow, "EQL", "below", "#089981", "#FFFFFF", 9, "pill", "600")
 }
 
-// One-shot break events are keyed to the confirmed swing level. Latches prevent
-// the same level from generating a fresh BOS/CHoCH on every bar beyond it.
+// One-shot break events are evaluated once per bar. Explicit event state is
+// reused by drawing and order-block consumers so crossing expressions do not
+// need to be recomputed against the moving history window.
+if (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true {
+    swingBullBreak := true
+}
+if (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true {
+    swingBearBreak := true
+}
+if (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true {
+    internalBullBreak := true
+}
+if (internalPivotLow > 0 and internalLowBroken == false and close < internalPivotLow and close[1] >= internalPivotLow) == true {
+    internalBearBreak := true
+}
 
-if showStructureLevels == true and showSwingStructure == true and (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true {
+if showStructureLevels == true and showSwingStructure == true and swingBullBreak == true {
     line(swingPivotHighTime, swingPivotHigh, time, swingPivotHigh, "#089981", 2)
 }
-if showStructureLevels == true and showSwingStructure == true and (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true {
+if showStructureLevels == true and showSwingStructure == true and swingBearBreak == true {
     line(swingPivotLowTime, swingPivotLow, time, swingPivotLow, "#F23645", 2)
 }
-if showSwingStructure == true and (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true and swingBias < 0 {
+if showSwingStructure == true and swingBullBreak == true and swingBias < 0 {
     label("Swing CHoCH ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true and swingBias >= 0 {
+if showSwingStructure == true and swingBullBreak == true and swingBias >= 0 {
     label("Swing BOS ↑", "below", "#089981", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true and swingBias > 0 {
+if showSwingStructure == true and swingBearBreak == true and swingBias > 0 {
     label("Swing CHoCH ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
-if showSwingStructure == true and (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true and swingBias <= 0 {
+if showSwingStructure == true and swingBearBreak == true and swingBias <= 0 {
     label("Swing BOS ↓", "above", "#F23645", "#FFFFFF", 10, "pill")
 }
 
-if showStructureLevels == true and showInternalStructure == true and (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true {
+if showStructureLevels == true and showInternalStructure == true and internalBullBreak == true {
     line(internalPivotHighTime, internalPivotHigh, time, internalPivotHigh, "#3179F5", 1)
 }
-if showStructureLevels == true and showInternalStructure == true and (internalPivotLow > 0 and internalLowBroken == false and close < internalPivotLow and close[1] >= internalPivotLow) == true {
+if showStructureLevels == true and showInternalStructure == true and internalBearBreak == true {
     line(internalPivotLowTime, internalPivotLow, time, internalPivotLow, "#F77C80", 1)
 }
-if showInternalStructure == true and (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true and internalBias < 0 {
+if showInternalStructure == true and internalBullBreak == true and internalBias < 0 {
     label("Internal CHoCH ↑", "below", "#089981", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true and internalBias >= 0 {
+if showInternalStructure == true and internalBullBreak == true and internalBias >= 0 {
     label("Internal BOS ↑", "below", "#089981", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and (internalPivotLow > 0 and internalLowBroken == false and close < internalPivotLow and close[1] >= internalPivotLow) == true and internalBias > 0 {
+if showInternalStructure == true and internalBearBreak == true and internalBias > 0 {
     label("Internal CHoCH ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
 }
-if showInternalStructure == true and (internalPivotLow > 0 and internalLowBroken == false and close < internalPivotLow and close[1] >= internalPivotLow) == true and internalBias <= 0 {
+if showInternalStructure == true and internalBearBreak == true and internalBias <= 0 {
     label("Internal BOS ↓", "above", "#F23645", "#FFFFFF", 9, "pill")
 }
-if (internalPivotHigh > 0 and internalHighBroken == false and close > internalPivotHigh and close[1] <= internalPivotHigh) == true {
+if internalBullBreak == true {
     internalHighBroken := true
     internalBias := 1
 }
-if (internalPivotLow > 0 and internalLowBroken == false and close < internalPivotLow and close[1] >= internalPivotLow) == true {
+if internalBearBreak == true {
     internalLowBroken := true
     internalBias := -1
 }
@@ -217,7 +244,7 @@ let bearObBottom: state<number> = 0
 let bearObCreatedAt: state<number> = 0
 let bearObOpacity: state<number> = 0.16
 
-if showOrderBlockZones == true and (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true and lastBearishTime > 0 {
+if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 0 {
     bullObExists := true
     bullObActive := true
     bullObLeft := lastBearishTime
@@ -227,7 +254,7 @@ if showOrderBlockZones == true and (swingPivotHigh > 0 and swingHighBroken == fa
     bullObCreatedAt := time[0]
     bullObOpacity := 0.16
 }
-if showOrderBlockZones == true and (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true and lastBullishTime > 0 {
+if showOrderBlockZones == true and swingBearBreak == true and lastBullishTime > 0 {
     bearObExists := true
     bearObActive := true
     bearObLeft := lastBullishTime
@@ -238,11 +265,11 @@ if showOrderBlockZones == true and (swingPivotLow > 0 and swingLowBroken == fals
     bearObOpacity := 0.16
 }
 // Commit swing structure state only after both same-bar order-block triggers have consumed the break event.
-if (swingPivotHigh > 0 and swingHighBroken == false and close > swingPivotHigh and close[1] <= swingPivotHigh) == true {
+if swingBullBreak == true {
     swingHighBroken := true
     swingBias := 1
 }
-if (swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow) == true {
+if swingBearBreak == true {
     swingLowBroken := true
     swingBias := -1
 }
