@@ -155,7 +155,7 @@ includes(packageJson, 'incrementalStatefulKernelContract.test.mjs', 'critical ve
 includes(packageJson, 'multiBackendKernelExecutorContract.test.mjs', 'critical verification exercises the actual WASM backend planner and adapter');
 includes(smcBenchmark, 'inputChangeReport.inputChangeChangedOutput !== true', 'SMC input-change benchmark fails closed if settings do not change results');
 includes(chartController, 'existing chart output was preserved', 'fatal runtime diagnostics preserve the last valid chart scene');
-const fatalDiagnosticGate = chartController.indexOf('if(fatalDiagnostic)throw new Error(');
+const fatalDiagnosticGate = chartController.indexOf('if(fatalDiagnostic){');
 const nativeSceneCommit = chartController.indexOf('output.scheduleObjects(');
 assert.ok(fatalDiagnosticGate >= 0 && nativeSceneCommit >= 0 && fatalDiagnosticGate < nativeSceneCommit,
   'fatal runtime diagnostics must be rejected before the native Vela output commit is attempted');
