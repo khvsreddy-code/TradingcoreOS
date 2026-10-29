@@ -1,0 +1,67 @@
+name: Prune Vercel Container Registry images
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: VCR repository to clean (select only after reviewing its Images tab)
+        required: true
+        type: choice
+        options:
+          - realtimegatewaynew
+          - realtimegateway
+          - realtimefresh
+          - realtime
+        default: realtimegatewaynew
+      tags_to_delete:
+        description: Exact comma-separated old tags to delete. No wildcards. Review deployments and rollback needs first.
+        required: true
+        type: string
+      keep_tags:
+        description: Optional comma-separated tags that must be preserved (include any live/rollback image tags that differ from current main).
+        required: false
+        type: string
+      confirmation:
+        description: Enter DELETE-UNUSED-IMAGES to authorize these exact deletions.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prune:
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'DELETE-UNUSED-IMAGES'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Go for crane
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Install crane
+        run: |
+          go install github.com/google/go-containerregistry/cmd/crane@v0.20.3
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate to Vercel Container Registry with short-lived OIDC credentials
+        uses: vercel/vcr-action/login@v1
+        with:
+          team: team_fRVGnRVl8pGI8RicRXie7JXI
+
+      - name: Delete only the reviewed, unreferenced manifests
+        env:
+          VCR_IMAGE_REPOSITORY: vcr.vercel.com/khvsreddy-codes-projects/tradingcoreos/${{ inputs.repository }}
+          VCR_DELETE_TAGS: ${{ inputs.tags_to_delete }}
+          VCR_KEEP_TAGS: ${{ inputs.keep_tags }}
+          VCR_CONFIRMATION: ${{ inputs.confirmation }}
+        run: node scripts/vcr-prune-images.mjs
