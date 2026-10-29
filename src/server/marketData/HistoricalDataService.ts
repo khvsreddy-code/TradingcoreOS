@@ -42,8 +42,6 @@ export interface HistoricalLoadRequest {
   /** FYERS plan history cap for this timeframe; null means no artificial cutoff. */
   historyMaxLookbackYears?: number | null;
   fetchFyersRecent?: FyersRecentFetcher;
-  /** Private, authorized NSE historical-data gateway. */
-  fetchNseHistory?: PreferredHistorySourceFetcher;
   /** Historical-only Investiny adapter; exact asset mapping is required. */
   fetchInvestinyHistory?: PreferredHistorySourceFetcher;
 }
@@ -683,7 +681,6 @@ export class HistoricalDataService {
     fetchFyersRecent: FyersRecentFetcher | undefined,
     requestedBars: number,
     historyMaxLookbackYears: number | null,
-    _fetchNseHistory?: PreferredHistorySourceFetcher,
     fetchInvestinyHistory?: PreferredHistorySourceFetcher,
   ): Promise<CacheRecord> {
     const key = cacheKey(mapping.instrumentId, timeframe);
@@ -855,7 +852,7 @@ export class HistoricalDataService {
           const range = getBoundedHistoryPageRange(mapping, timeframe, Math.min(2_000, maxBars), historyMaxLookbackYears, pageToMs);
           if (range.fromMs < range.toMs) {
             try {
-              let pageSource: 'nse' | 'investiny' | 'fyers' = 'investiny';
+              let pageSource: 'investiny' | 'fyers' = 'investiny';
               let investinyPageStatus: Record<string, unknown> | undefined;
               const fyersFloor = Date.now() - 14 * 86_400_000;
               // Older-page navigation is Investiny-only. FYERS must never be
@@ -912,7 +909,6 @@ export class HistoricalDataService {
               const combined = [...allBars.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
               const sourceStatus = {
                 ...currentRecord.sourceStatus,
-                nse: { status: 'disabled', reason: 'NSE scraper removed from market-data routing' },
                 ...(investinyPageStatus ? { investiny: investinyPageStatus } : {}),
                 route: { activeSource: pageBars.length ? pageSource : 'none', capability: 'historical-ohlcv', automaticFailback: true },
                 autoFixer: {
@@ -1014,7 +1010,7 @@ export class HistoricalDataService {
       const datasetComplete = completeness.datasetComplete === true ||
         completeness.status === 'plan-lookback-exhausted' ||
         (isRecord(cached.sourceStatus.pagination) && cached.sourceStatus.pagination.status === 'plan-lookback-limit');
-      const providerConfigured = Boolean(request.fetchNseHistory || request.fetchInvestinyHistory || request.fetchFyersRecent);
+      const providerConfigured = Boolean(request.fetchInvestinyHistory || request.fetchFyersRecent);
       // Only actual returned bars can satisfy the requested history depth. A large
       // requestedBars value alone is not proof that the cache contains that many bars.
       if (cached.bars.length >= maxBars || cachedReturnedBars >= maxBars || datasetComplete || !providerConfigured) {
@@ -1039,7 +1035,6 @@ export class HistoricalDataService {
         request.fetchFyersRecent,
         maxBars,
         request.historyMaxLookbackYears ?? null,
-        request.fetchNseHistory,
         request.fetchInvestinyHistory,
       ));
     } catch (error) {
