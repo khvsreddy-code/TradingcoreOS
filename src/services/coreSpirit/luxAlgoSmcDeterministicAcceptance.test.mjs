@@ -90,7 +90,8 @@ assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor ===
   'bullish FVGs must preserve their original bounds');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'),
   'bearish FVGs must preserve their original bounds');
-const hasBullishOrderBlock = outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC');
+const bullishOrderBlock = outputs.find(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC');
+const hasBullishOrderBlock = Boolean(bullishOrderBlock);
 const bullishOrderBlockDebug = hasBullishOrderBlock ? [] : executeCoreSpirit(source + `
 if bar_index == 167 {
     if close < open { label("DBG_BAR167_BEARISH_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
@@ -125,6 +126,12 @@ const bullishOrderBlockStateInstructions = compiled.ir.entry.instructions
 assert.ok(hasBullishOrderBlock,
   'bullish order blocks must be represented as bounded zones; diagnostics=' +
   JSON.stringify({optimizedDebug:bullishOrderBlockDebug,referenceZones:bullishOrderBlockReference,stateInstructions:bullishOrderBlockStateInstructions}));
+assert.equal(bullishOrderBlock.left, Date.parse(bars[167].timestamp) / 1000,
+  'the bullish order block must start at the last bearish candle time in epoch seconds');
+assert.equal(bullishOrderBlock.top, bars[167].high,
+  'the bullish order block top must come from the selected bearish origin candle');
+assert.equal(bullishOrderBlock.bottom, bars[167].low,
+  'the bullish order block bottom must come from the selected bearish origin candle');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#B22833'),
   'bearish order blocks must be represented as bounded zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#F23645'),

@@ -1324,33 +1324,42 @@ export class CoreSpiritRuntime {
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
-    if (!Number.isInteger(offset) || offset < 0) throw new Error(`future indexing is not allowed for ${name}[${offset}]`);
+    if (!Number.isInteger(offset) || offset < 0) throw new Error('future indexing is not allowed for ' + name + '[' + offset + ']');
     if (offset > barIndex) return null;
     const sourceIndex = barIndex - offset;
+    const source = bars[sourceIndex];
+    if (!source) return null;
 
-    // Persistent worker contexts read series directly from shared MarketFrame
+    // The runtime's bar timestamps are authoritative for the time series. A worker's
+    // MarketFrame can describe a different viewport/revision than this historical
+    // replay, so never let a detached frame return a stale or empty time value.
+    // CoreSpirit scripts use time as epoch seconds for drawing coordinates and
+    // persistent state; derive it from the exact bar being executed.
+    if (name === 'time') {
+      const timestamp = this.toEpoch(source.timestamp);
+      return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+    }
+
+    // Persistent worker contexts read OHLCV directly from shared MarketFrame
     // columns, avoiding a second object/column lookup for every quant feature.
-    const frame=this.marketFrameResolver?.();
-    if(frame && sourceIndex<frame.length){
-      const column=name==='time'?frame.time:
-        name==='open'?frame.open:
-        name==='high'?frame.high:
-        name==='low'?frame.low:
-        name==='close'?frame.close:
-        name==='volume'?frame.volume:undefined;
-      if(column){
-        const value=column[sourceIndex];
-        return value!=null && Number.isFinite(value)?value:null;
+    const frame = this.marketFrameResolver?.();
+    if (frame && sourceIndex < frame.length) {
+      const column = name === 'open' ? frame.open :
+        name === 'high' ? frame.high :
+        name === 'low' ? frame.low :
+        name === 'close' ? frame.close :
+        name === 'volume' ? frame.volume : undefined;
+      if (column) {
+        const value = column[sourceIndex];
+        return value != null && Number.isFinite(value) ? value : null;
       }
     }
 
     const columnar = this.columnarHistory.valueAt(name, sourceIndex);
     if (columnar != null) return columnar;
-    const source = bars[sourceIndex]; if (!source) return null;
-    const value = name === 'time' ? this.toEpoch(source.timestamp) : Number((source as any)[name]);
+    const value = Number((source as any)[name]);
     return Number.isFinite(value) ? value : null;
   }
-
   private eventActive(eventName:string): boolean {
     const normalized=eventName.trim().toLowerCase();
     if(normalized==='bar' || normalized==='bar.close' || normalized==='bar.closes') return true;
