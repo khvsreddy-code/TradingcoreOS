@@ -31,7 +31,7 @@
         }
       }
     },
-    "realtimegateway": {
+    "realtimegateway-v2": {
       "root": ".",
       "entrypoint": "Dockerfile",
       "runtime": "container"
@@ -44,13 +44,13 @@
     {
       "source": "/api/realtime/healthz",
       "destination": {
-        "service": "realtimegateway"
+        "service": "realtimegateway-v2"
       }
     },
     {
       "source": "/api/realtime/ws",
       "destination": {
-        "service": "realtimegateway"
+        "service": "realtimegateway-v2"
       }
     },
     {
