@@ -90,8 +90,23 @@ assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor ===
   'bullish FVGs must preserve their original bounds');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'),
   'bearish FVGs must preserve their original bounds');
-assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC'),
-  'bullish order blocks must be represented as bounded zones');
+const hasBullishOrderBlock = outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC');
+const bullishOrderBlockDebug = hasBullishOrderBlock ? [] : executeCoreSpirit(source + `
+if bar_index == 170 {
+    if swingBullBreak == true { label("DBG_SWING_BULL_BREAK_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
+    if swingBullBreak == false { label("DBG_SWING_BULL_BREAK_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if lastBearishTime > 0 { labelAt(time[0], lastBearishTime, "DBG_LAST_BEARISH_TIME", "below", "#00FF00", "#000000", 8, "pill", "600") }
+    if lastBearishTime <= 0 { label("DBG_LAST_BEARISH_TIME_ZERO", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if swingPivotHigh > 0 { labelAt(time[0], swingPivotHigh, "DBG_SWING_PIVOT_HIGH", "above", "#00FF00", "#000000", 8, "pill", "600") }
+    if close > swingPivotHigh and close[1] <= swingPivotHigh { label("DBG_SWING_CROSSING_TRUE", "above", "#00FF00", "#000000", 8, "pill") }
+    if bullObExists == true { label("DBG_BULL_OB_EXISTS_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
+    if bullObExists == false { label("DBG_BULL_OB_EXISTS_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+}
+`, bars, SOURCE_ID + '-ob-debug').outputs
+  .filter(item => item.kind === 'label' && item.text.startsWith('DBG_'))
+  .map(item => ({text:item.text, price:item.price, time:item.time}));
+assert.ok(hasBullishOrderBlock,
+  'bullish order blocks must be represented as bounded zones; diagnostics=' + JSON.stringify(bullishOrderBlockDebug));
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#B22833'),
   'bearish order blocks must be represented as bounded zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#F23645'),
