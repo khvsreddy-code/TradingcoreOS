@@ -51,21 +51,52 @@ export function buildCoreSpiritCompositionGraph(
   }
 
   const projectedEdges:CoreSpiritComposableEdge[] = [];
+  // Graphs may contain cycles when mutable state feeds a later condition. Keep
+  // projection bounded: deduplicate edges in O(1) and resolve each ancestor walk
+  // once per source node rather than repeating DFS for every incoming edge.
+  const projectedEdgeKeys = new Set<string>();
   const addProjectedEdge=(from:string,to:string,relation:CoreSpiritComposableEdge['relation']) => {
     if(from===to||!projectedNodes.has(from)||!projectedNodes.has(to)) return;
-    if(!projectedEdges.some(item=>item.from===from&&item.to===to&&item.relation===relation)) projectedEdges.push({from,to,relation});
+    const key=`${from}\u0000${to}\u0000${relation}`;
+    if(projectedEdgeKeys.has(key)) return;
+    projectedEdgeKeys.add(key);
+    projectedEdges.push({from,to,relation});
   };
 
-  const nearestProjectedAncestors=(sourceId:string,visited=new Set<string>()):string[] => {
-    if(visited.has(sourceId)) return [];
-    visited.add(sourceId);
-    if(projectedNodes.has(sourceId)) return [sourceId];
-    const parents=incoming.get(sourceId) ?? [];
-    const result:string[]=[];
-    for(const parent of parents) {
-      for(const ancestor of nearestProjectedAncestors(parent.from,visited)) if(!result.includes(ancestor)) result.push(ancestor);
+  const ancestorCache = new Map<string, readonly string[]>();
+  const nearestProjectedAncestors=(sourceId:string):string[] => {
+    const cached=ancestorCache.get(sourceId);
+    if(cached) return [...cached];
+    if(projectedNodes.has(sourceId)) {
+      const direct=[sourceId];
+      ancestorCache.set(sourceId,direct);
+      return [...direct];
     }
-    return result;
+
+    const visited=new Set<string>();
+    const result:string[]=[];
+    const resultSet=new Set<string>();
+    const stack=[sourceId];
+    while(stack.length) {
+      const current=stack.pop()!;
+      if(visited.has(current)) continue;
+      visited.add(current);
+      // A projected node is a boundary: preserve the previous nearest-ancestor
+      // contract and do not traverse past it.
+      if(projectedNodes.has(current)) {
+        if(!resultSet.has(current)) {
+          resultSet.add(current);
+          result.push(current);
+        }
+        continue;
+      }
+      const parents=incoming.get(current) ?? [];
+      // Reverse push preserves the source graph's stable depth-first parent order.
+      for(let index=parents.length-1;index>=0;index-=1) stack.push(parents[index]!.from);
+    }
+    const stable=Object.freeze([...result]);
+    ancestorCache.set(sourceId,stable);
+    return [...stable];
   };
 
   for(const edge of semanticGraph.edges) {

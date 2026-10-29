@@ -14,6 +14,14 @@ for (const banned of ['component\' keyword', 'function keyword', 'pipeline keywo
   }
 }
 
+const composability = read('src/services/coreSpirit/composability.ts');
+for (const token of ['const projectedEdgeKeys = new Set<string>()', 'const ancestorCache = new Map<string, readonly string[]>()', 'while(stack.length)', 'ancestorCache.set(sourceId,stable)']) {
+  if (!composability.includes(token)) throw new Error(`Cyclic composition graph traversal is not bounded: missing '${token}'`);
+}
+if (composability.includes('nearestProjectedAncestors(parent.from,visited)')) {
+  throw new Error('Composition graph projection must not recursively rewalk cyclic ancestors');
+}
+
 const components = read('src/services/coreSpirit/coreSpiritComponents.ts');
 for (const token of [
   'CoreSpiritComponentRegistry',
