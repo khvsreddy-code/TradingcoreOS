@@ -741,12 +741,24 @@ export function normalizeCoreSpiritSource(source: string): string {
 }
 
 export function describeCoreSpiritSurface(source: string, options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritSurfaceMetadata {
+  const traceSmcSurface = source.includes('Smart Money Concepts [CoreSpirit]') && source.includes('swingBullBreak');
+  const trace = (stage: string): void => { if (traceSmcSurface) console.log('SMC_SURFACE_TRACE', stage); };
+  trace('extract:start');
   const surface = extractCoreSpiritSurfaceMetadata(source);
+  trace('extract:done');
+  trace('normalize:start');
   const normalized = normalizeCoreSpiritSource(source);
+  trace('normalize:done');
+  trace('parse:start');
   const parsed = new CoreSpiritParser(normalized).parseDetailed();
+  trace('parse:done');
+  trace('semantic:start');
   const semantic = parsed.diagnostics.length ? null : analyzeCoreSpirit(parsed.ast,{ surface, components: options.components });
+  trace('semantic:done');
   if (!semantic) return surface;
+  trace('composition-graph:start');
   const graph = buildCoreSpiritCompositionGraph(parsed.ast,semantic,surface);
+  trace('composition-graph:done');
   return {
     ...surface,
     composition: {
