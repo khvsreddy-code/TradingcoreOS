@@ -7,7 +7,11 @@ import {
 } from './numericalKernels.ts';
 import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState } from './statefulIndicatorKernel.ts';
 
-const close = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, received ${actual}`);
+const close = (actual, expected, epsilonOrMessage = 1e-9, message) => {
+  const epsilon = typeof epsilonOrMessage === 'number' ? epsilonOrMessage : 1e-9;
+  const label = typeof epsilonOrMessage === 'string' ? epsilonOrMessage : message;
+  assert.ok(Math.abs(actual - expected) <= epsilon, label ?? `expected ${expected}, received ${actual}`);
+};
 const values = Float64Array.from([1, 2, 3, 4]);
 assert.deepEqual(Array.from(rollingMean(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingMean(values, 2)[1], 1.5);
