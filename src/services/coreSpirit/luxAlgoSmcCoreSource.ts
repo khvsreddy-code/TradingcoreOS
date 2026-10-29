@@ -209,6 +209,8 @@ if internalBearBreak == true {
 }
 
 // Track the most recent opposite candle as a displacement-origin candidate.
+// Current-bar OHLC/time values use their canonical unindexed series names;
+// history offsets are reserved for prior confirmed candles.
 // This is explicitly a latest-zone model, not the original's full OB array.
 let lastBearishTime: state<number> = 0
 let lastBearishHigh: state<number> = 0
@@ -217,14 +219,14 @@ let lastBullishTime: state<number> = 0
 let lastBullishHigh: state<number> = 0
 let lastBullishLow: state<number> = 0
 if close < open {
-    lastBearishTime := time[0]
-    lastBearishHigh := high[0]
-    lastBearishLow := low[0]
+    lastBearishTime := time
+    lastBearishHigh := high
+    lastBearishLow := low
 }
 if close > open {
-    lastBullishTime := time[0]
-    lastBullishHigh := high[0]
-    lastBullishLow := low[0]
+    lastBullishTime := time
+    lastBullishHigh := high
+    lastBullishLow := low
 }
 
 let bullObExists: state<bool> = false
@@ -248,20 +250,20 @@ if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 
     bullObExists := true
     bullObActive := true
     bullObLeft := lastBearishTime
-    bullObRight := time[0]
+    bullObRight := time
     bullObTop := lastBearishHigh
     bullObBottom := lastBearishLow
-    bullObCreatedAt := time[0]
+    bullObCreatedAt := time
     bullObOpacity := 0.16
 }
 if showOrderBlockZones == true and swingBearBreak == true and lastBullishTime > 0 {
     bearObExists := true
     bearObActive := true
     bearObLeft := lastBullishTime
-    bearObRight := time[0]
+    bearObRight := time
     bearObTop := lastBullishHigh
     bearObBottom := lastBullishLow
-    bearObCreatedAt := time[0]
+    bearObCreatedAt := time
     bearObOpacity := 0.16
 }
 // Commit swing structure state only after both same-bar order-block triggers have consumed the break event.
@@ -276,19 +278,19 @@ if swingBearBreak == true {
 
 if bullObActive == true and time > bullObCreatedAt and low < bullObBottom {
     bullObActive := false
-    bullObRight := time[0]
+    bullObRight := time
     bullObOpacity := 0.04
 }
 if bearObActive == true and time > bearObCreatedAt and high > bearObTop {
     bearObActive := false
-    bearObRight := time[0]
+    bearObRight := time
     bearObOpacity := 0.04
 }
 if bullObActive == true {
-    bullObRight := time[0]
+    bullObRight := time
 }
 if bearObActive == true {
-    bearObRight := time[0]
+    bearObRight := time
 }
 if showOrderBlockZones == true and bullObExists == true {
     zone(bullObLeft, bullObRight, bullObTop, bullObBottom, "#1848CC", "#1848CC", bullObOpacity)
@@ -321,37 +323,37 @@ if showFairValueGaps == true and low > high[2] {
     bullFvgExists := true
     bullFvgActive := true
     bullFvgLeft := time[2]
-    bullFvgRight := time[0]
-    bullFvgTop := low[0]
+    bullFvgRight := time
+    bullFvgTop := low
     bullFvgBottom := high[2]
-    bullFvgCreatedAt := time[0]
+    bullFvgCreatedAt := time
     bullFvgOpacity := 0.12
 }
 if showFairValueGaps == true and high < low[2] {
     bearFvgExists := true
     bearFvgActive := true
     bearFvgLeft := time[2]
-    bearFvgRight := time[0]
+    bearFvgRight := time
     bearFvgTop := low[2]
-    bearFvgBottom := high[0]
-    bearFvgCreatedAt := time[0]
+    bearFvgBottom := high
+    bearFvgCreatedAt := time
     bearFvgOpacity := 0.12
 }
 if bullFvgActive == true and time > bullFvgCreatedAt and low <= bullFvgBottom {
     bullFvgActive := false
-    bullFvgRight := time[0]
+    bullFvgRight := time
     bullFvgOpacity := 0.03
 }
 if bearFvgActive == true and time > bearFvgCreatedAt and high >= bearFvgTop {
     bearFvgActive := false
-    bearFvgRight := time[0]
+    bearFvgRight := time
     bearFvgOpacity := 0.03
 }
 if bullFvgActive == true {
-    bullFvgRight := time[0]
+    bullFvgRight := time
 }
 if bearFvgActive == true {
-    bearFvgRight := time[0]
+    bearFvgRight := time
 }
 if showFairValueGaps == true and bullFvgExists == true {
     zone(bullFvgLeft, bullFvgRight, bullFvgTop, bullFvgBottom, "#00FF68", "#00FF68", bullFvgOpacity)
@@ -384,20 +386,20 @@ let runningSessionLow: state<number> = 0
 let priorSessionHigh: state<number> = 0
 let priorSessionLow: state<number> = 0
 if runningSessionHigh <= 0 {
-    runningSessionHigh := high[0]
-    runningSessionLow := low[0]
+    runningSessionHigh := high
+    runningSessionLow := low
 }
 if time > time[1] and barDuration > 0 and time - time[1] > barDuration * sessionGapBars and runningSessionHigh > 0 {
     priorSessionHigh := runningSessionHigh
     priorSessionLow := runningSessionLow
-    runningSessionHigh := high[0]
-    runningSessionLow := low[0]
+    runningSessionHigh := high
+    runningSessionLow := low
 }
 if high > runningSessionHigh {
-    runningSessionHigh := high[0]
+    runningSessionHigh := high
 }
 if low < runningSessionLow {
-    runningSessionLow := low[0]
+    runningSessionLow := low
 }
 if showPreviousSessionLevels == true and priorSessionHigh > 0 {
     hline(priorSessionHigh, "#F5A623", 1)
