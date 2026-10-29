@@ -158,6 +158,14 @@ const pivotLabels = outputs.filter(item => item.kind === 'label' && /^(HH|LH|HL|
 assert.ok(pivotLabels.every(item => item.time <= Date.parse(bars.at(-1).timestamp) / 1000),
   'pivot labels must be anchored to historical bar times, not generated with future coordinates');
 
+const anchoredPivotLabels = outputs.filter(item => item.kind === 'label' && item.metadata?.anchor === 'time-price');
+for (const item of anchoredPivotLabels) {
+  const expectedBarIndex = bars.findIndex(bar => Math.floor(Date.parse(bar.timestamp) / 1000) === Math.floor(item.time));
+  assert.ok(expectedBarIndex >= 0, 'time-anchored pivot labels must match a canonical candle timestamp');
+  assert.equal(item.metadata.barIndex, expectedBarIndex,
+    'time-anchored pivot label metadata must reference its anchor candle, not the later confirmation candle');
+}
+
 // Exercise the production timestamp adapter and the native Vela drawing projection,
 // not just the compiler's internal output objects.
 const velaBars = normalizeVelaBarsToCoreSpirit(bars.map(bar => ({

@@ -1883,7 +1883,9 @@ export class CoreSpiritRuntime {
         const id=timeAnchored
           ? `${this.options.sourceId}:labelAt:${outputId||'label'}:${labelTime}`
           : `${this.options.sourceId}:label:${barIndex}:${outputId||text}`;
-        if(Number.isFinite(labelTime)&&Number.isFinite(price)&&text) outputs.push({kind:'label',id,time:labelTime,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},metadata:{source:this.options.sourceId,barIndex,...(timeAnchored?{anchor:'time-price'}:{})}});
+        const anchorBarIndex = timeAnchored ? bars.findIndex(candidate => Math.floor(this.toEpoch(candidate.timestamp)) === Math.floor(labelTime)) : barIndex;
+        const labelMetadata = {source:this.options.sourceId,barIndex:timeAnchored ? (anchorBarIndex >= 0 ? anchorBarIndex : undefined) : barIndex,...(timeAnchored?{anchor:'time-price'}:{})};
+        if(Number.isFinite(labelTime)&&Number.isFinite(price)&&text) outputs.push({kind:'label',id,time:labelTime,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},metadata:labelMetadata});
       }
       else if(kind==='line'){
         const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
