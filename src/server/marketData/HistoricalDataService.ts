@@ -842,7 +842,7 @@ export class HistoricalDataService {
       let paginationStatus = sameCachedPage ? String(previousPagination.status) : 'cache-hit';
       let historyExhausted = sameCachedPage && previousPagination.status === 'plan-lookback-limit' && older.length === 0;
       const historyMaxLookbackYears = request.historyMaxLookbackYears ?? null;
-      const paginationAvailable = Boolean(request.fetchNseHistory || request.fetchInvestinyHistory || request.fetchFyersRecent);
+      const paginationAvailable = Boolean(request.fetchInvestinyHistory || request.fetchFyersRecent);
       const lookbackFloorMs = historyMaxLookbackYears == null ? null : Date.now() - Math.max(1, Number(historyMaxLookbackYears) || 1) * 365.25 * 86_400_000;
       const oldestCachedMs = older[0]?.timestampMs;
       const pageToMs = Math.min(beforeTimestamp - 1, oldestCachedMs == null ? beforeTimestamp - 1 : oldestCachedMs - 1);
@@ -855,37 +855,34 @@ export class HistoricalDataService {
           const range = getBoundedHistoryPageRange(mapping, timeframe, Math.min(2_000, maxBars), historyMaxLookbackYears, pageToMs);
           if (range.fromMs < range.toMs) {
             try {
-              let pageSource: 'nse' | 'investiny' | 'fyers' = 'fyers';
-              let nsePageStatus: Record<string, unknown> | undefined;
+              let pageSource: 'nse' | 'investiny' | 'fyers' = 'investiny';
               let investinyPageStatus: Record<string, unknown> | undefined;
-              if (request.fetchNseHistory) {
-                const attempt = await fetchProviderBars('nse', request.fetchNseHistory, mapping, timeframe, range);
-                nsePageStatus = attempt.status;
-                if (attempt.bars.length) {
-                  pageSource = 'nse';
-                  pageBars = attempt.bars.filter(bar => bar.timestampMs < beforeTimestamp);
-                }
+              const fyersFloor = Date.now() - 14 * 86_400_000;
+              // Older-page navigation is Investiny-only. FYERS must never be
+              // paged beyond its two-week recent-history window.
+              if (request.fetchInvestinyHistory) {
+                const attempt = await fetchProviderBars('investiny', request.fetchInvestinyHistory, mapping, timeframe, {
+                  ...range,
+                  fromMs: Math.max(range.fromMs, Date.now() - Math.max(2, Math.min(5, Number(historyMaxLookbackYears) || 5)) * 365.25 * 86_400_000),
+                  lookbackFloorMs: Date.now() - Math.max(2, Math.min(5, Number(historyMaxLookbackYears) || 5)) * 365.25 * 86_400_000,
+                  calendarPolicy: 'investiny-older-history-page',
+                });
+                investinyPageStatus = attempt.status;
+                pageBars = attempt.bars.filter(bar => bar.timestampMs < beforeTimestamp && bar.timestampMs < fyersFloor);
               }
-              if (!isFnoInstrument(mapping) && request.fetchInvestinyHistory && pageBars.length < Math.min(2_000, maxBars)) {
-                const hadNsePage = pageBars.some(bar => bar.source === 'nse');
-                const attempt = await fetchProviderBars('investiny', request.fetchInvestinyHistory, mapping, timeframe, range);
-                investinyPageStatus = { ...attempt.status, role: pageBars.length ? 'page-gap-fill' : 'page-fallback' };
-                if (attempt.bars.length) {
-                  pageBars = mergeStoredBars(pageBars, attempt.bars.filter(bar =>
-                    bar.timestampMs < beforeTimestamp &&
-                    bar.timestampMs >= range.fromMs &&
-                    bar.timestampMs <= range.toMs,
-                  ));
-                  if (!hadNsePage && pageBars.some(bar => bar.source === 'investiny')) pageSource = 'investiny';
-                }
-              }
-              if (!pageBars.length && request.fetchFyersRecent) {
-                const fetched = await request.fetchFyersRecent(mapping, range);
+              if (!pageBars.length && request.fetchFyersRecent && range.toMs >= fyersFloor) {
+                const boundedRecentRange = {
+                  ...range,
+                  fromMs: Math.max(range.fromMs, fyersFloor),
+                  lookbackFloorMs: fyersFloor,
+                  calendarPolicy: 'fyers-only-last-14-days',
+                };
+                const fetched = await request.fetchFyersRecent(mapping, boundedRecentRange);
                 pageSource = 'fyers';
                 pageBars = normalizeRows(fetched.bars || [], 'fyers').filter(bar =>
                   bar.timestampMs < beforeTimestamp &&
-                  bar.timestampMs >= range.fromMs &&
-                  bar.timestampMs <= range.toMs,
+                  bar.timestampMs >= boundedRecentRange.fromMs &&
+                  bar.timestampMs <= boundedRecentRange.toMs,
                 );
               }
               const mergedOlder = new Map<number, StoredBar>();
@@ -915,11 +912,10 @@ export class HistoricalDataService {
               const combined = [...allBars.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
               const sourceStatus = {
                 ...currentRecord.sourceStatus,
-                ...(nsePageStatus ? { nse: nsePageStatus } : {}),
+                nse: { status: 'disabled', reason: 'NSE scraper removed from market-data routing' },
                 ...(investinyPageStatus ? { investiny: investinyPageStatus } : {}),
                 route: { activeSource: pageBars.length ? pageSource : 'none', capability: 'historical-ohlcv', automaticFailback: true },
                 autoFixer: {
-                  nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
                   investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
                   fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
                 },
