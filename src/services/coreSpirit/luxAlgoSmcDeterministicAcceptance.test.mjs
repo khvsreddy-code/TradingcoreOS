@@ -38,6 +38,11 @@ function fixedDataset() {
   bars[70] = candle(70, 92.0, 93.0, 90.0, 91.5);
   bars[125] = candle(125, 92.2, 93.2, 90.0, 91.6);
 
+  // An opposite-color candle gives the bullish break a real order-block origin.
+  // The default fixture bars are bullish, so without this bearish candle there
+  // is no qualifying source candle for the model's bounded bullish OB zone.
+  bars[167] = candle(167, 107.2, 107.6, 106.4, 106.6);
+
   // A confirmed bullish break with a real three-candle gap.
   bars[168] = candle(168, 106.0, 110.0, 105.4, 107.0);
   bars[169] = candle(169, 107.1, 111.2, 106.8, 108.2);
