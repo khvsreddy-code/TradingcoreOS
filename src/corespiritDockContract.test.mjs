@@ -99,8 +99,8 @@ includes(coreSpiritEngine, "stage:'rendered'", 'the Vela runtime reports rendere
 includes(dock, 'Execution pipeline', 'live dock presents the ordered execution-stage rail');
 includes(dock, 'Suggested correction:', 'live dock presents structured diagnostic fixes and previous-output status');
 includes(dock, 'Chart-side indicator manager', 'live dock exposes a chart-side script manager');
-includes(dock, 'manager.setInput(instance.id, field.key, next)', 'chart-manager input changes use Vela indicator handles');
-includes(dock, 'manager.setProp(instance.id, field.key, next)', 'chart-manager appearance changes use Vela indicator handles');
+includes(dock, 'manager.setInput(instance.id, field.key, value)', 'chart-manager input changes use Vela indicator handles');
+includes(dock, 'manager.setProp(instance.id, field.key, value)', 'chart-manager appearance changes use Vela indicator handles');
 includes(dock, 'manager.setVisible(instance.id, !instance.visible)', 'chart-manager visibility is backed by the Vela indicator handle');
 includes(dock, 'manager.remove(instance.id)', 'chart-manager removal uses Vela lifecycle rather than deleting renderer objects directly');
 includes(dock, 'Editor differs · chart still runs this saved source', 'the editor distinguishes source edits from the source currently running on the chart');
