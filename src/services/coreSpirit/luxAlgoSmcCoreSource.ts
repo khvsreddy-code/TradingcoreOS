@@ -218,13 +218,13 @@ let lastBullishHigh: state<number> = 0
 let lastBullishLow: state<number> = 0
 if close < open {
     lastBearishTime := time()
-    lastBearishHigh := high[0]
-    lastBearishLow := low[0]
+    lastBearishHigh := toNumber(high)
+    lastBearishLow := toNumber(low)
 }
 if close > open {
     lastBullishTime := time()
-    lastBullishHigh := high[0]
-    lastBullishLow := low[0]
+    lastBullishHigh := toNumber(high)
+    lastBullishLow := toNumber(low)
 }
 
 let bullObExists: state<bool> = false
