@@ -59,37 +59,6 @@ const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
 
 const outputs = execution.outputs;
-// Diagnostic probes run only if the acceptance assertion fails. They report the exact
-// bars where swing pivots/breaks fire and the retained swing level/bias at bars 124/134.
-const structureProbe = outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text))
-  ? []
-  : executeCoreSpirit(source + `
-if swingPivotLowConfirmed == true { label("DEBUG_LOW_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
-if swingBullBreak == true { label("DEBUG_BULL_BREAK", "below", "#00FF00", "#000000", 8, "pill") }
-if swingBearBreak == true { label("DEBUG_BEAR_BREAK", "above", "#FF0000", "#FFFFFF", 8, "pill") }
-if bar_index == 124 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_124", "below", "#00FF00", "#000000", 8, "pill", "600") }
-if close < 65 {
-  if swingPivotLow > 0 and swingLowBroken == false { label("DEBUG_COMBINED_2_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow { label("DEBUG_COMBINED_3_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow > 0 and swingLowBroken == false and close < swingPivotLow and close[1] >= swingPivotLow { label("DEBUG_COMBINED_4_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow <= 0 { label("DEBUG_PIVOT_NONPOSITIVE", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow > 0 { label("DEBUG_PIVOT_POSITIVE", "below", "#00FF00", "#000000", 8, "pill") }
-  if close < swingPivotLow { label("DEBUG_CLOSE_BELOW_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
-  if close >= swingPivotLow { label("DEBUG_CLOSE_NOT_BELOW_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow < 65 { label("DEBUG_PIVOT_LT_65", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingPivotLow >= 65 { label("DEBUG_PIVOT_GE_65", "below", "#00FF00", "#000000", 8, "pill") }
-  if close[1] >= swingPivotLow { label("DEBUG_PREV_CLOSE_GE_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
-  if close[1] < swingPivotLow { label("DEBUG_PREV_CLOSE_LT_PIVOT", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingLowBroken == true { label("DEBUG_LOW_BROKEN", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingLowBroken == false { label("DEBUG_LOW_OPEN", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingBearBreak == true { label("DEBUG_BEAR_BREAK_TRUE", "above", "#FF0000", "#FFFFFF", 8, "pill") }
-  if swingBearBreak == false { label("DEBUG_BEAR_BREAK_FALSE", "above", "#FF0000", "#FFFFFF", 8, "pill") }
-  if swingBias > 0 { label("DEBUG_SWING_BIAS_BULL", "below", "#00FF00", "#000000", 8, "pill") }
-  if swingBias < 0 { label("DEBUG_SWING_BIAS_BEAR", "below", "#00FF00", "#000000", 8, "pill") }
-}
-`, bars, 'luxalgo-smc-port-runtime-diagnostic').outputs
-  .filter(item => item.kind === 'label' && /DEBUG_/.test(item.text))
-  .map(item => ({ text: item.text, time: item.time, price: item.price, barIndex: item.metadata?.barIndex }));
 // Incremental execution exposes proxy-backed compatibility views and extension
 // metadata can contain callbacks. The worker transport must turn these into
 // clone-safe data instead of failing DedicatedWorkerGlobalScope.postMessage.
@@ -132,7 +101,7 @@ assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(structureLines.length < bars.length / 3,
   'structure drawings should be emitted on break transitions, not on every bar after the break');
-assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label; labels=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => ({text:item.text,time:item.time,price:item.price,barIndex:item.metadata?.barIndex}))) + '; debug=' + JSON.stringify(structureProbe));
+assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'), 'bearish fair-value gaps must produce red chart zones');
 const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fillColor === '#00FF68' || item.style?.fillColor === '#FF0008'));
