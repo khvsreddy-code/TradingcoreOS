@@ -64,6 +64,10 @@ export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
   return declaration.expression;
 }
 
+function traceSmcCompilerStage(sourceId: string, stage: string): void {
+  if (sourceId === 'luxalgo-smc-port-contract') console.log('SMC_COMPILER_TRACE', stage);
+}
+
 export class CoreSpiritCompiler {
   compileSource(
     source: string,
@@ -71,10 +75,13 @@ export class CoreSpiritCompiler {
     options: CoreSpiritCompilerOptions = {},
   ): CoreSpiritCompileResult {
     const original = String(source ?? '');
+    traceSmcCompilerStage(sourceId, 'compileSource:start');
     const normalizedSource = normalizeCoreSpiritSource(original);
+    traceSmcCompilerStage(sourceId, 'compileSource:normalized');
     let parsed: ReturnType<CoreSpiritParser['parseDetailed']>;
     try {
       parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
+      traceSmcCompilerStage(sourceId, 'compileSource:parsed');
     } catch (error) {
       const failure = error as { message?: string; position?: { offset?: number; line?: number; column?: number } };
       const start = Math.max(0, Number(failure?.position?.offset) || 0);
@@ -86,25 +93,37 @@ export class CoreSpiritCompiler {
         symbols: [],
       };
     }
+    traceSmcCompilerStage(sourceId, 'compileSource:surface:start');
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(original);
-    return this.compile(parsed.ast, sourceId, {
+    traceSmcCompilerStage(sourceId, 'compileSource:surface:done');
+    traceSmcCompilerStage(sourceId, 'compileSource:compile:start');
+    const result = this.compile(parsed.ast, sourceId, {
       ...options,
       surface,
       researchSource: original,
       artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options, original) },
     });
+    traceSmcCompilerStage(sourceId, 'compileSource:compile:done');
+    return result;
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
+    traceSmcCompilerStage(sourceId, 'compile:start');
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
+    traceSmcCompilerStage(sourceId, 'names:start');
     const names = resolveCoreSpiritNames(ast, { components: componentSource });
+    traceSmcCompilerStage(sourceId, 'names:done');
+    traceSmcCompilerStage(sourceId, 'semantic:start');
     const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource });
+    traceSmcCompilerStage(sourceId, 'semantic:done');
     const symbols = symbolsFromSemantic(semantic);
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics, symbols };
     const surface = options.surface ?? makeCoreSpiritSurfaceMetadata([]);
+    traceSmcCompilerStage(sourceId, 'semantic-graph:start');
     const semanticDependencyGraph = buildCoreSpiritSemanticDependencyGraph(ast, semantic, surface);
+    traceSmcCompilerStage(sourceId, 'semantic-graph:done');
     const instructions: CoreSpiritIrInstruction[] = [];
     const locals: string[] = [];
     const originFor = (node: CoreSpiritAstNode) => node.span ? {
@@ -414,7 +433,9 @@ export class CoreSpiritCompiler {
       }
     };
     try {
+      traceSmcCompilerStage(sourceId, 'lowering:start');
       stmt(ast);
+      traceSmcCompilerStage(sourceId, 'lowering:done');
       const rawIr:CoreSpiritIrProgram={
         version:1,
         sourceId,
@@ -428,9 +449,13 @@ export class CoreSpiritCompiler {
         semanticDependencyGraph,
         compilerPipeline:makeCoreSpiritCompilerPipelineTrace(),
       };
+      traceSmcCompilerStage(sourceId, 'optimizer:start');
       const optimized = optimizeCoreSpiritIr(rawIr);
+      traceSmcCompilerStage(sourceId, 'optimizer:done');
       const graphInput = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), semanticDependencyGraph } as CoreSpiritIrProgram;
+      traceSmcCompilerStage(sourceId, 'execution-graph:start');
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
+      traceSmcCompilerStage(sourceId, 'execution-graph:done');
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
       const researchPlan = buildCoreSpiritResearchPlan(options.researchSource ?? options.artifactContext?.source ?? '', surface);
@@ -518,7 +543,9 @@ export class CoreSpiritCompiler {
       const capabilityDiagnostics = capabilityCheck.errors.map(message => ({ severity:'error' as const, message, code:'CAPABILITY_REQUIRED' }));
       const allDiagnostics = [...stageDiagnostics,...capabilityDiagnostics,...repaintDiagnostics,...causalityDiagnostics];
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
+      traceSmcCompilerStage(sourceId, 'backend-planner:start');
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
+      traceSmcCompilerStage(sourceId, 'backend-planner:done');
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
       const uniqueLanguageFeatures = Object.freeze([...new Set(languageFeatures)]);
       const languagePolicy = buildCoreScriptLanguagePolicy({

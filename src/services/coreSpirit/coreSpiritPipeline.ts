@@ -58,7 +58,13 @@ export function compileCoreSpirit(
   sourceId = 'coreSpirit',
   options: { components?: CoreSpiritComponentRegistryLike; layer?: any } = {},
 ): CoreSpiritCompileResult {
+  const traceSmcPipeline = (stage: string): void => {
+    if (sourceId === 'luxalgo-smc-port-contract') console.log('SMC_PIPELINE_TRACE', stage);
+  };
+  traceSmcPipeline('start');
+  traceSmcPipeline('identity:start');
   const identity=buildCoreSpiritArtifactLookupIdentity(source,sourceId,options);
+  traceSmcPipeline('identity:done');
   const cached=artifactCache.get(identity.key);
   if(cached){
     artifactCache.delete(identity.key);
@@ -71,12 +77,16 @@ export function compileCoreSpirit(
     };
   }
 
+  traceSmcPipeline('surface:start');
   const surface=describeCoreSpiritSurface(source,options as any);
+  traceSmcPipeline('surface:done');
+  traceSmcPipeline('compileSource:start');
   const result=new CoreSpiritCompiler().compileSource(source,sourceId,{
     components:options.components,
     layer:options.layer,
     surface,
   });
+  traceSmcPipeline('compileSource:done');
 
   if(result.artifact){
     artifactCache.set(identity.key,result.artifact);
