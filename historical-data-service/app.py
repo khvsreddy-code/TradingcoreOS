@@ -57,8 +57,7 @@ class InvestinyHistoryRequest(BaseModel):
 
 
 def authenticated_investiny(authorization: Optional[str]) -> None:
-    expected = (os.environ.get("INVESTINY_SERVICE_TOKEN", "").strip()
-                or os.environ.get("TVDATAFEED_SERVICE_TOKEN", "").strip())
+    expected = os.environ.get("INVESTINY_SERVICE_TOKEN", "").strip()
     supplied = (authorization or "").removeprefix("Bearer ").strip()
     if not expected:
         raise HTTPException(status_code=503, detail="Investiny service token is not configured")
