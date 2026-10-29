@@ -4,7 +4,7 @@ import { marketDataAutoFixer } from './MarketDataAutoFixer.js';
 
 export const HISTORICAL_MAX_BARS = 5_000;
 export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'nse-first+investiny-history-fallback+fyers-quota-aware-fno-fallback-5000/v4';
+export const HISTORICAL_SOURCE_POLICY = 'fyers-primary-14d+investiny-2to5y-historical-backfill/v5';
 const CACHE_TTL_MS = 60_000;
 const NEGATIVE_CACHE_TTL_MS = 15_000;
 const SOURCE_TIMEOUT_MS = 10_000;
@@ -229,7 +229,8 @@ export function normalizeHistoricalCandles(rows: unknown[], source: StoredBar['s
   return normalizeRows(rows, source);
 }
 export function historicalSourcePriority(source: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed'): number {
-  switch (source) { case 'nse': return 4; case 'investiny': return 3; case 'fyers': return 2; case 'tvdatafeed': return 1; default: return 0; }
+  // FYERS wins overlapping recent bars; Investiny contributes only older history.
+  switch (source) { case 'fyers': return 4; case 'investiny': return 3; case 'nse': return 2; case 'tvdatafeed': return 1; default: return 0; }
 }
 function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
   const byTime = new Map<number, StoredBar>();
@@ -602,7 +603,7 @@ export class HistoricalDataService {
         if (result.data && Array.isArray(result.data.bars)) {
           const bars = (result.data.bars as unknown[]).map((row) => {
             if (!isRecord(row)) return null;
-            const source = row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'tvdatafeed';
+            const source = row.source === 'investiny' || row.source === 'fyers' ? row.source : 'tvdatafeed';
             return normalizeRows([row], source)[0] || null;
           }).filter((bar): bar is StoredBar => bar !== null).slice(-HISTORICAL_MAX_BARS);
           const updatedAt = Date.parse(String(result.data.updated_at || ''));
@@ -682,317 +683,140 @@ export class HistoricalDataService {
     fetchFyersRecent: FyersRecentFetcher | undefined,
     requestedBars: number,
     historyMaxLookbackYears: number | null,
-    fetchNseHistory?: PreferredHistorySourceFetcher,
+    _fetchNseHistory?: PreferredHistorySourceFetcher,
     fetchInvestinyHistory?: PreferredHistorySourceFetcher,
   ): Promise<CacheRecord> {
     const key = cacheKey(mapping.instrumentId, timeframe);
     const existing = inflight.get(key);
     if (existing) return existing;
     const task = (async (): Promise<CacheRecord> => {
-      const range = getBoundedHistoryPageRange(mapping, timeframe, requestedBars, historyMaxLookbackYears);
-      const sourceRoutingStatus: Record<string, Record<string, unknown>> = {
-        nse: { status: fetchNseHistory ? 'pending' : 'not-configured' },
-        investiny: { status: fetchInvestinyHistory ? 'pending' : 'not-configured' },
+      const now = Date.now();
+      const target = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
+      const fyersFloorMs = now - 14 * 86_400_000;
+      const requestedRange = getBoundedHistoryPageRange(mapping, timeframe, target, 0.04, now);
+      const fyersRange: BoundedHistoryPageRange = {
+        ...requestedRange,
+        fromMs: Math.max(fyersFloorMs, requestedRange.fromMs),
+        toMs: now,
+        fromDate: zonedDate(Math.max(fyersFloorMs, requestedRange.fromMs), mapping.timezone),
+        lookbackFloorMs: fyersFloorMs,
+        calendarPolicy: 'fyers-live-and-recent-history-only-14-days',
       };
-      const preferredTarget = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
-      const nseAttempt = await fetchPreferredHistoryPages('nse', fetchNseHistory, mapping, timeframe, preferredTarget);
-      sourceRoutingStatus.nse = nseAttempt.status;
-      const writePreferred = async (activeSource: 'nse' | 'investiny', freshBars: StoredBar[], investinyStatus?: Record<string, unknown>) => {
-        if (investinyStatus) sourceRoutingStatus.investiny = investinyStatus;
-        const merged = mergeStoredBars(cached?.bars || [], freshBars).slice(-HISTORICAL_MAX_BARS);
-        const now = Date.now();
-        const sourceStatus: Record<string, unknown> = {
-          nse: sourceRoutingStatus.nse,
-          investiny: sourceRoutingStatus.investiny,
-          fyers: { status: 'not-needed', reason: activeSource + ' returned validated history' },
-          tvdatafeed: { status: 'not-needed', reason: activeSource + ' returned validated history' },
-          cache: { status: cached?.bars.length ? 'merged-with-validated-cache' : 'miss' },
-          route: { activeSource, contributingSources: [...new Set(merged.map(bar => bar.source))], capability: 'historical-ohlcv', automaticFailback: true },
-          autoFixer: {
-            nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-            investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-            fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-          },
-          historyCompleteness: {
-            status: merged.length >= preferredTarget ? 'page-target-reached' : 'partial-page',
-            requestedBars: preferredTarget, returnedBars: Math.min(merged.length, preferredTarget),
-            datasetComplete: false,
-            paginationSupported: Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent),
-            hasMoreHistory: Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent),
-          },
-          calendarPolicy: range.calendarPolicy,
-        };
-        return this.writeCache({
-          instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
-          revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus,
-          degraded: activeSource !== 'nse' || merged.length < preferredTarget || ['error','partial-error','circuit-open'].includes(String(sourceRoutingStatus.nse.status)),
-          expiresAt: now + historicalFallbackCacheTtlMs(activeSource, sourceRoutingStatus.nse, now), updatedAt: now, quote: null,
-        });
-      };
-      const nseBars = nseAttempt.bars;
-      const nseMerged = mergeStoredBars(cached?.bars || [], nseBars);
-      const isFno = isFnoInstrument(mapping);
-      const investinyFallbackStatus: Record<string, unknown> = { status: fetchInvestinyHistory ? 'not-needed' : 'not-configured' };
-      if (nseBars.length && (!isFno || nseMerged.length >= preferredTarget)) {
-        let selectedBars = nseBars;
-        let investinyStatus: Record<string, unknown> = investinyFallbackStatus;
-        if (!isFno && fetchInvestinyHistory && nseMerged.length < preferredTarget) {
-          const remaining = Math.max(1, preferredTarget - nseMerged.length);
-          const investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, remaining, nseBars[0]!.timestampMs - 1);
-          investinyStatus = { ...investinyAttempt.status, role: 'older-history-gap-fill' };
-          selectedBars = mergeStoredBars(investinyAttempt.bars, selectedBars);
-        }
-        return writePreferred('nse', selectedBars, investinyStatus);
-      }
-      sourceRoutingStatus.investiny = isFno ? { status: 'skipped-fno-uses-fyers' } : { status: fetchInvestinyHistory ? 'pending' : 'not-configured' };
-      if (!isFno) {
-        const investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, preferredTarget);
-        sourceRoutingStatus.investiny = investinyAttempt.status;
-        if (investinyAttempt.bars.length) return writePreferred('investiny', investinyAttempt.bars);
-      }
-      const tvConfigured = Boolean(envValue('TVDATAFEED_SERVICE_URL') && envValue('TVDATAFEED_SERVICE_TOKEN'));
-      const tvCompatible = Boolean(mapping.tvSymbol && mapping.tvExchange && this.tvContractCompatible(mapping));
-      const tvEnabled = tvConfigured && tvCompatible;
-      const targetBars = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
-      const MAX_FYERS_PAGES_PER_REFRESH = 8;
       const fyersByTime = new Map<number, StoredBar>();
-      const fyersPageStats: Array<Record<string, unknown>> = [];
+      const fyersPages: Array<Record<string, unknown>> = [];
       let quote: HistoricalQuoteSnapshot | null = null;
-      let fyersFailed = false;
       let fyersError: string | undefined;
-      let pagesFetched = 0;
-      let emptyPages = 0;
-      let exhaustedByPlan = false;
-      let stoppedByEmpty = false;
-      let nextToMs = range.toMs;
+      let fyersFailed = false;
+      let nextToMs = fyersRange.toMs;
+      const pageBudget = 8;
 
-      // A page is bounded by FYERS' per-resolution date-range ceiling. Walk back
-      // only until the chart's requested bar count is met, the plan lookback is
-      // exhausted, a source gap is detected, or a conservative per-refresh call
-      // budget is reached. Every individual attempt still enters the same Redis gate.
-      while (fetchFyersRecent && fyersByTime.size < targetBars && pagesFetched < MAX_FYERS_PAGES_PER_REFRESH) {
-        if (range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs) {
-          exhaustedByPlan = true;
-          break;
-        }
-        const pageRange = pagesFetched === 0
-          ? range
-          : getBoundedHistoryPageRange(
-              mapping,
-              timeframe,
-              Math.max(1, targetBars - fyersByTime.size),
-              historyMaxLookbackYears,
-              nextToMs,
-            );
-        if (pageRange.toMs <= pageRange.fromMs) {
-          exhaustedByPlan = range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs;
-          break;
-        }
-
-        pagesFetched += 1;
-        try {
-          const result = await fetchFyersRecent(mapping, pageRange);
-          const rawBars = Array.isArray(result.bars) ? result.bars : [];
-          if (!quote && result.quote) quote = result.quote;
-          const pageBars = normalizeRows(rawBars, 'fyers').filter(bar =>
-            bar.timestampMs >= pageRange.fromMs && bar.timestampMs <= pageRange.toMs,
-          );
-          for (const bar of pageBars) {
-            const previous = fyersByTime.get(bar.timestampMs);
-            if (!previous || bar.source === 'fyers') fyersByTime.set(bar.timestampMs, bar);
-          }
-          fyersPageStats.push({
-            page: pagesFetched,
-            fromMs: pageRange.fromMs,
-            toMs: pageRange.toMs,
-            rawCount: rawBars.length,
-            validatedCount: pageBars.length,
-            ...(isRecord(result.status) ? { providerStatus: result.status } : {}),
-          });
-          emptyPages = pageBars.length ? 0 : emptyPages + 1;
-          if (pageBars.length) {
-            const oldestPageBar = pageBars.reduce((oldest, bar) => Math.min(oldest, bar.timestampMs), Number.POSITIVE_INFINITY);
-            nextToMs = oldestPageBar - 1;
-          } else {
-            // No validated bar in this range; advance to the preceding bounded
-            // range, then fall back to the alternate feed only if the gap persists.
-            nextToMs = pageRange.fromMs - 1;
-          }
-          if (range.lookbackFloorMs != null && nextToMs <= range.lookbackFloorMs) {
-            exhaustedByPlan = true;
+      // FYERS is the only source for live updates and recent candles. Historical
+      // requests are strictly bounded to the most recent 14 calendar days.
+      if (fetchFyersRecent) {
+        for (let page = 0; page < pageBudget && nextToMs >= fyersFloorMs; page += 1) {
+          const pageRange: BoundedHistoryPageRange = {
+            ...getBoundedHistoryPageRange(mapping, timeframe, Math.max(1, target - fyersByTime.size), 0.04, nextToMs),
+            fromMs: Math.max(fyersFloorMs, getBoundedHistoryPageRange(mapping, timeframe, Math.max(1, target - fyersByTime.size), 0.04, nextToMs).fromMs),
+            toMs: nextToMs,
+            lookbackFloorMs: fyersFloorMs,
+            calendarPolicy: 'fyers-live-and-recent-history-only-14-days',
+          };
+          if (pageRange.toMs <= pageRange.fromMs) break;
+          try {
+            const result = await fetchFyersRecent(mapping, pageRange);
+            const raw = Array.isArray(result?.bars) ? result.bars : [];
+            if (!quote && result?.quote) quote = result.quote;
+            const bars = normalizeRows(raw, 'fyers').filter(bar => bar.timestampMs >= fyersFloorMs && bar.timestampMs <= pageRange.toMs);
+            for (const bar of bars) fyersByTime.set(bar.timestampMs, bar);
+            fyersPages.push({ page: page + 1, fromMs: pageRange.fromMs, toMs: pageRange.toMs, rawCount: raw.length, validatedCount: bars.length });
+            if (!bars.length) break;
+            const oldest = bars.reduce((value, bar) => Math.min(value, bar.timestampMs), Number.POSITIVE_INFINITY);
+            if (!Number.isFinite(oldest) || oldest <= fyersFloorMs || oldest >= nextToMs) break;
+            nextToMs = oldest - 1;
+          } catch (error) {
+            fyersFailed = true;
+            fyersError = errorText(error);
+            fyersPages.push({ page: page + 1, fromMs: pageRange.fromMs, toMs: pageRange.toMs, status: 'error', error: fyersError });
             break;
           }
-          if (emptyPages >= 2) {
-            stoppedByEmpty = true;
-            break;
-          }
-        } catch (error) {
-          fyersFailed = true;
-          fyersError = errorText(error);
-          fyersPageStats.push({
-            page: pagesFetched,
-            fromMs: pageRange.fromMs,
-            toMs: pageRange.toMs,
-            status: 'error',
-            error: fyersError,
-          });
-          break;
         }
       }
 
-      const fyersRows: unknown[] = [...fyersByTime.values()]
-        .sort((a, b) => a.timestampMs - b.timestampMs)
-        .slice(-targetBars);
-      const fyersFallbackRequired = !fetchFyersRecent || fyersFailed || fyersRows.length === 0 || exhaustedByPlan || stoppedByEmpty;
-      let tvRows: unknown[] = [];
-      let tvFailed = false;
-      let tvStatus: Record<string, unknown> = {
-        status: !tvConfigured ? 'not-configured' : !mapping.tvSymbol || !mapping.tvExchange ? 'unmapped'
-          : !tvEnabled ? 'contract-mismatch'
-            : fyersFallbackRequired ? 'pending' : fyersRows.length >= targetBars ? 'not-needed-fyers-target-reached' : 'not-needed-fyers-pagination-available',
-      };
+      const recentBars = [...fyersByTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-target);
+      const recentFloor = recentBars[0]?.timestampMs ?? now;
+      const years = Math.max(2, Math.min(5, Number(historyMaxLookbackYears) || 5));
+      const longFloorMs = now - years * 365.25 * 86_400_000;
+      const olderTarget = Math.max(0, target - recentBars.length);
+      let investinyAttempt: ProviderBarsAttempt = { bars: [], status: { status: fetchInvestinyHistory ? 'pending' : 'not-configured' } };
 
-      // The alternate feed is queried only when FYERS is unavailable, reaches the
-      // user's plan lookback, or repeatedly has no validated bars. If a Prime user
-      // still has more FYERS history but this request's page budget is exhausted,
-      // return explicit partial metadata instead of switching sources unnecessarily.
-      if (tvEnabled && fyersFallbackRequired) {
-        try {
-          tvRows = await this.fetchTvdatafeed(mapping, timeframe);
-          tvStatus = { status: tvRows.length ? 'ok' : 'empty', rawCount: tvRows.length };
-        } catch (error) {
-          tvFailed = true;
-          tvStatus = { status: 'error', error: errorText(error) };
-        }
+      // Investiny is historical-only: it fills the older portion before the
+      // oldest FYERS candle and is bounded to a configurable 2–5 year window.
+      // It never replaces a validated FYERS candle or supplies a live quote.
+      if (fetchInvestinyHistory && (olderTarget > 0 || !recentBars.length)) {
+        const investinyEnd = recentBars.length ? recentFloor - 1 : now;
+        const investinyRange = getBoundedHistoryPageRange(mapping, timeframe, Math.max(1, olderTarget || target), years, investinyEnd);
+        const boundedRange: BoundedHistoryPageRange = {
+          ...investinyRange,
+          fromMs: Math.max(longFloorMs, investinyRange.fromMs),
+          toMs: investinyEnd,
+          lookbackFloorMs: longFloorMs,
+          calendarPolicy: 'investiny-historical-backfill-' + years + '-years',
+        };
+        investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, Math.max(1, olderTarget || target), boundedRange.toMs);
+        investinyAttempt.bars = investinyAttempt.bars.filter(bar => bar.timestampMs >= longFloorMs && bar.timestampMs < investinyEnd);
       }
 
-      const pageRangeFromMs = fyersPageStats.length
-        ? Number(fyersPageStats[fyersPageStats.length - 1]!.fromMs)
-        : range.fromMs;
-      const pageRangeToMs = fyersPageStats.length
-        ? Number(fyersPageStats[0]!.toMs)
-        : range.toMs;
+      const allowedCached = (cached?.bars || []).filter(bar =>
+        (bar.source === 'fyers' && bar.timestampMs >= fyersFloorMs) ||
+        (bar.source === 'investiny' && bar.timestampMs >= longFloorMs && bar.timestampMs < recentFloor),
+      );
+      const merged = mergeStoredBars(
+        allowedCached.filter(bar => !recentBars.some(recent => recent.timestampMs === bar.timestampMs)),
+        [...investinyAttempt.bars.filter(bar => bar.timestampMs < recentFloor), ...recentBars],
+      ).slice(-HISTORICAL_MAX_BARS);
+      const activeSource = recentBars.length ? 'fyers' : investinyAttempt.bars.length ? 'investiny' : allowedCached.length ? 'cache' : 'none';
       const sourceStatus: Record<string, unknown> = {
-        nse: sourceRoutingStatus.nse,
-        investiny: sourceRoutingStatus.investiny,
-        autoFixer: {
-          nse: marketDataAutoFixer.snapshot('nse', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-          investiny: marketDataAutoFixer.snapshot('investiny', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-          fyers: marketDataAutoFixer.snapshot('fyers', 'history', mapping.instrumentId + ':' + timeframe)[0] || null,
-        },
+        nse: { status: 'disabled', reason: 'NSE scraper removed from market-data routing' },
         fyers: {
-          status: fyersRows.length ? fyersFailed ? 'partial-error' : 'ok' : fyersFailed ? 'error' : fetchFyersRecent ? 'empty' : 'unavailable',
-          rawCount: fyersPageStats.reduce((sum, page) => sum + Number(page.rawCount || 0), 0),
-          validatedCount: fyersRows.length,
-          pagesFetched,
-          pageBudget: MAX_FYERS_PAGES_PER_REFRESH,
-          pages: fyersPageStats,
+          status: recentBars.length ? (fyersFailed ? 'partial-error' : 'ok') : fetchFyersRecent ? 'empty' : 'not-configured',
+          validatedCount: recentBars.length, pages: fyersPages, pageBudget, historyWindowDays: 14,
+          windowStart: new Date(fyersFloorMs).toISOString(), windowEnd: new Date(now).toISOString(),
           ...(fyersError ? { error: fyersError } : {}),
-          ...(exhaustedByPlan ? { lookbackExhausted: true } : {}),
         },
-        tvdatafeed: tvStatus,
-        calendarPolicy: range.calendarPolicy,
-        cache: { status: this.supabase && !this.cacheTableUnavailable ? 'durable' : 'memory-fallback' },
+        investiny: {
+          ...investinyAttempt.status, role: 'older-historical-backfill', validatedCount: investinyAttempt.bars.length,
+          historyWindowYears: years, windowStart: new Date(longFloorMs).toISOString(),
+          windowEnd: new Date(recentFloor).toISOString(),
+        },
+        tvdatafeed: { status: 'disabled', reason: 'Investiny is the configured historical backfill provider' },
+        cache: { status: cached?.bars.length ? 'merged-with-source-validated-cache' : 'miss' },
+        route: {
+          activeSource, liveSource: 'fyers', recentHistorySource: 'fyers', olderHistorySource: 'investiny',
+          contributingSources: [...new Set(merged.map(bar => bar.source))],
+          capability: 'historical-ohlcv', fyersHistoryWindowDays: 14, investinyHistoryWindowYears: years,
+        },
+        historyCompleteness: {
+          status: merged.length >= target ? 'requested-bar-target-reached' : 'partial-history',
+          requestedBars: target, returnedBars: Math.min(merged.length, target),
+          datasetComplete: false, paginationSupported: Boolean(fetchFyersRecent || fetchInvestinyHistory),
+          hasMoreHistory: Boolean(fetchInvestinyHistory), lookbackYears: years,
+        },
+        calendarPolicy: 'FYERS-recent-14-days+Investiny-older-history',
       };
-      let fyersAll = fyersRows as StoredBar[];
-      const dates = sessionDates(fyersAll, mapping.timezone);
-      const recentDates = new Set(dates);
-      const fyersBars = fyersAll;
-      let tvBars = normalizeRows(tvRows, 'tvdatafeed');
-      const firstRecentDate = dates[0] || null;
-      if (firstRecentDate) {
-        // FYERS wins for all sessions its bounded page covers. TV fills only
-        // validated older history outside that page and never overwrites it.
-        tvBars = tvBars.filter(bar => zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate);
-      }
-
-      // If tvdatafeed is unavailable or returns no validated bars, preserve the
-      // older portion of a previously validated dataset for this same, explicitly
-      // compatible instrument mapping. Never reuse cached bars from recent Fyers
-      // sessions, and never present the fallback as a fresh source response.
-      const cachedOlderBars = cached?.bars.length > 0 && tvBars.length === 0 && this.tvContractCompatible(mapping)
-        ? cached.bars.filter(bar => !firstRecentDate || zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate)
-        : [];
-
-      const byTime = new Map<number, StoredBar>();
-      for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars, ...nseBars]) {
-        const old = byTime.get(bar.timestampMs);
-        if (!old || historicalSourcePriority(bar.source) >= historicalSourcePriority(old.source)) {
-          byTime.set(bar.timestampMs, bar);
-        }
-      }
-      const merged = [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
-      const pageTarget = Math.min(HISTORICAL_MAX_BARS, requestedBars);
-      const targetReached = merged.length >= pageTarget;
-      const tvNeededButUnavailable = !targetReached && (!tvEnabled || tvFailed || tvBars.length === 0);
-      const degraded = fyersFailed || fyersBars.length === 0 || tvNeededButUnavailable || ['error','partial-error','circuit-open'].includes(String(sourceRoutingStatus.nse.status));
-      sourceStatus.fyers = {
-        ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}),
-        validatedCount: fyersBars.length,
-        sessions: [...recentDates].sort(),
-        pageRangeFrom: new Date(range.fromMs).toISOString(),
-        pageRangeTo: new Date(range.toMs).toISOString(),
-      };
-      const paginationAvailable = Boolean(fetchNseHistory || fetchInvestinyHistory || fetchFyersRecent);
-      sourceStatus.historyCompleteness = {
-        status: targetReached ? 'page-target-reached' : 'partial-page',
-        requestedBars: pageTarget,
-        returnedBars: Math.min(merged.length, pageTarget),
-        fyersReturnedBars: fyersBars.length,
-        providerPageLimit: 2_000,
-        paginationSupported: paginationAvailable,
-        datasetComplete: false,
-        hasMoreHistory: paginationAvailable,
-        pageRangeFrom: new Date(range.fromMs).toISOString(),
-        pageRangeTo: new Date(range.toMs).toISOString(),
-        lookbackFloor: range.lookbackFloorMs == null ? null : new Date(range.lookbackFloorMs).toISOString(),
-      };
-      sourceStatus.tvdatafeed = {
-        ...(isRecord(sourceStatus.tvdatafeed) ? sourceStatus.tvdatafeed : {}),
-        validatedCount: tvBars.length,
-        cachedOlderFallbackCount: cachedOlderBars.length,
-        candidateCap: HISTORICAL_MAX_BARS,
-        arbitraryEndPaging: Boolean(fetchFyersRecent),
-        requestRange: { from: new Date(range.fromMs).toISOString(), to: new Date(range.toMs).toISOString() },
-      };
-      sourceStatus.noValidatedBars = merged.length === 0;
-      const activeSource = nseBars.length ? 'nse'
-        : fyersBars.length ? 'fyers'
-          : tvBars.length ? 'tvdatafeed'
-            : cachedOlderBars.length ? 'cache' : 'none';
-      sourceStatus.route = {
-        activeSource,
-        contributingSources: [...new Set(merged.map(bar => bar.source))],
-        capability: 'historical-ohlcv',
-        automaticFailback: true,
-      };
-      let record: CacheRecord = {
+      const record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
-        revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
-        expiresAt: Date.now() + historicalFallbackCacheTtlMs(activeSource, sourceRoutingStatus.nse), updatedAt: Date.now(), quote,
+        revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus,
+        degraded: !recentBars.length || merged.length < target || fyersFailed || !fetchInvestinyHistory,
+        expiresAt: Date.now() + (recentBars.length ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS),
+        updatedAt: Date.now(), quote,
       };
       if (!merged.length && cached?.bars.length) {
-        const staleRecord: CacheRecord = {
-          ...cached,
-          sourcePolicy: HISTORICAL_SOURCE_POLICY,
-          // Let the breaker probe promptly after its normal cooldown rather than
-          // serving stale data for the full successful-cache TTL.
-          expiresAt: Date.now() + NEGATIVE_CACHE_TTL_MS,
-          updatedAt: Date.now(),
-          sourceStatus: {
-            ...sourceStatus,
-            staleCacheFallback: true,
-            previousSourcePolicy: cached.sourcePolicy,
-          },
-          degraded: true,
-          quote: quote || null,
-        };
-        // Preserve previously validated candles during a total source outage,
-        // including cache records written by the previous source policy.
-        return this.writeCache(staleRecord);
+        return this.writeCache({
+          ...cached, sourcePolicy: HISTORICAL_SOURCE_POLICY, expiresAt: Date.now() + NEGATIVE_CACHE_TTL_MS,
+          updatedAt: Date.now(), sourceStatus: { ...sourceStatus, staleCacheFallback: true }, degraded: true, quote,
+        });
       }
-      record = await this.writeCache(record);
-      return record;
+      return this.writeCache(record);
     })().finally(() => inflight.delete(key));
     inflight.set(key, task);
     return task;
