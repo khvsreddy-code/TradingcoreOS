@@ -23,7 +23,7 @@ assert.ok(compiled.ir, 'the test fixture must produce compiler IR');
 const policy = validateCoreSpiritChartCapabilities(compiled.ir);
 assert.deepEqual(policy.filter(item => item.severity === 'error'), [], 'a basic chart indicator passes the shared chart capability gate');
 
-const denied = validateCoreSpiritChartCapabilities({ requiredCapabilities: ['automation'] } as any);
+const denied = validateCoreSpiritChartCapabilities({ requiredCapabilities: ['automation'] });
 assert.ok(denied.some(item => item.code === 'CHART_CAPABILITY_DENIED' && item.severity === 'error'),
   'the shared chart gate must reject automation capabilities outside the chart target');
 
