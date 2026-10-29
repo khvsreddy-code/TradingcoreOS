@@ -95,7 +95,7 @@ assert.throws(() => requireCoreSpiritOutputs([
 assert.ok(!outputs.some(item => item.kind === 'series'),
   'the SMC port must not paint rolling extrema as continuous plots across every candle');
 const structureLines = outputs.filter(item => item.kind === 'line');
-assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vela line drawings');
+assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vela line drawings; outputKinds=' + JSON.stringify([...new Set(outputs.map(item => item.kind))]) + '; structureLabels=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => item.text).filter(text => /BOS|CHoCH|^(HH|LH|HL|LL|SH|SL)$/.test(text)).slice(-30)));
 assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.start.price === item.end.price),
   'BOS/CHoCH structure lines must use chart-time anchors and a stable horizontal price level');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
