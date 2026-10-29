@@ -51,9 +51,8 @@ bars[25] = candle(25, 108, 113, 107.5, 112); // bullish imbalance, still below t
 bars[35] = candle(35, 82, 83, 78, 80); // confirmed swing low; later break exercises bearish structure output
 bars[52] = candle(52, 102, 107, 101.5, 106); // bullish retracement before the confirmed pivot
 bars[55] = candle(55, 112, 115, 111.5, 114); // pivot high dominates the prior 50 bars and confirms at bar 105
-bars[75] = candle(75, 64, 67, 62, 63); // pivot low dominates the prior 50 bars and confirms at bar 125
-bars[115] = candle(115, 116.4, 122, 116.2, 120); // break the confirmed swing high, producing BOS after confirmation
-bars[135] = candle(135, 58, 61, 56, 58); // break the confirmed swing low against bullish bias, producing CHoCH
+bars[95] = candle(95, 72, 73, 68, 70); // breaks the confirmed bar-35 swing low first, establishing bearish bias
+bars[115] = candle(115, 116.4, 122, 116.2, 120); // breaks the later confirmed swing high against bearish bias, producing CHoCH
 
 const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
@@ -95,13 +94,13 @@ assert.throws(() => requireCoreSpiritOutputs([
 assert.ok(!outputs.some(item => item.kind === 'series'),
   'the SMC port must not paint rolling extrema as continuous plots across every candle');
 const structureLines = outputs.filter(item => item.kind === 'line');
-assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vela line drawings; outputKinds=' + JSON.stringify([...new Set(outputs.map(item => item.kind))]) + '; structureLabels=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => item.text).filter(text => /BOS|CHoCH|^(HH|LH|HL|LL|SH|SL)$/.test(text)).slice(-30)));
+assert.ok(structureLines.length > 0, 'structure breaks must produce anchored Vela line drawings');
 assert.ok(structureLines.every(item => item.start.time <= item.end.time && item.start.price === item.end.price),
   'BOS/CHoCH structure lines must use chart-time anchors and a stable horizontal price level');
 assert.ok(outputs.some(item => item.kind === 'label' && /BOS/.test(item.text)), 'structure breaks must produce BOS chart labels');
 assert.ok(structureLines.length < bars.length / 3,
   'structure drawings should be emitted on break transitions, not on every bar after the break');
-assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label; observed structure labels=' + JSON.stringify(outputs.filter(item => item.kind === 'label').map(item => item.text)));
+assert.ok(outputs.some(item => item.kind === 'label' && /CHoCH/.test(item.text)), 'a break against the retained structure bias must produce a CHoCH label');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#00FF68'), 'bullish fair-value gaps must produce green chart zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#FF0008'), 'bearish fair-value gaps must produce red chart zones');
 const fvgZones = outputs.filter(item => item.kind === 'zone' && (item.style?.fillColor === '#00FF68' || item.style?.fillColor === '#FF0008'));
