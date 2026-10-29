@@ -129,7 +129,7 @@ includes(smcBrowser, 'is now running on the active Vela chart', 'browser accepta
 includes(smcBrowser, 'kindCounts', 'browser acceptance inspects the committed native drawing kinds');
 includes(smcBrowser, 'recompileIdempotency', 'SMC browser acceptance recompiles the identical script against the active Vela scene');
 includes(smcBrowser, 'instanceCountAfter: replayState.count', 'recompilation acceptance proves the active chart retains only one matching script instance');
-includes(smcBrowser, 'assert.deepEqual(replayState.ids, initialInstanceState.ids)', 'same-source recompile retains its stable Vela instance ID');
+includes(smcBrowser, 'assert.deepEqual(replayState.ids, initialInstanceState.ids,', 'same-source recompile retains its stable Vela instance ID');
 includes(smcBrowser, 'Recompiling the identical SMC source must leave exactly one attached CoreSpirit instance', 'recompilation acceptance prevents duplicate retained chart instances');
 includes(backendBenchmark, 'executeCoreSpiritSeriesFusionGroupDispatched', 'backend benchmark exercises the real series dispatcher instead of a stand-alone kernel alone');
 includes(backendBenchmark, 'short-history-and-missing-values', 'backend acceptance tests missing values and short-history semantics');
