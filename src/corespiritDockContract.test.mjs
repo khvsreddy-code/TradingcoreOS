@@ -101,8 +101,8 @@ includes(dock, 'Suggested correction:', 'live dock presents structured diagnosti
 includes(dock, 'Chart-side indicator manager', 'live dock exposes a chart-side script manager');
 includes(dock, 'manager.setInput(instance.id, field.key, value)', 'chart-manager input changes use Vela indicator handles');
 includes(dock, 'manager.setProp(instance.id, field.key, value)', 'chart-manager appearance changes use Vela indicator handles');
-includes(dock, 'manager.setVisible(instance.id, !instance.visible)', 'chart-manager visibility is backed by the Vela indicator handle');
-includes(dock, 'manager.remove(instance.id)', 'chart-manager removal uses Vela lifecycle rather than deleting renderer objects directly');
+includes(dock, 'chartManagerFromWindow()?.setVisible(instance.id, !instance.visible)', 'chart-manager visibility is backed by the Vela indicator handle');
+includes(dock, 'chartManagerFromWindow()?.remove(instance.id)', 'chart-manager removal uses Vela lifecycle rather than deleting renderer objects directly');
 includes(dock, 'Editor differs · chart still runs this saved source', 'the editor distinguishes source edits from the source currently running on the chart');
 includes(editorPage, 'UNAPPLIED EDITS · CHART RUNS PREVIOUS SOURCE', 'full-page editor clearly distinguishes unsaved edits from running chart source');
 includes(live, '__TCO_CORESPIRIT_CHART_MANAGER__', 'the live Vela workspace exposes an active-cell indicator-manager bridge');
