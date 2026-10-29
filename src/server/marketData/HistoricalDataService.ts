@@ -384,12 +384,12 @@ function isRecord(value: unknown): value is Record<string, unknown> { return Boo
  */
 export function historicalFallbackCacheTtlMs(
   activeSource: string,
-  nseStatus: Record<string, unknown>,
+  providerStatus: Record<string, unknown>,
   now = Date.now(),
 ): number {
-  const status = String(nseStatus.status || '');
+  const status = String(providerStatus.status || '');
   if (!['error', 'partial-error', 'circuit-open'].includes(status)) return CACHE_TTL_MS;
-  const rawHealth = nseStatus.health;
+  const rawHealth = providerStatus.health;
   const health = rawHealth && typeof rawHealth === 'object' ? rawHealth as Record<string, unknown> : null;
   const nextProbeAt = Number(health?.nextProbeAt);
   if (!Number.isFinite(nextProbeAt)) return NEGATIVE_CACHE_TTL_MS;
@@ -552,39 +552,6 @@ export class HistoricalDataService {
       adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
       calendarHolidays: [], calendarComplete: false, enabled: true,
     };
-  }
-
-  private tvContractCompatible(mapping: HistoricalInstrumentMapping): boolean {
-    if (!mapping.tvSymbol || !mapping.tvExchange) return false;
-    // Never merge independently adjusted price histories without a source-specific
-    // adjustment transform; this implementation only merges matching policies.
-    if (mapping.fyersAdjustmentPolicy !== mapping.tvAdjustmentPolicy) return false;
-    const derivative = ['future', 'futures', 'option', 'options'].includes(mapping.instrumentType);
-    if (!derivative) return true;
-    const fyersIdentity = mapping.contractIdentity || mapping.contractExpiry || '';
-    return Boolean(fyersIdentity && mapping.tvContractIdentity && fyersIdentity === mapping.tvContractIdentity);
-  }
-
-  private async fetchTvdatafeed(mapping: HistoricalInstrumentMapping, timeframe: string): Promise<unknown[]> {
-    const baseUrl = envValue('TVDATAFEED_SERVICE_URL').replace(/\/+$/, '');
-    const token = envValue('TVDATAFEED_SERVICE_TOKEN');
-    if (!baseUrl || !token || !this.tvContractCompatible(mapping)) return [];
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
-    try {
-      const response = await fetch(baseUrl + '/v1/history', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({
-          instrument_id: mapping.instrumentId, symbol: mapping.tvSymbol, exchange: mapping.tvExchange,
-          timeframe, max_bars: HISTORICAL_MAX_BARS, timezone: mapping.timezone,
-          session_open: mapping.sessionOpen, fut_contract: mapping.tvFutContract,
-        }), signal: controller.signal,
-      });
-      if (!response.ok) throw new Error('tvdatafeed service returned HTTP ' + response.status);
-      const payload: unknown = await response.json();
-      if (!isRecord(payload) || !Array.isArray(payload.bars)) throw new Error('tvdatafeed returned an invalid OHLCV envelope');
-      return payload.bars;
-    } finally { clearTimeout(timer); }
   }
 
   private async readCache(instrumentId: string, timeframe: string): Promise<CacheRecord | null> {
@@ -773,7 +740,6 @@ export class HistoricalDataService {
       ).slice(-HISTORICAL_MAX_BARS);
       const activeSource = recentBars.length ? 'fyers' : investinyAttempt.bars.length ? 'investiny' : allowedCached.length ? 'cache' : 'none';
       const sourceStatus: Record<string, unknown> = {
-        nse: { status: 'disabled', reason: 'NSE scraper removed from market-data routing' },
         fyers: {
           status: recentBars.length ? (fyersFailed ? 'partial-error' : 'ok') : fetchFyersRecent ? 'empty' : 'not-configured',
           validatedCount: recentBars.length, pages: fyersPages, pageBudget, historyWindowDays: 14,
@@ -785,7 +751,6 @@ export class HistoricalDataService {
           historyWindowYears: years, windowStart: new Date(longFloorMs).toISOString(),
           windowEnd: new Date(recentFloor).toISOString(),
         },
-        tvdatafeed: { status: 'disabled', reason: 'Investiny is the configured historical backfill provider' },
         cache: { status: cached?.bars.length ? 'merged-with-source-validated-cache' : 'miss' },
         route: {
           activeSource, liveSource: 'fyers', recentHistorySource: 'fyers', olderHistorySource: 'investiny',
