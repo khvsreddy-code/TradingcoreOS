@@ -92,11 +92,21 @@ assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor ===
   'bearish FVGs must preserve their original bounds');
 const hasBullishOrderBlock = outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC');
 const bullishOrderBlockDebug = hasBullishOrderBlock ? [] : executeCoreSpirit(source + `
+if bar_index == 167 {
+    if close < open { label("DBG_BAR167_BEARISH_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
+    if close >= open { label("DBG_BAR167_BEARISH_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if time[0] > 0 { label("DBG_TIME0_POSITIVE_AT_167", "below", "#00FF00", "#000000", 8, "pill") }
+}
 if bar_index == 170 {
     if swingBullBreak == true { label("DBG_SWING_BULL_BREAK_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
     if swingBullBreak == false { label("DBG_SWING_BULL_BREAK_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
-    if lastBearishTime > 0 { labelAt(time[0], lastBearishTime, "DBG_LAST_BEARISH_TIME", "below", "#00FF00", "#000000", 8, "pill", "600") }
+    if lastBearishTime > 0 { label("DBG_LAST_BEARISH_TIME_POSITIVE", "below", "#00FF00", "#000000", 8, "pill") }
     if lastBearishTime <= 0 { label("DBG_LAST_BEARISH_TIME_ZERO", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if lastBearishTime != lastBearishTime { label("DBG_LAST_BEARISH_TIME_NAN", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if showOrderBlockZones == true { label("DBG_OB_INPUT_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
+    if showOrderBlockZones == false { label("DBG_OB_INPUT_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
+    if showOrderBlockZones == true and swingBullBreak == true and lastBearishTime > 0 { label("DBG_OB_GATE_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
+    if showOrderBlockZones == false or swingBullBreak == false or lastBearishTime <= 0 { label("DBG_OB_GATE_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
     if swingPivotHigh > 0 { labelAt(time[0], swingPivotHigh, "DBG_SWING_PIVOT_HIGH", "above", "#00FF00", "#000000", 8, "pill", "600") }
     if close > swingPivotHigh and close[1] <= swingPivotHigh { label("DBG_SWING_CROSSING_TRUE", "above", "#00FF00", "#000000", 8, "pill") }
     if bullObExists == true { label("DBG_BULL_OB_EXISTS_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
