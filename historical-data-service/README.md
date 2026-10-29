@@ -1,19 +1,18 @@
-# TradingCoreOS Historical Data Service
+# TradingCoreOS Historical Backfill Service
 
-Private FastAPI service isolating history libraries from browser and broker/order adapters. Every endpoint is protected by a server-only bearer token and should sit behind network restrictions. It provides historical OHLCV only.
+Private FastAPI service for historical OHLCV backfill only. TradingCoreOS uses the authenticated FYERS API and FYERS WebSocket as the live/recent market-data path; FYERS historical requests are bounded to the latest 14 calendar days. This service supplies older history from Investiny and never emits live quotes or ticks.
 
 ## Runtime
 
-Install dependencies from \`requirements.txt\`. The existing tvdatafeed adapter is \`POST /v1/history\`. The optional Investiny adapter is \`POST /v1/investiny/history\`, enabled only when \`INVESTINY_ENABLED=true\`. Both endpoints share a two-worker executor, bounded queue, request deadline and bearer-token authentication. The Investiny endpoint accepts the separate \`INVESTINY_SERVICE_TOKEN\`, falling back to \`TVDATAFEED_SERVICE_TOKEN\`.
+Install dependencies from `requirements.txt` and run `uvicorn app:app --host 0.0.0.0 --port 8080 --workers 1`. The service exposes `POST /v1/investiny/history` and `GET /health`. Requests require a server-only bearer token in `INVESTINY_SERVICE_TOKEN`. The service has bounded concurrency, request deadlines, a maximum of 5,000 bars per response, strict timestamp/OHLCV validation, and explicit historical-only metadata.
 
-Investiny requires an exact numeric Investing.com asset ID supplied by the authenticated TradingCoreOS server. It does not perform fuzzy symbol discovery and does not provide live quotes/ticks. The package is unofficial, last published in 2022, and its upstream can fail or change. Only enable it when your data-use rights and upstream terms permit your intended usage; do not use IP rotation, fingerprint spoofing or alternate hidden endpoints as a recovery tactic.
+Investiny requires an exact numeric Investing.com asset ID supplied by the authenticated TradingCoreOS server. It does not perform fuzzy symbol discovery. The package is unofficial and may fail or change; use only where your data-use rights and upstream terms permit. Do not rotate identities, spoof fingerprints, or probe hidden endpoints as a recovery strategy.
 
-## Investiny interface
+## Source policy
 
-\`POST /v1/investiny/history\` accepts \`instrument_id\`, \`investing_id\`, \`timeframe\`, \`from_ms\`, \`to_ms\`, \`max_bars\`, IANA \`timezone\`, and \`session_open\`. It returns normalized bars and explicit \`historical_only: true\` / \`live_stream_supported: false\` metadata. Seconds timeframes are rejected. Non-native minute intervals are aggregated from supported finer intervals using the session open as the bucket anchor, then filtered and validated.
+- **FYERS:** live ticks and forming/closed candle updates; recent historical candles, with a strict 14-day historical window.
+- **Investiny:** older historical candles only, up to a configurable 2–5-year lookback and within the 5,000-bar chart/history cap.
+- **Orders:** remain on the independent FYERS order execution path; the historical backfill service cannot place orders.
+- **NSE scraper / tvdatafeed:** not used by this service.
 
-Supported underlying intervals are 1, 5, 15, 30, 60, 300 minutes, daily, weekly and monthly. Intraday history depth varies by interval and may be limited. HTTP 403, empty or malformed responses trigger fallback; do not retry aggressively.
-
-## Source-of-truth policy
-
-TradingCoreOS routes an authorized NSE gateway first. Investiny is a historical-only fallback for explicitly mapped non-derivatives. F&O/options fall through to the existing quota-gated FYERS API when NSE is unavailable; existing tvdatafeed remains a final legacy fallback if contract identity and adjustment policy match. Source priority for overlapping timestamps is NSE, Investiny, FYERS, then tvdatafeed; F&O/options skip Investiny entirely and retain FYERS as the broker fallback.
+The server requires exact instrument-to-Investing.com numeric IDs in `INVESTINY_SYMBOL_MAP`; it must not guess an asset based on fuzzy text matching. Intraday history availability depends on the upstream instrument and interval, so responses must report the actual validated candle count rather than fabricate missing bars.
