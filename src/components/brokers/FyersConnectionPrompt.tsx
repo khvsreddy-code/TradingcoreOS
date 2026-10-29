@@ -105,11 +105,11 @@ export function FyersConnectionPrompt({
         <p>
           {expired
             ? 'FYERS access tokens expire daily. Reauthorize to resume broker-backed quotes, options data and live trading.'
-            : 'You can connect FYERS now or continue with delayed Yahoo Finance charts and quotes. Yahoo data is checked every 4 seconds; availability and delay vary by symbol.'}
+            : 'You can connect FYERS for live quotes and options, or continue with historical candles from the configured NSE-first source router. If authorized NSE/Investiny providers are unavailable, the chart will report that instead of silently substituting Yahoo prices.'}
         </p>
         <div className="tco-fyers-prompt-caption">
-          <span><Clock3 className="h-3 w-3" /> Yahoo fallback · 4-second refresh checks</span>
-          <span><CheckCircle2 className="h-3 w-3" /> Yahoo data is for charting/research; live orders still require broker authorization and risk checks</span>
+          <span><Clock3 className="h-3 w-3" /> Historical source · provider availability is shown honestly</span>
+          <span><CheckCircle2 className="h-3 w-3" /> Live quotes and orders require broker authorization; historical candles are not a live trading feed</span>
         </div>
       </div>
       <div className="tco-fyers-prompt-actions">
@@ -117,7 +117,7 @@ export function FyersConnectionPrompt({
           Connect FYERS <ArrowRight className="h-3.5 w-3.5" />
         </button>
         <button type="button" className="tco-fyers-prompt-secondary" onClick={dismiss}>
-          Continue with delayed data
+          Continue with historical data
         </button>
       </div>
       <button type="button" className="tco-fyers-prompt-close" aria-label="Dismiss FYERS connection reminder for today" title="Remind me tomorrow" onClick={dismiss}>

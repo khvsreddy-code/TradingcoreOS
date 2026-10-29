@@ -22,13 +22,8 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../marketData/watchlistTechnicals';
-import {
-  hasValidFyersSession,
-  loadYahooBars,
-  loadYahooQuoteTicks,
-  yahooHistoricalCandles,
-  YAHOO_FALLBACK_POLL_MS,
-} from '../../marketData/yahooFallback';
+import { hasValidFyersSession } from '../../marketData/yahooFallback';
+import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { historyStore } from '../../marketData/HistoryStore';
 import type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
@@ -1245,60 +1240,24 @@ const bookmarksPanel: SidePanelDescriptor = {
       };
     };
 
-    let quoteSourceMode: 'fyers' | 'yahoo' | null = null;
+    let quoteSourceMode: 'fyers' | 'none' | null = null;
     let quoteSymbolsSignature = '';
     const quoteSubscribe = (): void => {
       const symbols = watchlist.map((item) => item.symbol);
       if (!symbols.length) return;
-      const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
+      const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'none';
       const symbolsSignature = symbols.join(',');
-      if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && quoteStop) return;
+      if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && (nextMode === 'none' || quoteStop)) return;
       const sourceChanged = quoteSourceMode !== null && quoteSourceMode !== nextMode;
       quoteStop?.();
       quoteStop = undefined;
       if (sourceChanged) quotes.clear();
       quoteSourceMode = nextMode;
       quoteSymbolsSignature = symbolsSignature;
-      if (nextMode === 'yahoo') {
-        let cancelled = false;
-        let inFlight = false;
-        const poll = async () => {
-          if (cancelled || inFlight) return;
-          inFlight = true;
-          try {
-            const ticks = await loadYahooQuoteTicks(symbols);
-            if (cancelled) return;
-            for (const [symbol, tick] of ticks) {
-              const ltp = asFinite(tick.ltp, tick.close);
-              if (ltp === undefined) continue;
-              const previousClose = asFinite(tick.close);
-              const change = asFinite(tick.change);
-              const changePercent = asFinite(tick.changePercent);
-              quotes.set(symbol.toUpperCase(), {
-                ltp,
-                change,
-                changePercent,
-                previousClose,
-                high: asFinite(tick.high),
-                low: asFinite(tick.low),
-                receivedAt: Date.now(),
-                source: 'yahoo',
-              });
-            }
-            if (sortMode === 'price' || sortMode === 'change') buildRows();
-            else {
-              for (const symbol of ticks.keys()) updateRows(symbol.toUpperCase());
-              updateDetails();
-            }
-          } catch {
-            // Keep the last Yahoo quote, clearly aged by the regular staleness pass.
-          } finally {
-            inFlight = false;
-          }
-        };
-        void poll();
-        const timer = window.setInterval(() => void poll(), YAHOO_FALLBACK_POLL_MS);
-        quoteStop = () => { cancelled = true; window.clearInterval(timer); };
+      if (nextMode === 'none') {
+        quotes.clear();
+        buildRows();
+        updateDetails();
         return;
       }
       quoteStop = tradingCoreRuntime.subscribeMarketData(symbols, (event) => {
@@ -1627,11 +1586,14 @@ const bookmarksPanel: SidePanelDescriptor = {
           ? (async () => {
               try {
                 if (!hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
-                  const yahooBars = await loadYahooBars(item.symbol, '5', 2_000, undefined, AbortSignal.timeout(12_000));
-                  const yahooCandles = yahooHistoricalCandles(yahooBars);
+                  const canonicalBars = await loadTcoCanonicalHistoryBars(item.symbol, '5m', 5_000, AbortSignal.timeout(12_000));
+                  const canonicalCandles = canonicalBars.map(bar => ({
+                    timestamp: new Date(bar.time).toISOString(), open: Number(bar.open), high: Number(bar.high),
+                    low: Number(bar.low), close: Number(bar.close), volume: Number(bar.volume) || 0,
+                  }));
                   technicalBySymbol.set(item.symbol, {
-                    summary: buildWatchlistTechnicalSummary(yahooCandles),
-                    expiresAt: Date.now() + (yahooCandles.length >= 50 ? 120_000 : 30_000),
+                    summary: buildWatchlistTechnicalSummary(canonicalCandles),
+                    expiresAt: Date.now() + (canonicalCandles.length >= 50 ? 120_000 : 30_000),
                   });
                   return;
                 }
@@ -1708,7 +1670,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     // Refresh the stale marker while the market is quiet or closed; otherwise an old
     // quote can remain visually LIVE simply because no later tick arrived to repaint it.
     const freshnessTimer = window.setInterval(() => {
-      const expectedMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'yahoo';
+      const expectedMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'none';
       if (expectedMode !== quoteSourceMode) {
         quoteSubscribe();
         // Recompute technicals after an expiry or reauthorization changes the history source.

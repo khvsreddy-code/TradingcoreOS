@@ -48,7 +48,13 @@ function chartStatusView(snapshot: TcoVelaChartStatusSnapshot, now = Date.now())
   const timeframe = snapshot.timeframe || '—';
   const context = `${instrument} · ${timeframe}`;
   if (!hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
-    return { phase: 'history-ready', tone: 'neutral', title: 'Yahoo Finance · delayed data', detail: `${context} · delayed bars and quotes are checked every 4 seconds. Connect FYERS for live broker data and options.`, symbol: instrument, timeframe };
+    return {
+      phase: snapshot.error ? 'failed' : snapshot.historyReady && snapshot.historyBars > 0 ? 'history-ready' : 'loading-history',
+      tone: snapshot.error ? 'warn' : 'neutral',
+      title: snapshot.error ? 'Canonical history unavailable' : snapshot.historyReady && snapshot.historyBars > 0 ? 'Historical data only · no live feed' : 'Loading configured historical data',
+      detail: `${context} · history uses configured NSE-first sources, Investiny for historical fallback, and FYERS for F&O when available. No delayed Yahoo prices are injected; connect FYERS for live quotes and options.${snapshot.error ? ` · ${snapshot.error}` : ''}`,
+      symbol: instrument, timeframe,
+    };
   }
   if (snapshot.error) {
     const noHistory = /no historical candles|no historical data|returned no history/i.test(snapshot.error);

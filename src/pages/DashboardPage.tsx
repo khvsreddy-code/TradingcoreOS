@@ -7,10 +7,10 @@ import { WorkspaceModuleShell, WorkspaceRoute, Panel } from '../components/works
 import { loadTradingCoreRuntime, type TradingCoreRuntimeApi } from '../services/runtime/tradingCoreRuntimeLoader';
 import { listPublicIndicatorPublications, type IndicatorPublication } from '../services/coreSpirit/indicatorPublicationService';
 import type { NormalizedMarketTick } from '../types/market';
-import { hasValidFyersSession, loadYahooQuoteTicks, YAHOO_FALLBACK_POLL_MS } from '../services/marketData/yahooFallback';
+import { hasValidFyersSession } from '../services/marketData/yahooFallback';
 
 type MarketIndex = { symbol: string; label: string };
-type MarketQuoteView = MarketIndex & { tick: NormalizedMarketTick | null; receivedAt: number; ageMs: number; live: boolean; source: 'fyers' | 'yahoo' };
+type MarketQuoteView = MarketIndex & { tick: NormalizedMarketTick | null; receivedAt: number; ageMs: number; live: boolean; source: 'fyers' | 'none' };
 type NewsItem = { id?: string; title: string; source: string; url: string; publishedAt?: string };
 type NewsPayload = { success?: boolean; provider?: string; items?: NewsItem[]; error?: string };
 
@@ -22,7 +22,7 @@ const MARKET_INDEXES: MarketIndex[] = [
   { symbol: 'NSE:MIDCPNIFTY-INDEX', label: 'MIDCAP SELECT' },
 ];
 
-const MARKET_REFRESH_MS = YAHOO_FALLBACK_POLL_MS;
+const MARKET_REFRESH_MS = 5_000;
 const NEWS_REFRESH_MS = 5 * 60_000;
 
 function receivedAtMs(tick: NormalizedMarketTick | undefined): number {
@@ -105,25 +105,9 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
     try {
       const fyersReady = Boolean(runtime && hasValidFyersSession(runtime.getAllConnections()));
       if (!fyersReady) {
-        // Dashboard index quotes remain useful before FYERS is connected; these are
-        // always labelled delayed and never count toward a live-feed sentiment score.
-        try {
-          const yahooQuotes = await loadYahooQuoteTicks(MARKET_INDEXES.map(index => index.symbol));
-          const now = Date.now();
-          setMarketQuotes(MARKET_INDEXES.map(index => {
-            const candidates = [
-              index.symbol,
-              index.symbol.replace(/-INDEX$/i, ''),
-              index.symbol.split(':').pop() ?? index.symbol,
-            ];
-            const tick = candidates.map(key => yahooQuotes.get(key)).find(Boolean) ?? null;
-            const receivedAt = receivedAtMs(tick ?? undefined);
-            return { ...index, tick, receivedAt, ageMs: receivedAt ? Math.max(0, now - receivedAt) : Number.POSITIVE_INFINITY, live: false, source: 'yahoo' as const };
-          }));
-        } catch {
-          // Preserve last displayed prices, but never keep the "LIVE" label after FYERS expires.
-          setMarketQuotes(previous => previous.map(item => ({ ...item, live: false, ageMs: item.receivedAt ? Math.max(0, Date.now() - item.receivedAt) : Number.POSITIVE_INFINITY })));
-        }
+        setMarketQuotes(previous => previous.map(item => ({
+          ...item, tick: null, receivedAt: 0, ageMs: Number.POSITIVE_INFINITY, live: false, source: 'none',
+        })));
         return;
       }
       const now = Date.now();
@@ -251,11 +235,11 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
             {!connected && <button type="button" onClick={onBroker} className="rounded-lg border border-[var(--tco-border)] px-3 py-2.5 text-xs hover:bg-[var(--tco-hover)]">Connect broker</button>}
           </div>
         </div>
-        {!connected && <div className="border-t border-[var(--tco-border)] px-5 py-3 text-xs text-[var(--tco-muted)]">Connect FYERS for broker-backed live quotes and portfolio metrics. Without a valid FYERS session, index prices use delayed Yahoo Finance data checked every 4 seconds. Headlines and community scripts load independently.</div>}
+        {!connected && <div className="border-t border-[var(--tco-border)] px-5 py-3 text-xs text-[var(--tco-muted)]">Connect FYERS for authorized live quotes and portfolio metrics. Without a live broker session, this panel does not substitute delayed third-party prices. Historical chart data uses the configured canonical history sources.</div>}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_310px]">
-        <Panel title="Market overview" subtitle="FYERS is preferred when authorized. Otherwise Yahoo Finance is checked every 4 seconds and its values are always labelled delayed.">
+        <Panel title="Market overview" subtitle="Shows authorized FYERS quotes only; without a live quote feed, prices remain unavailable rather than substituting delayed data.">
           <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-5">
             {marketQuotes.map(item => {
               const price = item.tick?.ltp ?? item.tick?.close;
@@ -263,7 +247,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
               const change = Number.isFinite(Number(item.tick?.change)) ? Number(item.tick?.change) : null;
               const toneValue = Number.isFinite(Number(item.tick?.changePercent)) ? Number(item.tick?.changePercent) : change;
               return <div key={item.symbol} className="min-w-0 rounded-xl border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
-                <div className="flex items-center justify-between gap-2"><div className="truncate text-[10px] font-semibold">{item.label}</div><span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-mono ${item.live ? 'bg-emerald-500/10 text-emerald-400' : price != null ? 'bg-amber-500/10 text-amber-300' : 'bg-[var(--tco-hover)] text-[var(--tco-dim)]'}`}>{item.source === 'yahoo' ? price != null ? 'YAHOO DELAYED' : 'NO YAHOO DATA' : item.live ? 'LIVE' : price != null ? 'STALE' : 'NO QUOTE'}</span></div>
+                <div className="flex items-center justify-between gap-2"><div className="truncate text-[10px] font-semibold">{item.label}</div><span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-mono ${item.live ? 'bg-emerald-500/10 text-emerald-400' : price != null ? 'bg-amber-500/10 text-amber-300' : 'bg-[var(--tco-hover)] text-[var(--tco-dim)]'}`}>{item.source === 'none' ? 'NO LIVE SOURCE' : item.live ? 'LIVE' : price != null ? 'STALE' : 'NO QUOTE'}</span></div>
                 <div className="mt-3 text-xl font-bold font-mono tracking-tight">{price != null ? fmtPrice(price) : '—'}</div>
                 <div className={`mt-1 flex items-center gap-1 text-[10px] font-mono ${signedTone(toneValue)}`}>
                   {toneValue != null && toneValue > 0 ? <ArrowUpRight size={12}/> : toneValue != null && toneValue < 0 ? <ArrowDownRight size={12}/> : null}
