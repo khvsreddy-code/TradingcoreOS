@@ -115,8 +115,16 @@ if bar_index == 170 {
 `, bars, SOURCE_ID + '-ob-debug').outputs
   .filter(item => item.kind === 'label' && item.text.startsWith('DBG_'))
   .map(item => ({text:item.text, price:item.price, time:item.time}));
+const bullishOrderBlockReference = referenceReplay.outputs
+  .filter(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC')
+  .map(item => ({left:item.left,right:item.right,top:item.top,bottom:item.bottom,style:item.style}));
+const bullishOrderBlockStateInstructions = compiled.ir.entry.instructions
+  .filter(instruction => instruction.op === 'setState' &&
+    ['lastBearishTime','lastBearishHigh','lastBearishLow','bullObExists','bullObLeft','bullObRight','bullObTop','bullObBottom'].includes(instruction.name))
+  .map(instruction => ({op:instruction.op,name:instruction.name,initialize:instruction.initialize}));
 assert.ok(hasBullishOrderBlock,
-  'bullish order blocks must be represented as bounded zones; diagnostics=' + JSON.stringify(bullishOrderBlockDebug));
+  'bullish order blocks must be represented as bounded zones; diagnostics=' +
+  JSON.stringify({optimizedDebug:bullishOrderBlockDebug,referenceZones:bullishOrderBlockReference,stateInstructions:bullishOrderBlockStateInstructions}));
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#B22833'),
   'bearish order blocks must be represented as bounded zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#F23645'),
