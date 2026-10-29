@@ -71,8 +71,10 @@ if bar_index == 124 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_124", "below", 
 if close < 65 {
   labelAt(time[0], swingPivotLow, "DEBUG_PIVOT_ON_DUMP", "below", "#00FF00", "#000000", 8, "pill", "600")
   labelAt(time[0], close[1], "DEBUG_PREVIOUS_CLOSE", "below", "#00FF00", "#000000", 8, "pill", "600")
-  labelAt(time[0], swingLowBroken, "DEBUG_LOW_BROKEN", "below", "#00FF00", "#000000", 8, "pill", "600")
-  labelAt(time[0], swingBias, "DEBUG_SWING_BIAS", "below", "#00FF00", "#000000", 8, "pill", "600")
+  if swingLowBroken == true { label("DEBUG_LOW_BROKEN", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingLowBroken == false { label("DEBUG_LOW_OPEN", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingBias > 0 { label("DEBUG_SWING_BIAS_BULL", "below", "#00FF00", "#000000", 8, "pill") }
+  if swingBias < 0 { label("DEBUG_SWING_BIAS_BEAR", "below", "#00FF00", "#000000", 8, "pill") }
 }
 `, bars, 'luxalgo-smc-port-runtime-diagnostic').outputs
   .filter(item => item.kind === 'label' && /DEBUG_/.test(item.text))
