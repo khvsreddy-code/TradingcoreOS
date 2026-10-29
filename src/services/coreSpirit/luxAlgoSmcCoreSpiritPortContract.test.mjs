@@ -37,7 +37,7 @@ const stateProbeRun = executeCoreSpirit(stateProbeSource, [
 assert.ok(stateProbeRun.outputs.some(item => item.kind === 'label' && item.text === 'State CHoCH'),
   'typed state initializer must not overwrite the state updated on the previous bar');
 const bars = [];
-for (let i = 0; i < 70; i += 1) {
+for (let i = 0; i < 110; i += 1) {
   let base;
   if (i < 25) base = 100 + Math.sin(i * 0.7) * 2;
   else if (i < 35) base = 111 + Math.sin((i - 26) * 0.7);
@@ -48,10 +48,10 @@ for (let i = 0; i < 70; i += 1) {
   bars.push(candle(i, open, Math.max(open, close) + 0.5, Math.min(open, close) - 0.5, close));
 }
 bars[25] = candle(25, 108, 113, 107.5, 112); // bullish imbalance and upward structure break
-bars[35] = candle(35, 100, 101, 94.5, 96);  // bearish imbalance and downward structure break
+bars[35] = candle(35, 82, 83, 78, 80); // confirmed swing low; later break exercises bearish structure output
 bars[52] = candle(52, 102, 107, 101.5, 106); // bullish reversal through the prior range
-bars[60] = candle(60, 113, 122, 112.5, 120); // post-warmup bullish swing break and bullish FVG
-bars[65] = candle(65, 89.5, 90, 88, 89); // post-warmup bearish break, CHoCH, and bearish FVG
+bars[85] = candle(85, 116.4, 122, 116.2, 120); // break the already-confirmed swing high after its 50-bar confirmation delay
+bars[95] = candle(95, 72, 73, 68, 70); // break the already-confirmed swing low against bullish bias, producing CHoCH
 
 const execution = executeCoreSpirit(source, bars, 'luxalgo-smc-port-runtime');
 assert.deepEqual(execution.diagnostics, [], 'converted SMC execution must not emit runtime diagnostics');
