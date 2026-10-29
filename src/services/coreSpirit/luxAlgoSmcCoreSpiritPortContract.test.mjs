@@ -68,7 +68,12 @@ if swingPivotLowConfirmed == true { label("DEBUG_LOW_PIVOT", "below", "#00FF00",
 if swingBullBreak == true { label("DEBUG_BULL_BREAK", "below", "#00FF00", "#000000", 8, "pill") }
 if swingBearBreak == true { label("DEBUG_BEAR_BREAK", "above", "#FF0000", "#FFFFFF", 8, "pill") }
 if bar_index == 124 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_124", "below", "#00FF00", "#000000", 8, "pill", "600") }
-if bar_index == 134 { labelAt(time[0], swingPivotLow, "DEBUG_LOW_134", "below", "#00FF00", "#000000", 8, "pill", "600"); labelAt(time[0], swingBias, "DEBUG_BIAS_134", "below", "#00FF00", "#000000", 8, "pill", "600") }
+if close < 65 {
+  labelAt(time[0], swingPivotLow, "DEBUG_PIVOT_ON_DUMP", "below", "#00FF00", "#000000", 8, "pill", "600")
+  labelAt(time[0], close[1], "DEBUG_PREVIOUS_CLOSE", "below", "#00FF00", "#000000", 8, "pill", "600")
+  labelAt(time[0], swingLowBroken, "DEBUG_LOW_BROKEN", "below", "#00FF00", "#000000", 8, "pill", "600")
+  labelAt(time[0], swingBias, "DEBUG_SWING_BIAS", "below", "#00FF00", "#000000", 8, "pill", "600")
+}
 `, bars, 'luxalgo-smc-port-runtime-diagnostic').outputs
   .filter(item => item.kind === 'label' && /DEBUG_/.test(item.text))
   .map(item => ({ text: item.text, time: item.time, price: item.price, barIndex: item.metadata?.barIndex }));
