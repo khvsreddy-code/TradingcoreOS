@@ -98,7 +98,7 @@ export function getRecentHistoryRequestRange(
   const beforeSessionOpen = nowMinutes < (sessionOpenParts[0] || 0) * 60 + (sessionOpenParts[1] || 0);
   const holidays = new Set(mapping.calendarHolidays || []);
   let firstSessionDate = beforeSessionOpen ? previousDate(today) : today;
-  let calendarPolicy = 'observed-sessions-fallback-10-calendar-days';
+  let calendarPolicy = 'observed-sessions-fallback-7-calendar-days';
   if (mapping.calendarComplete === true) {
     let cursor = firstSessionDate, seen = 0;
     for (let walked = 0; walked < 370 && seen < HISTORICAL_RECENT_SESSIONS; walked += 1) {
@@ -113,7 +113,7 @@ export function getRecentHistoryRequestRange(
     for (let i = 0; i < FYERS_HISTORY_WINDOW_DAYS; i += 1) firstSessionDate = previousDate(firstSessionDate);
   }
   return {
-    // Midnight includes daily bars stamped at 00:00 on the third session date.
+    // Midnight includes daily bars stamped at 00:00 on the earliest included session.
     fromMs: localDateTimeToEpoch(firstSessionDate, '00:00', timezone),
     toMs: now.getTime(), fromDate: firstSessionDate, calendarPolicy,
   };
