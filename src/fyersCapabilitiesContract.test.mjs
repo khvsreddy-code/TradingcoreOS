@@ -6,6 +6,7 @@ import {
   FyersCapabilityError,
   resolveFyersAdmissionBudget,
 } from './server/fyers/core/FyersCapabilities.ts';
+import { clampFyersHistoryRange, FYERS_HISTORY_WINDOW_DAYS, fyersHistoryWindowFloorMs } from './server/fyers/core/FyersHistoryWindow.ts';
 
 const env = {
   FYERS_API_PLAN_BY_USER: JSON.stringify({
@@ -55,6 +56,20 @@ assert.throws(
 assert.equal(resolveFyersCapabilities('u', {FYERS_API_PLAN_BY_USER:'not-json'}).plan, 'standard');
 assert.equal(resolveFyersCapabilities('u', {FYERS_API_PLAN_BY_USER:JSON.stringify({u:'enterprise'})}).plan, 'standard');
 
+assert.equal(FYERS_HISTORY_WINDOW_DAYS, 7, 'standard FYERS history is capped at one calendar week');
+const fixedNow = Date.UTC(2026, 9, 30, 12);
+const fyersFloor = fyersHistoryWindowFloorMs(fixedNow);
+const clippedRange = clampFyersHistoryRange(fixedNow - 30 * 86_400_000, fixedNow, fixedNow);
+assert.equal(clippedRange?.fromMs, fyersFloor, 'older FYERS history is clipped to the seven-day boundary');
+assert.equal(clippedRange?.toMs, fixedNow);
+assert.equal(clippedRange?.clipped, true);
+const exactWeek = clampFyersHistoryRange(fyersFloor, fixedNow, fixedNow);
+assert.equal(exactWeek?.fromMs, fyersFloor);
+assert.equal(exactWeek?.clipped, false);
+assert.equal(clampFyersHistoryRange(fixedNow - 30 * 86_400_000, fixedNow - 20 * 86_400_000, fixedNow), null,
+  'a request wholly older than a week is rejected before consuming quota');
+assert.throws(() => clampFyersHistoryRange('', fixedNow, fixedNow), /valid increasing range/);
+
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const quoteRoute = read('./server/routes/fyers-market.routes.ts');
 const quoteService = read('./server/fyers/market/FyersMarketDataService.ts');
@@ -103,6 +118,8 @@ assert.match(apiClient, /recordFyersQuotaAttempt\(category, this\.capabilities\.
 assert.match(apiClient, /isRetryableNetworkError/, 'transient network failures receive bounded retry handling on safe requests');
 assert.match(apiClient, /retryableNetworkError/, 'network retries are limited to retry-safe API operations');
 assert.match(apiClient, /maxPerDay: budget\.requestsPerDay/);
+assert.match(apiClient, /clampFyersHistoryRange\\(/, 'ordinary Data API history requests pass through the seven-day boundary');
+assert.match(apiClient, /base === DATA_BASE && pathOnly === '\/history'/, 'the central policy covers direct and legacy history callers');
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy history endpoint must gate seconds data by server-resolved plan');
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
