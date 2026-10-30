@@ -1,10 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { HistoricalCandle, HistoricalDataMetadata, HistoricalQuoteSnapshot } from '../../services/brokers/BrokerAdapter.js';
 import { marketDataAutoFixer } from './MarketDataAutoFixer.js';
+import { FYERS_HISTORY_WINDOW_DAYS, fyersHistoryWindowFloorMs } from '../fyers/core/FyersHistoryWindow.js';
 
 export const HISTORICAL_MAX_BARS = 5_000;
-export const HISTORICAL_RECENT_SESSIONS = 3;
-export const HISTORICAL_SOURCE_POLICY = 'fyers-primary-14d+investiny-2to5y-historical-backfill/v5';
+export const HISTORICAL_RECENT_SESSIONS = 5;
+export const HISTORICAL_SOURCE_POLICY = 'fyers-primary-7d+investiny-2to5y-historical-backfill/v6';
 const CACHE_TTL_MS = 60_000;
 const NEGATIVE_CACHE_TTL_MS = 15_000;
 const SOURCE_TIMEOUT_MS = 10_000;
@@ -109,7 +110,7 @@ export function getRecentHistoryRequestRange(
     else firstSessionDate = previousDate(today);
   } else {
     firstSessionDate = today;
-    for (let i = 0; i < 10; i += 1) firstSessionDate = previousDate(firstSessionDate);
+    for (let i = 0; i < FYERS_HISTORY_WINDOW_DAYS; i += 1) firstSessionDate = previousDate(firstSessionDate);
   }
   return {
     // Midnight includes daily bars stamped at 00:00 on the third session date.
@@ -272,14 +273,15 @@ async function fetchProviderBars(
 }
 
 const MAX_PREFERRED_SOURCE_PAGES_PER_REFRESH = 24;
-async function fetchPreferredHistoryPages(source: 'nse' | 'investiny', fetcher: PreferredHistorySourceFetcher | undefined, mapping: HistoricalInstrumentMapping, timeframe: string, requestedBars: number, endMs = Date.now()): Promise<ProviderBarsAttempt> {
+async function fetchPreferredHistoryPages(source: 'nse' | 'investiny', fetcher: PreferredHistorySourceFetcher | undefined, mapping: HistoricalInstrumentMapping, timeframe: string, requestedBars: number, endMs = Date.now(), floorMs = Date.UTC(1990, 0, 1)): Promise<ProviderBarsAttempt> {
   const target = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
   if (!fetcher) return { bars: [], status: { status: 'not-configured', pagesFetched: 0 } };
   const byTime = new Map<number, StoredBar>();
   const pageBudget = Math.min(MAX_PREFERRED_SOURCE_PAGES_PER_REFRESH, Math.max(1, Math.ceil(target / 200) + 1));
   let nextToMs = Math.min(Number(endMs) || Date.now(), Date.now()), pagesFetched = 0, rawCount = 0, failed = false, exhausted = false, lastError: string | undefined;
   while (byTime.size < target && pagesFetched < pageBudget) {
-    const pageRange = getPreferredHistoryPageRange(mapping, timeframe, target - byTime.size, nextToMs);
+    const suggestedRange = getPreferredHistoryPageRange(mapping, timeframe, target - byTime.size, nextToMs);
+    const pageRange: BoundedHistoryPageRange = { ...suggestedRange, fromMs: Math.max(suggestedRange.fromMs, floorMs), lookbackFloorMs: floorMs, calendarPolicy: 'investiny-bounded-historical-backfill' };
     if (pageRange.toMs <= pageRange.fromMs) { exhausted = true; break; }
     const attempt = await fetchProviderBars(source, fetcher, mapping, timeframe, pageRange);
     pagesFetched += 1;
@@ -294,7 +296,7 @@ async function fetchPreferredHistoryPages(source: 'nse' | 'investiny', fetcher: 
     for (const bar of attempt.bars) { byTime.set(bar.timestampMs, bar); oldest = Math.min(oldest, bar.timestampMs); }
     if (!Number.isFinite(oldest) || oldest >= nextToMs) { exhausted = true; break; }
     nextToMs = oldest - 1;
-    if (oldest <= Date.UTC(1990,0,1)) { exhausted = true; break; }
+    if (oldest <= floorMs) { exhausted = true; break; }
   }
   const bars = [...byTime.values()].sort((a,b)=>a.timestampMs-b.timestampMs).slice(-target);
   return { bars, status: { status: failed ? (bars.length ? 'partial-error' : 'error') : bars.length >= target ? 'ok' : bars.length ? 'partial' : 'empty', rawCount, validatedCount: bars.length, pagesFetched, pageBudget, requestedBars: target, historyExhausted: exhausted, ...(lastError ? { error: lastError } : {}) } };
@@ -656,7 +658,7 @@ export class HistoricalDataService {
     const task = (async (): Promise<CacheRecord> => {
       const now = Date.now();
       const target = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(requestedBars) || HISTORICAL_MAX_BARS)));
-      const fyersFloorMs = now - 14 * 86_400_000;
+      const fyersFloorMs = fyersHistoryWindowFloorMs(now);
       const requestedRange = getBoundedHistoryPageRange(mapping, timeframe, target, 0.04, now);
       const fyersRange: BoundedHistoryPageRange = {
         ...requestedRange,
@@ -664,7 +666,7 @@ export class HistoricalDataService {
         toMs: now,
         fromDate: zonedDate(Math.max(fyersFloorMs, requestedRange.fromMs), mapping.timezone),
         lookbackFloorMs: fyersFloorMs,
-        calendarPolicy: 'fyers-live-and-recent-history-only-14-days',
+        calendarPolicy: 'fyers-live-and-recent-history-only-7-days',
       };
       const fyersByTime = new Map<number, StoredBar>();
       const fyersPages: Array<Record<string, unknown>> = [];
@@ -675,7 +677,7 @@ export class HistoricalDataService {
       const pageBudget = 8;
 
       // FYERS is the only source for live updates and recent candles. Historical
-      // requests are strictly bounded to the most recent 14 calendar days.
+      // REST requests are strictly bounded to the most recent seven calendar days.
       if (fetchFyersRecent) {
         for (let page = 0; page < pageBudget && nextToMs >= fyersFloorMs; page += 1) {
           const pageRange: BoundedHistoryPageRange = {
@@ -683,7 +685,7 @@ export class HistoricalDataService {
             fromMs: Math.max(fyersFloorMs, getBoundedHistoryPageRange(mapping, timeframe, Math.max(1, target - fyersByTime.size), 0.04, nextToMs).fromMs),
             toMs: nextToMs,
             lookbackFloorMs: fyersFloorMs,
-            calendarPolicy: 'fyers-live-and-recent-history-only-14-days',
+            calendarPolicy: 'fyers-live-and-recent-history-only-7-days',
           };
           if (pageRange.toMs <= pageRange.fromMs) break;
           try {
@@ -726,7 +728,7 @@ export class HistoricalDataService {
           lookbackFloorMs: longFloorMs,
           calendarPolicy: 'investiny-historical-backfill-' + years + '-years',
         };
-        investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, Math.max(1, olderTarget || target), boundedRange.toMs);
+        investinyAttempt = await fetchPreferredHistoryPages('investiny', fetchInvestinyHistory, mapping, timeframe, Math.max(1, olderTarget || target), boundedRange.toMs, longFloorMs);
         investinyAttempt.bars = investinyAttempt.bars.filter(bar => bar.timestampMs >= longFloorMs && bar.timestampMs < investinyEnd);
       }
 
@@ -742,7 +744,7 @@ export class HistoricalDataService {
       const sourceStatus: Record<string, unknown> = {
         fyers: {
           status: recentBars.length ? (fyersFailed ? 'partial-error' : 'ok') : fetchFyersRecent ? 'empty' : 'not-configured',
-          validatedCount: recentBars.length, pages: fyersPages, pageBudget, historyWindowDays: 14,
+          validatedCount: recentBars.length, pages: fyersPages, pageBudget, historyWindowDays: FYERS_HISTORY_WINDOW_DAYS,
           windowStart: new Date(fyersFloorMs).toISOString(), windowEnd: new Date(now).toISOString(),
           ...(fyersError ? { error: fyersError } : {}),
         },
@@ -755,7 +757,7 @@ export class HistoricalDataService {
         route: {
           activeSource, liveSource: 'fyers', recentHistorySource: 'fyers', olderHistorySource: 'investiny',
           contributingSources: [...new Set(merged.map(bar => bar.source))],
-          capability: 'historical-ohlcv', fyersHistoryWindowDays: 14, investinyHistoryWindowYears: years,
+          capability: 'historical-ohlcv', fyersHistoryWindowDays: FYERS_HISTORY_WINDOW_DAYS, investinyHistoryWindowYears: years,
         },
         historyCompleteness: {
           status: merged.length >= target ? 'requested-bar-target-reached' : 'partial-history',
@@ -819,9 +821,9 @@ export class HistoricalDataService {
             try {
               let pageSource: 'investiny' | 'fyers' = 'investiny';
               let investinyPageStatus: Record<string, unknown> | undefined;
-              const fyersFloor = Date.now() - 14 * 86_400_000;
+              const fyersFloor = fyersHistoryWindowFloorMs();
               // Older-page navigation is Investiny-only. FYERS must never be
-              // paged beyond its two-week recent-history window.
+              // paged beyond its seven-calendar-day recent-history window.
               if (request.fetchInvestinyHistory) {
                 const attempt = await fetchProviderBars('investiny', request.fetchInvestinyHistory, mapping, timeframe, {
                   ...range,
@@ -837,7 +839,7 @@ export class HistoricalDataService {
                   ...range,
                   fromMs: Math.max(range.fromMs, fyersFloor),
                   lookbackFloorMs: fyersFloor,
-                  calendarPolicy: 'fyers-only-last-14-days',
+                  calendarPolicy: 'fyers-only-last-7-days',
                 };
                 const fetched = await request.fetchFyersRecent(mapping, boundedRecentRange);
                 pageSource = 'fyers';
