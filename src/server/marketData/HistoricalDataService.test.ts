@@ -6,7 +6,7 @@ const ordered = [...sources].sort((left, right) => historicalSourcePriority(righ
 assert.deepEqual(ordered, ['fyers', 'investiny', 'nse', 'tvdatafeed']);
 assert.ok(historicalSourcePriority('fyers') > historicalSourcePriority('investiny'));
 assert.ok(historicalSourcePriority('investiny') > historicalSourcePriority('nse'));
-assert.match(HISTORICAL_SOURCE_POLICY, /fyers-primary-14d\+investiny-2to5y-historical-backfill/);
+assert.match(HISTORICAL_SOURCE_POLICY, /fyers-primary-7d\+investiny-2to5y-historical-backfill/);
 assert.ok(historicalSourcePriority('fyers') > historicalSourcePriority('tvdatafeed'));
 
 const now = 1_000_000;
