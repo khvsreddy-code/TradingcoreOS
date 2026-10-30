@@ -125,8 +125,8 @@ async function fetchFyersHistoryTarget(
   // prevents an unexpectedly large Prime request from spawning hundreds of calls.
   const allowedYears = intraday ? capabilities.historyDepth.intradayYears : capabilities.historyDepth.dailyYears;
   const operationalCeilingYears = secondsInterval ? 2 : intraday ? 15 : 30;
-  const maxLookbackDays = Math.min(operationalCeilingYears, allowedYears ?? operationalCeilingYears) * 365;
-  const chunkDays = secondsInterval ? 1 : intraday ? 90 : 3650;
+  const maxLookbackDays = Math.min(7, Math.min(operationalCeilingYears, allowedYears ?? operationalCeilingYears) * 365);
+  const chunkDays = secondsInterval ? 1 : 7;
   const now = new Date();
   const earliest = new Date(now.getTime() - maxLookbackDays * 86_400_000);
   let end = new Date(now);
