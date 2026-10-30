@@ -8,6 +8,7 @@ import {
 } from './FyersCapabilities.js';
 import { recordFyersQuotaAttempt, recordFyersQuotaDenial, recordFyersQuotaResponse } from './FyersQuotaTelemetry.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
+import { clampFyersHistoryRange, FyersHistoryWindowError } from './FyersHistoryWindow.js';
 
 export class FyersApiError extends Error {
   status: number;
@@ -165,6 +166,16 @@ export class FyersApiClient {
       const existing = qIndex >= 0 ? path.slice(qIndex + 1) : '';
       const combined = new URLSearchParams(existing);
       query.forEach((value, key) => combined.set(key, value));
+
+      // Central boundary: every standard Data API /history caller is clipped to
+      // seven days. A wholly older page fails locally before quota admission.
+      if (base === DATA_BASE && pathOnly === '/history') {
+        const bounded = clampFyersHistoryRange(combined.get('range_from'), combined.get('range_to'));
+        if (!bounded) throw new FyersHistoryWindowError('This FYERS history page is older than the permitted seven-day window; use historical backfill.');
+        combined.set('range_from', String(Math.floor(bounded.fromMs / 1000)));
+        combined.set('range_to', String(Math.floor(bounded.toMs / 1000)));
+        combined.set('date_format', '0');
+      }
       const url = `${base}${pathOnly}${combined.toString() ? `?${combined.toString()}` : ''}`;
       let lastError: unknown;
       // Never auto-retry a side-effecting transaction: its outcome may be ambiguous.
