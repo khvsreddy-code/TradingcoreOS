@@ -19,9 +19,14 @@ function parseTimestamp(value: unknown, endOfDay = false): number {
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (dateOnly) {
     const year = Number(dateOnly[1]), month = Number(dateOnly[2]) - 1, day = Number(dateOnly[3]);
+    // FYERS date_format=1 date strings represent India exchange-local dates.
+    // Convert local midnight/end-of-day to the corresponding UTC instant before
+    // sending epoch seconds with date_format=0.
+    const indiaOffsetMs = (5 * 60 + 30) * 60_000;
+    const startMs = Date.UTC(year, month, day) - indiaOffsetMs;
     return endOfDay
-      ? Date.UTC(year, month, day, 23, 59, 59, 999)
-      : Date.UTC(year, month, day);
+      ? Date.UTC(year, month, day + 1) - indiaOffsetMs - 1
+      : startMs;
   }
   const parsed = Date.parse(text);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
