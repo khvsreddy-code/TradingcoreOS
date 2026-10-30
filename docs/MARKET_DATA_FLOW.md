@@ -1,45 +1,49 @@
 # TradingCoreOS shared market-data flow
 
-Provider history sources feed one canonical history service. An authorized NSE gateway is primary, Investiny is a best-effort history-only fallback for explicitly mapped non-derivatives, FYERS is the quota-aware broker fallback (especially for options/F&O), and compatible tvdatafeed history remains a legacy fallback. Vela, CoreSpirit, replay and research must not make competing independent candle stores.
+FYERS supplies the latest seven calendar days of standard chart history and the live WebSocket feed. Investiny fills only older validated history within the configured two-to-five-year window. All consumers share one canonical dataset; Vela, CoreSpirit, replay and research must not create competing candle stores.
 
 ~~~mermaid
 flowchart TD
-  A[Authorized NSE gateway] --> R[Capability router and source health]
-  R -->|NSE healthy| N[Validated NSE bars]
-  R -->|NSE down: historical data| I[Exact-ID Investiny adapter]
-  R -->|F&O / backup unavailable| F[FYERS plan-aware API gate]
-  N --> C[Canonical history normalization and cache]
-  I --> C
-  F --> C
-  C --> D[ChartDataPlane: generation/revision fences]
+  F[FYERS REST: trailing 7 days] --> C[Canonical history normalization + cache]
+  I[Exact-ID Investiny historical backfill] --> C
+  WS[FYERS Data WebSocket: live ticks] --> D[ChartDataPlane: generation/revision fences]
+  C --> D
   D --> E[Typed columnar market data]
   E --> G[CoreSpirit incremental compute]
-  E --> H[Vela chart and indicators]
+  E --> H[Vela chart and native indicators]
   G --> H
-  R --> X[Auto-fixer: circuit, cooldown, half-open probe]
-  X --> R
+  G --> X[Host risk and execution boundary]
+  C --> A[Source health and cache metadata]
+  I --> A
+  F --> A
 ~~~
 
 ## Boundaries
 
-- \`src/server/marketData/HistoricalDataService.ts\` owns source routing, normalized history, cache reconciliation, provenance and source metadata.
-- \`src/server/marketData/MarketDataAutoFixer.ts\` owns bounded runtime recovery. It never writes or patches application source code.
-- \`src/services/marketData/chartDataPlane.ts\` remains the only canonical lifecycle for a broker/instrument/timeframe dataset: accepted history, live trade events, mutations, revisions, generations and subscribers.
-- \`chartHistoryCoordinator.ts\` schedules shared history demand. \`HistoryStore.ts\` owns bounded browser-side caching.
-- \`chartCandleEvents.ts\` defines dataset key, generation, revision, mutation kind and dirty range. \`chartComputeCoordinator.ts\` fences stale indicator results.
-- \`TcoVelaDataProvider.ts\` observes the canonical data plane; it must not open independent subscriptions.
+- `HistoricalDataService.ts` owns source routing, normalized history, cache reconciliation, provenance and source metadata.
+- `FyersApiClient.ts` owns the authenticated Data API request gate. `FyersHistoryWindow.ts` enforces the seven-calendar-day range centrally for every standard `/history` caller, including legacy adapters.
+- Investiny is historical-only and requires exact server-side asset IDs; its configured floor is applied before provider requests.
+- `chartDataPlane.ts` remains the only canonical lifecycle for a broker/instrument/timeframe dataset: accepted history, live trade events, mutations, revisions, generations and subscribers.
+- `chartHistoryCoordinator.ts` schedules shared history demand. `HistoryStore.ts` owns bounded browser-side caching.
+- `chartCandleEvents.ts` defines dataset key, generation, revision, mutation kind and dirty range. `chartComputeCoordinator.ts` fences stale indicator results.
+- `TcoVelaDataProvider.ts` observes the canonical data plane; it must not open independent subscriptions.
 
 ## Rules
 
-1. Instrument and derivative contract identities must be exact; do not mix expiries or adjustment policies.
-2. Late history responses are generation-checked before mutation.
-3. Corrections/backfills publish dirty ranges and invalidate/replay dependent calculations.
-4. Only valid exchange trade timestamps may create or advance live candles; receive time is not trade time.
-5. \`historyReady\` means an accepted baseline exists, not that the requested window is complete.
-6. Quote snapshots never become fabricated OHLCV bars.
-7. Provider failures open a source-specific circuit; cooldown expires into one probe, and a validated NSE response automatically restores the primary route.
-8. Runtime auto-fixing must not evade provider access controls or mutate source code. Order intent still passes through host-side risk and capability checks.
+1. Instrument and derivative contract identities must be exact; never mix expiries or adjustment policies.
+2. No ordinary FYERS `/history` request may fetch candles older than the trailing seven calendar days.
+3. Older chart history goes to Investiny only when an exact Investing.com ID is configured.
+4. Live candle updates come from the FYERS WebSocket; REST history and quote snapshots cannot synthesize live candles.
+5. Late history responses are generation-checked before mutation.
+6. Corrections/backfills publish dirty ranges and invalidate/replay dependent calculations.
+7. Only valid exchange trade timestamps may create or advance live candles; receive time is not trade time.
+8. Provider failures open a source-specific circuit; retries are bounded and observable. Runtime auto-fixing must not evade provider access controls or mutate source code.
+9. Order intent stays inside host-side risk, capability and broker-execution boundaries.
 
-## Deployment constraint
+## FYERS quota policy
 
-NSE routing is a private adapter contract—not a bundled feed or scraper. Configure \`NSE_MARKET_DATA_SERVICE_URL\` and \`NSE_MARKET_DATA_SERVICE_TOKEN\` for an authorized gateway implementing \`POST /v1/history\`. Investiny requires explicit opt-in, an exact ID map and permitted data usage. The existing FYERS transport remains the live-feed fallback; a true NSE live adapter needs the licensed provider's actual stream protocol.
+Standard Data API limits are 5 requests/second, 50/minute and 5,000/day. TradingCoreOS admits at most 80% through its shared per-user gate (4/second, 40/minute and 4,000/day). This reserves 20% for safety and manual/external use. Every retry is a separately counted provider attempt. Requests made outside TradingCoreOS cannot be included in the internal quota counter.
+
+## Failure policy
+
+If FYERS is disconnected, historical candles can still load from the validated Investiny cache/backfill. The application must show that the live feed is unavailable rather than synthesizing a current candle. If Investiny has no exact mapping, report an unmapped source and retain the last valid data; never guess an instrument or silently mix derivative expiries.
