@@ -52,7 +52,7 @@ function chartStatusView(snapshot: TcoVelaChartStatusSnapshot, now = Date.now())
       phase: snapshot.error ? 'failed' : snapshot.historyReady && snapshot.historyBars > 0 ? 'history-ready' : 'loading-history',
       tone: snapshot.error ? 'warn' : 'neutral',
       title: snapshot.error ? 'Canonical history unavailable' : snapshot.historyReady && snapshot.historyBars > 0 ? 'Historical data only · no live feed' : 'Loading configured historical data',
-      detail: `${context} · history uses configured NSE-first sources, Investiny for historical fallback, and FYERS for F&O when available. No delayed Yahoo prices are injected; connect FYERS for live quotes and options.${snapshot.error ? ` · ${snapshot.error}` : ''}`,
+      detail: `${context} · history uses Investiny for older historical candles and FYERS for the most recent seven calendar days and live updates. No delayed Yahoo prices are injected; connect FYERS for live quotes and options.${snapshot.error ? ` · ${snapshot.error}` : ''}`,
       symbol: instrument, timeframe,
     };
   }
