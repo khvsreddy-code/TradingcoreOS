@@ -118,8 +118,8 @@ assert.match(apiClient, /recordFyersQuotaAttempt\(category, this\.capabilities\.
 assert.match(apiClient, /isRetryableNetworkError/, 'transient network failures receive bounded retry handling on safe requests');
 assert.match(apiClient, /retryableNetworkError/, 'network retries are limited to retry-safe API operations');
 assert.match(apiClient, /maxPerDay: budget\.requestsPerDay/);
-assert.match(apiClient, /clampFyersHistoryRange\\(/, 'ordinary Data API history requests pass through the seven-day boundary');
-assert.match(apiClient, /base === DATA_BASE && pathOnly === '\/history'/, 'the central policy covers direct and legacy history callers');
+assert.ok(apiClient.includes('clampFyersHistoryRange('), 'ordinary Data API history requests pass through the seven-day boundary');
+assert.ok(apiClient.includes("base === DATA_BASE && pathOnly === '/history'"), 'the central policy covers direct and legacy history callers');
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy history endpoint must gate seconds data by server-resolved plan');
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
