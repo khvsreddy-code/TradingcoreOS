@@ -83,7 +83,7 @@ function localDateTimeToEpoch(date: string, time: string, timezone: string): num
   return guess;
 }
 
-/** Count three configured weekday sessions; otherwise request a safe ten-day window and keep the last three observed sessions. */
+/** Count five configured weekday sessions; otherwise scan the trailing seven calendar days. */
 export function getRecentHistoryRequestRange(
   mapping: Pick<HistoricalInstrumentMapping, 'timezone' | 'sessionOpen' | 'calendarHolidays' | 'calendarComplete'>,
   now = new Date(),
@@ -765,7 +765,7 @@ export class HistoricalDataService {
           datasetComplete: false, paginationSupported: Boolean(fetchFyersRecent || fetchInvestinyHistory),
           hasMoreHistory: Boolean(fetchInvestinyHistory), lookbackYears: years,
         },
-        calendarPolicy: 'FYERS-recent-14-days+Investiny-older-history',
+        calendarPolicy: 'FYERS-recent-7-days+Investiny-older-history',
       };
       const record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
