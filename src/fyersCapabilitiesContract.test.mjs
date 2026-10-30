@@ -66,6 +66,9 @@ assert.equal(clippedRange?.clipped, true);
 const exactWeek = clampFyersHistoryRange(fyersFloor, fixedNow, fixedNow);
 assert.equal(exactWeek?.fromMs, fyersFloor);
 assert.equal(exactWeek?.clipped, false);
+const dateOnlyRange = clampFyersHistoryRange('2026-10-24', '2026-10-30', fixedNow);
+assert.equal(dateOnlyRange?.fromMs, Date.UTC(2026, 9, 24), 'date-only starts are inclusive at midnight');
+assert.equal(dateOnlyRange?.toMs, fixedNow, 'date-only end dates include the full current trading day without going past now');
 assert.equal(clampFyersHistoryRange(fixedNow - 30 * 86_400_000, fixedNow - 20 * 86_400_000, fixedNow), null,
   'a request wholly older than a week is rejected before consuming quota');
 assert.throws(() => clampFyersHistoryRange('', fixedNow, fixedNow), /valid increasing range/);
