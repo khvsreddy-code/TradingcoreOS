@@ -276,7 +276,7 @@ export class FyersAdapter extends BaseBroker {
     const dailyResolution = ['D','1D','1W','1M','W','M'].includes(resolution.toUpperCase());
     const allowedYears = dailyResolution ? capabilities.historyDepth.dailyYears : capabilities.historyDepth.intradayYears;
     const operationalYears = secondsInterval ? 2 : dailyResolution ? 30 : 15;
-    const maxLookbackDays = Math.min(operationalYears, allowedYears ?? operationalYears) * 365;
+    const maxLookbackDays = Math.min(7, Math.min(operationalYears, allowedYears ?? operationalYears) * 365);
     const minuteResolution = Number(resolution);
     const barsPerDay = secondsInterval
       ? (6.25 * 60 * 60) / Number(secondsMatch?.[1] || 1)
@@ -296,7 +296,7 @@ export class FyersAdapter extends BaseBroker {
     // only the estimated lookback needed for the desired candle count, then split
     // that window into compliant chunks. The shared FYERS request gate still
     // enforces this account's per-second/minute/day quota across all chunks.
-    const chunkDays = secondsInterval ? 1 : dailyResolution ? 360 : 95;
+    const chunkDays = secondsInterval ? 1 : 7;
     const ranges: Array<{ from: number; to: number }> = [];
     let rangeEnd = to;
     while (rangeEnd > from) {
