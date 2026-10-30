@@ -5,6 +5,7 @@ import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
+import { CORE_SPIRIT_AUTHORING_LEVELS, getCoreSpiritAuthoringProfileForLevel } from '../../services/coreSpirit/coreSpiritAuthoring';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
 import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
 import {
@@ -110,6 +111,8 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const [chartManagerOpen, setChartManagerOpen] = useState(true);
   const [managerError, setManagerError] = useState('');
   const sourceVersion = useRef(0);
+  const authoringProfile = getCoreSpiritAuthoringProfileForLevel(level);
+  const compiledRequiredLevel = compileResult?.ir?.authoringLevel;
 
   const reportStage = (stage: CoreSpiritLifecycleStage, message?: string, extra: Partial<CoreSpiritLifecycleDiagnostic> = {}) => {
     setLifecycleStage(stage);
@@ -489,9 +492,9 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-b border-[#293244] px-3 py-2">
-        <span className="text-[10px] text-slate-400">LEVEL</span>
-        <select value={level} onChange={event => setLevel(event.target.value as AuthoringLevel)} className="rounded-md border border-[#303b4f] bg-[#101827] px-2 py-1.5 text-[10px] text-slate-200" aria-label="CoreSpirit authoring level">
-          <option value="beginner">Beginner</option><option value="trader">Trader</option><option value="quant">Quant</option><option value="system">System</option>
+        <span className="text-[10px] text-slate-400">VIEW</span>
+        <select value={level} onChange={event => setLevel(event.target.value as AuthoringLevel)} className="rounded-md border border-[#303b4f] bg-[#101827] px-2 py-1.5 text-[10px] text-slate-200" aria-label="CoreSpirit authoring guidance view">
+          {CORE_SPIRIT_AUTHORING_LEVELS.map(option => <option key={option} value={option}>{getCoreSpiritAuthoringProfileForLevel(option).label}</option>)}
         </select>
         <span className="ml-auto text-[10px] text-slate-500">{scriptId ? 'CLOUD VERSIONING' : 'LOCAL DRAFT'}</span>
         {versions.length > 0 && (
@@ -502,6 +505,18 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
             </select>
           </div>
         )}
+      </div>
+
+      <div className="mx-3 mt-2 rounded-lg border border-[#263249] bg-[#0a1018] px-3 py-2" aria-label="CoreSpirit authoring guidance">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{authoringProfile.label} view · one CoreScript language</span>
+          <span className="text-[9px] text-slate-500">Guidance only</span>
+        </div>
+        <p className="mt-1 text-[9px] leading-4 text-slate-300">{authoringProfile.description}</p>
+        <div className="mt-1 text-[8px] leading-4 text-slate-500">Building blocks: {authoringProfile.features.slice(0, 8).join(' · ')}</div>
+        {compiledRequiredLevel && <div className="mt-1 text-[9px] text-sky-200">Compiler-required level: {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}</div>}
+        {compiledRequiredLevel && CORE_SPIRIT_AUTHORING_LEVELS.indexOf(level) < CORE_SPIRIT_AUTHORING_LEVELS.indexOf(compiledRequiredLevel) && <p className="mt-1 text-[9px] leading-4 text-amber-200">This source uses {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}-level concepts. Switch views for more relevant guidance; this selector never changes compiler or runtime permissions.</p>}
+        {!compiledRequiredLevel && <p className="mt-1 text-[8px] text-slate-500">Compile the current source to infer its required authoring level.</p>}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
