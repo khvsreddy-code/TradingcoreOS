@@ -47,6 +47,10 @@ includes(chrome, 'embedded: true', 'CoreSpirit is docked rather than rendered as
 includes(chrome, "ctx.togglePanel('tco.corespirit-code', false)", 'terminal close button closes the Vela side panel');
 includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart bridge for Add to Chart');
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
+includes(dock, 'getCoreSpiritAuthoringProfileForLevel', 'the embedded terminal reuses the canonical four-level authoring profiles');
+includes(dock, 'CoreSpirit authoring guidance', 'the embedded terminal exposes level guidance inside the active chart dock');
+includes(dock, 'compiledRequiredLevel', 'the required language level comes from the compiled program, not the selected view');
+includes(dock, 'this selector never changes compiler or runtime permissions', 'the authoring view cannot bypass host capability and execution policy');
 includes(dock, 'CORESPIRIT_LUXALGO_SMC_SOURCE', 'the editor uses the converted SMC script as its default');
 includes(dock, 'isLegacySmcStarter', 'existing users with the bundled step-plot SMC starter are migrated to corrected drawings');
 includes(dock, 'isBundledLegacyStarter(cloudSource)', 'cloud drafts are upgraded only when they match a known bundled starter');
