@@ -6,6 +6,37 @@ The bundled Smart Money Concepts conversion is deliberately treated as a staged 
 
 The known conversion boundary remains explicit: multi-timeframe `request.security` alignment, the full original historical order-block/mitigation model, strong/weak swing rules, the original display modes, and exchange-calendar session semantics are not yet a parity claim. Do not promote it as an exact LuxAlgo replacement until those semantics have matching fixtures.
 
+## Runtime semantics release gate
+
+Multi-timeframe planning is not, by itself, Pine-compatible execution. The language parity matrix intentionally marks multi-timeframe support as **partial** until the runtime has passing fixtures for all of these observable behaviors:
+
+- higher-timeframe values are not exposed as confirmed until the source bar is confirmed under the selected lookahead policy;
+- gaps and missing source bars follow an explicit `gaps` policy rather than silently carrying values forward;
+- lower-timeframe requests aggregate child bars in stable timestamp order and respect parent-bar/session boundaries;
+- exchange sessions and timezone transitions do not leak bars across session boundaries;
+- replay and live execution produce the same final confirmed outputs from the same ordered event history;
+- late, duplicate and corrected events invalidate the affected dependent ranges without preserving stale outputs;
+- developing-bar updates are provisional and replace the existing bar/object by identity rather than appending duplicates.
+
+A language feature must not be marked implemented solely because the parser, namespace, planner or IR can represent it. Update the parity matrix only after compiler diagnostics, runtime behavior, output adaptation and deterministic tests agree.
+
+## Visual object lifecycle release gate
+
+Chart drawings are semantic objects anchored to bar/time and price, not pixel overlays. For every supported object kind, acceptance must prove:
+
+- stable IDs across same-source recalculation and forming-bar replacement;
+- in-place updates when a zone boundary, label position or style changes;
+- deterministic removal when an object disappears from the next valid snapshot;
+- correction-range invalidation for drawings downstream of corrected bars;
+- no duplicate retained objects after repeated Compile & Run;
+- failed compilation or scene commit preserves the last valid scene.
+
+The existing browser test is a chart-change smoke test, not a golden-image suite. It cannot substitute for fixed-history assertions over exact time/price coordinates and retained-object identity.
+
+## Editor contract
+
+The live dock currently uses a textarea while the full Coder surface is described as having richer editor integrations. Do not claim editor parity until both surfaces share the same editor adapter/model, compiler worker, immutable source revisions, diagnostics and completion/hover/definition providers. A shared adapter must reject stale compile responses and must not turn the selected authoring level into a runtime permission.
+
 ## Deterministic acceptance
 
 Run:
