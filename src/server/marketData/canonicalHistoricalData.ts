@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
@@ -107,6 +108,64 @@ function safeError(error: unknown): string {
   return String(value?.message || 'Unable to load validated historical candles').replace(/[\r\n\t]+/g, ' ').slice(0, 240);
 }
 
+/**
+ * Distributed single-flight for identical FYERS history ranges. Redis cache entries
+ * are short-lived and contain validated provider envelopes only. If Redis is not
+ * configured, the existing HistoricalDataService process-local single-flight remains
+ * active; the shared request gate still accounts every provider attempt.
+ */
+async function withDistributedFyersHistory<T>(
+  keyParts: readonly (string | number)[],
+  fetcher: () => Promise<T>,
+): Promise<T> {
+  const redis = getSharedRedis();
+  if (!redis.configured) return fetcher();
+
+  const digest = createHash('sha256')
+    .update(keyParts.map(value => String(value)).join(':'))
+    .digest('hex');
+  const cacheKey = 'tco:fyers:history-result:v1:' + digest;
+  const lockKey = 'tco:fyers:history-flight:v1:' + digest;
+  const cached = await redis.get<string>(cacheKey).catch(() => null);
+  if (cached) {
+    try { return JSON.parse(cached) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
+  }
+
+  const owner = createHash('sha256')
+    .update(digest + ':' + Date.now() + ':' + Math.random())
+    .digest('hex');
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline) {
+    const acquired = await redis.acquireLock(lockKey, owner, 20_000).catch(() => false);
+    if (acquired) {
+      try {
+        const secondRead = await redis.get<string>(cacheKey).catch(() => null);
+        if (secondRead) {
+          try { return JSON.parse(secondRead) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
+        }
+        const result = await fetcher();
+        await redis.set(cacheKey, JSON.stringify(result), { px: 60_000 }).catch(() => undefined);
+        return result;
+      } finally {
+        await redis.releaseLock(lockKey, owner).catch(() => undefined);
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const sharedResult = await redis.get<string>(cacheKey).catch(() => null);
+    if (sharedResult) {
+      try { return JSON.parse(sharedResult) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
+    }
+  }
+
+  // Fail closed rather than allowing concurrent Vercel instances to fan out
+  // duplicate provider calls when a distributed lease is stuck or unavailable.
+  throw Object.assign(new Error('Timed out waiting for the shared FYERS history fetch.'), {
+    status: 503,
+    code: 'FYERS_HISTORY_SINGLEFLIGHT_TIMEOUT',
+  });
+}
+
 async function fallbackQuoteSnapshot(client: FyersApiClient, symbol: string): Promise<HistoricalQuoteSnapshot | null> {
   try {
     const signal = timeoutSignal(API_LATENCY_BUDGET_MS.quote);
@@ -178,28 +237,32 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
   }
 
   const fetchFyersRecentRaw = client
-    ? async (mapping: HistoricalInstrumentMapping, range: { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string }) => {
-        const signal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
-        const payload = await client!.dataGet<any>('/history', {
-          symbol: mapping.fyersSymbol,
-          resolution: spec.resolution,
-          date_format: '0',
-          range_from: String(Math.floor(range.fromMs / 1000)),
-          range_to: String(Math.floor(range.toMs / 1000)),
-          cont_flag: '1',
-        }, signal, API_LATENCY_BUDGET_MS.history, 'interactive');
-        const bars = Array.isArray(payload?.candles) ? payload.candles : [];
-        // A historical "before" page must not trigger a second quote request
-        // merely because that older range contains no candles.
-        const quote = bars.length || request.beforeTimestamp !== undefined
-          ? null
-          : await fallbackQuoteSnapshot(client!, mapping.fyersSymbol);
-        return {
-          bars,
-          quote,
-          status: { recentSessionRangeFrom: range.fromDate, rangeTo: new Date(range.toMs).toISOString(), calendarPolicy: range.calendarPolicy },
-        };
-      }
+    ? async (mapping: HistoricalInstrumentMapping, range: { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string }) =>
+        withDistributedFyersHistory(
+          [client!.quotaIdentity, mapping.instrumentId, spec.interval, Math.floor(range.fromMs / 1000), Math.floor(range.toMs / 1000)],
+          async () => {
+            const signal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
+            const payload = await client!.dataGet<any>('/history', {
+              symbol: mapping.fyersSymbol,
+              resolution: spec.resolution,
+              date_format: '0',
+              range_from: String(Math.floor(range.fromMs / 1000)),
+              range_to: String(Math.floor(range.toMs / 1000)),
+              cont_flag: '1',
+            }, signal, API_LATENCY_BUDGET_MS.history, 'interactive');
+            const bars = Array.isArray(payload?.candles) ? payload.candles : [];
+            // A historical "before" page must not trigger a second quote request
+            // merely because that older range contains no candles.
+            const quote = bars.length || request.beforeTimestamp !== undefined
+              ? null
+              : await fallbackQuoteSnapshot(client!, mapping.fyersSymbol);
+            return {
+              bars,
+              quote,
+              status: { recentSessionRangeFrom: range.fromDate, rangeTo: new Date(range.toMs).toISOString(), calendarPolicy: range.calendarPolicy },
+            };
+          },
+        )
     : undefined;
 
   const fetchFyersRecent = fetchFyersRecentRaw
