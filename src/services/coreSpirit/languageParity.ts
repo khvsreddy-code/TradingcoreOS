@@ -61,7 +61,7 @@ export const CORE_SPIRIT_PINE_FEATURE_MATRIX:readonly CoreSpiritFeatureParity[]=
   {id:'time',domain:'pine-language',status:'implemented',scope:'time/bar index/temporal phases',nativeSurface:'time / bar_index / temporal<T>'},
   {id:'symbols',domain:'pine-language',status:'implemented',scope:'market references in semantic/data graph',nativeSurface:'market("…")'},
   {id:'timeframes',domain:'pine-language',status:'implemented',scope:'explicit timeframe references',nativeSurface:'market(...).timeframe(...)'},
-  {id:'multi-timeframe',domain:'pine-language',status:'implemented',scope:'multi-timeframe graph/planning',nativeSurface:'timeframe / data graph'},
+  {id:'multi-timeframe',domain:'pine-language',status:'partial',scope:'multi-timeframe graph/planning exists; confirmed-bar publication, gaps, lookahead and exchange-session alignment still require end-to-end semantic fixtures',nativeSurface:'timeframe / data graph'},
   {id:'multi-symbol',domain:'pine-language',status:'implemented',scope:'multi-symbol graph/planning',nativeSurface:'multiple market refs'},
   {id:'lower-timeframe',domain:'pine-language',status:'implemented',scope:'lower-TF resolution surface',nativeSurface:'lowerTf'},
   {id:'financial-data',domain:'pine-language',status:'partial',scope:'generic host market-data request path',nativeSurface:'request'},
