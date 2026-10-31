@@ -167,11 +167,14 @@ export class FyersApiClient {
       const combined = new URLSearchParams(existing);
       query.forEach((value, key) => combined.set(key, value));
 
-      // Central boundary: every standard Data API /history caller is clipped to
-      // seven days. A wholly older page fails locally before quota admission.
-      if (base === DATA_BASE && pathOnly === '/history') {
+      // Central boundary: clamp every FYERS endpoint whose path identifies a
+      // historical request (including expired F&O history) before quota admission.
+      // This prevents alternate history routes from bypassing the seven-day policy.
+      const isHistoricalEndpoint = pathOnly.toLowerCase().includes('history');
+      if ((base === DATA_BASE || base === API_BASE) && isHistoricalEndpoint
+        && combined.has('range_from') && combined.has('range_to')) {
         const bounded = clampFyersHistoryRange(combined.get('range_from'), combined.get('range_to'));
-        if (!bounded) throw new FyersHistoryWindowError('This FYERS history page is older than the permitted seven-day window; use historical backfill.');
+        if (!bounded) throw new FyersHistoryWindowError('This FYERS history page is older than the permitted seven-day window; use the configured historical backfill source.');
         combined.set('range_from', String(Math.floor(bounded.fromMs / 1000)));
         combined.set('range_to', String(Math.floor(bounded.toMs / 1000)));
         combined.set('date_format', '0');
