@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
@@ -159,7 +160,16 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
     const session = await BrokerRepository.getSession('fyers', userId);
     if (session?.status === 'Connected') {
       const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-      client = new FyersApiClient(accessToken, undefined, capabilities, userId);
+      // Share the quota bucket when the same FYERS account is connected through
+      // more than one TradingCore identity. Prefer the stable broker client code;
+      // never key quotas by a rotating access token. Hash before passing the key
+      // into request-gate state.
+      const stableFyersAccount = String(session.clientCode || userId).trim().toUpperCase();
+      const quotaIdentity = createHash('sha256')
+        .update('tradingcore:fyers-account:v1:')
+        .update(stableFyersAccount)
+        .digest('hex');
+      client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
     } else {
       fyersUnavailableReason = 'Fyers session is not connected';
     }
