@@ -254,6 +254,11 @@ assert.equal(detectCoreSpiritAuthoringLevel('let note = "model alpha backtest au
   'mentions inside strings must not elevate the required level');
 assert.equal(detectCoreSpiritAuthoringLevel('// model alpha backtest\nlet x = ta.ema(close, 9)'), 'beginner',
   'comment-only mentions must not elevate the required level');
+const signalSubscriptionTrader = `${levelTrader}\non signal("LONG") { signal("CONFIRMED") }`;
+assert.equal(detectCoreSpiritAuthoringLevel(signalSubscriptionTrader), 'trader',
+  'subscribing to a trading signal without automation must remain trader-level');
+assert.equal(detectCoreSpiritAuthoringLevel('on market.tick { signal("LONG") }'), 'system',
+  'explicit market-event handlers must remain system-level');
 
 const sharedFacts = { strategy:true, model:true, multiTimeframe:true, automation:true };
 const requiredLevel = inferCoreSpiritRequiredLevel(sharedFacts);
