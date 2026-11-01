@@ -49,7 +49,7 @@ assert.deepEqual(targetForOldConfig, {value:42});
 
 for (const [field, value] of [
   ['kernelVersion', 2],
-  ['parametersSignature', 'ema:period=21'],
+  ['parametersSignature', 'ema:period=34'],
   ['dataRevision', 'market-revision-11'],
   ['nextBarIndex', 101],
   ['modelVersion', 'core-model-v2'],
