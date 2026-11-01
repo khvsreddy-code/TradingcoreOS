@@ -175,7 +175,11 @@ includes(live, 'const sameSourceInstance = activeCell.instances.find', 'same-sou
 includes(live, 'activeCell.removeFromChart(nativeCount + staleIndex)', 'a changed source replaces stale script instances only after the replacement is ready');
 assert.ok(live.indexOf('await new Promise<void>') < live.indexOf('for (const previousId of previousInstanceIds)'),
   'the previous valid CoreSpirit instance must stay attached until the replacement emits ready');
-includes(chrome, 'await addToChart(scriptName, scriptSource, artifact, scriptId)', 'the embedded dock forwards script identity with the compiled artifact');
+includes(chrome, 'coreSpiritChartRegistry.getActive()', 'the embedded Vela dock resolves the registered active chart target');
+includes(chrome, 'target.updateCode(scriptSource, artifact, instanceId)', 'the embedded dock forwards the validated artifact through the chart update transaction');
+includes(chrome, 'diagnosticDetails?.find(diagnostic => diagnostic.severity === \'error\')', 'fatal worker diagnostics block a false rendered status');
+includes(chrome, 'result.barsProcessed <= 0', 'stale or empty chart executions are not reported as successful');
+excludes(chrome, '__TCO_ADD_CORESPIRIT_TO_CHART__', 'the Vela side panel must not depend on an unimplemented window-global chart bridge');
 includes(engine, 'consumeCoreSpiritPrecompiledArtifact(source)', 'Vela consumes the source-matched artifact before fallback compilation');
 includes(engine, 'validateCoreScriptCapabilitiesAgainstSandbox(', 'precompiled artifacts pass the same chart capability sandbox');
 includes(engine, 'await loadOrCompileCoreSpiritArtifact(source, instanceId', 'a handoff miss safely falls back to the normal compile path');
