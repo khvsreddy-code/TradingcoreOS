@@ -15,6 +15,17 @@ feed.enqueue({generation:g2,receivedAt:now+3,exchangeTimestamp:10003,sequence:3,
 feed.enqueue({generation:g2,receivedAt:now+2,exchangeTimestamp:10002,sequence:2,payload:'b'});
 feed.enqueue({generation:g2,receivedAt:now+1,exchangeTimestamp:10001,sequence:1,payload:'a'});
 assert.equal(feed.droppedEvents,1,'buffer must remain bounded');assert.deepEqual(feed.drain().map(x=>x.payload),['b','c']);
+feed.enqueue({generation:g2,receivedAt:now+4,exchangeTimestamp:10005,sequence:5,payload:'e'});
+feed.enqueue({generation:g2,receivedAt:now+5,exchangeTimestamp:10004,sequence:4,payload:'d'});
+assert.equal(feed.enqueue({generation:g2,receivedAt:now+6,exchangeTimestamp:10003,sequence:3,payload:'late'},false), false);
+assert.equal(feed.droppedEvents,2,'a late event must be counted as dropped rather than evicting newer market data');
+assert.deepEqual(feed.drain().map(x=>x.payload),['d','e'],'full buffer retains the newest events by exchange ordering, not arrival order');
+const reconnectBuffer=new MarketFeedLifecycle<string>({maxBufferedEvents:2});
+const oldBufferGeneration=reconnectBuffer.beginConnection();
+reconnectBuffer.enqueue({generation:oldBufferGeneration,receivedAt:now+1,sequence:1,payload:'old-generation'});
+const newBufferGeneration=reconnectBuffer.beginConnection();
+assert.deepEqual(reconnectBuffer.drain(),[],'reconnect must clear packets buffered by the retired socket generation');
+assert.ok(newBufferGeneration>oldBufferGeneration);
 assert.equal(feed.beginRecovery(g2),true);assert.equal(feed.finishRecovery(g2,false),true);assert.equal(feed.snapshot().phase,'stale');
 assert.equal(feed.authenticationFailed(g2),true);assert.equal(feed.snapshot().phase,'failed');
 const g3=feed.beginConnection();feed.retire();assert.equal(feed.accept({generation:g3,receivedAt:now+4,payload:'retired-after-unsubscribe'}),false);
