@@ -395,7 +395,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
   if (!capacity.allowed) {
     return res.status(400).json({
       success: false,
-      error: `FYERS ${capabilities.plan} Data WebSocket limit is ${capacity.limit} unique active symbols across this user's shared stream.`,
+      error: `FYERS ${capabilities.plan} Data WebSocket limit is ${capacity.limit} unique active symbols across this FYERS account's shared stream.`,
       code: 'FYERS_STREAM_SYMBOL_LIMIT',
       limit: capacity.limit,
       active: capacity.activeSymbols,

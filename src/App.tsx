@@ -3,7 +3,7 @@ import { AuthProvider } from './auth/context/AuthContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
 import type { WorkspaceRoute } from './components/workspace/WorkspaceModuleShellTypes';
-import { WORKSPACE_ROUTES, isWorkspaceRoute } from './routing/appRoutes';
+import { isWorkspaceRoute } from './routing/appRoutes';
 import { LoadingScreen } from './components/common/LoadingScreen';
 import { LandingShell } from './appShells/LandingShell';
 const TradingWorkspaceShell = lazy(() => import('./appShells/TradingWorkspaceShell').then(m => ({ default: m.TradingWorkspaceShell })));
@@ -16,8 +16,6 @@ const BrokerCallbackPage = lazy(() => import('./pages/BrokerCallbackPage').then(
 const LegalPage = lazy(() => import('./pages/LegalPage').then(m => ({ default: m.LegalPage })));
 const IndicatorExplorePage = lazy(() => import('./pages/IndicatorExplorePage').then(m => ({ default: m.IndicatorExplorePage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
-
-const workspacePaths = WORKSPACE_ROUTES;
 
 const viewFromPath = (path: string): 'landing' | 'login' | 'app' | 'broker-connection' =>
   path === '/broker' ? 'broker-connection' :

@@ -39,11 +39,11 @@ export class FyersMarketDataTransport {
   }
 
   static checkSubscriptionCapacity(
-    userId: string,
+    _userId: string,
     instrumentKeys: readonly string[],
     maxSymbols: number,
     depthSymbols: readonly string[] = [],
-    quotaIdentity = userId,
+    quotaIdentity = _userId,
   ): { allowed: boolean; activeSymbols: number; projectedSymbols: number; limit: number } {
     const active = new Set<string>();
     for (const session of this.sessions.values()) {
