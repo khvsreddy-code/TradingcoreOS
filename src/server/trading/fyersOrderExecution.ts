@@ -100,7 +100,9 @@ export async function placeFyersOrderViaFixedIpGateway(accessToken: string, orde
     version: 1,
     riskApproved: decision.approved,
     strategyId: 'tco-manual-order',
-    accountKey: createHash('sha256').update(userId).digest('hex'),
+    // The gateway validates this key against rateLimitIdentity; use the same
+    // broker-account scope so cross-user orders share the account-level limiter.
+    accountKey: createHash('sha256').update(quotaIdentity).digest('hex'),
     // The HMAC binds this identity and entitlement to the order request. The
     // gateway verifies them before charging the shared transaction quota.
     rateLimitIdentity: quotaIdentity,
