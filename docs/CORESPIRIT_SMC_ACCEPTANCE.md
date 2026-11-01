@@ -71,14 +71,20 @@ For an authenticated workspace, set `TCO_REQUIRE_AUTH=true` and use an existing 
 2. the post-commit native scene contains chart-target drawing objects such as lines, zones, boxes or labels;
 3. the screenshot of the actual Vela plot differs from the pre-compile screenshot by a minimum number of pixels inside the chart-plot region;
 4. a second screenshot comparison proves the plot changed after a wheel zoom and horizontal drag;
-5. recompiling the same SMC source leaves exactly one stable active-chart instance and does not grow the retained visual inventory;
+5. recompiling the same SMC source repeatedly leaves exactly one stable active-chart instance and does not grow the retained visual inventory;
 6. the source saved by the actual Compile & Run path is restored exactly after a page reload.
 
 The screenshot comparator reads the browser-produced PNG files, decodes RGB/RGBA pixels, and compares only the overlap of the largest visible Vela chart canvas region. The pass threshold is deliberately a *change detector*, not a similarity score: it confirms that the native drawing commit affected pixels and that viewport gestures caused a plot update. It does not assert that the drawing is semantically correct at every coordinate by itself; that is covered by the separate fixed-history fixtures.
 
 This is a rendered-pixel smoke gate, not yet a baseline screenshot-diff suite. There are no stored golden images, and it does not yet provide expected-image comparisons for every viewport size, pane, color scheme or instrument.
 
+The browser report now includes first-plot-ready time (from the Compile & Run click to the native visual-commit event), repeated warm recompile-to-visual-commit samples with nearest-rank p50/p95, device concurrency/memory hints, and Chromium JS heap samples where `performance.memory` is exposed. Repeated recompiles also assert that the same instance and native object-kind inventory are retained. These are browser execution/commit measurements, not GPU/process-memory measurements and not a substitute for frame-paint profiling. Run against the same browser, instrument, timeframe, history length and viewport when comparing reports.
+
 ## Performance baseline
+
+The persistent worker pool now uses a conservative resource budget based on browser device hints. Devices reporting 4 GiB or less are capped at one worker and three retained contexts per worker; devices above 4 GiB and up to 8 GiB are capped at two workers and five contexts; larger-memory devices may use up to four workers (still leaving one reported hardware thread free) and eight contexts. When device memory is unavailable, the pool stays at two workers and four contexts. These values are admission guards, not measurements of available free RAM; browsers often expose only coarse device-memory buckets.
+
+A workload containing at least 20,000 market-data points (bars plus graph-node points) runs exclusively: existing worker jobs drain before it starts, and small jobs do not refill the pool until it finishes. Normal smaller workloads retain the existing priority-based worker parallelism. This is intended to avoid simultaneous large history copies and retained execution state on low-memory browsers. The threshold must be tuned from real browser evidence; it is not a universal optimal bar count.
 
 Run a comparable pipeline sample and persist its JSON report:
 
