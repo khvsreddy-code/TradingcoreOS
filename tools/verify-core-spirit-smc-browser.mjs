@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 
@@ -262,6 +262,13 @@ try {
 
   evaluate(`(() => {
     window.__TCO_SMC_VISUAL_COMMITS__ = [];
+    window.__TCO_SMC_WORKER_METRICS__ = [];
+    window.addEventListener('tco:corespirit:worker-performance', event => {
+      const detail = event.detail || {};
+      if (typeof detail.metric !== 'string' || !Number.isFinite(Number(detail.durationMs))) return;
+      window.__TCO_SMC_WORKER_METRICS__.push(detail);
+      if (window.__TCO_SMC_WORKER_METRICS__.length > 512) window.__TCO_SMC_WORKER_METRICS__.splice(0, 64);
+    });
     window.addEventListener('tco:corespirit:visual-commit', event => {
       const memory = performance.memory;
       const measuredAtMs = performance.now();
@@ -319,6 +326,19 @@ try {
       assert(chartPixelDiff.passed,
         'SMC native objects committed but chart screenshot pixels did not change enough: ' +
         chartPixelDiff.changedPixels + '/' + chartPixelDiff.comparedPixels + '.');
+      let goldenImageDiff = null;
+      const goldenImagePath = process.env.TCO_SMC_GOLDEN_IMAGE?.trim();
+      if (goldenImagePath) {
+        const goldenBytes = await readFile(resolve(goldenImagePath));
+        const goldenDimensions = decodePng(goldenBytes);
+        const actualDimensions = decodePng(afterScreenshot);
+        assert(goldenDimensions.width === actualDimensions.width && goldenDimensions.height === actualDimensions.height,
+          'Stored SMC golden image dimensions must match the browser screenshot; capture goldens at the same viewport/device scale.');
+        goldenImageDiff = countChartPixelDiff(goldenBytes, afterScreenshot, beforeRegion, afterRegion);
+        assert(goldenImageDiff.passed,
+          'SMC output differs from the approved golden screenshot beyond the configured pixel threshold: ' +
+          goldenImageDiff.changedPixels + '/' + goldenImageDiff.comparedPixels + '.');
+      }
       const persisted = evaluateJson(`({
         versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
         legacyDraft: localStorage.getItem('tradingcore:corespirit:editor') === ${JSON.stringify(smcSource)}
@@ -527,6 +547,32 @@ try {
         comparedPixels: viewportPixelDiff.comparedPixels,
         changedRatio: viewportPixelDiff.changedRatio,
       };
+      const workerPerformance = evaluateJson(`(() => {
+        const samples = Array.isArray(window.__TCO_SMC_WORKER_METRICS__) ? window.__TCO_SMC_WORKER_METRICS__ : [];
+        const quantile = (values, p) => {
+          const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+          return sorted.length ? Number(sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)].toFixed(2)) : null;
+        };
+        const summarize = (metric, filter = {}) => {
+          const values = samples.filter(item => item.metric === metric &&
+            (!filter.mode || item.mode === filter.mode) &&
+            (!filter.artifactLifecycle || item.artifactLifecycle === filter.artifactLifecycle))
+            .map(item => Number(item.durationMs)).filter(Number.isFinite);
+          return { sampleCount: values.length, p50Ms: quantile(values, 0.50), p95Ms: quantile(values, 0.95), maxMs: values.length ? Number(Math.max(...values).toFixed(2)) : null };
+        };
+        return {
+          sampleCount: samples.length,
+          admissionWait: summarize('worker-admission-wait'),
+          resultRoundTrip: summarize('worker-result-roundtrip'),
+          endToEnd: summarize('worker-end-to-end'),
+          historicalRoundTrip: summarize('worker-result-roundtrip', { mode: 'historical' }),
+          incrementalRoundTrip: summarize('worker-result-roundtrip', { mode: 'incremental' }),
+          coldArtifactInstallRoundTrip: summarize('worker-result-roundtrip', { artifactLifecycle: 'cold-install' }),
+          warmArtifactReuseRoundTrip: summarize('worker-result-roundtrip', { artifactLifecycle: 'warm-reuse' }),
+          maxMarketDataPoints: samples.reduce((max, item) => Math.max(max, Number(item.dataPoints) || 0), 0),
+          measurementDefinition: 'main-thread admission wait and postMessage-to-result round trip; round trip includes worker execution, data transfer, and message scheduling rather than pure kernel CPU time'
+        };
+      })()`);
       const browserTelemetry = evaluateJson(`(() => {
         const memory = performance.memory;
         return {
@@ -553,7 +599,9 @@ try {
         heapDeltaAcrossRecompileSamplesBytes: Number.isFinite(commit.__heapUsedBytes) && Number.isFinite(finalRepeatedCommit?.__heapUsedBytes)
           ? finalRepeatedCommit.__heapUsedBytes - commit.__heapUsedBytes : null,
         repeatedHeapSampleCount: repeatedRecompileHeapSamples.length,
-        note: 'Times end at the browser visual-commit event; p50/p95 are nearest-rank statistics for repeated Compile & Run samples. Heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
+        workerPerformance,
+        goldenImageComparison: goldenImagePath ? { configured: true, path: goldenImagePath, changedPixels: goldenImageDiff.changedPixels, comparedPixels: goldenImageDiff.comparedPixels, changedRatio: goldenImageDiff.changedRatio } : { configured: false, note: 'Set TCO_SMC_GOLDEN_IMAGE to compare against an approved viewport-matched PNG.' },
+        note: 'Times end at the browser visual-commit event; p50/p95 are nearest-rank statistics for repeated Compile & Run samples. Worker round-trip includes worker execution and messaging, not pure kernel CPU time. Heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
       };
       const visualEvidence = {
         url: baseUrl,
@@ -577,6 +625,12 @@ try {
           changedRatio: chartPixelDiff.changedRatio,
           threshold: chartPixelDiff.threshold,
         },
+        goldenImagePixelDiff: goldenImageDiff ? {
+          changedPixels: goldenImageDiff.changedPixels,
+          comparedPixels: goldenImageDiff.comparedPixels,
+          changedRatio: goldenImageDiff.changedRatio,
+          threshold: goldenImageDiff.threshold,
+        } : null,
         viewportPixelDiff: {
           changedPixels: viewportPixelDiff.changedPixels,
           comparedPixels: viewportPixelDiff.comparedPixels,
