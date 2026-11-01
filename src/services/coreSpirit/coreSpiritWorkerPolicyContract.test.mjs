@@ -51,17 +51,21 @@ assert.throws(
 assert.equal(CORESPIRIT_WORKER_EXCLUSIVE_DATA_POINTS, 20_000);
 assert.equal(isCoreSpiritWorkerExclusiveWorkload(19_999), false);
 assert.equal(isCoreSpiritWorkerExclusiveWorkload(20_000), true);
-assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [], [20_000]), false,
-  'a waiting large snapshot must drain the small in-flight queue before admission');
-assert.equal(canDispatchCoreSpiritWorkerWorkload(20_000, [], [2_000, 20_000]), true,
-  'the large snapshot may start when the active pool has drained');
-assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [2_000], [20_000]), false,
-  'small jobs must not refill worker slots while a large snapshot is waiting');
-assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [20_000], []), false,
-  'a running large snapshot must retain exclusive worker capacity');
-assert.equal(canDispatchCoreSpiritWorkerWorkload(20_000, [2_000], []), false,
+assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [], [20_000], 1), false,
+  'a large snapshot at the head of the queue must block later small work');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [], [2_000, 20_000], 0), true,
+  'higher-priority small work ahead of a large snapshot may drain first');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [], [20_000, 2_000], 1), false,
+  'lower-priority small work behind a large snapshot must wait');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(20_000, [], [2_000, 20_000], 1), true,
+  'the large snapshot may start once all higher-priority queued work ahead of it has drained');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [2_000], [2_000, 20_000], 1), false,
+  'the exclusive snapshot must wait until active small jobs complete');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(2_000, [20_000], [2_000], 0), false,
+  'small jobs must not run alongside an active large snapshot');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(20_000, [2_000], [20_000], 0), false,
   'a large snapshot must wait until existing small jobs complete');
-assert.equal(canDispatchCoreSpiritWorkerWorkload(5_000, [2_000], [7_000]), true,
-  'ordinary workloads may still run concurrently when no large snapshot is queued');
+assert.equal(canDispatchCoreSpiritWorkerWorkload(5_000, [2_000], [5_000, 7_000], 0), true,
+  'ordinary workloads ahead of a non-exclusive job retain existing worker parallelism');
 
 console.log('CORESPIRIT_WORKER_RESOURCE_POLICY_CONTRACT_OK');
