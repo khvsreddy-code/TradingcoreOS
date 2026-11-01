@@ -213,6 +213,24 @@ assert.equal(semanticFingerprint(revisedLive.outputs), semanticFingerprint(refer
   'forming-bar replacement must be equivalent to executing only the final version of that bar');
 assert.equal(revisedLive.state.barIndex, referenceLive.state.barIndex);
 
+// Apply another correction to the same still-forming bar. Three successive
+// versions must remain one observation, and the final state must be independent
+// of how many provisional versions arrived before it.
+const finalRevisionBar = {
+  ...revisedBar,
+  close: liveBar.close - 0.09,
+  high: Math.max(liveBar.high, liveBar.open, liveBar.close - 0.09),
+  low: Math.min(liveBar.low, liveBar.close - 0.21),
+};
+const repeatedRevision = liveRuntime.executeBar(finalRevisionBar, 'realtime');
+const repeatedRevisionReferenceRuntime = new CoreSpiritRuntime({ sourceId: 'smc-forming-bar' });
+repeatedRevisionReferenceRuntime.executeIr(compiled.ir, prefix);
+const repeatedRevisionReference = repeatedRevisionReferenceRuntime.executeBar(finalRevisionBar, 'realtime');
+assert.equal(semanticFingerprint(repeatedRevision.outputs), semanticFingerprint(repeatedRevisionReference.outputs),
+  'repeated forming-bar replacement must restore the same pre-bar checkpoint instead of accumulating provisional state');
+assert.equal(repeatedRevision.state.barIndex, repeatedRevisionReference.state.barIndex,
+  'repeated forming-bar replacement must not advance the logical bar index');
+
 // Historical corrections force a chronological replay and must converge to the
 // same outputs as a clean run of the corrected immutable dataset.
 const correctedBars = bars.map(bar => ({ ...bar }));
