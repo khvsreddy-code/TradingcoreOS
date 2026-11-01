@@ -54,39 +54,105 @@ export class CoreSpiritPerformanceMonitor {
 }
 
 type Task = { id: string; lane: 'hot' | 'warm' | 'cold'; run: () => void };
+type TaskLane = Task['lane'];
+type QueuedTask = Readonly<{ task: Task }>;
 
-/** Deterministic lane scheduler. It is a host scheduler, not a second VM. */
+/**
+ * Deterministic lane scheduler. It is a host scheduler, not a second VM.
+ *
+ * Dequeue is O(1): a head cursor replaces Array.shift(), which moves every
+ * remaining entry on each task. Superseded work is tombstoned by entry identity
+ * and compacted amortized, so rescheduling a keyed task does not scan/splice a
+ * hot queue on every market update.
+ */
 export class CoreSpiritLaneScheduler {
-  private queues: Record<Task['lane'], Task[]> = { hot: [], warm: [], cold: [] };
-  private keyed = new Map<string, Task>();
+  private queues: Record<TaskLane, QueuedTask[]> = { hot: [], warm: [], cold: [] };
+  private readonly heads: Record<TaskLane, number> = { hot: 0, warm: 0, cold: 0 };
+  private readonly activeCounts: Record<TaskLane, number> = { hot: 0, warm: 0, cold: 0 };
+  private readonly flushing: Record<TaskLane, boolean> = { hot: false, warm: false, cold: false };
+  private keyed = new Map<string, QueuedTask>();
 
   schedule(task: Task): void {
     const existing = this.keyed.get(task.id);
+    const entry: QueuedTask = Object.freeze({ task });
+    this.keyed.set(task.id, entry);
     if (existing) {
-      const queue = this.queues[existing.lane];
-      const index = queue.indexOf(existing);
-      if (index >= 0) queue.splice(index, 1);
+      this.activeCounts[existing.task.lane] = Math.max(0, this.activeCounts[existing.task.lane] - 1);
+      this.compact(existing.task.lane);
     }
-    this.keyed.set(task.id, task);
-    this.queues[task.lane].push(task);
+    this.activeCounts[task.lane] += 1;
+    this.queues[task.lane].push(entry);
+    this.compact(task.lane);
   }
 
-  flush(lane: Task['lane'], budgetMs = lane === 'hot' ? CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.hotTaskMs : lane === 'warm' ? CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.reactiveMs : CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.backgroundMs): number {
+  flush(
+    lane: TaskLane,
+    budgetMs = lane === 'hot'
+      ? CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.hotTaskMs
+      : lane === 'warm'
+        ? CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.reactiveMs
+        : CORE_SPIRIT_DEFAULT_PERFORMANCE_BUDGET.backgroundMs,
+  ): number {
     const queue = this.queues[lane];
     const started = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     let ran = 0;
-    while (queue.length) {
-      const task = queue.shift()!;
-      this.keyed.delete(task.id);
-      task.run();
-      ran += 1;
-      const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-      if (now - started >= budgetMs) break;
+    this.flushing[lane] = true;
+    try {
+      while (this.heads[lane] < queue.length) {
+        const entry = queue[this.heads[lane]++]!;
+        // A newer task with the same key owns the slot; stale entries are
+        // skipped without touching the keyed task's live count.
+        if (this.keyed.get(entry.task.id) !== entry) continue;
+        this.keyed.delete(entry.task.id);
+        this.activeCounts[lane] = Math.max(0, this.activeCounts[lane] - 1);
+        entry.task.run();
+        ran += 1;
+        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        if (now - started >= budgetMs) break;
+      }
+      return ran;
+    } finally {
+      this.flushing[lane] = false;
+      this.compact(lane);
     }
-    return ran;
   }
 
-  flushAll(): number { return this.flush('hot', Number.POSITIVE_INFINITY) + this.flush('warm', Number.POSITIVE_INFINITY) + this.flush('cold', Number.POSITIVE_INFINITY); }
-  pending(lane?: Task['lane']): number { return lane ? this.queues[lane].length : this.queues.hot.length + this.queues.warm.length + this.queues.cold.length; }
-  clear(): void { this.queues.hot.length = 0; this.queues.warm.length = 0; this.queues.cold.length = 0; this.keyed.clear(); }
+  flushAll(): number {
+    return this.flush('hot', Number.POSITIVE_INFINITY) +
+      this.flush('warm', Number.POSITIVE_INFINITY) +
+      this.flush('cold', Number.POSITIVE_INFINITY);
+  }
+
+  pending(lane?: TaskLane): number {
+    return lane
+      ? this.activeCounts[lane]
+      : this.activeCounts.hot + this.activeCounts.warm + this.activeCounts.cold;
+  }
+
+  clear(): void {
+    this.queues = { hot: [], warm: [], cold: [] };
+    this.heads.hot = 0;
+    this.heads.warm = 0;
+    this.heads.cold = 0;
+    this.activeCounts.hot = 0;
+    this.activeCounts.warm = 0;
+    this.activeCounts.cold = 0;
+    this.keyed.clear();
+  }
+
+  private compact(lane: TaskLane): void {
+    if (this.flushing[lane]) return;
+    const queue = this.queues[lane];
+    const head = this.heads[lane];
+    const threshold = Math.max(64, this.activeCounts[lane] * 2);
+    if (head < threshold && queue.length <= threshold) return;
+
+    const live: QueuedTask[] = [];
+    for (let index = head; index < queue.length; index += 1) {
+      const entry = queue[index]!;
+      if (this.keyed.get(entry.task.id) === entry) live.push(entry);
+    }
+    this.queues[lane] = live;
+    this.heads[lane] = 0;
+  }
 }
