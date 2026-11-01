@@ -200,6 +200,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     };
     setCompileResult(result);
     monacoAdapterRef.current?.setDiagnostics(result.diagnostics, value);
+    monacoAdapterRef.current?.setSymbolInfo(result.symbols ?? []);
     const errors = result.diagnostics.filter(item => item.severity === 'error');
     setDiagnostics(result.diagnostics.map(item => {
       const location = item.line == null ? '' : 'L' + item.line + (item.column == null ? '' : ':' + item.column) + ': ';
