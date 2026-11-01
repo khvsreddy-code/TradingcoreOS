@@ -19,6 +19,7 @@ const contextMenu = read('../vendor/vela/src/widget/context-menu.ts');
 const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const rendererImpl = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const nativeExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
+const coreSpiritDock = read('./components/corespirit/CoreSpiritDock.tsx');
 
 assert.match(velaProvenance, /Upstream source version: \*\*0\.9\.0\*\*/, 'live chart integration must match the verified Vela 0.9.0 source baseline');
 assert.match(velaReleaseNotes, /^## \[0\.8\.5\]/m, '0.8.5 integration contract must be backed by the vendored upstream release notes');
@@ -63,8 +64,8 @@ assert.match(provider, /const requested = Math\.max\(100, Math\.min\(5_000, Math
 
 assert.match(chrome, /mountCoreSpiritMonaco/, 'live CoreSpirit panel should use the Pine-editor-inspired Monaco authoring surface');
 assert.match(chrome, /compileCoreSpiritSourceOffThread/, 'live CoreScript must compile off the UI thread');
-assert.match(chrome, /adapter\.setDiagnostics\(result\.diagnostics, currentSource\)/, 'compiler diagnostics must be visible in the editor');
-assert.match(chrome, /adapter\.setSymbolInfo\(result\.symbols\)/, 'compiler symbols must feed editor completion/hover');
+assert.match(coreSpiritDock, /monacoAdapterRef\.current\?\.setDiagnostics\(result\.diagnostics, value\)/, 'compiled diagnostics must be visible in the embedded editor');
+assert.match(coreSpiritDock, /monacoAdapterRef\.current\?\.setSymbolInfo\(result\.symbols \?\? \[\]\)/, 'the latest compiled symbols must feed editor completion/hover');
 assert.match(chrome, /ctx\.addIndicator\(\{ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' \}\)/, 'Run must submit the actual CoreScript to the active Vela chart with an explicit instance identity');
 assert.match(chrome, /candidate\.id === indicatorId/, 'CoreSpirit Run must bind readiness/errors to its exact Vela indicator instance');
 assert.match(chrome, /activeHandle\.updateCode\(currentSource\);/, 'subsequent CoreSpirit Run actions must use Vela updateCode without expecting a return value');
