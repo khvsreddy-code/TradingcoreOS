@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Clock3, Code2, Maximize2, Minimize2, Minus, Plus, X, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
+import type { CoreSpiritEditorModel } from '../../services/coreSpirit/editorModel';
+import type { CoreSpiritMonacoAdapter } from '../../services/coreSpirit/monacoAdapter';
+import type { CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
 import { getSupabaseClient } from '../../services/auth/supabaseClient';
 import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
-import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
 import { CORE_SPIRIT_AUTHORING_LEVELS, getCoreSpiritAuthoringProfileForLevel } from '../../services/coreSpirit/coreSpiritAuthoring';
@@ -79,10 +81,21 @@ export type CoreSpiritDockProps = {
   embedded?: boolean;
   /** Updates Vela's own panel maximization state. */
   onFullscreenChange?: (fullscreen: boolean) => void;
+  /** Loaded only when the user opens Code; shared with the full-page Coder. */
+  editorModelClass?: new (source?: string) => CoreSpiritEditorModel;
+  /** Monaco adapter loader is injected at the Code-panel boundary. */
+  mountMonaco?: (container: HTMLElement, model: CoreSpiritEditorModel, onChange: (source: string) => void) => Promise<CoreSpiritMonacoAdapter>;
 };
 
-export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange }: CoreSpiritDockProps) {
-  const [source, setSource] = useState(() => localSource() || DEFAULT_SOURCE);
+export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange, editorModelClass, mountMonaco }: CoreSpiritDockProps) {
+  const initialSource = useRef<string | null>(null);
+  if (initialSource.current === null) initialSource.current = localSource() || DEFAULT_SOURCE;
+  const [source, setSource] = useState(initialSource.current);
+  const editorModelRef = useRef<CoreSpiritEditorModel | null>(null);
+  if (editorModelClass && !editorModelRef.current) editorModelRef.current = new editorModelClass(initialSource.current);
+  const monacoContainerRef = useRef<HTMLDivElement | null>(null);
+  const monacoAdapterRef = useRef<CoreSpiritMonacoAdapter | null>(null);
+  const [editorStatus, setEditorStatus] = useState<'loading' | 'ready' | 'fallback'>(editorModelClass && mountMonaco ? 'loading' : 'fallback');
   const [name, setName] = useState(() => {
     try {
       const savedName = localStorage.getItem('tradingcore:corespirit:editor-name') || '';
@@ -111,6 +124,13 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const [chartManagerOpen, setChartManagerOpen] = useState(true);
   const [managerError, setManagerError] = useState('');
   const sourceVersion = useRef(0);
+  const setEditorSource = (next: string) => {
+    if (editorModelRef.current && editorModelRef.current.getSource() !== next) {
+      editorModelRef.current.updateSource(next, '', { deferSemanticAnalysis: true });
+    }
+    monacoAdapterRef.current?.setSource(next);
+    setSource(next);
+  };
   const authoringProfile = getCoreSpiritAuthoringProfileForLevel(level);
   const compiledRequiredLevel = compileResult?.ir?.authoringLevel;
 
@@ -152,6 +172,8 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const compileSource = async (value: string) => {
     const requestedVersion = ++sourceVersion.current;
     reportStage('compiling', 'Compiling the current source revision…');
+    // Defer the compiler worker bundle until the user actually compiles/runs.
+    const { compileCoreSpiritSourceOffThread } = await import('../../services/coreSpirit/coreSpiritCompilerClient');
     const initial = await compileCoreSpiritSourceOffThread(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
     // The textarea remains editable while workers run. Never publish diagnostics
     // or apply an artifact from a compile whose source was superseded in the editor.
@@ -228,7 +250,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   };
 
   const loadManagedSource = (instance: CoreSpiritChartManagedIndicator) => {
-    setSource(instance.source);
+    setEditorSource(instance.source);
     sourceVersion.current += 1;
     setName(instance.name);
     setNameDraft(instance.name);
@@ -286,7 +308,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         // trend-cross sample; never replace another locally authored script.
         if (!localSource()) {
           const hydratedSource = migrateCloudStarter ? DEFAULT_SOURCE : cloudSource;
-          setSource(hydratedSource);
+          setEditorSource(hydratedSource);
           if (migrateCloudStarter) persistLocalSource(hydratedSource, DEFAULT_SCRIPT_NAME, script.id);
         }
         const user = await getSupabaseClient().auth.getUser();
@@ -417,7 +439,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const selectVersion = (id: string) => {
     const version = versions.find(item => item.id === id);
     if (!version) return;
-    setSource(version.source);
+    setEditorSource(version.source);
     sourceVersion.current += 1;
     setSelectedVersion(id);
     setDiagnostics([]);
@@ -426,7 +448,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   };
 
   const changeSource = (value: string) => {
-    setSource(value);
+    setEditorSource(value);
     sourceVersion.current += 1;
     setSelectedVersion('');
     setCompileResult(null);
@@ -435,6 +457,32 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     reportStage('editing', 'Unsaved source edits · the active chart continues running its last valid version.');
     persistLocalSource(value, nameDraft, scriptId);
   };
+
+  useEffect(() => {
+    const model = editorModelRef.current;
+    const container = monacoContainerRef.current;
+    if (!model || !mountMonaco || !container) {
+      setEditorStatus('fallback');
+      return;
+    }
+    let active = true;
+    setEditorStatus('loading');
+    void mountMonaco(container, model, changeSource).then(adapter => {
+      if (!active) {
+        adapter.dispose();
+        return;
+      }
+      monacoAdapterRef.current = adapter;
+      setEditorStatus('ready');
+    }).catch(() => {
+      if (active) setEditorStatus('fallback');
+    });
+    return () => {
+      active = false;
+      monacoAdapterRef.current?.dispose();
+      monacoAdapterRef.current = null;
+    };
+  }, [editorModelClass, mountMonaco]);
 
   const busyText = busy === 'compile' ? 'Compiling…' : busy === 'save' ? 'Saving…' : busy === 'rename' ? 'Renaming…' : busy === 'publish' ? 'Publishing…' : busy === 'add' ? 'Adding…' : '';
 
@@ -524,7 +572,15 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
           <div className="flex items-center gap-2 text-[10px] text-slate-400"><Code2 size={13}/> CoreSpirit Script</div>
           <span className="text-[10px] text-slate-500">UTF-8 · {source.split('\n').length} lines</span>
         </div>
-        <textarea value={source} onChange={event => changeSource(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="CoreSpirit source editor" className="min-h-[200px] flex-1 resize-none rounded-lg border border-[#263249] bg-[#070b12] p-3 font-mono text-[12px] leading-[1.65] text-[#c6ddf8] outline-none focus:border-sky-500/70" />
+        <div className="relative min-h-[200px] flex-1 overflow-hidden rounded-lg border border-[#263249] bg-[#070b12]">
+          <div ref={monacoContainerRef} aria-label="CoreSpirit Monaco editor" className={'absolute inset-0 ' + (editorStatus === 'ready' ? 'block' : 'hidden')} />
+          {editorStatus !== 'ready' && (
+            <div className="flex h-full min-h-[200px] flex-col">
+              {editorStatus === 'loading' && <div role="status" className="border-b border-[#263249] px-3 py-1 text-[9px] text-slate-500">Loading CoreSpirit editor services…</div>}
+              <textarea value={source} onChange={event => changeSource(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="CoreSpirit source editor" className="min-h-[200px] flex-1 resize-none bg-transparent p-3 font-mono text-[12px] leading-[1.65] text-[#c6ddf8] outline-none focus:border-sky-500/70" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mx-3 mb-2 rounded-lg border border-[#263249] bg-[#0a101a] px-3 py-2" aria-label="CoreSpirit execution lifecycle">
