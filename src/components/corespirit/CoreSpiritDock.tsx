@@ -463,6 +463,8 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     reportStage('editing', 'Unsaved source edits · the active chart continues running its last valid version.');
     persistLocalSource(value, nameDraft, scriptId);
   };
+  const changeSourceRef = useRef(changeSource);
+  changeSourceRef.current = changeSource;
 
   useEffect(() => {
     const model = editorModelRef.current;
@@ -473,7 +475,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     }
     let active = true;
     setEditorStatus('loading');
-    void mountMonaco(container, model, changeSource).then(adapter => {
+    void mountMonaco(container, model, value => changeSourceRef.current(value)).then(adapter => {
       if (!active) {
         adapter.dispose();
         return;
