@@ -106,6 +106,11 @@ export class FyersMarketDataTransport {
     feedClass: FyersDataFeedClass,
     quotaIdentity = userId,
   ): () => void {
+    // A broker account switch invalidates every socket owned by this TradingCore
+    // user; never carry the previous account's subscriptions into the new quota pool.
+    if ([...this.sessions.values()].some(session => session.userId === userId && session.quotaIdentity !== quotaIdentity)) {
+      this.disconnect(userId);
+    }
     const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
     if (!symbols.length) throw Object.assign(new Error('At least one valid FYERS symbol is required.'), { status: 400, code: 'FYERS_EMPTY_SUBSCRIPTION' });
     const capacity = this.checkSubscriptionCapacity(userId, symbols, maxSymbols, [], quotaIdentity);

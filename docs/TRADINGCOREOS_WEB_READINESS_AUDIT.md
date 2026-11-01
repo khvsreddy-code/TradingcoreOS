@@ -12,7 +12,7 @@ The live workspace already requests historical candles while its broker restore 
 
 ### FYERS quotas are keyed by broker account
 
-`resolveFyersQuotaIdentity()` is shared by account routes, market/quote routes, canonical history, the legacy broker adapter, the direct history route and the fixed-IP manual-order gateway. A known `clientCode` defines the account budget across TradingCore users. When it is absent, the configured FYERS application ID is used as a conservative shared fallback; the OAuth token-exchange call also uses this application-level bucket because the broker account ID is not known until the token is returned. The identity is SHA-256 hashed before it reaches request-gate keys. Rotating access tokens and TradingCore user IDs are not independent quota identities.
+`resolveFyersQuotaIdentity()` is shared by account routes, market/quote routes, canonical history, the legacy broker adapter, the direct history route and the fixed-IP manual-order gateway. A known `clientCode` defines the account budget across TradingCore users. When it is absent, the configured FYERS application ID is used as a conservative shared fallback; the OAuth token-exchange call also uses this application-level bucket because the broker account ID is not known until the token is returned. The identity is SHA-256 hashed before it reaches request-gate keys. The WebSocket symbol-union admission gate uses that same account identity across active user sessions; an account switch retires that user's stale sockets before admitting the new account's subscriptions. Rotating access tokens and TradingCore user IDs are not independent quota identities.
 
 ### Historical provider pages are coalesced
 
