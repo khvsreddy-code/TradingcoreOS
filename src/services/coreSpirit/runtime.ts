@@ -1073,16 +1073,29 @@ export class CoreSpiritRuntime {
     nodeId: string,
     barIndex?: number,
   ): CoreSpiritKernelSnapshot<CoreSpiritKernelState> | undefined {
-    const modelVersion = this.compiledIr ? this.kernelModelVersion() : '';
-    const snapshot = barIndex == null
-      ? this.kernelStateSnapshots.latest(nodeId)
-      : this.kernelStateSnapshots.at(nodeId, barIndex);
-    if (!snapshot || (modelVersion && snapshot.modelVersion !== modelVersion)) return undefined;
-    return Object.freeze({
-      ...snapshot,
-      inputDependencies: Object.freeze([...snapshot.inputDependencies]),
-      state: cloneCoreSpiritKernelState(snapshot.state),
-    });
+    if (!this.compiledIr) return undefined;
+    const latest = this.kernelStateSnapshots.latest(nodeId);
+    const targetBarIndex = barIndex ?? latest?.barIndex;
+    if (targetBarIndex == null) return undefined;
+
+    // Historical lookup must still prove compatibility with the active kernel.
+    // The underlying store deliberately rejects bar-index-only access.
+    for (const [identityKey, identity] of this.kernelNodeIdentities) {
+      if (identity.nodeId !== nodeId) continue;
+      const separator = identityKey.indexOf(':');
+      if (separator < 1) continue;
+      const family = identityKey.slice(0, separator) as CoreSpiritKernelState['family'];
+      const key = identityKey.slice(separator + 1);
+      const expected = this.kernelSnapshotIdentity(family, key, targetBarIndex + 1);
+      const snapshot = this.kernelStateSnapshots.at(nodeId, targetBarIndex, expected);
+      if (!snapshot) continue;
+      return Object.freeze({
+        ...snapshot,
+        inputDependencies: Object.freeze([...snapshot.inputDependencies]),
+        state: cloneCoreSpiritKernelState(snapshot.state),
+      });
+    }
+    return undefined;
   }
 
   /**
