@@ -32,6 +32,13 @@ function evaluateJson(expression) {
 function pause(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+function percentileNearestRank(values, percentile) {
+  if (!values.length) return null;
+  const sorted = [...values].filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(percentile * sorted.length) - 1));
+  return Number(sorted[index].toFixed(2));
+}
 function decodePng(buffer) {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   if (buffer.length < 33 || !buffer.subarray(0, 8).equals(signature)) throw new Error('Screenshot is not a valid PNG.');
@@ -403,6 +410,86 @@ try {
         freshNativeSceneCommits: freshCommits.length,
         passed: true,
       };
+
+      // Repeat real editor Compile & Run operations against the same data. This
+      // produces a small browser-side latency distribution and catches retained
+      // drawing multiplication that a single idempotency replay could miss.
+      const repeatedRecompileCommits = [recompileCommit];
+      const repeatedRecompileFailures = [];
+      for (let repeat = 0; repeat < 3; repeat += 1) {
+        const commitCountBefore = evaluateJson('(window.__TCO_SMC_VISUAL_COMMITS__ || []).length');
+        evaluate(`(() => {
+          const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
+          if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled during repeated browser performance sample.');
+          window.__TCO_SMC_RECOMPILE_STARTED_AT__ = performance.now();
+          window.__TCO_SMC_HEAP_BEFORE_RECOMPILE__ = performance.memory ? performance.memory.usedJSHeapSize : null;
+          button.click();
+          return 'SMC_REPEAT_RECOMPILE_CLICKED';
+        })()`);
+
+        let sampleState = null;
+        let sawRepeatCompileState = false;
+        const sampleDeadline = Date.now() + Math.min(timeoutMs, 20_000);
+        while (Date.now() < sampleDeadline) {
+          sampleState = evaluateJson(`(() => {
+            const body = document.body.innerText || '';
+            const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
+            const commits = window.__TCO_SMC_VISUAL_COMMITS__ || [];
+            const cell = window.__TCO_VELA__?.workspace?.active;
+            const instances = Array.isArray(cell?.instances) ? cell.instances : [];
+            const matches = instances.filter(instance =>
+              instance?.entry?.language === 'corespirit' &&
+              instance?.entry?.name === 'Smart Money Concepts [CoreSpirit]' &&
+              String(instance?.id || '').startsWith('tco-corespirit-'));
+            return {
+              compiling: body.includes('Compiling CoreSpirit and preparing chart output…'),
+              success: body.includes('is now running on the active Vela chart'),
+              buttonBusy: !!button?.disabled,
+              errorOverlay: !!document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay'),
+              activeCellAvailable: !!cell,
+              count: matches.length,
+              ids: matches.map(instance => instance.id),
+              commits
+            };
+          })()`);
+          if (sampleState.errorOverlay) throw new Error('Framework error overlay appeared during repeated SMC recompilation.');
+          if (sampleState.compiling) sawRepeatCompileState = true;
+          if (sawRepeatCompileState && sampleState.success && !sampleState.buttonBusy &&
+              sampleState.commits.length > commitCountBefore) break;
+          await pause(150);
+        }
+
+        assert(sawRepeatCompileState && sampleState?.success && !sampleState.buttonBusy,
+          'Each repeated SMC Compile & Run must complete with a visible compile transition.');
+        assert(sampleState.activeCellAvailable && sampleState.count === 1,
+          'Repeated SMC recompilation must preserve exactly one attached CoreSpirit instance.');
+        assert.deepEqual(sampleState.ids, initialInstanceState.ids,
+          'Repeated SMC recompilation must preserve the stable Vela instance id.');
+        const newCommits = sampleState.commits.slice(commitCountBefore).filter(item =>
+          Number(item.objectCount) > 0 &&
+          Object.keys(item.kindCounts || {}).some(kind => ['line','zone','box','label','marker','shape','polyline','polygon','hline'].includes(kind))
+        );
+        assert.ok(newCommits.length > 0, 'Each repeated SMC recompilation must publish a fresh visual scene commit.');
+        const sampleCommit = newCommits[newCommits.length - 1];
+        assert.equal(sampleCommit.objectCount, commit.objectCount,
+          'Repeated SMC recompilation must not increase the retained drawing-object count.');
+        assert.deepEqual(sampleCommit.kindCounts, commit.kindCounts,
+          'Repeated SMC recompilation must preserve the retained native object-kind inventory.');
+        repeatedRecompileCommits.push(sampleCommit);
+      }
+      const repeatedRecompileLatencies = repeatedRecompileCommits
+        .map(item => Number(item.__recompileLatencyMs))
+        .filter(Number.isFinite);
+      const repeatedRecompileHeapSamples = repeatedRecompileCommits
+        .map(item => Number(item.__heapUsedBytes))
+        .filter(Number.isFinite);
+      assert.equal(repeatedRecompileCommits.length, 4,
+        'The browser performance sample must contain four real native scene recompiles.');
+      assert.ok(repeatedRecompileLatencies.length >= 3,
+        'At least three recompile-to-visual-commit latency samples must be available.');
+      recompileIdempotency.repeatedCompileRuns = repeatedRecompileCommits.length;
+      recompileIdempotency.stableObjectInventoryAcrossRuns = true;
+
       // Exercise both viewport gestures and compare the actual plot screenshot.
       const canvasCenter = evaluateJson(`(() => {
         const boxes = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
@@ -443,16 +530,23 @@ try {
           heapBeforeRecompileBytes: window.__TCO_SMC_HEAP_BEFORE_RECOMPILE__ ?? null
         };
       })()`);
+      const finalRepeatedCommit = repeatedRecompileCommits[repeatedRecompileCommits.length - 1];
       const browserPerformance = {
         firstPlotReadyMs: Number.isFinite(commit.__firstRunLatencyMs) ? Number(commit.__firstRunLatencyMs.toFixed(2)) : null,
         recompilePlotReadyMs: Number.isFinite(recompileCommit.__recompileLatencyMs) ? Number(recompileCommit.__recompileLatencyMs.toFixed(2)) : null,
+        repeatedRecompileSamples: repeatedRecompileLatencies.length,
+        recompilePlotReadyP50Ms: percentileNearestRank(repeatedRecompileLatencies, 0.50),
+        recompilePlotReadyP95Ms: percentileNearestRank(repeatedRecompileLatencies, 0.95),
+        recompilePlotReadySamplesMs: repeatedRecompileLatencies.map(value => Number(value.toFixed(2))),
         heapAtFirstPlotBytes: commit.__heapUsedBytes ?? null,
         heapAtRecompileBytes: recompileCommit.__heapUsedBytes ?? null,
+        heapAtFinalRepeatedRecompileBytes: finalRepeatedCommit?.__heapUsedBytes ?? null,
         firstRunHeapDeltaBytes: Number.isFinite(browserTelemetry.heapBeforeFirstRunBytes) && Number.isFinite(commit.__heapUsedBytes)
           ? commit.__heapUsedBytes - browserTelemetry.heapBeforeFirstRunBytes : null,
-        heapDeltaAcrossRecompileBytes: Number.isFinite(commit.__heapUsedBytes) && Number.isFinite(recompileCommit.__heapUsedBytes)
-          ? recompileCommit.__heapUsedBytes - commit.__heapUsedBytes : null,
-        note: 'Times end at the browser visual-commit event; heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
+        heapDeltaAcrossRecompileSamplesBytes: Number.isFinite(commit.__heapUsedBytes) && Number.isFinite(finalRepeatedCommit?.__heapUsedBytes)
+          ? finalRepeatedCommit.__heapUsedBytes - commit.__heapUsedBytes : null,
+        repeatedHeapSampleCount: repeatedRecompileHeapSamples.length,
+        note: 'Times end at the browser visual-commit event; p50/p95 are nearest-rank statistics for repeated Compile & Run samples. Heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
       };
       const visualEvidence = {
         url: baseUrl,
