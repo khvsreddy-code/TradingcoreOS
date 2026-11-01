@@ -17,7 +17,7 @@ feed.enqueue({generation:g2,receivedAt:now+1,exchangeTimestamp:10001,sequence:1,
 assert.equal(feed.droppedEvents,1,'buffer must remain bounded');assert.deepEqual(feed.drain().map(x=>x.payload),['b','c']);
 feed.enqueue({generation:g2,receivedAt:now+4,exchangeTimestamp:10005,sequence:5,payload:'e'});
 feed.enqueue({generation:g2,receivedAt:now+5,exchangeTimestamp:10004,sequence:4,payload:'d'});
-assert.equal(feed.enqueue({generation:g2,receivedAt:now+6,exchangeTimestamp:10003,sequence:3,payload:'late'},false), false);
+assert.equal(feed.enqueue({generation:g2,receivedAt:now+6,exchangeTimestamp:10003,sequence:3,payload:'late'}), false);
 assert.equal(feed.droppedEvents,2,'a late event must be counted as dropped rather than evicting newer market data');
 assert.deepEqual(feed.drain().map(x=>x.payload),['d','e'],'full buffer retains the newest events by exchange ordering, not arrival order');
 const reconnectBuffer=new MarketFeedLifecycle<string>({maxBufferedEvents:2});
