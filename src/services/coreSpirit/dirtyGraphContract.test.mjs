@@ -128,8 +128,14 @@ assert.equal(correction.instructions.size, nodes.length, 'full replay includes e
 assert.deepEqual(checkpointCorrection.ranges.get('i:ema'), { from: 450, to: 520 }, 'checkpoint replay must evaluate affected state from the checkpoint, not only the corrected bar');
 assert.deepEqual(checkpointCorrection.ranges.get('i:signal'), { from: 450, to: 520 }, 'dependent outputs must be replayed from the checkpoint too');
 
-const volumeCorrection = graph.planCorrection(['volume'], { from: 500, to: 501 }, 520, 450);
-assert.equal(volumeCorrection.allHistory, false, 'a valid checkpoint keeps correction replay scoped to the affected subgraph');
+const compatibleVolumeCheckpoint = {
+  ...compatibleCheckpoint,
+  kernelType: 'vwap',
+  parametersSignature: 'vwap:session=regular',
+  inputDependencies: ['close', 'high', 'low', 'volume', 'time'],
+};
+const volumeCorrection = graph.planCorrection(['volume'], { from: 500, to: 501 }, 520, compatibleVolumeCheckpoint);
+assert.equal(volumeCorrection.allHistory, false, 'a fully identified compatible checkpoint keeps correction replay scoped to the affected subgraph');
 assert.equal(volumeCorrection.nodes.has('i:vwap'), true);
 assert.equal(volumeCorrection.nodes.has('i:ema'), false, 'unrelated recursive indicators must remain reusable');
 assert.deepEqual(volumeCorrection.ranges.get('i:vwap'), { from: 450, to: 520 });
