@@ -415,7 +415,6 @@ try {
       // produces a small browser-side latency distribution and catches retained
       // drawing multiplication that a single idempotency replay could miss.
       const repeatedRecompileCommits = [recompileCommit];
-      const repeatedRecompileFailures = [];
       for (let repeat = 0; repeat < 3; repeat += 1) {
         const commitCountBefore = evaluateJson('(window.__TCO_SMC_VISUAL_COMMITS__ || []).length');
         evaluate(`(() => {
