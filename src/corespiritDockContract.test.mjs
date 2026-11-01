@@ -47,6 +47,16 @@ includes(chrome, 'embedded: true', 'CoreSpirit is docked rather than rendered as
 includes(chrome, "ctx.togglePanel('tco.corespirit-code', false)", 'terminal close button closes the Vela side panel');
 includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart bridge for Add to Chart');
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
+includes(editorPage, "import { CoreSpiritEditorModel } from '../services/coreSpirit/editorModel'", 'the full-page Coder uses the canonical CoreSpiritEditorModel');
+includes(editorPage, "import { mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter } from '../services/coreSpirit/monacoAdapter'", 'the full-page Coder uses the shared Monaco adapter');
+includes(editorPage, 'new CoreSpiritEditorModel(initialSource)', 'the full-page Coder owns a canonical compiler-backed editor model');
+includes(chrome, "import('../../coreSpirit/editorModel')", 'opening the embedded dock loads the same canonical editor model module');
+includes(chrome, "import('../../coreSpirit/monacoAdapter')", 'opening the embedded dock loads the same Monaco adapter module');
+includes(chrome, 'editorModelClass: editorModelModule.CoreSpiritEditorModel', 'the embedded dock receives the canonical editor model constructor');
+includes(chrome, 'mountMonaco: monacoModule.mountCoreSpiritMonaco', 'the embedded dock receives the same Monaco adapter mount function');
+includes(dock, 'new editorModelClass(initialSource.current)', 'the embedded dock constructs the canonical editor-model implementation');
+includes(dock, 'mountMonaco(container, model, value => changeSourceRef.current(value))', 'the embedded dock binds Monaco to its canonical editor model');
+includes(chrome, "import('../../coreSpirit/coreSpiritCompilerClient')", 'the live dock defers compiler-worker loading until the user invokes Compile & Run');
 includes(dock, 'monacoAdapterRef.current?.setSymbolInfo([])', 'source changes invalidate completion and hover symbols from the previous compiled revision');
 includes(dock, 'monacoAdapterRef.current?.setSymbolInfo(result.symbols ?? [])', 'successful compile publishes symbols for the exact current source revision');
 includes(dock, 'getCoreSpiritAuthoringProfileForLevel', 'the embedded terminal reuses the canonical four-level authoring profiles');

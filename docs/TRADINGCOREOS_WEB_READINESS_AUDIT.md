@@ -27,7 +27,7 @@ No ticker-to-Investing.com ID is inferred. A mapping must be configured under th
 - `App.tsx` lazy-loads both the non-live workspace shell and live terminal only when their protected routes open. Landing/login keep their own route graph and do not download the workspace shell up front.
 - `TcoVelaDataProvider` subscribes to the canonical chart data plane and sends columnar updates directly to Vela; React is not on the per-tick candle path.
 - The provider sends a small first-paint batch before awaiting the complete historical dataset. The full requested history still has to be ready before the initial chart load resolves.
-- The full-page CoreSpirit Coder and embedded dock already share `CoreSpiritEditorModel` and `mountCoreSpiritMonaco`; this audit does not introduce a second editor implementation.
+- The full-page CoreSpirit Coder and embedded dock use the same `CoreSpiritEditorModel` class and `mountCoreSpiritMonaco` adapter. The Vela dock loads those modules only when opened and defers the compiler worker until Compile & Run. The critical dock contract now protects this shared implementation boundary.
 - Vite route/chunk budgets and manifest-based bundle validation remain intact. The preceding performance commit added browser first-plot, warm-recompile, heap and frame-gap measurements with configurable runner budgets.
 - The SMC/Pine parity documentation remains explicit about higher-timeframe, full order-block, strong/weak swing, original display-mode and exchange-session gaps.
 
