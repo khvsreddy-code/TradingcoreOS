@@ -65,6 +65,13 @@ export function ChartOverlay({
   closeCoreSpirit:()=>void;
   analytics:ChartAnalytics|null;
 }) {
+  const openChartSettings = () => {
+    setShowCandleSettings(true);
+    setShowIndicatorMenu(false);
+    setShowPredictionMenu(false);
+    setShowDrawingMenu(false);
+  };
+
   return <>
     <div className="absolute left-2 top-2 z-40 flex flex-wrap items-center gap-1.5 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1.5 text-[9px] shadow-xl backdrop-blur">
       <span className="px-1.5 font-mono uppercase tracking-widest text-[var(--tco-dim)]">Chart</span>
@@ -137,6 +144,14 @@ export function ChartOverlay({
     </div>}
 
     <div className="absolute right-2 top-2 z-40 flex flex-col items-center gap-1 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl">
+      <button
+        type="button"
+        title="Vela chart settings"
+        aria-label="Vela chart settings"
+        aria-expanded={showCandleSettings}
+        onClick={openChartSettings}
+        className={`flex h-8 w-8 items-center justify-center rounded ${showCandleSettings?'bg-[#3b82f6]/20 text-[#93c5fd]':'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}
+      ><Settings2 size={15}/></button>
       <button title="CoreSpirit Editor" aria-label="CoreSpirit Editor" onClick={openCoreSpirit} className={`flex h-8 w-8 items-center justify-center rounded ${coreSpiritState.open?'bg-[#3b82f6]/20 text-[#93c5fd]':'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Code2 size={15}/></button>
     </div>
 
