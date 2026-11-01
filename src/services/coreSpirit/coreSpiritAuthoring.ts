@@ -6,6 +6,7 @@ import {
 } from './coreSpiritExecutionModel';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import { CoreSpiritParser } from './parser';
+import type { CoreSpiritAstNode } from './ast';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
@@ -98,6 +99,19 @@ function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringP
   });
 }
 
+function containsCoreSpiritEventHandler(nodes: readonly CoreSpiritAstNode[]): boolean {
+  return nodes.some(node => {
+    switch (node.type) {
+      case 'onEvent': return true;
+      case 'program': return containsCoreSpiritEventHandler(node.body);
+      case 'if':
+        return containsCoreSpiritEventHandler(node.thenBranch) ||
+          containsCoreSpiritEventHandler(node.elseBranch ?? []);
+      default: return false;
+    }
+  });
+}
+
 const analysisCache = new Map<string, CoreSpiritAuthoringSourceAnalysis>();
 const MAX_ANALYSIS_CACHE = 32;
 
@@ -163,7 +177,10 @@ export function analyzeCoreSpiritAuthoringSource(
       .filter(symbol => symbol !== 'current')
       .filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
     const hasMultiTimeframe = tradingPlan.dataDependencies.some(dependency => dependency.timeframe !== 'chart');
-    const hasSystemEvent = graph.nodes.some(node => node.kind === 'event');
+    // `signal()` is a normal trader-facing output, not a system event handler.
+    // Escalate only for explicit `on ... {}` event handlers; the dependency graph
+    // also contains event nodes for emitted signals, which must not elevate traders.
+    const hasSystemEvent = containsCoreSpiritEventHandler(parsed.ast.body);
     const hasAutomation = graph.nodes.some(node => node.kind === 'automation') ||
       surface.declarations.some(declaration => declaration.kind === 'automation');
     const hasOrderIntent = graph.nodes.some(node => node.kind === 'order-intent');
