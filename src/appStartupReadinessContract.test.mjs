@@ -7,4 +7,6 @@ assert.match(source,/publishBrokerReadiness\('restoring'\)/,'broker restoration 
 assert.match(source,/await nextRuntime\.restoreBrokerConnections\(\)/,'broker restoration remains active in the background');
 assert.match(source,/navigate\('\/dashboard'\);/,'login success opens the workspace without awaiting broker restore');
 assert.doesNotMatch(source,/setHasConnectedBroker|setBrokerRestoreReady/,'broker readiness is not copied into App route state');
+assert.match(source,/const TradingWorkspaceShell = lazy\(\(\) => import\('\.\/appShells\/TradingWorkspaceShell'\)/,'the non-live workspace shell is deferred until a protected route is opened');
+assert.doesNotMatch(source,/import \{ TradingWorkspaceShell \} from '\.\/appShells\/TradingWorkspaceShell'/,'the workspace dependency graph must not be statically loaded by the landing shell');
 console.log('TRADINGCORE_APP_AUTH_AND_BROKER_READINESS_CONTRACT_OK');
