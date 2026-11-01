@@ -904,7 +904,7 @@ export class CoreSpiritRuntime {
     for (const dependency of dependencies) {
       const symbol = dependency.symbol === 'current' ? this.options.symbol : dependency.symbol;
       const timeframe = dependency.timeframe === 'chart' ? this.options.timeframe : dependency.timeframe;
-      const isPrimaryChart = dependency.domain === 'market' &&
+      const isPrimaryChart = (dependency.domain === 'bar-series' || dependency.domain === 'market') &&
         symbol.trim().toUpperCase() === String(this.options.symbol ?? '').trim().toUpperCase() &&
         String(timeframe).trim().toLowerCase() === String(this.options.timeframe ?? '').trim().toLowerCase();
       if (isPrimaryChart) continue;
@@ -933,7 +933,7 @@ export class CoreSpiritRuntime {
     return dependencies.some(dependency => {
       const symbol = dependency.symbol === 'current' ? this.options.symbol : dependency.symbol;
       const timeframe = dependency.timeframe === 'chart' ? this.options.timeframe : dependency.timeframe;
-      const isPrimaryChart = dependency.domain === 'market' &&
+      const isPrimaryChart = (dependency.domain === 'bar-series' || dependency.domain === 'market') &&
         symbol.trim().toUpperCase() === String(this.options.symbol ?? '').trim().toUpperCase() &&
         String(timeframe).trim().toLowerCase() === String(this.options.timeframe ?? '').trim().toLowerCase();
       if (isPrimaryChart) return false;
