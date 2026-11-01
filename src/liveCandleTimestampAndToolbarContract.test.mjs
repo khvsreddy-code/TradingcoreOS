@@ -15,7 +15,7 @@ assert.match(transport, /payload\.last_traded_time, payload\.exch_feed_time/, 'c
 assert.match(transport, /return candidates\.length \? Math\.max\(\.\.\.candidates\) : undefined/, 'choose the newest valid exchange timestamp');
 assert.equal((transport.match(/const brokerTimestamp = latestFyersTimestamp\(payload\);/g) || []).length, 2, 'both lite and full FYERS feeds must use the timestamp policy');
 assert.match(provider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, 'Vela must only patch candles for snapshots and validated candle ticks');
-assert.match(terminal, /'tco\.watchlist'[\s\S]*'tco\.positions'[\s\S]*'alerts'/, 'retain the primary TCO navigation controls');
+assert.match(terminal, /'tco\.research'[\s\S]*'tco\.automation'[\s\S]*'tco\.trading'[\s\S]*'tco\.positions'[\s\S]*'alerts'/, 'retain the consolidated TCO navigation controls in Vela topbar');
 assert.doesNotMatch(terminal, /tco\.brand/, 'remove the redundant TRADINGCOREOS × VELA label');
 assert.doesNotMatch(terminal, /'panels'|tco\.profile|tco\.broker-connection|'screenshot'/, 'remove the unused icon-only toolbar cluster and extras');
 const topbar = terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '';
