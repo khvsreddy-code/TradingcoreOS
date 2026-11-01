@@ -280,6 +280,7 @@ export class CoreSpiritRuntime {
   private readonly kernelNodeIdentities = new Map<string, { nodeId:string; inputDependencies:readonly string[] }>();
   /** Changes only when the loaded/history generation is rebuilt, not on forming-bar ticks. */
   private kernelDataRevision = 0;
+  private readonly checkpointRestoreDiagnostics: Array<Readonly<{ nodeId:string; barIndex:number; status:'missing'|'identity-mismatch'|'state-copy-failed'; mismatches:readonly string[] }>> = [];
   private readonly recoveryStats = {
     barsReused: 0,
     barsReplayed: 0,
@@ -728,6 +729,8 @@ export class CoreSpiritRuntime {
   getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
 
   /** Recovery counters are cumulative for this runtime instance and safe to sample in telemetry. */
+  getCheckpointRestoreDiagnostics() { return Object.freeze([...this.checkpointRestoreDiagnostics]); }
+
   getRecoveryStats(): Readonly<{
     barsReused:number;
     barsReplayed:number;
@@ -1024,6 +1027,28 @@ export class CoreSpiritRuntime {
         this.recoveryStats.checkpointsRestored += 1;
       } else {
         this.recoveryStats.checkpointRestoreFailures += 1;
+        const latest = this.kernelStateSnapshots.entries().find(snapshot =>
+          snapshot.nodeId === identity.nodeId && snapshot.barIndex === barIndex);
+        const expected = this.kernelSnapshotIdentity(family, key, barIndex + 1);
+        const mismatches: string[] = [];
+        if (latest) {
+          if (latest.modelVersion !== expected.modelVersion) mismatches.push('modelVersion');
+          if (latest.kernelType !== expected.kernelType) mismatches.push('kernelType');
+          if (latest.kernelVersion !== expected.kernelVersion) mismatches.push('kernelVersion');
+          if (latest.parametersSignature !== expected.parametersSignature) mismatches.push('parametersSignature');
+          if (latest.dataRevision !== expected.dataRevision) mismatches.push('dataRevision');
+          if (latest.nextBarIndex !== expected.nextBarIndex) mismatches.push('nextBarIndex');
+          if (latest.inputDependencies.length !== expected.inputDependencies.length ||
+              expected.inputDependencies.some(value => !latest.inputDependencies.includes(value))) mismatches.push('inputDependencies');
+          if (latest.state.family !== family) mismatches.push('stateFamily');
+        }
+        this.checkpointRestoreDiagnostics.push(Object.freeze({
+          nodeId:identity.nodeId,
+          barIndex,
+          status:!latest ? 'missing' : mismatches.length ? 'identity-mismatch' : 'state-copy-failed',
+          mismatches:Object.freeze(mismatches),
+        }));
+        if (this.checkpointRestoreDiagnostics.length > 32) this.checkpointRestoreDiagnostics.splice(0, this.checkpointRestoreDiagnostics.length - 32);
       }
     };
     for (const [key, cursor] of this.directKernelCursors) restore('direct', key, cursor);
