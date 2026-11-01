@@ -54,4 +54,23 @@ assert.equal(scheduler.pending(), 0);
 assert.equal(scheduler.flushAll(), 0);
 assert.ok(!events.includes('must-not-run'), 'clear must discard live and stale queue entries');
 
+// clear() may be called by an executing task (for example, when a workspace
+// generation is retired). It must truncate the same array held by flush().
+let afterClearRuns = 0;
+scheduler.schedule({
+  id: 'clear-during-flush',
+  lane: 'hot',
+  run: () => {
+    events.push('clear-during-flush');
+    scheduler.schedule({ id: 'queued-before-clear', lane: 'hot', run: () => { afterClearRuns += 1; } });
+    scheduler.clear();
+  },
+});
+scheduler.schedule({ id: 'queued-behind-clear', lane: 'hot', run: () => { afterClearRuns += 1; } });
+assert.equal(scheduler.flush('hot', Number.POSITIVE_INFINITY), 1,
+  'clearing from an active task must stop the current lane drain immediately');
+assert.equal(afterClearRuns, 0, 'no task queued before clear may execute after clear returns');
+assert.equal(scheduler.pending(), 0);
+assert.equal(scheduler.flushAll(), 0);
+
 console.log('CORESPIRIT_PERFORMANCE_SCHEDULER_CONTRACT_OK');
