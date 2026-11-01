@@ -1,5 +1,5 @@
 /** Canonical CoreSpirit language/runtime release contract. */
-export const CORE_SPIRIT_VERSION = 'v101';
+export const CORE_SPIRIT_VERSION = 'v102';
 
 export const CORE_SPIRIT_COMPILER_VERSION = `corespirit-compiler-${CORE_SPIRIT_VERSION}`;
 export const CORE_SPIRIT_IR_VERSION = 1 as const;
