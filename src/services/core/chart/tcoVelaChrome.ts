@@ -949,7 +949,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
           source: string,
           sourceVersion: number,
           contextId: string,
-          options: { layer: 'script' | 'automation' },
+          options: { layer?: string; signal?: AbortSignal } = {},
         ) => {
           const compiler = await import('../../coreSpirit/coreSpiritCompilerClient');
           return compiler.compileCoreSpiritSourceOffThread(source, sourceVersion, contextId, options);
