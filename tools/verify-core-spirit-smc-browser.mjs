@@ -611,14 +611,19 @@ try {
         return {
           sampleCount: samples.length,
           admissionWait: summarize('worker-admission-wait'),
+          marketSync: summarize('worker-market-sync'),
+          execution: summarize('worker-execution'),
+          outputSerialization: summarize('worker-output-serialization'),
           resultRoundTrip: summarize('worker-result-roundtrip'),
           endToEnd: summarize('worker-end-to-end'),
+          historicalExecution: summarize('worker-execution', { mode: 'historical' }),
+          incrementalExecution: summarize('worker-execution', { mode: 'incremental' }),
           historicalRoundTrip: summarize('worker-result-roundtrip', { mode: 'historical' }),
           incrementalRoundTrip: summarize('worker-result-roundtrip', { mode: 'incremental' }),
           coldArtifactInstallRoundTrip: summarize('worker-result-roundtrip', { artifactLifecycle: 'cold-install' }),
           warmArtifactReuseRoundTrip: summarize('worker-result-roundtrip', { artifactLifecycle: 'warm-reuse' }),
           maxMarketDataPoints: samples.reduce((max, item) => Math.max(max, Number(item.dataPoints) || 0), 0),
-          measurementDefinition: 'main-thread admission wait and postMessage-to-result round trip; round trip includes worker execution, data transfer, and message scheduling rather than pure kernel CPU time'
+          measurementDefinition: 'worker execution measures VM replay/update on the worker; market sync measures market-buffer synchronization; output serialization measures output/state validation and transport preparation; postMessage round trip includes worker execution, transfers, and message scheduling'
         };
       })()`);
       const browserTelemetry = evaluateJson(`(() => {
