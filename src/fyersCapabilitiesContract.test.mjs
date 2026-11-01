@@ -126,7 +126,7 @@ assert.ok(apiClient.includes("pathOnly.toLowerCase().includes('history')"), 'the
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy history endpoint must gate seconds data by server-resolved plan');
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
-assert.match(historyDataRoute, /fetchFyersHistoryTarget\(session\.token, symbol, interval, limit, capabilities, session\.userId\)/, 'legacy history must pass the resolved plan and stable user ID');
+assert.match(historyDataRoute, /fetchFyersHistoryTarget\(session\.token, symbol, interval, limit, capabilities, session\.quotaIdentity\)/, 'legacy history must pass the resolved plan and broker-account quota identity');
 assert.match(legacyHistoryRoute, /rateLimitIdentity: string/, 'legacy history helper APIs require an explicit stable identity');
 assert.match(legacyHistoryRoute, /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'user-requested legacy history uses interactive admission priority');
 assert.match(read('./server/fyers/market/FyersMarketDataService.ts'), /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'the shared FYERS history service prioritizes visible chart requests');
@@ -143,10 +143,10 @@ assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy optio
 assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities, session\.userId\)/,'option-chain route must pass plan and stable user quota identity');
 assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must not be retried as provider errors');
 assert.match(apiClient,/Stable FYERS account or application identity is required for quota enforcement/,'FYERS clients reject absent stable broker/application quota identity');
-assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable per-user quota bucket');
+assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable broker-account quota bucket');
 assert.match(quoteRoute,/new FyersApiClient\(EncryptionService\.decrypt\(session\.accessTokenEncrypted\), undefined, capabilities, resolveFyersQuotaIdentity\(session\.clientCode\)\)/,'quote routes share the FYERS account-level quota');
-assert.match(canonicalHistory,/String\(session\.clientCode \|\| userId\)\.trim\(\)\.toUpperCase\(\)/,'canonical history prefers a stable broker account identity and falls back to the authenticated user');
-assert.match(canonicalHistory,/createHash\('sha256'\)[\s\S]*tradingcore:fyers-account:v1:[\s\S]*\.update\(stableFyersAccount\)[\s\S]*\.digest\('hex'\)/,'canonical history hashes the stable broker identity before using it as a quota key');
+assert.match(canonicalHistory,/resolveFyersQuotaIdentity\(session\.clientCode\)/,'canonical history resolves one shared FYERS account identity');
+assert.match(canonicalHistory,/withDistributedHistoricalPage/,'canonical history shares provider pages through distributed single-flight');
 assert.match(canonicalHistory,/new FyersApiClient\(accessToken, undefined, capabilities, quotaIdentity\)/,'canonical history shares quota across TradingCore users connected to the same FYERS account');
 assert.match(brokerAdapter,/Authenticated TradingCore user identity is required for FYERS quota enforcement/,'legacy adapter requests must reject absent user identity instead of using rotating tokens');
 assert.doesNotMatch(brokerAdapter,/rateLimitIdentity\s*=\s*accessToken/,'no legacy adapter may fall back to access-token quota identity');
@@ -184,7 +184,7 @@ assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(session\?\.clientCode\)/,
 assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(undefined\)/,'OAuth token exchange uses one application-level quota bucket before the broker account is known');
 assert.match(legacyHistoryRoute,/resolveFyersQuotaIdentity\(session\.clientCode\)/,'legacy direct history requests use the FYERS account identity');
 assert.match(tradingRoute,/req\.fyersQuotaIdentity = resolveFyersQuotaIdentity\(session\.clientCode\)/,'manual orders receive the shared FYERS account quota identity');
-assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId\)/,'FYERS orders use the fixed-IP gateway with the authenticated user quota identity');
+assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId, req\.fyersQuotaIdentity\)/,'FYERS orders use the fixed-IP gateway with the broker-account quota identity');
 
 
 console.log('FYERS_PLAN_CAPABILITIES_CONTRACT_OK');
