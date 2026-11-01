@@ -85,7 +85,8 @@ async function getNews(topic = '', cacheNamespace: 'SYMBOL' | 'TOPIC' = 'SYMBOL'
   // Keep topic research and symbol/watchlist requests independently cached. The
   // same RSS publisher can support both, but mode-specific cache entries avoid
   // serving a broader symbol query for a narrower topic preset (or vice versa).
-  const key = cacheNamespace + ':' + String(topic || 'INDIA_MARKETS').trim().toUpperCase().slice(0, 120);
+  const namespacePrefix = cacheNamespace === 'TOPIC' ? 'TOPIC:' : 'SYMBOL:';
+  const key = namespacePrefix + String(topic || 'INDIA_MARKETS').trim().toUpperCase().slice(0, 120);
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.bundle;
   const pending = inflight.get(key);
