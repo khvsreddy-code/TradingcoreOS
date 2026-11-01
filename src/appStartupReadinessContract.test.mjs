@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source=fs.readFileSync(new URL('./App.tsx',import.meta.url),'utf8');
+assert.doesNotMatch(source,/brokerRestoreReady|initialProtectedEntry/,'broker restoration cannot gate protected navigation');
+assert.match(source,/if \(authLoading \|\| authStatus === 'degraded'\) return;/,'route guard depends on authentication only');
+assert.match(source,/publishBrokerReadiness\('restoring'\)/,'broker restoration exposes independent readiness');
+assert.match(source,/await nextRuntime\.restoreBrokerConnections\(\)/,'broker restoration remains active in the background');
+assert.match(source,/navigate\('\/dashboard'\);/,'login success opens the workspace without awaiting broker restore');
+assert.doesNotMatch(source,/setHasConnectedBroker|setBrokerRestoreReady/,'broker readiness is not copied into App route state');
+console.log('TRADINGCORE_APP_AUTH_AND_BROKER_READINESS_CONTRACT_OK');

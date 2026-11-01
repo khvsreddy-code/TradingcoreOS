@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useState, useEffect, type ReactNode } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
@@ -10,7 +10,6 @@ import { TradingWorkspaceShell } from './appShells/TradingWorkspaceShell';
 const LiveTradingShell = lazy(() => import('./appShells/LiveTradingShell').then(m => ({ default: m.LiveTradingShell })));
 import { ThemeProvider } from './theme/ThemeContext';
 import { loadTradingCoreRuntime } from './services/runtime/tradingCoreRuntimeLoader';
-import type { TradingCoreRuntimeApi } from './services/runtime/tradingCoreRuntimeLoader';
 
 const BrokerConnectionRequiredPage = lazy(() => import('./pages/BrokerConnectionRequiredPage').then(m => ({ default: m.BrokerConnectionRequiredPage })));
 const BrokerCallbackPage = lazy(() => import('./pages/BrokerCallbackPage').then(m => ({ default: m.BrokerCallbackPage })));
@@ -73,18 +72,11 @@ function AppContent() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [routeErrorReset, setRouteErrorReset] = useState(0);
   const publicIndicatorRoute = pathnameIsPublicIndicator(pathname) || pathnameIsPublicScript(pathname);
-  const initialProtectedEntry = useRef(workspacePaths.includes(window.location.pathname as WorkspaceRoute));
-  const [runtime, setRuntime] = useState<TradingCoreRuntimeApi | null>(null);
-  const [hasConnectedBroker, setHasConnectedBroker] = useState(false);
-  const [brokerRestoreReady, setBrokerRestoreReady] = useState(() => !isAuthenticated || !initialProtectedEntry.current);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const currentView = viewFromPath(pathname);
   const protectedEntry = currentView === 'app' || currentView === 'broker-connection';
-  const isSystemInitializing =
-    authLoading ||
-    authStatus === 'degraded' ||
-    (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
+  // Authentication gates the workspace. Broker restoration is an independent background state.
 
   useEffect(() => {
     const pop = () => setPathname(window.location.pathname);
@@ -96,50 +88,34 @@ function AppContent() {
     if (!isAuthenticated || publicIndicatorRoute || !protectedEntry || authStatus === 'degraded') return;
 
     let cancelled = false;
-    setBrokerRestoreReady(false);
+    const publishBrokerReadiness = (status: 'restoring' | 'connected' | 'not-connected' | 'unavailable') => {
+      if (cancelled) return;
+      window.dispatchEvent(new CustomEvent('tco:broker-readiness', { detail: { status } }));
+    };
 
-    // Do not mark broker restoration ready merely because the runtime module has
-    // loaded. On a hard refresh the runtime is created before its async server
-    // session restore finishes; publishing "ready" at that point can render
-    // /live with an empty in-memory broker map and send the user to /broker.
+    // Broker restoration is background work, not a route prerequisite. The chart
+    // can hydrate validated history while FYERS session restoration proceeds;
+    // account, order and live-feed operations remain broker-gated.
+    publishBrokerReadiness('restoring');
     void loadTradingCoreRuntime()
       .then(async (nextRuntime) => {
         if (cancelled) return;
-        setRuntime(nextRuntime);
         try {
           await nextRuntime.restoreBrokerConnections();
+          publishBrokerReadiness(nextRuntime.hasConnectedBroker() ? 'connected' : 'not-connected');
         } catch {
-          // The UI remains deterministic: no broker is assumed connected when
-          // the server-side restore could not be completed.
-        }
-        if (!cancelled) {
-          setHasConnectedBroker(nextRuntime.hasConnectedBroker());
-          setBrokerRestoreReady(true);
+          publishBrokerReadiness('unavailable');
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setHasConnectedBroker(false);
-          setBrokerRestoreReady(true);
-        }
-      });
+      .catch(() => publishBrokerReadiness('unavailable'));
 
     return () => { cancelled = true; };
   }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, protectedEntry]);
 
   useEffect(() => {
-    if (!runtime) return;
-    const check = () => setHasConnectedBroker(runtime.hasConnectedBroker());
-    check();
-    const onConnected = runtime.on('BROKER_CONNECTED', check);
-    const onDisconnected = runtime.on('BROKER_DISCONNECTED', check);
-    return () => { onConnected(); onDisconnected(); };
-  }, [runtime]);
-
-  useEffect(() => {
     const isBrokerCallbackRoute = pathname.startsWith('/auth/broker-callback');
     if (publicIndicatorRoute || isBrokerCallbackRoute) return;
-    if (authLoading || authStatus === 'degraded' || (initialProtectedEntry.current && !brokerRestoreReady)) return;
+    if (authLoading || authStatus === 'degraded') return;
 
     if (isAuthenticated && user) {
       if (pathname === '/login' || pathname === '/' || pathname === '/landing') {
@@ -157,7 +133,7 @@ function AppContent() {
       window.history.replaceState({}, '', '/login');
       setPathname('/login');
     }
-  }, [isAuthenticated, user, pathname, brokerRestoreReady, authLoading, authStatus, publicIndicatorRoute]);
+  }, [isAuthenticated, user, pathname, authLoading, authStatus, publicIndicatorRoute]);
 
   const navigate = (path: '/broker' | '/' | '/landing' | '/login' | WorkspaceRoute) => {
     if (window.location.pathname === path) {
@@ -209,14 +185,13 @@ function AppContent() {
     );
   }
 
-  if (isSystemInitializing) {
+  if (authLoading || authStatus === 'degraded') {
     let loadingMsg = 'Checking Session...';
     let subMsg = 'Verifying your TradingCore login';
     if (authStep === 'connecting') { loadingMsg = 'Connecting...'; subMsg = 'Establishing secure handshake with Google OAuth'; }
     else if (authStep === 'authenticating') { loadingMsg = 'Authenticating...'; subMsg = 'Verifying identity with Supabase Authentication'; }
     else if (authStep === 'preparing') { loadingMsg = 'Preparing Workspace...'; subMsg = 'Synchronizing kernel configuration and broker channels'; }
     else if (authStatus === 'degraded') { loadingMsg = 'Restoring Session...'; subMsg = 'Your saved login is being revalidated; we will not sign you out on a transient connection failure'; }
-    else if (protectedEntry && !brokerRestoreReady) { loadingMsg = 'Restoring Broker State...'; subMsg = 'Checking your connected broker sessions securely'; }
     else if (profileLoading) { loadingMsg = 'Loading Profile...'; subMsg = 'Fetching user preferences and onboarding state'; }
 
     return (
@@ -230,20 +205,9 @@ function AppContent() {
   }
 
   if (currentView === 'login') {
-    const handleLoginSuccess = async () => {
-      try {
-        const nextRuntime = await loadTradingCoreRuntime();
-        setRuntime(nextRuntime);
-        await nextRuntime.restoreBrokerConnections().catch(() => undefined);
-        const connected = nextRuntime.hasConnectedBroker();
-        setHasConnectedBroker(connected);
-        setBrokerRestoreReady(true);
-        // Broker connection is optional: open the dashboard and offer delayed Yahoo data
-        // until the user authorizes FYERS, rather than trapping first-time users in onboarding.
-        navigate('/dashboard');
-      } catch {
-        navigate('/dashboard');
-      }
+    const handleLoginSuccess = () => {
+      // Navigate immediately; protected-entry setup restores brokers in the background.
+      navigate('/dashboard');
     };
 
     return (
@@ -265,7 +229,6 @@ function AppContent() {
             // The broker setup screen is a real route. Once OAuth verification
             // completes, the Launch Workspace action must advance the app shell
             // to the command center rather than leaving the user on /broker.
-            setHasConnectedBroker(true);
             navigate('/dashboard');
           }}
         />
