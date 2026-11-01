@@ -5,9 +5,10 @@ import type { CoreSpiritObject } from './types';
  *
  * Primitive drawings with a stable ID are an upsert stream, not an append-only
  * tick log: the most recent geometry for a retained object replaces its prior
+ * geometry. Zone identities include their origin-time anchor: a new zone at
+ * the same call site is distinct, while updates to the same origin replace its
  * geometry. Event-like outputs without an ID remain append-only. This matters
- * for zones/lines that extend over time, forming-bar replacements, and hline
- * values that move when their source level changes.
+ * for OB/FVG history, forming-bar replacements, and moving hline values.
  */
 export class CoreSpiritOutputCollector {
   private readonly items: CoreSpiritObject[] = [];

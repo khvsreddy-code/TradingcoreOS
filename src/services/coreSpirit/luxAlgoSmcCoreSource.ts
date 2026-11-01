@@ -8,11 +8,12 @@
  * premium/discount ranges and gap-inferred prior-session levels.
  *
  * Still not source-equivalent to the complete LuxAlgo original: the original
- * multi-timeframe request.security graph, all historical OB arrays/mitigation
- * modes, strong/weak swing rules, present-vs-historical drawing modes, and its
- * full input surface require further native semantic support. Prior-session
- * boundaries are inferred from timestamp gaps; hosts with explicit exchange
- * session metadata should supply that contract before this is treated as exact.
+ * multi-timeframe request.security graph, per-zone mitigation for every
+ * historical OB/FVG (mitigation state remains latest-only), strong/weak swing
+ * rules, present-vs-historical drawing modes, and its full input surface require
+ * further native semantic support. Prior-session boundaries in this source
+ * remain inferred from timestamp gaps; runtime exchange calendars do not
+ * silently change this script-level approximation.
  */
 export const CORESPIRIT_LUXALGO_SMC_SOURCE = `indicator("Smart Money Concepts [CoreSpirit]") {
     overlay: true

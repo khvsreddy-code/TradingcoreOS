@@ -42,6 +42,7 @@ import { CoreSpiritColumnarHistory } from './columnarMarketData';
 import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot, type CoreSpiritKernelSnapshotIdentity } from './kernelStateSnapshots';
 import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandbox } from './capabilitySandbox';
 import { validateSynchronizedSnapshot } from './multiSymbolTimeframe';
+import type { CoreSpiritSessionWindow } from './sessionCalendar';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -60,6 +61,8 @@ export type CoreSpiritRuntimeOptions = {
   riskResolver?: CoreSpiritRiskResolver;
   eventResolver?: (eventName:string) => boolean | unknown;
   profiler?: CoreSpiritProfilerOptions;
+  /** Exchange calendar used to resolve holidays, special sessions and local market phases. */
+  sessionCalendar?: CoreSpiritSessionWindow;
   visibleRange?: { from:number; to:number };
   inputValues?: Readonly<Record<string, CoreSpiritValue>>;
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
@@ -296,6 +299,7 @@ export class CoreSpiritRuntime {
   private readonly optimizedExecutionContextKey = {};
   private optimizedComponentDefinitionSignature = '';
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
+  private readonly sessionCalendar?: CoreSpiritSessionWindow;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
   private suppressExternalEffects: boolean;
@@ -326,6 +330,7 @@ export class CoreSpiritRuntime {
     this.modelTrainingMode = options.modelTrainingMode === 'research' ? 'research' : 'disabled';
     this.hmmArtifactResolver = options.hmmArtifactResolver;
     this.riskResolver = options.riskResolver;
+    this.sessionCalendar = options.sessionCalendar;
     this.inputValues = Object.freeze({ ...(options.inputValues ?? {}) });
     this.propValues = Object.freeze({ ...(options.propValues ?? {}) });
     this.suppressExternalEffects = options.suppressExternalEffects === true;
@@ -341,7 +346,7 @@ export class CoreSpiritRuntime {
     this.stateHistoryLimit = this.options.stateHistoryLimit;
     this.maxOutputsPerBar = Math.max(100, Math.floor(options.maxOutputsPerBar || 10000));
     this.maxHistoryBars = Math.max(2048, Math.floor(options.maxHistoryBars || 60000));
-    this.executionContext = createCoreSpiritExecutionContext({ mode: options.executionMode || 'historical', symbol: this.options.symbol, timeframe: this.options.timeframe, timezone: this.timezone, runId: options.runId, policy: options.executionPolicy });
+    this.executionContext = createCoreSpiritExecutionContext({ mode: options.executionMode || 'historical', symbol: this.options.symbol, timeframe: this.options.timeframe, timezone: this.timezone, runId: options.runId, policy: options.executionPolicy, sessionCalendar: this.sessionCalendar });
     this.bus = bus;
     this.outputCollector = new CoreSpiritOutputCollector(this.maxOutputsPerBar);
     this.eventRouter = new CoreSpiritEventRouter(this.bus);
@@ -385,6 +390,7 @@ export class CoreSpiritRuntime {
         executionTier: this.executionTier,
         mode: this.executionContext.mode,
         timezone: this.timezone,
+        sessionCalendar: this.sessionCalendar ? { id:this.sessionCalendar.id, timezone:this.sessionCalendar.timezone, openMinute:this.sessionCalendar.openMinute, closeMinute:this.sessionCalendar.closeMinute, holidayDates:this.sessionCalendar.holidayDates ?? [], specialSessions:this.sessionCalendar.specialSessions ?? [] } : null,
         maxStepsPerBar: this.options.maxStepsPerBar,
         policy: this.executionContext.policy ?? null,
       }),
@@ -604,7 +610,7 @@ export class CoreSpiritRuntime {
     this.indicatorMemo.clear();
     this.outputCount = 0;
     this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:true, isConfirmed:false, revision:this.realtimeRevision, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
-    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
+    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false, sessionCalendar:this.sessionCalendar });
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
     if (canIncremental && dirtyPlan) {
@@ -683,7 +689,7 @@ export class CoreSpiritRuntime {
     if (this.state.barIndex < 0) return;
     this.realtimeLifecycle = 'committed';
     this.state.barState = { ...this.state.barState!, isRealtime:false, isConfirmed:true, isLast:true };
-    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex:this.state.barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:false, isConfirmed:true, isNewBar:false, revision:this.state.barState.revision, isFirst:this.state.barState.isFirst, isLast:true });
+    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex:this.state.barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:false, isConfirmed:true, isNewBar:false, revision:this.state.barState.revision, isFirst:this.state.barState.isFirst, isLast:true, sessionCalendar:this.sessionCalendar });
     this.executionContext.session = this.executionContext.frame.session;
     this.committedSeriesState = cloneNumberMap(this.state.seriesState);
     this.committedLocalSeries = cloneValueMap(this.state.localSeries);
@@ -721,7 +727,7 @@ export class CoreSpiritRuntime {
     this.state.time=this.history.length?this.toEpoch(this.history.at(-1)!.timestamp):0;
     this.realtimeRevision=0;
     this.state.barState={ index:this.state.barIndex,time:this.state.time,isFirst:this.state.barIndex===0,isLast:false,isRealtime:false,isConfirmed:true,revision:0,symbol:this.options.symbol,timeframe:this.options.timeframe,mode:this.executionContext.mode };
-    if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false}); this.executionContext.session=this.executionContext.frame.session; }
+    if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false,sessionCalendar:this.sessionCalendar}); this.executionContext.session=this.executionContext.frame.session; }
     this.currentBarSnapshot=undefined;
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
@@ -1150,7 +1156,7 @@ export class CoreSpiritRuntime {
       const bar = bars[i];
       this.validateBar(bar); this.state.barIndex = i; this.state.time = this.toEpoch(bar.timestamp); this.state.locals = {};
       this.state.barState = { index:i, time:this.state.time, isFirst:i===0, isLast:i===bars.length-1, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
-      this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1});
+      this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1,sessionCalendar:this.sessionCalendar});
       this.executionContext.session=this.executionContext.frame.session;
       this.history.push(bar);
       this.columnarHistory.append(bar);
@@ -1944,7 +1950,7 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='zone'){
         const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
-        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${outputId||'zone'}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
+        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${outputId||'zone'}:${left}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
       }
       else if(kind==='box'){
         const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
