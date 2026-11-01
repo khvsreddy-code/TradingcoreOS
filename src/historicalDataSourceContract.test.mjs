@@ -69,4 +69,11 @@ assert.match(historyStore, /row\.source === 'unknown'/);
 assert.match(chartHistoryNormalization, /row\.source === 'unknown'/);
 assert.match(chartDataProvider, /Yahoo-delayed chart candles are disabled/);
 
+assert.match(canonical, /withDistributedHistoricalPage/,
+  'provider history pages share one Redis-backed distributed single-flight boundary');
+assert.match(canonical, /resolveInvestinyAssetMapping/,
+  'Investiny IDs are validated against an exact canonical instrument mapping');
+assert.match(canonical, /\['investiny', mapping\.instrumentId, mapping\.fyersSymbol, asset\.investingId, timeframe/,
+  'Investiny page identity includes the configured asset, timeframe and page range');
+
 console.log('TRADINGCOREOS_HISTORICAL_DATA_SOURCE_POLICY_OK');

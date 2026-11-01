@@ -1,10 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
+import { resolveInvestinyAssetMapping } from './investinyMapping.js';
 import { canonicalFyersSymbol } from '../fyers/symbols/canonicalFyersSymbol.js';
 import { historicalDataService, type HistoricalInstrumentMapping, type PreferredHistorySourceFetcher } from './HistoricalDataService.js';
 import { marketDataAutoFixer } from './MarketDataAutoFixer.js';
@@ -108,13 +110,17 @@ function safeError(error: unknown): string {
   return String(value?.message || 'Unable to load validated historical candles').replace(/[\r\n\t]+/g, ' ').slice(0, 240);
 }
 
+const HISTORICAL_PAGE_RESULT_TTL_MS = 60_000;
+const HISTORICAL_PAGE_FLIGHT_TTL_MS = 20_000;
+const HISTORICAL_PAGE_WAIT_MS = 12_000;
+
 /**
- * Distributed single-flight for identical FYERS history ranges. Redis cache entries
- * are short-lived and contain validated provider envelopes only. If Redis is not
- * configured, the existing HistoricalDataService process-local single-flight remains
- * active; the shared request gate still accounts every provider attempt.
+ * Distributed single-flight for identical FYERS and Investiny history pages.
+ * The short-lived result is published only after the lease owner completes the
+ * provider call. Without shared Redis, the dataset service still deduplicates
+ * complete refreshes inside each server process.
  */
-async function withDistributedFyersHistory<T>(
+async function withDistributedHistoricalPage<T>(
   keyParts: readonly (string | number)[],
   fetcher: () => Promise<T>,
 ): Promise<T> {
@@ -124,27 +130,30 @@ async function withDistributedFyersHistory<T>(
   const digest = createHash('sha256')
     .update(keyParts.map(value => String(value)).join(':'))
     .digest('hex');
-  const cacheKey = 'tco:fyers:history-result:v1:' + digest;
-  const lockKey = 'tco:fyers:history-flight:v1:' + digest;
-  const cached = await redis.get<string>(cacheKey).catch(() => null);
-  if (cached) {
-    try { return JSON.parse(cached) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
-  }
+  const cacheKey = 'tco:historical:page-result:v2:' + digest;
+  const lockKey = 'tco:historical:page-flight:v2:' + digest;
+  const readCached = async (): Promise<T | undefined> => {
+    const cached = await redis.get<string>(cacheKey);
+    if (!cached) return undefined;
+    try { return JSON.parse(cached) as T; }
+    catch { await redis.del(cacheKey); return undefined; }
+  };
 
-  const owner = createHash('sha256')
-    .update(digest + ':' + Date.now() + ':' + Math.random())
-    .digest('hex');
-  const deadline = Date.now() + 12_000;
+  const cached = await readCached().catch(() => undefined);
+  if (cached !== undefined) return cached;
+
+  const owner = randomUUID();
+  const deadline = Date.now() + HISTORICAL_PAGE_WAIT_MS;
   while (Date.now() < deadline) {
-    const acquired = await redis.acquireLock(lockKey, owner, 20_000).catch(() => false);
+    const acquired = await redis.acquireLock(lockKey, owner, HISTORICAL_PAGE_FLIGHT_TTL_MS).catch(() => false);
     if (acquired) {
       try {
-        const secondRead = await redis.get<string>(cacheKey).catch(() => null);
-        if (secondRead) {
-          try { return JSON.parse(secondRead) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
-        }
+        const secondRead = await readCached();
+        if (secondRead !== undefined) return secondRead;
         const result = await fetcher();
-        await redis.set(cacheKey, JSON.stringify(result), { px: 60_000 }).catch(() => undefined);
+        // Publishing the shared result is part of the single-flight contract.
+        // Do not swallow a Redis write failure and let the next instance refetch.
+        await redis.set(cacheKey, JSON.stringify(result), { px: HISTORICAL_PAGE_RESULT_TTL_MS });
         return result;
       } finally {
         await redis.releaseLock(lockKey, owner).catch(() => undefined);
@@ -152,17 +161,13 @@ async function withDistributedFyersHistory<T>(
     }
 
     await new Promise(resolve => setTimeout(resolve, 100));
-    const sharedResult = await redis.get<string>(cacheKey).catch(() => null);
-    if (sharedResult) {
-      try { return JSON.parse(sharedResult) as T; } catch { await redis.del(cacheKey).catch(() => undefined); }
-    }
+    const sharedResult = await readCached().catch(() => undefined);
+    if (sharedResult !== undefined) return sharedResult;
   }
 
-  // Fail closed rather than allowing concurrent Vercel instances to fan out
-  // duplicate provider calls when a distributed lease is stuck or unavailable.
-  throw Object.assign(new Error('Timed out waiting for the shared FYERS history fetch.'), {
+  throw Object.assign(new Error('Timed out waiting for the shared historical provider page.'), {
     status: 503,
-    code: 'FYERS_HISTORY_SINGLEFLIGHT_TIMEOUT',
+    code: 'HISTORICAL_PAGE_SINGLEFLIGHT_TIMEOUT',
   });
 }
 
@@ -223,11 +228,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       // more than one TradingCore identity. Prefer the stable broker client code;
       // never key quotas by a rotating access token. Hash before passing the key
       // into request-gate state.
-      const stableFyersAccount = String(session.clientCode || userId).trim().toUpperCase();
-      const quotaIdentity = createHash('sha256')
-        .update('tradingcore:fyers-account:v1:')
-        .update(stableFyersAccount)
-        .digest('hex');
+      const quotaIdentity = resolveFyersQuotaIdentity(session.clientCode);
       client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
     } else {
       fyersUnavailableReason = 'Fyers session is not connected';
@@ -238,8 +239,8 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
 
   const fetchFyersRecentRaw = client
     ? async (mapping: HistoricalInstrumentMapping, range: { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string }) =>
-        withDistributedFyersHistory(
-          [client!.quotaIdentity, mapping.instrumentId, spec.interval, Math.floor(range.fromMs / 1000), Math.floor(range.toMs / 1000)],
+        withDistributedHistoricalPage(
+          ['fyers', client!.quotaIdentity, mapping.instrumentId, spec.interval, Math.floor(range.fromMs / 1000), Math.floor(range.toMs / 1000)],
           async () => {
             const signal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
             const payload = await client!.dataGet<any>('/history', {
@@ -295,23 +296,26 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
   const fetchInvestinyHistory: PreferredHistorySourceFetcher | undefined =
     investinyEnabled && investinyBase && investinyToken
       ? async (mapping, timeframe, range) => {
-          const mapped = investinyMap[mapping.instrumentId] || investinyMap[mapping.fyersSymbol];
-          const rawId = mapped?.investingId ?? mapped?.investing_id ?? mapped?.id;
-          const investingId = Number(rawId);
-          if (!Number.isSafeInteger(investingId) || investingId <= 0) {
-            throw Object.assign(new Error('No exact Investing.com asset ID is configured for this instrument'), { code: 'INVESTINY_SYMBOL_UNMAPPED' });
+          const asset = resolveInvestinyAssetMapping(investinyMap, mapping);
+          if (!asset) {
+            throw Object.assign(new Error('No exact, validated Investing.com asset ID is configured for this instrument'), { code: 'INVESTINY_SYMBOL_UNMAPPED' });
           }
-          const response = await fetch(investinyBase + '/v1/investiny/history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + investinyToken, Accept: 'application/json' },
-            signal: timeoutSignal(API_LATENCY_BUDGET_MS.history),
-            body: JSON.stringify({ instrument_id: mapping.instrumentId, investing_id: investingId, timeframe, from_ms: range.fromMs, to_ms: range.toMs, max_bars: range.requestedBars, timezone: mapping.timezone, session_open: mapping.sessionOpen }),
-          });
-          if (!response.ok) throw Object.assign(new Error('Investiny service returned HTTP ' + response.status), { status: response.status, retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')) });
-          const payload: unknown = await response.json();
-          const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-          if (!Array.isArray(record.bars)) throw Object.assign(new Error('Investiny service returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
-          return record.bars;
+          return withDistributedHistoricalPage(
+            ['investiny', mapping.instrumentId, mapping.fyersSymbol, asset.investingId, timeframe, range.requestedBars, Math.floor(range.fromMs / 1000), Math.floor(range.toMs / 1000)],
+            async () => {
+              const response = await fetch(investinyBase + '/v1/investiny/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + investinyToken, Accept: 'application/json' },
+                signal: timeoutSignal(API_LATENCY_BUDGET_MS.history),
+                body: JSON.stringify({ instrument_id: mapping.instrumentId, investing_id: asset.investingId, fyers_symbol: mapping.fyersSymbol, timeframe, from_ms: range.fromMs, to_ms: range.toMs, max_bars: range.requestedBars, timezone: mapping.timezone, session_open: mapping.sessionOpen }),
+              });
+              if (!response.ok) throw Object.assign(new Error('Investiny service returned HTTP ' + response.status), { status: response.status, retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')) });
+              const payload: unknown = await response.json();
+              const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+              if (!Array.isArray(record.bars)) throw Object.assign(new Error('Investiny service returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
+              return record.bars;
+            },
+          );
         }
       : undefined;
 
