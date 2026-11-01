@@ -137,3 +137,18 @@ The canonical market-data plane remains the source of truth. The acceptance work
 ## Remaining release gates
 
 Do not call the SMC conversion source-equivalent or production-certified until there are explicit semantic fixtures against the original Pine behavior for the documented missing features, a passing authenticated browser run in the target deployment, and repeatable screenshot-diff evidence for pan/zoom/resize and at least one multi-pane layout. The normal build and browser run must also complete successfully; a deployment-provider rate-limit failure is not evidence that the test suite passed or failed.
+
+
+## Resource-safe market buffers and enforceable browser budgets
+
+The persistent worker pool now allocates each shared market buffer from the chart current row count instead of reserving at least 65,536 OHLCV rows for every context. When a context grows past its current power-of-two capacity, the host creates a replacement buffer and republishes the entire canonical frame before the next worker run. It does not attempt to grow a live `SharedArrayBuffer` in place, and the replacement preserves the monotonic publication sequence. A full re-sync on resize is intentional: a tail-only dirty range cannot initialize newly allocated columns safely. Histories outside the shared-buffer limit use the existing transferable market-data path rather than forcing an oversized shared allocation.
+
+The SMC browser verifier can enforce runner-specific performance limits without baking one machine latency into the product contract. Set any of these environment variables on a stable browser runner to turn the corresponding measurement into a failure gate:
+
+- `TCO_SMC_MAX_FIRST_PLOT_MS`: maximum Compile & Run click-to-native-visual-commit latency.
+- `TCO_SMC_MAX_RECOMPILE_P95_MS`: maximum nearest-rank p95 across warm recompile-to-visual-commit samples.
+- `TCO_SMC_MAX_P95_FRAME_GAP_MS`: maximum p95 requestAnimationFrame gap during compile/execute/scene commit.
+- `TCO_SMC_MAX_HEAP_GROWTH_BYTES`: maximum heap delta across repeated recompile samples, when Chromium exposes `performance.memory`.
+- `TCO_SMC_REQUIRE_GOLDEN_IMAGE=true`: require `TCO_SMC_GOLDEN_IMAGE` to point to a reviewed viewport-matched PNG rather than silently running only the pre/post pixel-change check.
+
+Every configured performance budget requires an actual finite measurement; missing browser telemetry fails that configured gate instead of being reported as zero. Leave a budget unset when its browser API is unavailable or the runner is not sufficiently controlled. Calibrate limits on the same browser build, device class, viewport, symbol, timeframe, history and SMC inputs used by the acceptance job. No default latency/heap thresholds are imposed on arbitrary developer machines.

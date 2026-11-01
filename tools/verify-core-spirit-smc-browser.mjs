@@ -4,10 +4,16 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
+import { evaluateCoreSpiritBrowserBudgets } from './core-spirit-browser-budgets.mjs';
 
 const baseUrl = (process.env.TCO_BROWSER_URL || 'http://localhost:5173/live').trim();
 const requireAuth = process.env.TCO_REQUIRE_AUTH === 'true';
 const timeoutMs = Math.max(10_000, Math.min(90_000, Number(process.env.TCO_SMC_BROWSER_TIMEOUT_MS || 38_000)));
+const requireGoldenImage = process.env.TCO_SMC_REQUIRE_GOLDEN_IMAGE === 'true';
+const configuredGoldenImage = process.env.TCO_SMC_GOLDEN_IMAGE?.trim();
+if (requireGoldenImage && !configuredGoldenImage) {
+  throw new Error('TCO_SMC_REQUIRE_GOLDEN_IMAGE=true requires TCO_SMC_GOLDEN_IMAGE to point to an approved PNG.');
+}
 const sourceFile = await readFile(new URL('../src/services/coreSpirit/luxAlgoSmcCoreSource.ts', import.meta.url), 'utf8');
 const match = sourceFile.match(/export const CORESPIRIT_LUXALGO_SMC_SOURCE = \x60([\s\S]*?)\x60;\s*$/);
 if (!match) throw new Error('Could not load the bundled SMC acceptance source from luxAlgoSmcCoreSource.ts.');
@@ -656,11 +662,20 @@ try {
         goldenImageComparison: goldenImagePath ? { configured: true, path: goldenImagePath, changedPixels: goldenImageDiff.changedPixels, comparedPixels: goldenImageDiff.comparedPixels, changedRatio: goldenImageDiff.changedRatio, maxChangedRatio: goldenImageDiff.maxChangedRatio, passed: goldenImageDiff.passed } : { configured: false, note: 'Set TCO_SMC_GOLDEN_IMAGE to compare against an approved viewport-matched PNG.' },
         note: 'Times end at the browser visual-commit event; p50/p95 are nearest-rank statistics for repeated Compile & Run samples. Worker round-trip includes worker execution and messaging, not pure kernel CPU time. Heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
       };
+      const browserPerformanceBudgets = evaluateCoreSpiritBrowserBudgets({
+        firstPlotReadyMs: browserPerformance.firstPlotReadyMs,
+        recompilePlotReadyP95Ms: browserPerformance.recompilePlotReadyP95Ms,
+        p95FrameGapMs: mainThreadResponsiveness.p95FrameGapMs,
+        heapDeltaAcrossRecompileSamplesBytes: browserPerformance.heapDeltaAcrossRecompileSamplesBytes,
+      });
+      assert(browserPerformanceBudgets.passed,
+        'SMC browser performance budget failed: ' + JSON.stringify(browserPerformanceBudgets));
       const visualEvidence = {
         url: baseUrl,
         acceptance: 'compile-and-run + native Vela drawing commit + chart plot screenshot diffs before/after compile and after zoom/pan',
         browserTelemetry,
         browserPerformance,
+        browserPerformanceBudgets,
         mainThreadResponsiveness,
         priorSmcInstancesRemoved: clearedPriorSmc.removed,
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },

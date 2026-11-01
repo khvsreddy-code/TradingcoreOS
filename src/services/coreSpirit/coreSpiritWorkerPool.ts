@@ -10,6 +10,7 @@ import { isRecord } from '../boundary/brokerApiValidation';
 import { materializeSharedSeriesOutput, type CoreSpiritSharedSeriesDescriptor } from './sharedOutputBuffer';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 import {
+  canUseCoreSpiritSharedMarketBuffer,
   CoreSpiritSharedMarketBuffer,
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
@@ -517,11 +518,15 @@ export class CoreSpiritWorkerPool {
   }
 
   private getOrCreateSharedBuffer(contextKey:string,length:number):CoreSpiritSharedMarketBuffer|undefined {
-    if(typeof SharedArrayBuffer==='undefined')return undefined;
-    if(typeof globalThis.crossOriginIsolated==='boolean'&&!globalThis.crossOriginIsolated)return undefined;
+    if(!canUseCoreSpiritSharedMarketBuffer(length)){
+      this.sharedBuffers.delete(contextKey);
+      return undefined;
+    }
     let buffer=this.sharedBuffers.get(contextKey);
     if(!buffer){
-      buffer=new CoreSpiritSharedMarketBuffer(Math.max(65_536,Math.min(262_144,Math.max(256,length))),true);
+      // Allocate for the actual history size, not a 65k-bar reservation per
+      // chart context. The buffer grows safely when history is extended.
+      buffer=new CoreSpiritSharedMarketBuffer(Math.max(256,Math.floor(length)),true);
       this.sharedBuffers.set(contextKey,buffer);
     }
     return buffer;

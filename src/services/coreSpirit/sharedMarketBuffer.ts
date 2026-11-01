@@ -95,19 +95,30 @@ export class CoreSpiritSharedMarketBuffer {
     dirtyFrom = 0,
     dirtyTo = bars.length,
   ): CoreSpiritSharedMarketDescriptor {
-    if (bars.length > this.capacity) {
-      if (this.shared) throw new Error(
-        'Shared CoreSpirit dataset exceeds fixed buffer capacity (' +
-        this.capacity +
-        '); use a bounded/chunked dataset transport.',
-      );
+    const resized = bars.length > this.capacity;
+    if (resized) {
+      // SharedArrayBuffer cannot be grown in place. Replace it before publishing
+      // the descriptor and seed its header so sequence/version stay monotonic.
+      const previousHeader = this.columns.header;
+      const readHeader = (index: number): number =>
+        this.shared && typeof Atomics !== 'undefined'
+          ? Atomics.load(previousHeader, index)
+          : previousHeader[index]!;
       this.capacity = nextPowerOfTwo(bars.length);
-      this.buffer = allocateBuffer(this.capacity, false);
+      this.buffer = allocateBuffer(this.capacity, this.shared);
       this.columns = views(this.buffer, this.capacity);
+      this.columns.header[0] = CORE_SPIRIT_SHARED_MARKET_VERSION;
+      this.columns.header[1] = readHeader(1);
+      this.columns.header[2] = readHeader(2);
+      this.columns.header[3] = readHeader(3);
+      this.columns.header[4] = readHeader(4);
+      this.columns.header[5] = readHeader(5);
     }
 
-    const start = Math.max(0, Math.min(bars.length, Math.floor(dirtyFrom)));
-    const end = Math.max(start, Math.min(bars.length, Math.ceil(dirtyTo)));
+    // A replacement buffer has no valid old columns. Re-publish the complete
+    // frame on growth even when the caller supplied only a tail dirty range.
+    const start = resized ? 0 : Math.max(0, Math.min(bars.length, Math.floor(dirtyFrom)));
+    const end = resized ? bars.length : Math.max(start, Math.min(bars.length, Math.ceil(dirtyTo)));
 
     for (let i = start; i < end; i += 1) {
       const bar = bars[i]!;
