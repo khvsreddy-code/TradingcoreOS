@@ -27,8 +27,8 @@ assert.match(plane, /if \(!Number\.isFinite\(milliseconds\) \|\| milliseconds <=
 assert.doesNotMatch(runtime, /seedLiveCandle/, 'a single quote must not be rendered as a historical candle');
 assert.match(runtime, /timezoneKey='tradingcore:vela-timezone:v1'/, 'IST timezone default and user choice persistence are required');
 assert.match(runtime, /applyFeature\('countdown',false\)/, 'non-session-aware countdown must be disabled in TCO');
-assert.match(overlay, /openChartSettings/, 'right rail must expose native Vela settings');
-assert.match(overlay, /title="Vela chart settings"/, 'settings button must be visible and accessible');
+assert.match(overlay, /aria-label="Candle style"/, 'chart toolbar must expose native candle appearance settings');
+assert.match(overlay, /title="Candle style"/, 'candle appearance settings control must be visible and accessible');
 assert.match(overlay, /<BarChart3/, 'indicator action must have a visible icon');
 assert.match(overlay, /<Sparkles/, 'AI action must have a visible icon');
 assert.match(overlay, /<Volume2/, 'volume action must have a visible icon');
