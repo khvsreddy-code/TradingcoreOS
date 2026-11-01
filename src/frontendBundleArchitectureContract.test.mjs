@@ -68,7 +68,7 @@ assert(tcoVelaChrome.includes('Renderer metrics are warming up'), 'research dock
 assert(tcoVelaChrome.includes(' · LTP ${Number.isFinite(ltp)?ltp.toLocaleString'), 'order-book context must show the active quote and its freshness state');
 assert(workspaceShell.includes('Skip to workspace content'), 'workspace shell must provide a keyboard skip link');
 assert(workspaceShell.includes('aria-label="Primary workspace navigation"'), 'workspace navigation must be named for assistive technology');
-assert(workspaceShell.includes("aria-current={active===path?'page':undefined}"), 'workspace navigation must expose the current page');
+assert.match(workspaceShell, /aria-current=\{active\s*===\s*path\s*\?\s*'page'\s*:\s*undefined\}/, 'workspace navigation must expose the current page');
 assert(workspaceRoutes.includes('ROUTE_LOADING_COPY') && workspaceRoutes.includes('fallback(route)'), 'lazy workspace routes must have meaningful route-specific loading states');
 assert(coreSpiritPage.includes('aria-label="CoreSpirit research workspace"'), 'CoreSpirit research workspace must have a labelled main region');
 assert(coreSpiritPage.includes('aria-label="CoreSpirit compiler diagnostics"'), 'CoreSpirit diagnostics must be announced accessibly');
