@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { resolveFyersQuotaIdentity } from './server/fyers/core/FyersQuotaIdentity.ts';
+const a = resolveFyersQuotaIdentity(' ab123456 ', 'TRADINGCORE-APP');
+assert.equal(a, resolveFyersQuotaIdentity('AB123456', 'OTHER-APP'), 'the same broker account shares one quota identity across TradingCore users');
+assert.notEqual(a, resolveFyersQuotaIdentity('ZX987654', 'TRADINGCORE-APP'), 'different broker accounts remain isolated');
+assert.ok(!a.includes('AB123456'), 'raw broker client codes are hashed before they reach the quota key');
+const fallback = resolveFyersQuotaIdentity(undefined, 'TRADINGCORE-APP');
+assert.equal(fallback, resolveFyersQuotaIdentity(null, 'tradingcore-app'), 'application fallback is stable and case-normalized');
+assert.notEqual(fallback, resolveFyersQuotaIdentity(undefined, 'OTHER-APP'));
+assert.throws(() => resolveFyersQuotaIdentity(undefined, ''), error => error?.code === 'BROKER_IDENTITY_REQUIRED' && error?.status === 503);
+console.log('FYERS_ACCOUNT_QUOTA_IDENTITY_CONTRACT_OK');

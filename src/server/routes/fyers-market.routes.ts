@@ -5,6 +5,7 @@ import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
 import { assertFyersQuoteBatch, FyersCapabilityError, resolveFyersCapabilities, toPublicFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
 
 export const fyersMarketRoutes = Router();
 fyersMarketRoutes.use(requireUser);
@@ -18,7 +19,7 @@ async function clientFor(req: AuthenticatedRequest, res: Response): Promise<Fyer
   }
   try {
     const capabilities = resolveFyersCapabilities(userId);
-    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted), undefined, capabilities, userId);
+    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted), undefined, capabilities, resolveFyersQuotaIdentity(session.clientCode));
   } catch {
     res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' });
     return null;

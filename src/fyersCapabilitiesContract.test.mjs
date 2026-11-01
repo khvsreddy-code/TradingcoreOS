@@ -142,9 +142,9 @@ assert.match(brokerAdapter,/FYERS_SECONDS_DATA_REQUIRES_PRIME/,'legacy adapter m
 assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy option-chain requests must use the Data API gate');
 assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities, session\.userId\)/,'option-chain route must pass plan and stable user quota identity');
 assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must not be retried as provider errors');
-assert.match(apiClient,/Authenticated TradingCore user identity is required for FYERS quota enforcement/,'FYERS clients must not default to rotating access-token identities');
+assert.match(apiClient,/Stable FYERS account or application identity is required for quota enforcement/,'FYERS clients reject absent stable broker/application quota identity');
 assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable per-user quota bucket');
-assert.match(quoteRoute,/new FyersApiClient\(EncryptionService\.decrypt\(session\.accessTokenEncrypted\), undefined, capabilities, userId\)/,'the dedicated quote client must be keyed by authenticated user, not rotating token');
+assert.match(quoteRoute,/new FyersApiClient\(EncryptionService\.decrypt\(session\.accessTokenEncrypted\), undefined, capabilities, resolveFyersQuotaIdentity\(session\.clientCode\)\)/,'quote routes share the FYERS account-level quota');
 assert.match(canonicalHistory,/String\(session\.clientCode \|\| userId\)\.trim\(\)\.toUpperCase\(\)/,'canonical history prefers a stable broker account identity and falls back to the authenticated user');
 assert.match(canonicalHistory,/createHash\('sha256'\)[\s\S]*tradingcore:fyers-account:v1:[\s\S]*\.update\(stableFyersAccount\)[\s\S]*\.digest\('hex'\)/,'canonical history hashes the stable broker identity before using it as a quota key');
 assert.match(canonicalHistory,/new FyersApiClient\(accessToken, undefined, capabilities, quotaIdentity\)/,'canonical history shares quota across TradingCore users connected to the same FYERS account');
@@ -177,7 +177,7 @@ assert.match(apiClient,/recordFyersQuotaDenial/,'local quota denials are observa
 assert.match(quotaTelemetry,/scope: 'process-local telemetry; admission authority is ' \+ coordinationAuthorityLabel\(\)/,'telemetry remains process-local while identifying the configured shared admission backend');
 assert.match(quotaTelemetry,/`http-\$\{Math\.trunc\(status\)\}`/,'quota telemetry records the exact provider HTTP status instead of only broad status classes');
 assert.match(quotaTelemetry,/`local-gate-\$\{status\}`/,'quota telemetry preserves local gate denial status codes separately from provider responses');
-assert.match(accountRoute,/new FyersApiClient\(EncryptionService\.decrypt\(s\.accessTokenEncrypted\),undefined,capabilities,userId\)/,'account endpoints use stable authenticated identity and server-resolved capabilities');
+assert.match(accountRoute,/new FyersApiClient\(EncryptionService\.decrypt\(s\.accessTokenEncrypted\),undefined,capabilities,resolveFyersQuotaIdentity\(s\.clientCode\)\)/,'account endpoints share the FYERS account-level quota');
 assert.match(orderGateway,/rateLimitIdentity: userId/,'fixed-IP order execution carries the authenticated user identity to the external quota authority');
 assert.match(orderGateway,/quotaPlan: resolveFyersCapabilities\(userId\)\.plan/,'fixed-IP order execution forwards only server-resolved FYERS plan entitlements');
 assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId\)/,'FYERS orders use the fixed-IP gateway with the authenticated user quota identity');

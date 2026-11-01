@@ -92,7 +92,7 @@ export class FyersApiClient {
   ) {
     const identity = String(rateLimitIdentity || '').trim();
     if (!identity) {
-      throw Object.assign(new Error('Authenticated TradingCore user identity is required for FYERS quota enforcement.'), {
+      throw Object.assign(new Error('Stable FYERS account or application identity is required for quota enforcement.'), {
         status: 503,
         code: 'BROKER_IDENTITY_REQUIRED',
       });
