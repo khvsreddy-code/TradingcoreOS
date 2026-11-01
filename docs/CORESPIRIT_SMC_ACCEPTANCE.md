@@ -52,6 +52,7 @@ The SMC acceptance test compiles the bundled source into an executable artifact 
 - BOS/CHoCH, confirmed swing labels, equal-high/equal-low output, order-block zones, FVGs and premium/discount zones;
 - pivot confirmation delay, actual pivot anchor time/price, and exact bullish/bearish FVG left/right/top/bottom boundaries;
 - FVG visibility input behavior, forming-bar replacement, unique drawing IDs and historical-correction replay;
+- bullish and bearish order-block lifecycle: active zones fade on mitigation, same-bar wick corrections restore active styling, replayed mitigation preserves the same drawing identity and original price bounds;
 - Vela timestamp adaptation and native visual-ABI projection;
 - stable chart-instance identity: identical source reuses one instance, while changed source only replaces the previous valid instance after the new instance reports ready.
 
@@ -78,9 +79,11 @@ The screenshot comparator reads the browser-produced PNG files, decodes RGB/RGBA
 
 This is a rendered-pixel smoke gate, not yet a baseline screenshot-diff suite. There are no stored golden images, and it does not yet provide expected-image comparisons for every viewport size, pane, color scheme or instrument.
 
-The browser report now includes first-plot-ready time (from the Compile & Run click to the native visual-commit event), repeated warm recompile-to-visual-commit samples with nearest-rank p50/p95, device concurrency/memory hints, and Chromium JS heap samples where `performance.memory` is exposed. Repeated recompiles also assert that the same instance and native object-kind inventory are retained. These are browser execution/commit measurements, not GPU/process-memory measurements and not a substitute for frame-paint profiling. Run against the same browser, instrument, timeframe, history length and viewport when comparing reports.
+The browser report now includes first-plot-ready time (from the Compile & Run click to the native visual-commit event), repeated warm recompile-to-visual-commit samples with nearest-rank p50/p95, device concurrency/memory hints, Chromium JS heap samples where `performance.memory` is exposed, and main-thread responsiveness samples collected during the compile/execute/scene-commit window. The responsiveness sample reports requestAnimationFrame gap p50/p95/max, frames over 33 ms and 50 ms, and `PerformanceObserver` long-task counts/durations when the browser supports that API. These are diagnostic samples; the harness does not impose hardware-specific pass thresholds and does not infer GPU time, dropped physical display frames or process memory from them. Repeated recompiles also assert that the same instance and native object-kind inventory are retained. Run against the same browser, instrument, timeframe, history length and viewport when comparing reports.
 
 ## Performance baseline
+
+The host-side lane scheduler now uses cursor-based O(1) dequeue with keyed tombstones and amortized compaction instead of per-task `Array.shift()` and queue scans. Its deterministic contract covers cross-lane supersession, FIFO scheduling while a task enqueues more work, budget exhaustion, queue clearing during an active flush and repeated keyed replacements. This is a scheduler data-structure improvement, not an end-to-end chart speed claim until the browser responsiveness and multi-indicator workload reports are collected on representative hardware.
 
 The persistent worker pool now uses a conservative resource budget based on browser device hints. Devices reporting 4 GiB or less are capped at one worker and three retained contexts per worker; devices above 4 GiB and up to 8 GiB are capped at two workers and five contexts; larger-memory devices may use up to four workers (still leaving one reported hardware thread free) and eight contexts. When device memory is unavailable, the pool stays at two workers and four contexts. These values are admission guards, not measurements of available free RAM; browsers often expose only coarse device-memory buckets.
 
