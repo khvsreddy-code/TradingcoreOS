@@ -81,8 +81,11 @@ async function fetchFeed(feed: typeof FEEDS[number], topic: string): Promise<New
   return rows;
 }
 
-async function getNews(topic = ''): Promise<NewsBundle> {
-  const key = String(topic || 'INDIA_MARKETS').trim().toUpperCase().slice(0, 120);
+async function getNews(topic = '', cacheNamespace: 'SYMBOL' | 'TOPIC' = 'SYMBOL'): Promise<NewsBundle> {
+  // Keep topic research and symbol/watchlist requests independently cached. The
+  // same RSS publisher can support both, but mode-specific cache entries avoid
+  // serving a broader symbol query for a narrower topic preset (or vice versa).
+  const key = cacheNamespace + ':' + String(topic || 'INDIA_MARKETS').trim().toUpperCase().slice(0, 120);
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.bundle;
   const pending = inflight.get(key);
@@ -111,10 +114,19 @@ async function getNews(topic = ''): Promise<NewsBundle> {
   return promise;
 }
 
+async function getSymbolNews(symbol: string): Promise<NewsBundle> {
+  return getNews(symbol, 'SYMBOL');
+}
+
+async function getTopicNews(topic: string): Promise<NewsBundle> {
+  return getNews(topic, 'TOPIC');
+}
+
 router.get('/news', async (req, res) => {
+  const topicMode = req.query.topic !== undefined;
   const topic = String(req.query.topic || req.query.symbol || req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 120);
   try {
-    const bundle = await getNews(topic);
+    const bundle = topicMode ? await getTopicNews(topic) : await getSymbolNews(topic);
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.json({ success: true, provider: bundle.provider, topic: topic || 'India markets', region: 'IN', items: bundle.items, fetchedAt: new Date().toISOString() });
   } catch (error: unknown) {
