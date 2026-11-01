@@ -68,14 +68,20 @@ export function canDispatchCoreSpiritWorkerWorkload(
   requestedDataPoints: number,
   activeDataPoints: readonly number[],
   pendingDataPoints: readonly number[] = [],
+  requestedQueueIndex = 0,
 ): boolean {
   const activeLarge = activeDataPoints.some(isCoreSpiritWorkerExclusiveWorkload);
   if (activeLarge) return false;
 
-  const largeWaiting = pendingDataPoints.some(isCoreSpiritWorkerExclusiveWorkload);
-  if (largeWaiting) {
-    if (activeDataPoints.length > 0) return false;
-    return isCoreSpiritWorkerExclusiveWorkload(requestedDataPoints);
+  // Keep the queue's existing priority order: jobs ahead of the first large
+  // snapshot may drain, the large snapshot runs exclusively, and later jobs
+  // cannot refill slots until that snapshot completes.
+  const firstLargeIndex = pendingDataPoints.findIndex(isCoreSpiritWorkerExclusiveWorkload);
+  if (firstLargeIndex >= 0) {
+    if (isCoreSpiritWorkerExclusiveWorkload(requestedDataPoints)) {
+      return requestedQueueIndex === firstLargeIndex && activeDataPoints.length === 0;
+    }
+    return requestedQueueIndex < firstLargeIndex;
   }
 
   if (isCoreSpiritWorkerExclusiveWorkload(requestedDataPoints)) return activeDataPoints.length === 0;
