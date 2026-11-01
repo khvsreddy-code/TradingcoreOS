@@ -9,6 +9,7 @@ type Listener = (event: MarketFeedEvent) => void;
 
 interface Session {
   userId: string;
+  quotaIdentity: string;
   feedClass: FyersDataFeedClass;
   socket?: WebSocket;
   instruments: Set<string>;
@@ -42,10 +43,11 @@ export class FyersMarketDataTransport {
     instrumentKeys: readonly string[],
     maxSymbols: number,
     depthSymbols: readonly string[] = [],
+    quotaIdentity = userId,
   ): { allowed: boolean; activeSymbols: number; projectedSymbols: number; limit: number } {
     const active = new Set<string>();
     for (const session of this.sessions.values()) {
-      if (session.userId === userId) session.instruments.forEach(symbol => active.add(symbol));
+      if (session.quotaIdentity === quotaIdentity) session.instruments.forEach(symbol => active.add(symbol));
     }
     const projected = new Set<string>([...active, ...instrumentKeys, ...depthSymbols]);
     return { allowed: projected.size <= maxSymbols, activeSymbols: active.size, projectedSymbols: projected.size, limit: maxSymbols };
@@ -60,13 +62,14 @@ export class FyersMarketDataTransport {
     depthSymbols: string[] = instrumentKeys,
     maxSymbols = DEFAULT_FYERS_CAPABILITIES.maxStreamSymbols,
     feedClass: FyersDataFeedClass = 'full',
+    quotaIdentity = userId,
   ): () => void {
     // Backward compatibility: a legacy combined request is fulfilled by two
     // physically distinct sockets rather than subscribing to depth on the chart socket.
     if (feedClass === 'full' && includeDepth) {
-      const stopFull = this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, 'full');
+      const stopFull = this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, 'full', quotaIdentity);
       try {
-        const stopDepth = this.subscribeSingle(userId, accessToken, depthSymbols, listener, maxSymbols, 'depth');
+        const stopDepth = this.subscribeSingle(userId, accessToken, depthSymbols, listener, maxSymbols, 'depth', quotaIdentity);
         let stopped = false;
         return () => {
           if (stopped) return;
@@ -79,7 +82,7 @@ export class FyersMarketDataTransport {
         throw error;
       }
     }
-    return this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, feedClass);
+    return this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, feedClass, quotaIdentity);
   }
 
   static disconnect(userId: string): void {
@@ -101,10 +104,11 @@ export class FyersMarketDataTransport {
     listener: Listener,
     maxSymbols: number,
     feedClass: FyersDataFeedClass,
+    quotaIdentity = userId,
   ): () => void {
     const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
     if (!symbols.length) throw Object.assign(new Error('At least one valid FYERS symbol is required.'), { status: 400, code: 'FYERS_EMPTY_SUBSCRIPTION' });
-    const capacity = this.checkSubscriptionCapacity(userId, symbols, maxSymbols);
+    const capacity = this.checkSubscriptionCapacity(userId, symbols, maxSymbols, [], quotaIdentity);
     if (!capacity.allowed) {
       throw Object.assign(
         new Error(`FYERS stream symbol limit exceeded: ${capacity.projectedSymbols} unique symbols requested; ${capacity.limit} allowed for this account's plan.`),
@@ -116,7 +120,7 @@ export class FyersMarketDataTransport {
     let session = this.sessions.get(key);
     if (!session) {
       session = {
-        userId, feedClass, instruments: new Set(), listeners: new Set(), subscriptions: new Map(),
+        userId, quotaIdentity, feedClass, instruments: new Set(), listeners: new Set(), subscriptions: new Map(),
         accessToken, closing: false, reconnectAttempt: 0, connectGeneration: 0, lastTickAt: 0, sequence: 0,
       };
       this.sessions.set(key, session);

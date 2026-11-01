@@ -390,6 +390,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
     symbols,
     capabilities.maxStreamSymbols,
     includeDepth ? depthSymbols : [],
+    session.quotaIdentity,
   );
   if (!capacity.allowed) {
     return res.status(400).json({
@@ -422,7 +423,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
   let unsubscribe: (() => void);
   try {
     unsubscribe = FyersMarketDataTransport.subscribe(
-      session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols, feedClass,
+      session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols, feedClass, session.quotaIdentity,
     );
   } catch (error: any) {
     write({ type: 'error', error: error?.message || 'Unable to subscribe to FYERS market data' });

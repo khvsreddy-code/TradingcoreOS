@@ -115,6 +115,8 @@ assert.match(quoteService, /withCallerAbort\(sharedRequest, signal\)/, 'one call
 assert.match(streamRoute, /capabilities\.maxStreamSymbols/);
 assert.match(streamRoute, /post\('\/:brokerId\/market-stream'/, 'large Prime stream subscriptions need a POST transport');
 assert.match(streamTransport, /checkSubscriptionCapacity/, 'active subscriptions must be capped as a union, not only per request');
+assert.match(streamTransport, /session\.quotaIdentity === quotaIdentity/, 'the active WebSocket symbol union is scoped to the actual FYERS account, not a TradingCore login');
+assert.match(streamRoute, /session\.quotaIdentity/, 'market-stream admission passes the resolved FYERS account identity into the shared capacity gate');
 assert.match(apiClient, /const budgetKey = category === 'data' \? 'data' : 'account'/, "Data has its own pool while User Info and Transactions share the provider's combined account/API ceiling");
 assert.match(brokerAdapter, /budgetKey: 'account'/, 'OAuth token exchange shares the combined User Info + Transactions budget instead of creating a third independent bucket');
 assert.match(apiClient, /recordFyersQuotaAttempt\(category, this\.capabilities\.plan, pathOnly\)/, 'quota telemetry retains the precise API category even when admission shares a provider pool');
