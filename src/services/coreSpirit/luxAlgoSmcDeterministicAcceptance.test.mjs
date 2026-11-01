@@ -132,6 +132,45 @@ assert.equal(bullishOrderBlock.top, bars[167].high,
   'the bullish order block top must come from the selected bearish origin candle');
 assert.equal(bullishOrderBlock.bottom, bars[167].low,
   'the bullish order block bottom must come from the selected bearish origin candle');
+
+// The active → mitigated transition is part of the observable SMC contract.
+// Keep the same runtime/instance so the test proves an in-place lifecycle update,
+// not merely two independent historical snapshots that happen to look similar.
+const orderBlockLifecycleRuntime = new CoreSpiritRuntime({ sourceId: SOURCE_ID + '-ob-lifecycle' });
+const orderBlockSeed = orderBlockLifecycleRuntime.executeIr(compiled.ir, bars.slice(0, 171));
+assert.deepEqual(orderBlockSeed.diagnostics, [], 'the unmitigated order-block prefix must execute cleanly');
+const activeBullishOrderBlock = orderBlockSeed.outputs.find(item =>
+  item.kind === 'zone' && item.style?.fillColor === '#1848CC');
+assert.ok(activeBullishOrderBlock, 'the confirmed bullish break must create a retained bullish order block');
+assert.equal(activeBullishOrderBlock.left, Date.parse(bars[167].timestamp) / 1000,
+  'the active order block must retain its bearish-origin anchor');
+assert.equal(activeBullishOrderBlock.right, Date.parse(bars[170].timestamp) / 1000,
+  'the active order block must end at the latest visible bar before mitigation');
+assert.equal(activeBullishOrderBlock.style?.fillOpacity, 0.16,
+  'an unmitigated order block must retain its active fill opacity');
+
+const mitigationBar = candle(171, 106.2, 106.6, 106.1, 106.2);
+const mitigatedRun = orderBlockLifecycleRuntime.executeBar(mitigationBar, 'realtime');
+assert.deepEqual(mitigatedRun.diagnostics, [], 'order-block mitigation must not produce runtime diagnostics');
+const mitigatedBullishOrderBlock = mitigatedRun.outputs.find(item =>
+  item.kind === 'zone' && item.style?.fillColor === '#1848CC');
+assert.ok(mitigatedBullishOrderBlock, 'a mitigated order block remains as a faded historical drawing');
+assert.equal(mitigatedBullishOrderBlock.id, activeBullishOrderBlock.id,
+  'mitigation must update the existing retained drawing identity rather than create a duplicate');
+assert.equal(mitigatedBullishOrderBlock.left, activeBullishOrderBlock.left,
+  'mitigation must preserve the original order-block left anchor');
+assert.equal(mitigatedBullishOrderBlock.right, Date.parse(mitigationBar.timestamp) / 1000,
+  'mitigation must stop the order-block right edge on the first candle that trades through its invalidation boundary');
+assert.equal(mitigatedBullishOrderBlock.top, activeBullishOrderBlock.top);
+assert.equal(mitigatedBullishOrderBlock.bottom, activeBullishOrderBlock.bottom);
+assert.equal(mitigatedBullishOrderBlock.style?.fillOpacity, 0.04,
+  'a mitigated order block must become visually faded without losing its original price bounds');
+assert.equal(
+  mitigatedRun.outputs.filter(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC').length,
+  1,
+  'the active-to-mitigated transition must retain exactly one bullish order-block object',
+);
+
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#B22833'),
   'bearish order blocks must be represented as bounded zones');
 assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor === '#F23645'),
