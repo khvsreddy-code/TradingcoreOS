@@ -58,7 +58,8 @@ assert.match(historyPolicy, /'5m': 1000/, 'older history should page in bounded 
 assert.match(historyPolicy, /Math\.min\(1500, Math\.max\(base, bars \* 4\)\)/, 'viewport-demand paging must stay bounded');
 assert.match(provider, /async loadRange\(/, 'Vela range paging must stay on the shared TCO data plane');
 assert.match(provider, /async getBars\(/, 'timeframe changes must use the canonical provider history path');
-assert.match(provider, /Math\.min\(500, Math\.floor\(Number\(range\.limit\) \|\| 500\)\)/, 'first paint must not request more than 500 candles');
+assert.match(terminal, /bars:2_000/, 'the initial Vela workspace should request the configured 2,000-bar chart window');
+assert.match(provider, /const requested = Math\.max\(100, Math\.min\(5_000, Math\.floor\(Number\(range\.limit\) \|\| 5_000\)\)\)/, 'provider history requests must stay bounded at 5,000 bars while preserving the requested initial window');
 
 assert.match(chrome, /mountCoreSpiritMonaco/, 'live CoreSpirit panel should use the Pine-editor-inspired Monaco authoring surface');
 assert.match(chrome, /compileCoreSpiritSourceOffThread/, 'live CoreScript must compile off the UI thread');
