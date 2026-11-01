@@ -169,14 +169,15 @@ function isSafeToSkipDirty(instruction: CoreSpiritIrInstruction): boolean {
       return instruction.componentPure === true &&
         instruction.componentDeterministic === true &&
         instruction.componentStateful !== true;
-    // Market/history reads depend on the current bar index even when their
-    // source expression is unchanged. A loadSeries offset of 1 on bar N is
-    // a different candle than offset 1 on bar N-1; local-series indexes also
-    // move as their ring buffers advance. Reusing either result across bars
-    // can leave compound event predicates inconsistent with their operands.
-    // Keep these reads dirty so invalidation propagates into dependent logic.
+    // Market/history reads are safe to reuse only when the canonical dirty graph
+    // has not invalidated their source. A changed bar, source column, or upstream
+    // series update must include these instructions in dirtyInstructions; once
+    // included, their invalidation propagates through the register consumers below.
+    // This allows a derived-only update to reuse unchanged OHLCV/index reads without
+    // silently re-fetching the source or defeating dependency-scoped scheduling.
     case 'loadSeries':
     case 'index':
+      return true;
     default:
       return false;
   }
