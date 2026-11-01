@@ -454,6 +454,14 @@ export class CoreSpiritWorkerPool {
           const metricMetadata={mode:workerMode,artifactLifecycle};
           this.recordPerformanceMetric(job,'worker-result-roundtrip',receivedAt-workerPostedAt,metricMetadata);
           this.recordPerformanceMetric(job,'worker-end-to-end',Date.now()-job.enqueuedAt,metricMetadata);
+          for (const [field,metric] of [
+            ['workerMarketSyncMs','worker-market-sync'],
+            ['workerExecutionMs','worker-execution'],
+            ['workerOutputSerializationMs','worker-output-serialization'],
+          ] as const) {
+            const duration=Number(message[field]);
+            if(Number.isFinite(duration)&&duration>=0)this.recordPerformanceMetric(job,metric,duration,metricMetadata);
+          }
           if(artifactChanged){
             this.contextArtifacts.set(job.contextKey,artifactId);
             this.contextRuntimeOptions.set(job.contextKey,runtimeOptionsSignature);
