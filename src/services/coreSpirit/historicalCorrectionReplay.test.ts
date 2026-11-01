@@ -127,5 +127,5 @@ statelessRuntime.executeIr(statelessCompilation.ir!, statelessCorrection);
 assert.equal(statelessRuntime.getLastDirtyPlan()?.allHistory, true);
 assert.equal(statelessRuntime.getLastDirtyPlan()?.correction?.replayFrom, 0);
 assert.equal(statelessRuntime.getLastDirtyPlan()?.correction?.reason, 'full-replay-conservative',
-  'stateless dirty ranges must not masquerade as incremental execution while the runtime replays every bar');
+  'stateless dirty ranges must not masquerade as incremental execution while the runtime replays every bar: ' + JSON.stringify(statelessRuntime.getLastDirtyPlan()?.correction));
 console.log('CORESPIRIT_HISTORICAL_CORRECTION_REPLAY_OK');
