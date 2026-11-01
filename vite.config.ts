@@ -19,6 +19,13 @@ export default defineConfig(() => {
           manualChunks(id) {
             const normalized = id.replace(/\\/g, '/');
 
+            // Keep the compiler bridge in its own deferred chunk. The actual parser,
+            // semantic pipeline and execution work remain in the dedicated module worker;
+            // this isolates the browser-side request/validation bridge until Compile/Run.
+            if (normalized.endsWith('/src/services/coreSpirit/coreSpiritCompilerClient.ts')) {
+              return 'tco-corespirit-compiler';
+            }
+
             // Keep application code under Vite/Rollup's graph-aware splitting. Forcing
             // application modules into global manual chunks can turn a dependency used by
             // one lazy route into an initial dependency of every route that shares its chunk.
