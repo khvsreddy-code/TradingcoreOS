@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
 import { withBrokerRequestGate } from '../BrokerRequestGate.js';
 import { FyersApiClient } from '../../fyers/core/FyersApiClient.js';
+import { resolveFyersQuotaIdentity } from '../../fyers/core/FyersQuotaIdentity.js';
+import { BrokerRepository } from '../../storage/BrokerRepository.js';
 import {
   assertFyersQuoteBatch,
   DEFAULT_FYERS_CAPABILITIES,
@@ -26,6 +28,13 @@ export class FyersAdapter extends BaseBroker {
   readonly brokerId = 'fyers';
   readonly name = 'Fyers Direct';
 
+  private async quotaIdentityForUser(userId?: string): Promise<string> {
+    const identity = String(userId || '').trim();
+    if (!identity) throw Object.assign(new Error('Authenticated TradingCore user identity is required for FYERS quota enforcement.'), { status: 503, code: 'BROKER_IDENTITY_REQUIRED' });
+    const session = await BrokerRepository.getSession('fyers', identity);
+    return resolveFyersQuotaIdentity(session?.clientCode);
+  }
+
   getAuthUrl(redirectUri: string, state: string, _clientId?: string): string {
     const appId = process.env.FYERS_CLIENT_ID;
     if (!appId) throw new Error('FYERS_CLIENT_ID is not configured');
@@ -45,7 +54,8 @@ export class FyersAdapter extends BaseBroker {
 
     try {
       const appIdHash = crypto.createHash('sha256').update(`${appId}:${secret}`).digest('hex');
-      const response = await withBrokerRequestGate('fyers', identity, async (gateSignal) => {
+      const quotaIdentity = resolveFyersQuotaIdentity(undefined);
+      const response = await withBrokerRequestGate('fyers', quotaIdentity, async (gateSignal) => {
         recordFyersQuotaAttempt('user-info', capabilities.plan, '/validate-authcode');
         try {
           const upstream = await fetch('https://api-t1.fyers.in/api/v3/validate-authcode', {
@@ -121,7 +131,8 @@ export class FyersAdapter extends BaseBroker {
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch { /* Preserve valid non-JSON body formats as-is. */ }
     }
-    const client = new FyersApiClient(accessToken, undefined, resolveFyersCapabilities(identity), identity);
+    const quotaIdentity = await this.quotaIdentityForUser(identity);
+    const client = new FyersApiClient(accessToken, undefined, resolveFyersCapabilities(identity), quotaIdentity);
     const method = String(options.method || 'GET').toUpperCase();
     const resolvedCategory: FyersApiCategory = category || (method === 'GET' ? 'user-info' : 'transactions');
     return client.apiRequest(path, {
@@ -223,7 +234,9 @@ export class FyersAdapter extends BaseBroker {
     const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
     if (!symbols.length) return {};
     assertFyersQuoteBatch(symbols, capabilities);
-    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
+    const userId = String(rateLimitIdentity || '').trim();
+    const quotaIdentity = await this.quotaIdentityForUser(userId);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
     const data = await client.dataGet<any>(
       '/quotes',
       { symbols: symbols.join(',') },
@@ -290,7 +303,9 @@ export class FyersAdapter extends BaseBroker {
     const estimatedCalendarDays = Math.ceil((requestedLimit / Math.max(1 / 30, barsPerDay)) * 1.65);
     const lookbackDays = Math.min(maxLookbackDays, Math.max(secondsInterval ? 1 : 7, estimatedCalendarDays));
     const from = Math.floor((now.getTime() - lookbackDays * 86_400_000) / 1000);
-    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
+    const userId = String(rateLimitIdentity || '').trim();
+    const quotaIdentity = await this.quotaIdentityForUser(userId);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
 
     // FYERS restricts the date span of an individual history request. Request
     // only the estimated lookback needed for the desired candle count, then split
@@ -360,7 +375,9 @@ export class FyersAdapter extends BaseBroker {
     // the dedicated FYERS route. The newer route preserves the fuller chain.
     const params:Record<string,string|number|undefined> = { symbol:instrumentKey, strikecount:'7' };
     if (expiryDate && expiryDate !== 'current_week' && /^[0-9]+$/.test(expiryDate)) params.timestamp=expiryDate;
-    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
+    const userId = String(rateLimitIdentity || '').trim();
+    const quotaIdentity = await this.quotaIdentityForUser(userId);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
     const payload = await client.dataGet<any>(
       '/options-chain-v3',
       params,

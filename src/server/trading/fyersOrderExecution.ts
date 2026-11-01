@@ -3,6 +3,7 @@ import type { BrokerOrderPayload } from '../brokers/contracts.js';
 import { getErrorMessage, isRecord } from '../../services/boundary/brokerApiValidation.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
 
 export function parseBrokerOrderPayload(value: unknown): BrokerOrderPayload {
   if (!isRecord(value)) throw new Error('Order payload must be a JSON object');
@@ -82,7 +83,7 @@ export function validateFyersManualOrderPreflight(order: BrokerOrderPayload): Fy
   };
 }
 
-export async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string, userId: string) {
+export async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string, userId: string, quotaIdentity = resolveFyersQuotaIdentity(undefined)) {
   const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.trim().replace(/\/$/, '');
   const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
   if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
@@ -102,7 +103,7 @@ export async function placeFyersOrderViaFixedIpGateway(accessToken: string, orde
     accountKey: createHash('sha256').update(userId).digest('hex'),
     // The HMAC binds this identity and entitlement to the order request. The
     // gateway verifies them before charging the shared transaction quota.
-    rateLimitIdentity: userId,
+    rateLimitIdentity: quotaIdentity,
     quotaPlan: resolveFyersCapabilities(userId).plan,
     riskDecisionId: decisionId,
     issuedAt,

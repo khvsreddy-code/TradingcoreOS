@@ -6,6 +6,7 @@ import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
 import type { MarketFeedEvent } from '../../types/market.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
 import { FyersAdapter } from '../brokers/adapters/BrokerAdapters.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
@@ -19,7 +20,7 @@ async function getFyersSession(req: AuthenticatedRequest, res: Response) {
   const userId = req.tradingCoreUserId!;
   const session = await BrokerRepository.getSession('fyers', userId);
   if (!session || session.status !== 'Connected') { res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' }); return null; }
-  try { return { userId, token: EncryptionService.decrypt(session.accessTokenEncrypted) }; }
+  try { return { userId, token: EncryptionService.decrypt(session.accessTokenEncrypted), quotaIdentity: resolveFyersQuotaIdentity(session.clientCode) }; }
   catch { res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' }); return null; }
 }
 
@@ -296,7 +297,7 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {
-    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities, session.userId);
+    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities, session.quotaIdentity);
     if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
     res.setHeader('Cache-Control', 'private, max-age=15');
     return res.json({

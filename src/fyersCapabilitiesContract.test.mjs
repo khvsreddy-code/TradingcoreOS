@@ -178,8 +178,12 @@ assert.match(quotaTelemetry,/scope: 'process-local telemetry; admission authorit
 assert.match(quotaTelemetry,/`http-\$\{Math\.trunc\(status\)\}`/,'quota telemetry records the exact provider HTTP status instead of only broad status classes');
 assert.match(quotaTelemetry,/`local-gate-\$\{status\}`/,'quota telemetry preserves local gate denial status codes separately from provider responses');
 assert.match(accountRoute,/new FyersApiClient\(EncryptionService\.decrypt\(s\.accessTokenEncrypted\),undefined,capabilities,resolveFyersQuotaIdentity\(s\.clientCode\)\)/,'account endpoints share the FYERS account-level quota');
-assert.match(orderGateway,/rateLimitIdentity: userId/,'fixed-IP order execution carries the authenticated user identity to the external quota authority');
+assert.match(orderGateway,/rateLimitIdentity: quotaIdentity/,'fixed-IP order execution uses the account-wide quota identity while retaining per-user risk/account partitioning');
 assert.match(orderGateway,/quotaPlan: resolveFyersCapabilities\(userId\)\.plan/,'fixed-IP order execution forwards only server-resolved FYERS plan entitlements');
+assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(session\?\.clientCode\)/,'legacy broker adapter requests use the stored FYERS account identity');
+assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(undefined\)/,'OAuth token exchange uses one application-level quota bucket before the broker account is known');
+assert.match(legacyHistoryRoute,/resolveFyersQuotaIdentity\(session\.clientCode\)/,'legacy direct history requests use the FYERS account identity');
+assert.match(tradingRoute,/req\.fyersQuotaIdentity = resolveFyersQuotaIdentity\(session\.clientCode\)/,'manual orders receive the shared FYERS account quota identity');
 assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId\)/,'FYERS orders use the fixed-IP gateway with the authenticated user quota identity');
 
 

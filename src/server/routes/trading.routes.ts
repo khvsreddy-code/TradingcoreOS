@@ -14,6 +14,7 @@ import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
 import { TradingKillSwitchRepository } from '../trading/TradingKillSwitchRepository.js';
@@ -21,7 +22,7 @@ import { evaluateManualPreTradeRisk } from '../trading/AutomationPreTradeRiskEng
 
 export const tradingRoutes = Router();
 
-type BrokerSessionRequest = AuthenticatedRequest & { brokerAdapter: BaseBroker; accessToken: string };
+type BrokerSessionRequest = AuthenticatedRequest & { brokerAdapter: BaseBroker; accessToken: string; fyersQuotaIdentity?: string };
 
 async function injectBrokerSession(req: BrokerSessionRequest, res: Response, next: NextFunction) {
   const brokerId = req.params.brokerId;
@@ -44,6 +45,7 @@ async function injectBrokerSession(req: BrokerSessionRequest, res: Response, nex
     if (!accessToken) return res.status(401).json({ success: false, error: 'Broker session token is unavailable or expired' });
     req.brokerAdapter = adapter;
     req.accessToken = accessToken;
+    if (brokerId.toLowerCase() === 'fyers') req.fyersQuotaIdentity = resolveFyersQuotaIdentity(session.clientCode);
     next();
   } catch {
     return res.status(500).json({ success: false, error: 'Failed to prepare broker session token' });
@@ -334,7 +336,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     let data: unknown;
     try {
       data = brokerId === 'fyers'
-        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey, userId)
+        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey, userId, req.fyersQuotaIdentity)
         : await req.brokerAdapter.placeOrder(req.accessToken, orderPayload);
     } catch (err: unknown) {
       const message = getErrorMessage(err, 'Broker order request failed');
