@@ -452,7 +452,10 @@ export class CoreSpiritRuntime {
     if (previousIr !== nextIr || previousBars.length === 0 || !this.dirtyGraph) return undefined;
     const fullReplayPlan = (): CoreSpiritDirtyExecutionPlan => {
       const plan = this.dirtyGraph!.planFull(nextBars.length);
-      const requiresStateRestore = [...plan.nodes].some(id => this.dirtyGraph!.nodesById.get(id)?.stateful === true);
+      const requiresStateRestore = [...plan.nodes].some(id => {
+        const node = this.dirtyGraph!.nodesById.get(id);
+        return node?.requiresStateRestore ?? node?.stateful === true;
+      });
       return {
         ...plan,
         correction: Object.freeze({
