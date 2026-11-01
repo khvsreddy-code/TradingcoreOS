@@ -187,6 +187,7 @@ assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(session\?\.clientCode\)/,
 assert.match(brokerAdapter,/resolveFyersQuotaIdentity\(undefined\)/,'OAuth token exchange uses one application-level quota bucket before the broker account is known');
 assert.match(legacyHistoryRoute,/resolveFyersQuotaIdentity\(session\.clientCode\)/,'legacy direct history requests use the FYERS account identity');
 assert.match(tradingRoute,/req\.fyersQuotaIdentity = resolveFyersQuotaIdentity\(session\.clientCode\)/,'manual orders receive the shared FYERS account quota identity');
+assert.match(tradingRoute,/FyersMarketDataTransport\.subscribe\(req\.tradingCoreUserId!, req\.accessToken, instrumentKeys, write, undefined, undefined, undefined, undefined, req\.fyersQuotaIdentity\)/,'legacy trading-route WebSocket admission shares the FYERS account-wide stream-symbol capacity');
 assert.match(tradingRoute,/placeFyersOrderViaFixedIpGateway\(req\.accessToken, orderPayload, idempotencyKey, userId, req\.fyersQuotaIdentity\)/,'FYERS orders use the fixed-IP gateway with the broker-account quota identity');
 
 

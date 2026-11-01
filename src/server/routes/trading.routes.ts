@@ -150,7 +150,7 @@ tradingRoutes.get('/:brokerId/market-stream', injectBrokerSession, (req: BrokerS
     try { res.write(`${JSON.stringify(event)}\n`); } catch {}
   };
   res.setHeader('X-TradingCore-Stream-Lease-Ms', String(API_LATENCY_BUDGET_MS.streamLease));
-  const unsubscribe = FyersMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, write);
+  const unsubscribe = FyersMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, write, undefined, undefined, undefined, undefined, req.fyersQuotaIdentity);
   const leaseTimer = setTimeout(() => {
     write({ type: 'status', status: 'disconnected', reason: 'stream_lease_expired' });
     unsubscribe();
