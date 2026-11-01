@@ -3,6 +3,7 @@ import { Check, Clock3, Code2, Maximize2, Minimize2, Minus, Plus, X, Play, Save,
 import type { CoreSpiritEditorModel } from '../../services/coreSpirit/editorModel';
 import type { CoreSpiritMonacoAdapter } from '../../services/coreSpirit/monacoAdapter';
 import type { CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
+type CoreSpiritCompileFunction = typeof import('../../services/coreSpirit/coreSpiritCompilerClient').compileCoreSpiritSourceOffThread;
 import { getSupabaseClient } from '../../services/auth/supabaseClient';
 import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
@@ -85,9 +86,11 @@ export type CoreSpiritDockProps = {
   editorModelClass?: new (source?: string) => CoreSpiritEditorModel;
   /** Monaco adapter loader is injected at the Code-panel boundary. */
   mountMonaco?: (container: HTMLElement, model: CoreSpiritEditorModel, onChange: (source: string) => void) => Promise<CoreSpiritMonacoAdapter>;
+  /** Deferred compiler entrypoint. It is invoked only after Compile/Save/Publish. */
+  compileCoreSpiritSourceOffThread?: CoreSpiritCompileFunction;
 };
 
-export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange, editorModelClass, mountMonaco }: CoreSpiritDockProps) {
+export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFullscreenChange, editorModelClass, mountMonaco, compileCoreSpiritSourceOffThread }: CoreSpiritDockProps) {
   const initialSource = useRef<string | null>(null);
   if (initialSource.current === null) initialSource.current = localSource() || DEFAULT_SOURCE;
   const [source, setSource] = useState(initialSource.current);
@@ -129,6 +132,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       editorModelRef.current.updateSource(next, '', { deferSemanticAnalysis: true });
     }
     monacoAdapterRef.current?.setSource(next);
+    monacoAdapterRef.current?.setDiagnostics([], next);
     setSource(next);
   };
   const authoringProfile = getCoreSpiritAuthoringProfileForLevel(level);
@@ -173,8 +177,9 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     const requestedVersion = ++sourceVersion.current;
     reportStage('compiling', 'Compiling the current source revision…');
     // Defer the compiler worker bundle until the user actually compiles/runs.
-    const { compileCoreSpiritSourceOffThread } = await import('../../services/coreSpirit/coreSpiritCompilerClient');
-    const initial = await compileCoreSpiritSourceOffThread(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
+    const compile = compileCoreSpiritSourceOffThread
+      || (await import('../../services/coreSpirit/coreSpiritCompilerClient')).compileCoreSpiritSourceOffThread;
+    const initial = await compile(value, requestedVersion, 'corespirit-live-dock', { layer: 'script' });
     // The textarea remains editable while workers run. Never publish diagnostics
     // or apply an artifact from a compile whose source was superseded in the editor.
     if (requestedVersion !== sourceVersion.current) {
@@ -194,6 +199,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       diagnostics: [...(initial.diagnostics || []), ...policyDiagnostics],
     };
     setCompileResult(result);
+    monacoAdapterRef.current?.setDiagnostics(result.diagnostics, value);
     const errors = result.diagnostics.filter(item => item.severity === 'error');
     setDiagnostics(result.diagnostics.map(item => {
       const location = item.line == null ? '' : 'L' + item.line + (item.column == null ? '' : ':' + item.column) + ': ';
