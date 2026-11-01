@@ -1,4 +1,17 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const searchRoute = read('./server/routes/instrument-search-priority.routes.ts');
+const symbolMaster = read('./server/fyers/symbols/FyersSymbolMasterService.ts');
+const searchClient = read('./services/marketData/instrumentSearch.ts');
+const workspace = read('./components/workspace/FullWorkspaceView.tsx');
+const appearancePanel = read('./components/workspace/WorkspaceAppearancePanel.tsx');
+const appearanceModel = read('./theme/workspaceAppearance.ts');
+const liveChart = read('./components/workspace/LiveChart.tsx');
+const velaOptions = read('../vendor/vela/src/core/options.ts');
+const velaFacade = read('./services/core/chart/velaNativeChartKernel.ts');
+const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 import { FyersSymbolMasterService } from './server/fyers/symbols/FyersSymbolMasterService.ts';
 import { canonicalFyersSymbol } from './server/fyers/symbols/canonicalFyersSymbol.ts';
 import { filterSymbols } from '../vendor/vela/src/widget/symbol-picker.ts';
@@ -11,7 +24,8 @@ assert.equal(canonicalFyersSymbol('NSE:NIFTY26JUN22600CE'), 'NSE:NIFTY26JUN22600
   'call contracts must stay on the requested derivatives instrument');
 assert.equal(canonicalFyersSymbol('BSE:SENSEX26JUN80000PE'), 'BSE:SENSEX26JUN80000PE',
   'BSE index option contracts must keep their listing venue');
-assert.match(searchRoute, /MCX_COM_sym_master\.json/, 'commodity instruments must be available to search');
+assert.match(symbolMaster, /'MCX_COM'/, 'the canonical symbol-master set must include MCX commodity contracts');
+assert.match(symbolMaster, /\$\{master\}_sym_master\.json/, 'the canonical loader must fetch each exchange-specific FYERS symbol master');
 assert.match(searchRoute, /rankFyersInstrumentRows/, 'live search must use the deterministic semantic ranker');
 assert.match(searchRoute, /expiryTime\(a\.row\.expiry\) - expiryTime\(b\.row\.expiry\)/, 'futures results must prioritize nearest expiry');
 assert.match(searchRoute, /FyersSymbolMasterService\.masterNames\(\)/, 'search should reuse the canonical per-master service and cache');
