@@ -10,6 +10,8 @@ export interface CoreSpiritDirtyNode {
   readonly output?: string;
   readonly lookback: number;
   readonly stateful: boolean;
+  /** True only when the node owns hidden state that must be restored before replay. */
+  readonly requiresStateRestore?: boolean;
   readonly incremental: boolean;
   readonly viewportDependent: boolean;
   readonly realtimeSafe: boolean;
@@ -72,7 +74,7 @@ function inferLookback(node: CoreSpiritDirtyNode, instructionName: string | unde
   if (FINITE_WINDOW_CALLS.has(name)) {
     return Number.isFinite(constantValue) ? Math.max(0, Math.floor(constantValue as number) - 1) : Number.POSITIVE_INFINITY;
   }
-  if (node.stateful) return Number.POSITIVE_INFINITY;
+  if (node.requiresStateRestore ?? node.stateful) return Number.POSITIVE_INFINITY;
   return 0;
 }
 
@@ -103,8 +105,11 @@ export function buildCoreSpiritDirtyGraph(graph: CoreSpiritSemanticGraph, reacti
         : instruction?.op === 'loadSeries'
           ? instruction.offset
           : undefined;
-    const lookback = inferLookback({id:node.id,instruction:node.instruction,inputs:node.sourceInputs,output:node.dest,lookback:0,stateful:node.stateful,incremental,viewportDependent,realtimeSafe,dependents:dependents[node.id]||[],dependencies:node.dependencies,alwaysRecompute:reactive.alwaysRecompute.includes(node.id)}, callName, Number.isFinite(constantValue) ? constantValue : undefined);
-    return Object.freeze({ id:node.id, instruction:node.instruction, inputs:Object.freeze([...(node.sourceInputs||[])]), output:node.dest, lookback, stateful:node.stateful, incremental, viewportDependent, realtimeSafe, dependents:Object.freeze([...(dependents[node.id]||[])]), dependencies:Object.freeze([...node.dependencies]), alwaysRecompute:reactive.alwaysRecompute.includes(node.id) });
+    // setLocal retains a chart series column but has no hidden recursive state to restore.
+    // Persistent `setState`, recursive/rolling built-ins, and stateful components do.
+    const requiresStateRestore = node.stateful && node.op !== 'setLocal';
+    const lookback = inferLookback({id:node.id,instruction:node.instruction,inputs:node.sourceInputs,output:node.dest,lookback:0,stateful:node.stateful,requiresStateRestore,incremental,viewportDependent,realtimeSafe,dependents:dependents[node.id]||[],dependencies:node.dependencies,alwaysRecompute:reactive.alwaysRecompute.includes(node.id)}, callName, Number.isFinite(constantValue) ? constantValue : undefined);
+    return Object.freeze({ id:node.id, instruction:node.instruction, inputs:Object.freeze([...(node.sourceInputs||[])]), output:node.dest, lookback, stateful:node.stateful, requiresStateRestore, incremental, viewportDependent, realtimeSafe, dependents:Object.freeze([...(dependents[node.id]||[])]), dependencies:Object.freeze([...node.dependencies]), alwaysRecompute:reactive.alwaysRecompute.includes(node.id) });
   });
   return Object.freeze(output);
 }
@@ -220,7 +225,10 @@ export class CoreSpiritDirtyGraph {
     const end = Math.max(0, Math.floor(Number.isFinite(executionEnd) ? executionEnd : 0));
     const from = Math.min(end, Math.max(0, Math.floor(Number.isFinite(changedRange.from) ? changedRange.from : 0)));
     const to = Math.min(end, Math.max(from, Math.floor(Number.isFinite(changedRange.to) ? changedRange.to : from)));
-    const requiresStateRestore = [...base.nodes].some(id => this.nodesById.get(id)?.stateful === true);
+    const requiresStateRestore = [...base.nodes].some(id => {
+      const node = this.nodesById.get(id);
+      return node?.requiresStateRestore ?? node?.stateful === true;
+    });
     // A bare bar index cannot prove that the saved state belongs to this
     // kernel version, parameter set, dependency chain or corrected data revision.
     // Legacy numeric checkpoints are deliberately rejected and trigger full replay.
