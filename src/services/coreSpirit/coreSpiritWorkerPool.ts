@@ -17,6 +17,7 @@ import { createGraphResolver, graphSnapshotTransferables, type CoreSpiritGraphSn
 import { structureCoreSpiritRuntimeDiagnostics } from './runtimeDiagnostics';
 import type { CoreSpiritExecutionDiagnostic as CoreSpiritExecutionDiagnosticType } from './runtimeDiagnostics';
 import { canDispatchCoreSpiritWorkerWorkload, resolveCoreSpiritWorkerResourceBudget } from './coreSpiritWorkerPolicy';
+import { CoreSpiritPerformanceMonitor } from './coreSpiritPerformance';
 export type { CoreSpiritExecutionDiagnostic } from './runtimeDiagnostics';
 
 export type CoreSpiritWorkerRuntimeOptions = Pick<CoreSpiritRuntimeOptions,
@@ -69,6 +70,7 @@ const MAX_QUEUED_WORKER_JOBS = 64;
 const MAX_CONTEXTS_PER_WORKER = 8;
 const WORKER_JOB_TIMEOUT_MS = 20_000;
 function abortError(message:string):Error { const error=new Error(message); error.name='AbortError'; return error; }
+function monotonicNow():number { return typeof performance!=='undefined'&&performance.now?performance.now():Date.now(); }
 
 type WorkerJob = {
   artifact:CoreSpiritExecutableArtifact;
@@ -159,6 +161,32 @@ export class CoreSpiritWorkerPool {
   private readonly maxQueuedJobs = MAX_QUEUED_WORKER_JOBS;
   private readonly maxContextsPerWorker:number;
   private readonly fallbackContexts = new Map<string,FallbackRuntimeContext>();
+  private readonly performanceMonitor = new CoreSpiritPerformanceMonitor();
+
+  /** Bounded main-thread admission/worker round-trip timings for diagnostics and browser acceptance. */
+  performanceSnapshot() { return this.performanceMonitor.snapshot(); }
+  performanceSummary() { return this.performanceMonitor.summarizeByName(); }
+
+  private recordPerformanceMetric(
+    job:WorkerJob,
+    metric:string,
+    durationMs:number,
+    metadata:{mode:'historical'|'incremental';artifactLifecycle:'cold-install'|'warm-reuse'},
+  ):void {
+    const lane:'hot'|'warm'|'cold'=job.priority<=1?'hot':job.priority<=2?'warm':'cold';
+    try { this.performanceMonitor.record(lane,metric,Math.max(0,durationMs)); } catch { /* telemetry must never block chart execution */ }
+    if(typeof window==='undefined'||typeof CustomEvent==='undefined')return;
+    try {
+      window.dispatchEvent(new CustomEvent('tco:corespirit:worker-performance',{detail:Object.freeze({
+        metric,durationMs:Math.max(0,durationMs),lane,priority:job.priority,
+        mode:metadata.mode,artifactLifecycle:metadata.artifactLifecycle,
+        dataPoints:this.jobDataPointCount(job),datasetVersion:job.datasetVersion,
+        executionMode:job.runtimeOptions?.executionMode??'unknown',
+        executionTarget:job.runtimeOptions?.executionTarget??'unknown',
+        timestamp:Date.now(),
+      })}));
+    } catch { /* optional diagnostics are fail-open */ }
+  }
 
   constructor(maxWorkers?:number) {
     const browserNavigator = typeof navigator !== 'undefined' ? navigator as Navigator & { deviceMemory?: number } : undefined;
@@ -412,6 +440,9 @@ export class CoreSpiritWorkerPool {
     } : null;
 
     const cleanup=()=>{if(slot.timeout)clearTimeout(slot.timeout);slot.timeout=undefined;if(slot.job===job){slot.busy=false;slot.job=undefined;}this.dispatch();};
+    let workerPostedAt=0;
+    let workerMode:WorkerRunEnvelope['mode']='historical';
+    const artifactLifecycle:'cold-install'|'warm-reuse'=artifactChanged?'cold-install':'warm-reuse';
 
     slot.worker.onmessage=(event:MessageEvent<unknown>)=>{
       const message=event.data;
@@ -419,6 +450,10 @@ export class CoreSpiritWorkerPool {
       if(job.generation!==this.contextGenerations.get(job.contextKey)){this.retireSlot(slot,abortError('CoreSpirit result belongs to an obsolete generation.'));return;}
       try{
         if(message.type==='result'){
+          const receivedAt=monotonicNow();
+          const metricMetadata={mode:workerMode,artifactLifecycle};
+          this.recordPerformanceMetric(job,'worker-result-roundtrip',receivedAt-workerPostedAt,metricMetadata);
+          this.recordPerformanceMetric(job,'worker-end-to-end',Date.now()-job.enqueuedAt,metricMetadata);
           if(artifactChanged){
             this.contextArtifacts.set(job.contextKey,artifactId);
             this.contextRuntimeOptions.set(job.contextKey,runtimeOptionsSignature);
@@ -442,6 +477,8 @@ export class CoreSpiritWorkerPool {
       job.dirtyRange.from>=Math.max(0,job.bars.length-2)
         ? 'incremental'
         : 'historical';
+    workerMode=mode;
+    this.recordPerformanceMetric(job,'worker-admission-wait',Date.now()-job.enqueuedAt,{mode,artifactLifecycle});
 
     slot.timeout=setTimeout(()=>{if(slot.job===job)this.retireSlot(slot,new Error('CoreSpirit worker timed out; it was terminated and will restart on demand.'));},WORKER_JOB_TIMEOUT_MS);
 
@@ -460,6 +497,7 @@ export class CoreSpiritWorkerPool {
     };
 
     try{
+      workerPostedAt=monotonicNow();
       if(sendArtifact)slot.worker.postMessage(sendArtifact, graphSnapshotForTransfer ? graphSnapshotTransferables(graphSnapshotForTransfer) : []);
       else if(sendHMMArtifacts)slot.worker.postMessage(sendHMMArtifacts);
       if(!sendArtifact&&sendGraph&&graphSnapshotForTransfer)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(graphSnapshotForTransfer));
