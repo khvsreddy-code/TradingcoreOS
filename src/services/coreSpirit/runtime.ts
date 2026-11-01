@@ -280,7 +280,7 @@ export class CoreSpiritRuntime {
   private readonly kernelNodeIdentities = new Map<string, { nodeId:string; inputDependencies:readonly string[] }>();
   /** Changes only when the loaded/history generation is rebuilt, not on forming-bar ticks. */
   private kernelDataRevision = 0;
-  private readonly checkpointRestoreDiagnostics: Array<Readonly<{ nodeId:string; barIndex:number; status:'missing'|'identity-mismatch'|'state-copy-failed'; mismatches:readonly string[] }>> = [];
+  private readonly checkpointRestoreDiagnostics: Array<Readonly<{ nodeId:string; barIndex:number; status:'missing'|'identity-mismatch'|'state-copy-failed'|'unversioned-external-input'; mismatches:readonly string[] }>> = [];
   private readonly recoveryStats = {
     barsReused: 0,
     barsReplayed: 0,
@@ -1001,6 +1001,13 @@ export class CoreSpiritRuntime {
       // No cache identity means no proof that secondary data stayed unchanged.
       // Keep the live result correct by replaying instead of restoring any cursor.
       this.recoveryStats.checkpointRestoreFailures += activeKernelCount;
+      this.checkpointRestoreDiagnostics.push(Object.freeze({
+        nodeId:'*',
+        barIndex,
+        status:'unversioned-external-input',
+        mismatches:Object.freeze(['secondary-data-cache-identity-unavailable']),
+      }));
+      if (this.checkpointRestoreDiagnostics.length > 32) this.checkpointRestoreDiagnostics.splice(0, this.checkpointRestoreDiagnostics.length - 32);
       return Object.freeze({complete:false,expected:activeKernelCount,restored:0});
     }
     const modelVersion = this.kernelModelVersion();
