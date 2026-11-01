@@ -40,11 +40,17 @@ assert.equal(
 );
 assert.notEqual(Number(replayed.state.locals.average), originalAverage, 'correction must change downstream EMA state');
 assert.equal(runtime.getState().barIndex, corrected.length - 1, 'runtime should finish on the latest corrected bar');
+const checkpointBeforeLateBar = runtime.exportCheckpoint();
+const recoveryStatsBeforeLateBar = runtime.getRecoveryStats();
 assert.throws(
   () => runtime.executeBar({ ...corrected[2]!, timestamp: corrected[2]!.timestamp }),
-  /out-of-order bar update rejected/,
-  'a late bar delivered through the live-tail API must be rejected without mutating canonical history',
+  /CoreSpirit bars must be chronological/,
+  'a late bar delivered through the live-tail API must be rejected before history validation completes',
 );
+assert.deepEqual(runtime.exportCheckpoint(), checkpointBeforeLateBar,
+  'rejecting a late live-tail bar must leave canonical history, series and runtime state unchanged');
+assert.deepEqual(runtime.getRecoveryStats(), recoveryStatsBeforeLateBar,
+  'a rejected late live-tail bar must not change correction/replay counters');
 assert.ok(runtime.getRecoveryStats().barsReplayed >= corrected.length, 'full-history correction replay must account for every replayed bar');
 assert.equal(runtime.getRecoveryStats().lastReplayFrom, 0, 'recursive correction replay must report the safe origin');
 assert.equal(correctionPlan?.allHistory, true, 'the published correction plan must describe the full replay that actually ran');
