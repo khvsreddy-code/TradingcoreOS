@@ -102,7 +102,13 @@ function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringP
 function containsCoreSpiritEventHandler(nodes: readonly CoreSpiritAstNode[]): boolean {
   return nodes.some(node => {
     switch (node.type) {
-      case 'onEvent': return true;
+      case 'onEvent':
+        // Subscribing to a trading signal is still part of the trader workflow.
+        // Market/session/system event handlers are System Builder features; a
+        // signal handler becomes system-level when its body invokes automation
+        // (detected separately from the semantic graph).
+        return !/^signal\\s*\\(/i.test(node.eventName.trim()) ||
+          containsCoreSpiritEventHandler(node.body);
       case 'program': return containsCoreSpiritEventHandler(node.body);
       case 'if':
         return containsCoreSpiritEventHandler(node.thenBranch) ||
