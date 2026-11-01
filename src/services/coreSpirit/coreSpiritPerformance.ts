@@ -130,7 +130,12 @@ export class CoreSpiritLaneScheduler {
   }
 
   clear(): void {
-    this.queues = { hot: [], warm: [], cold: [] };
+    // Preserve the array identities held by an in-progress flush(). Truncating
+    // in place ensures a task may safely clear its own lane without allowing
+    // the old queue snapshot to resume draining after that task returns.
+    this.queues.hot.length = 0;
+    this.queues.warm.length = 0;
+    this.queues.cold.length = 0;
     this.heads.hot = 0;
     this.heads.warm = 0;
     this.heads.cold = 0;
