@@ -23,7 +23,7 @@ assert.doesNotMatch(coldHistoryGuard, /\.transition\(|makeCandleChange|type: 'ti
 assert.match(plane, /if \(!Number\.isFinite\(price\) \|\| tradeTimeMs == null\)/, 'receive-time-only ticks must remain quote-only after history becomes ready');
 assert.match(plane, /function tradeTimestamp\(/, 'candle time must come from a trade timestamp');
 assert.match(plane, /ensureReadyHistory\(limitOverride\?: number\): Promise<HistoricalCandle\[]> \{\s*return this\.ensureReady\(limitOverride\);/, 'legacy Vela call sites must also enter the typed-first loader');
-assert.match(plane, /if \(!Number\.isFinite\(timestampMs\) \|\| timestampMs <= 0\) return/, 'invalid trade times must never be replaced by receive time');
+assert.match(plane, /if \(!Number\.isFinite\(milliseconds\) \|\| milliseconds <= 0\) return undefined/, 'invalid trade times must never be replaced by receive time');
 assert.doesNotMatch(runtime, /seedLiveCandle/, 'a single quote must not be rendered as a historical candle');
 assert.match(runtime, /timezoneKey='tradingcore:vela-timezone:v1'/, 'IST timezone default and user choice persistence are required');
 assert.match(runtime, /applyFeature\('countdown',false\)/, 'non-session-aware countdown must be disabled in TCO');
