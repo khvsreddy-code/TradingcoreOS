@@ -46,7 +46,8 @@ assert(liveWorkspace.includes('Loading chart engine') && liveWorkspace.includes(
 
 
 assert(tcoVelaTerminal.includes("left:['symbol','timeframes','style','layout','indicators']"), 'Vela must retain ownership of the primary symbol/timeframe/style toolbar');
-assert(tcoVelaTerminal.includes("'tco.chart-settings'"), 'chart settings must stay in the existing terminal top bar');
+assert(!tcoVelaTerminal.includes("'tco.chart-settings'"), 'native Vela chart settings must not be duplicated in the TCO terminal top bar');
+assert(tcoVelaChrome.includes("if (typeof renderer.openSettings === 'function')"), 'the registered compatibility action must delegate to the native Vela settings dialog');
 assert(tcoVelaChrome.includes("if (typeof renderer.openSettings === 'function')"), 'chart settings must delegate to the Vela chart adapter rather than maintain a duplicate settings model');
 assert(!tcoVelaChrome.includes("import { CoreSpiritEditorModel }"), 'CoreSpirit Studio model must not be loaded with the chart chrome');
 assert(!tcoVelaChrome.includes("import { mountCoreSpiritMonaco"), 'Monaco must not be loaded with the chart chrome');
