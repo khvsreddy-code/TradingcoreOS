@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritCompiler } from './compiler';
 import { CoreSpiritRuntime } from './runtime';
 
-const compiled = new CoreSpiritCompiler().compileSource('let average = ema(close, 3)', 'historical-correction-contract');
+const compiled = new CoreSpiritCompiler().compileSource('let average = ema(close, 3)\nplot(average)', 'historical-correction-contract');
 assert.ok(compiled.ir, compiled.diagnostics.map(item => item.message).join('\n'));
 const ir = compiled.ir;
 
@@ -17,6 +17,8 @@ const bars = [10, 11, 12, 13, 14, 15, 16].map((close, index) => ({
 
 const runtime = new CoreSpiritRuntime({ sourceId: 'historical-correction-contract' });
 const original = runtime.executeIr(ir, bars);
+assert.ok(original.outputs.some(item => item.kind === 'series'), 'the checkpoint fixture must publish the EMA as a chart-observed series');
+assert.ok(runtime.getKernelStateSnapshots().length > 0, 'the historical EMA run must retain a compatible confirmed-bar checkpoint');
 const originalAverage = Number(original.state.locals.average);
 assert.ok(Number.isFinite(originalAverage), 'EMA should publish its latest confirmed value');
 
@@ -87,12 +89,15 @@ assert.deepEqual(observableOutputs(afterOutOfOrder), observableOutputs(afterOutO
 
 // Immediately resume live updates after a correction. Repeated updates to the
 // forming bar restore a compatible pre-bar checkpoint or trigger full replay.
+const confirmedCheckpointIndex = earlierCorrection.length - 1;
 const nextTimestamp = Date.parse(earlierCorrection.at(-1)!.timestamp) + 300_000;
 const formingBar = {
   timestamp: new Date(nextTimestamp).toISOString(),
   open: 20, high: 21, low: 19, close: 20, volume: 150,
 };
 runtime.executeBar(formingBar);
+assert.ok(runtime.getKernelStateSnapshots().some(snapshot => snapshot.barIndex === confirmedCheckpointIndex),
+  'starting a forming bar must preserve the confirmed pre-bar kernel checkpoint');
 const correctedLive = runtime.executeBar({ ...formingBar, high: 23, close: 22, volume: 175 });
 outOfOrderReferenceRuntime.executeBar(formingBar);
 const referenceLive = outOfOrderReferenceRuntime.executeBar({ ...formingBar, high: 23, close: 22, volume: 175 });
@@ -107,7 +112,7 @@ assert.deepEqual(correctedLive.state.locals, referenceLive.state.locals,
 assert.deepEqual(observableOutputs(correctedLive), observableOutputs(referenceLive),
   'live output and order-intent observables must remain equivalent after correction recovery');
 assert.ok(runtime.getRecoveryStats().checkpointsRestored > 0,
-  'compatible pre-bar checkpoints should be counted when the forming bar is revised');
+  'compatible pre-bar checkpoints should be counted when the forming bar is revised: ' + JSON.stringify(runtime.getRecoveryStats()));
 
 // Even a stateless correction is currently handled by executeIr's full replay.
 // The diagnostic must not claim a narrower replay range than was actually run.
