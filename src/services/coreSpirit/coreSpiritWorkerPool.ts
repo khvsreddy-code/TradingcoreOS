@@ -67,6 +67,86 @@ type DirtyRange = { from:number; to:number };
 const MAX_QUEUED_WORKER_JOBS = 64;
 const MAX_CONTEXTS_PER_WORKER = 8;
 const WORKER_JOB_TIMEOUT_MS = 20_000;
+/**
+ * A 20k+ bar snapshot can hold a substantial market-data copy, runtime state
+ * and retained drawing inventory. Run these snapshots alone; smaller chart
+ * workloads may still use the device's remaining worker capacity.
+ */
+export const CORESPIRIT_WORKER_EXCLUSIVE_DATA_POINTS = 20_000;
+
+export type CoreSpiritWorkerDeviceProfile = Readonly<{
+  hardwareConcurrency?: number;
+  deviceMemoryGiB?: number;
+}>;
+
+export type CoreSpiritWorkerResourceBudget = Readonly<{
+  maxWorkers: number;
+  maxContextsPerWorker: number;
+  memoryTier: 'constrained' | 'standard' | 'expanded' | 'unknown';
+}>;
+
+/** Resolve a conservative worker/cache budget without depending on browser globals. */
+export function resolveCoreSpiritWorkerResourceBudget(
+  profile: CoreSpiritWorkerDeviceProfile = {},
+  requestedMaxWorkers?: number,
+): CoreSpiritWorkerResourceBudget {
+  if (requestedMaxWorkers !== undefined &&
+      (!Number.isSafeInteger(requestedMaxWorkers) || requestedMaxWorkers < 1)) {
+    throw new Error('requestedMaxWorkers must be a positive safe integer');
+  }
+
+  const hardware = Number.isSafeInteger(profile.hardwareConcurrency) && Number(profile.hardwareConcurrency) > 0
+    ? Number(profile.hardwareConcurrency)
+    : 2;
+  const hardwareLimit = Math.max(1, hardware - 1);
+  const memory = Number.isFinite(profile.deviceMemoryGiB) && Number(profile.deviceMemoryGiB) > 0
+    ? Number(profile.deviceMemoryGiB)
+    : undefined;
+
+  const memoryTier: CoreSpiritWorkerResourceBudget['memoryTier'] =
+    memory === undefined ? 'unknown' : memory <= 4 ? 'constrained' : memory <= 8 ? 'standard' : 'expanded';
+  const memoryWorkerLimit = memoryTier === 'constrained' ? 1
+    : memoryTier === 'standard' ? 2
+    : memoryTier === 'expanded' ? Math.min(4, hardwareLimit)
+    : Math.min(2, hardwareLimit);
+  const maxContextsPerWorker = memoryTier === 'constrained' ? 3
+    : memoryTier === 'standard' ? 5
+    : memoryTier === 'expanded' ? MAX_CONTEXTS_PER_WORKER
+    : 4;
+
+  return Object.freeze({
+    maxWorkers: Math.max(1, Math.min(requestedMaxWorkers ?? memoryWorkerLimit, hardwareLimit, memoryWorkerLimit)),
+    maxContextsPerWorker,
+    memoryTier,
+  });
+}
+
+export function isCoreSpiritWorkerExclusiveWorkload(dataPoints: number): boolean {
+  return Number.isFinite(dataPoints) && dataPoints >= CORESPIRIT_WORKER_EXCLUSIVE_DATA_POINTS;
+}
+
+/**
+ * Large snapshots drain the in-flight pool before starting and block new small
+ * work until completion. This keeps history copies/state-heavy runs bounded.
+ */
+export function canDispatchCoreSpiritWorkerWorkload(
+  requestedDataPoints: number,
+  activeDataPoints: readonly number[],
+  pendingDataPoints: readonly number[] = [],
+): boolean {
+  const activeLarge = activeDataPoints.some(isCoreSpiritWorkerExclusiveWorkload);
+  if (activeLarge) return false;
+
+  const largeWaiting = pendingDataPoints.some(isCoreSpiritWorkerExclusiveWorkload);
+  if (largeWaiting) {
+    if (activeDataPoints.length > 0) return false;
+    return isCoreSpiritWorkerExclusiveWorkload(requestedDataPoints);
+  }
+
+  if (isCoreSpiritWorkerExclusiveWorkload(requestedDataPoints)) return activeDataPoints.length === 0;
+  return true;
+}
+
 function abortError(message:string):Error { const error=new Error(message); error.name='AbortError'; return error; }
 
 type WorkerJob = {
@@ -156,14 +236,17 @@ export class CoreSpiritWorkerPool {
   private readonly contextGenerations = new Map<string,number>();
   private requestSequence = 0;
   private readonly maxQueuedJobs = MAX_QUEUED_WORKER_JOBS;
-  private readonly maxContextsPerWorker = MAX_CONTEXTS_PER_WORKER;
+  private readonly maxContextsPerWorker:number;
   private readonly fallbackContexts = new Map<string,FallbackRuntimeContext>();
 
   constructor(maxWorkers?:number) {
-    const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
-      ? navigator.hardwareConcurrency
-      : 2;
-    this.maxWorkers = Math.max(1, Math.min(maxWorkers ?? 2, Math.max(1, hardware - 1)));
+    const browserNavigator = typeof navigator !== 'undefined' ? navigator as Navigator & { deviceMemory?: number } : undefined;
+    const budget = resolveCoreSpiritWorkerResourceBudget({
+      hardwareConcurrency: browserNavigator?.hardwareConcurrency,
+      deviceMemoryGiB: browserNavigator?.deviceMemory,
+    }, maxWorkers);
+    this.maxWorkers = budget.maxWorkers;
+    this.maxContextsPerWorker = budget.maxContextsPerWorker;
   }
 
   async run(
@@ -303,17 +386,30 @@ export class CoreSpiritWorkerPool {
     }
     slot.contexts.clear();if(dispatch)this.dispatch();
   }
+  private jobDataPointCount(job:WorkerJob):number {
+    const graphPoints=job.graphSnapshot?.nodes.reduce((total,node)=>total+node.time.length,0)??0;
+    return job.bars.length+graphPoints;
+  }
+
   private dispatch():void {
     if(this.disposed)return;this.sortQueue();
 
     // Search for any runnable context rather than head-of-line blocking on a
-    // chart whose own worker is busy. The queue itself contains only one pending
-    // snapshot per context due to runArtifact's coalescing step above.
+    // chart whose own worker is busy. Large snapshots get an exclusive turn:
+    // existing small jobs drain first, then the large job runs without another
+    // history copy being admitted alongside it.
     let madeProgress=true;
     while(madeProgress){
       madeProgress=false;
+      const activeDataPoints=this.slots
+        .filter(candidate=>candidate.busy&&candidate.job)
+        .map(candidate=>this.jobDataPointCount(candidate.job!));
+      const pendingDataPoints=this.queue.map(candidate=>this.jobDataPointCount(candidate));
       for(let index=0;index<this.queue.length;index+=1){
         const job=this.queue[index]!;
+        if(!canDispatchCoreSpiritWorkerWorkload(
+          this.jobDataPointCount(job),activeDataPoints,pendingDataPoints,
+        ))continue;
         let slot=this.contextSlots.get(job.contextKey);
         if(slot?.busy)continue;
         if(!slot){
