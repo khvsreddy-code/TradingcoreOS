@@ -278,6 +278,10 @@ try {
     });
     return 'SMC_NATIVE_SCENE_COMMIT_LISTENER_ARMED';
   })()`);
+
+  // Measure chart main-thread responsiveness during the actual compile → execute →
+  // retained-scene commit path. Output-ready latency alone can hide UI stalls.
+  evaluate("(() => {\n  const monitor = { startedAt: performance.now(), lastFrameAt: null, frameGaps: [], longTasks: [], active: true, rafId: 0, observer: null, longTaskSupported: false };\n  window.__TCO_SMC_MAIN_THREAD_MONITOR__ = monitor;\n  const supported = typeof PerformanceObserver !== 'undefined' && Array.isArray(PerformanceObserver.supportedEntryTypes) && PerformanceObserver.supportedEntryTypes.includes('longtask');\n  if (supported) {\n    try {\n      monitor.observer = new PerformanceObserver(list => {\n        for (const entry of list.getEntries()) { monitor.longTasks.push(Number(entry.duration)); if (monitor.longTasks.length > 4096) monitor.longTasks.shift(); }\n      });\n      monitor.observer.observe({ type: 'longtask', buffered: true });\n      monitor.longTaskSupported = true;\n    } catch { monitor.observer = null; }\n  }\n  const sampleFrame = timestamp => {\n    if (!monitor.active) return;\n    if (monitor.lastFrameAt !== null) { monitor.frameGaps.push(timestamp - monitor.lastFrameAt); if (monitor.frameGaps.length > 4096) monitor.frameGaps.shift(); }\n    monitor.lastFrameAt = timestamp;\n    monitor.rafId = requestAnimationFrame(sampleFrame);\n  };\n  monitor.rafId = requestAnimationFrame(sampleFrame);\n  return { armed: true, longTaskSupported: monitor.longTaskSupported };\n})()");
   evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
     if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled.');
@@ -489,6 +493,10 @@ try {
       recompileIdempotency.repeatedCompileRuns = repeatedRecompileCommits.length;
       recompileIdempotency.stableObjectInventoryAcrossRuns = true;
 
+      // Stop responsiveness sampling after repeated compiles; report evidence without
+      // imposing a machine-specific frame-time threshold on developer or CI hosts.
+      const mainThreadResponsiveness = evaluateJson("(() => {\n  const monitor = window.__TCO_SMC_MAIN_THREAD_MONITOR__;\n  if (!monitor) return { supported: false, frameSamples: 0, longTaskSamples: 0, maxFrameGapMs: null, p95FrameGapMs: null, maxLongTaskMs: null };\n  monitor.active = false;\n  if (monitor.rafId) cancelAnimationFrame(monitor.rafId);\n  try { monitor.observer?.disconnect(); } catch {}\n  const quantile = (values, p) => { const sorted = values.filter(Number.isFinite).sort((a, b) => a - b); return sorted.length ? Number(sorted[Math.ceil(p * sorted.length) - 1].toFixed(2)) : null; };\n  const frames = monitor.frameGaps, tasks = monitor.longTasks;\n  return {\n    supported: true, longTaskObserverSupported: monitor.longTaskSupported,\n    durationMs: Number((performance.now() - monitor.startedAt).toFixed(2)),\n    frameSamples: frames.length, maxFrameGapMs: frames.length ? Number(Math.max(...frames).toFixed(2)) : null,\n    p95FrameGapMs: quantile(frames, 0.95), framesOver33Ms: frames.filter(value => value > 33).length, framesOver50Ms: frames.filter(value => value > 50).length,\n    longTaskSamples: tasks.length, totalLongTaskMs: Number(tasks.reduce((sum, value) => sum + value, 0).toFixed(2)),\n    maxLongTaskMs: tasks.length ? Number(Math.max(...tasks).toFixed(2)) : null, p95LongTaskMs: quantile(tasks, 0.95)\n  };\n})()");
+
       // Exercise both viewport gestures and compare the actual plot screenshot.
       const canvasCenter = evaluateJson(`(() => {
         const boxes = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
@@ -552,6 +560,7 @@ try {
         acceptance: 'compile-and-run + native Vela drawing commit + chart plot screenshot diffs before/after compile and after zoom/pan',
         browserTelemetry,
         browserPerformance,
+        mainThreadResponsiveness,
         priorSmcInstancesRemoved: clearedPriorSmc.removed,
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },
         objectCount: commit.objectCount,
