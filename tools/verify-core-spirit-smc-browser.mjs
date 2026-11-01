@@ -123,6 +123,50 @@ function countChartPixelDiff(beforeBytes, afterBytes, beforeViewport, afterViewp
     passed: changedPixels >= minimumChangedPixels };
 }
 
+function compareGoldenImage(goldenBytes, actualBytes, viewport, maxChangedRatio, threshold = 24) {
+  const expected = decodePng(goldenBytes), actual = decodePng(actualBytes);
+  if (expected.width !== actual.width || expected.height !== actual.height) {
+    throw new Error('Golden and actual PNG dimensions differ.');
+  }
+  const rect = viewport.rect;
+  const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+  const right = Math.min(rect.left + rect.width, viewport.viewportWidth);
+  const bottom = Math.min(rect.top + rect.height, viewport.viewportHeight);
+  if (!(right > left && bottom > top)) throw new Error('Golden image chart region is empty.');
+  const sx = expected.width / viewport.viewportWidth;
+  const sy = expected.height / viewport.viewportHeight;
+  let changedPixels = 0, comparedPixels = 0;
+  const xStart = Math.max(0, Math.floor(left * sx)), xEnd = Math.min(expected.width, Math.ceil(right * sx));
+  const yStart = Math.max(0, Math.floor(top * sy)), yEnd = Math.min(expected.height, Math.ceil(bottom * sy));
+  for (let py = yStart; py < yEnd; py += 1) {
+    const cssY = (py + 0.5) / sy;
+    if (cssY < top || cssY >= bottom) continue;
+    for (let px = xStart; px < xEnd; px += 1) {
+      const cssX = (px + 0.5) / sx;
+      if (cssX < left || cssX >= right) continue;
+      const index = (py * expected.width + px) * expected.channels;
+      const actualIndex = (py * actual.width + px) * actual.channels;
+      const delta = Math.max(
+        Math.abs(expected.pixels[index] - actual.pixels[actualIndex]),
+        Math.abs(expected.pixels[index + 1] - actual.pixels[actualIndex + 1]),
+        Math.abs(expected.pixels[index + 2] - actual.pixels[actualIndex + 2]),
+      );
+      comparedPixels += 1;
+      if (delta > threshold) changedPixels += 1;
+    }
+  }
+  const changedRatio = changedPixels / Math.max(1, comparedPixels);
+  return {
+    changedPixels,
+    comparedPixels,
+    changedRatio: Number(changedRatio.toFixed(5)),
+    threshold,
+    maxChangedRatio,
+    passed: changedRatio <= maxChangedRatio,
+    regionCss: { left, top, width: right - left, height: bottom - top },
+  };
+}
+
 function getLargestChartCanvasRegion() {
   return evaluateJson(`(() => {
     const regions = Array.from(document.querySelectorAll('.vela-workspace canvas')).map(canvas => {
@@ -334,10 +378,14 @@ try {
         const actualDimensions = decodePng(afterScreenshot);
         assert(goldenDimensions.width === actualDimensions.width && goldenDimensions.height === actualDimensions.height,
           'Stored SMC golden image dimensions must match the browser screenshot; capture goldens at the same viewport/device scale.');
-        goldenImageDiff = countChartPixelDiff(goldenBytes, afterScreenshot, beforeRegion, afterRegion);
+        const maxGoldenChangedRatio = Number(process.env.TCO_SMC_GOLDEN_MAX_CHANGED_RATIO ?? 0.02);
+        assert(Number.isFinite(maxGoldenChangedRatio) && maxGoldenChangedRatio >= 0 && maxGoldenChangedRatio <= 1,
+          'TCO_SMC_GOLDEN_MAX_CHANGED_RATIO must be a finite ratio between 0 and 1.');
+        goldenImageDiff = compareGoldenImage(goldenBytes, afterScreenshot, afterRegion, maxGoldenChangedRatio);
         assert(goldenImageDiff.passed,
-          'SMC output differs from the approved golden screenshot beyond the configured pixel threshold: ' +
-          goldenImageDiff.changedPixels + '/' + goldenImageDiff.comparedPixels + '.');
+          'SMC output exceeds the approved golden screenshot mismatch budget: ' +
+          goldenImageDiff.changedPixels + '/' + goldenImageDiff.comparedPixels +
+          ' pixels (' + goldenImageDiff.changedRatio + ' > ' + maxGoldenChangedRatio + ').');
       }
       const persisted = evaluateJson(`({
         versionedDraft: localStorage.getItem('tradingcore:corespirit:v1:editor') === ${JSON.stringify(smcSource)},
@@ -600,7 +648,7 @@ try {
           ? finalRepeatedCommit.__heapUsedBytes - commit.__heapUsedBytes : null,
         repeatedHeapSampleCount: repeatedRecompileHeapSamples.length,
         workerPerformance,
-        goldenImageComparison: goldenImagePath ? { configured: true, path: goldenImagePath, changedPixels: goldenImageDiff.changedPixels, comparedPixels: goldenImageDiff.comparedPixels, changedRatio: goldenImageDiff.changedRatio } : { configured: false, note: 'Set TCO_SMC_GOLDEN_IMAGE to compare against an approved viewport-matched PNG.' },
+        goldenImageComparison: goldenImagePath ? { configured: true, path: goldenImagePath, changedPixels: goldenImageDiff.changedPixels, comparedPixels: goldenImageDiff.comparedPixels, changedRatio: goldenImageDiff.changedRatio, maxChangedRatio: goldenImageDiff.maxChangedRatio, passed: goldenImageDiff.passed } : { configured: false, note: 'Set TCO_SMC_GOLDEN_IMAGE to compare against an approved viewport-matched PNG.' },
         note: 'Times end at the browser visual-commit event; p50/p95 are nearest-rank statistics for repeated Compile & Run samples. Worker round-trip includes worker execution and messaging, not pure kernel CPU time. Heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
       };
       const visualEvidence = {
@@ -630,6 +678,8 @@ try {
           comparedPixels: goldenImageDiff.comparedPixels,
           changedRatio: goldenImageDiff.changedRatio,
           threshold: goldenImageDiff.threshold,
+          maxChangedRatio: goldenImageDiff.maxChangedRatio,
+          passed: goldenImageDiff.passed,
         } : null,
         viewportPixelDiff: {
           changedPixels: viewportPixelDiff.changedPixels,
