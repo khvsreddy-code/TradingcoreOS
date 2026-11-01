@@ -188,6 +188,8 @@ function getContext(message:RunMessage):WorkerContext{
   return context;
 }
 
+const workerNow=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
+
 self.onmessage=(event:MessageEvent<Message>)=>{
   const message=event.data;
   try{
@@ -230,10 +232,11 @@ self.onmessage=(event:MessageEvent<Message>)=>{
 
     if(!isRecord(message)||message.type!=='run')return;
     const context=getContext(message);
-
+    const marketSyncStartedAt=workerNow();
     const sync=message.sharedMarket
       ? syncSharedMarket(context,message.sharedMarket)
       : syncObjectBars(context,message.bars || []);
+    const workerMarketSyncMs=Math.max(0,workerNow()-marketSyncStartedAt);
 
     const fullReset=
       message.readOnly ||
@@ -242,6 +245,7 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       message.datasetVersion<=context.datasetVersion;
 
     let result;
+    const executionStartedAt=workerNow();
     if(fullReset){
       context.runtime.reset();
       context.runtime.loadIr(context.artifact.ir);
@@ -261,15 +265,18 @@ self.onmessage=(event:MessageEvent<Message>)=>{
         : context.runtime.executeBar(latest,'realtime');
     }
 
+    const workerExecutionMs=Math.max(0,workerNow()-executionStartedAt);
     context.datasetVersion=message.datasetVersion;
 
     // The incremental runtime fast path returns proxy-backed series views in
     // result.state (getState({ clone:false })). Worker.postMessage cannot clone
     // proxies/functions from runtime or extension metadata, so rebuild the state
     // from the runtime's public snapshot and sanitize both state and outputs.
+    const outputSerializationStartedAt=workerNow();
     const safeOutputs=requireCoreSpiritOutputs(toCoreSpiritWorkerTransportValue(result.outputs));
     const transported=createSharedSeriesOutput(safeOutputs);
     const safeState=toCoreSpiritWorkerTransportValue(context.runtime.getState());
+    const workerOutputSerializationMs=Math.max(0,workerNow()-outputSerializationStartedAt);
     self.postMessage({
       type:'result',
       requestId:message.requestId,
@@ -281,6 +288,9 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       diagnostics:result.diagnostics,
       dirtyFrom:sync.dirtyFrom,
       dirtyTo:sync.dirtyTo,
+      workerMarketSyncMs,
+      workerExecutionMs,
+      workerOutputSerializationMs,
     });
   }catch(error){
     self.postMessage({
