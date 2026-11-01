@@ -12,12 +12,20 @@ export async function resolve(specifier, context, defaultResolve) {
       ? fileURLToPath(specifier)
       : fileURLToPath(new URL(specifier, context.parentURL));
 
-    for (const extension of ['.ts', '.tsx', '.js', '.mjs']) {
+    // TypeScript ESM sources conventionally import sibling modules with a
+    // runtime .js suffix. Node cannot resolve that emitted path before a build,
+    // so map a missing explicit .js target back to its .ts/.tsx source file.
+    const sourceBase = base.endsWith('.js') ? base.slice(0, -3) : base;
+    const candidates = base.endsWith('.js')
+      ? [sourceBase + '.ts', sourceBase + '.tsx']
+      : ['.ts', '.tsx', '.js', '.mjs'].map(extension => base + extension);
+
+    for (const candidate of candidates) {
       try {
-        await stat(base + extension);
-        return { url: pathToFileURL(base + extension).href, shortCircuit: true };
+        await stat(candidate);
+        return { url: pathToFileURL(candidate).href, shortCircuit: true };
       } catch {
-        // Continue through conventional extensions.
+        // Continue through conventional source extensions.
       }
     }
 
