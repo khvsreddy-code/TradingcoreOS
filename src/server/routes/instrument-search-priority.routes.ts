@@ -231,7 +231,7 @@ export function rankFyersInstrumentRows(rows: readonly Row[], query: string, seg
 
   // Expiry is the secondary ordering criterion for futures: all matching contracts
   // remain discoverable, with the closest dated contract first.
-  const nearestDerivativeFirst = intent.asksFutures || intent.asksOptions || normalizedSegment === 'futures' || normalizedSegment === 'options';
+  const nearestDerivativeFirst = intent.asksFutures || intent.asksOptions || normalizedSegment === 'futures' || normalizedSegment === 'options' || normalizedSegment === 'commodities';
   scored.sort((a, b) => b.score - a.score
     || (nearestDerivativeFirst && (a.kind.future || a.kind.option) && (b.kind.future || b.kind.option) ? expiryTime(a.row.expiry) - expiryTime(b.row.expiry) : 0)
     || String(a.row.symbol).localeCompare(String(b.row.symbol)));
