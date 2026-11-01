@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
 import type { CoreSpiritExecutableArtifact } from '../../coreSpirit/artifact';
+import { coreSpiritChartRegistry } from '../../coreSpirit/chartRegistry';
 import {
   registerLegendAction,
   registerLegendCallout,
@@ -962,13 +963,25 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
           panel?.toggleAttribute('data-maximized', fullscreen);
         },
         onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => {
-          const addToChart = (window as Window & {
-            __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
-          }).__TCO_ADD_CORESPIRIT_TO_CHART__;
-          if (typeof addToChart !== 'function') {
-            throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
+          // Use the chart controller already registered by the active workspace.
+          // This keeps Compile & Run on the same worker/transactional Vela output
+          // path as chart-managed CoreSpirit indicators; no window-global bridge
+          // or second indicator execution route is needed.
+          const target = coreSpiritChartRegistry.getActive();
+          if (!target) {
+            throw new Error('No active chart is registered for CoreSpirit. Wait for the chart to finish loading and retry.');
           }
-          await addToChart(scriptName, scriptSource, artifact, scriptId);
+          const instanceId = 'tco-corespirit-live-' + (scriptId?.trim() || 'studio');
+          const result = target.updateCode
+            ? await target.updateCode(scriptSource, artifact, instanceId)
+            : await target.run(scriptSource, instanceId);
+          const fatalDiagnostic = result.diagnosticDetails?.find(diagnostic => diagnostic.severity === 'error');
+          if (fatalDiagnostic) {
+            throw new Error('CoreSpirit "' + scriptName + '" failed [' + fatalDiagnostic.code + ']: ' + fatalDiagnostic.message);
+          }
+          if (result.barsProcessed <= 0) {
+            throw new Error(result.diagnostics.join('; ') || 'CoreSpirit "' + scriptName + '" did not commit a chart result.');
+          }
         },
       }));
     }).catch(error => {
