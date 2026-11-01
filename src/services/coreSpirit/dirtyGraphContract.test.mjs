@@ -58,8 +58,8 @@ assert.deepEqual(recursivePlan.ranges.get('i:rsi'), { from: 500, to: 520 });
 assert.equal(recursivePlan.latest, 520);
 
 const correction = graph.planCorrection(['close'], { from: 500, to: 501 }, 520);
-assert.deepEqual(correction.ranges.get('i:ema'), { from: 500, to: 520 }, 'historical EMA correction invalidates the recursive tail');
-assert.deepEqual(correction.ranges.get('i:signal'), { from: 500, to: 520 }, 'downstream outputs receive propagated tail ranges');
+assert.deepEqual(correction.ranges.get('i:ema'), { from: 0, to: 520 }, 'without a compatible checkpoint, historical EMA correction must replay the recursive state from zero');
+assert.deepEqual(correction.ranges.get('i:signal'), { from: 0, to: 520 }, 'downstream outputs must replay from the same safe checkpoint boundary');
 assert.equal(correction.correction?.requiresStateRestore, true);
 assert.equal(correction.correction?.replayFrom, 0, 'without a safe checkpoint, stateful correction replays from zero');
 assert.equal(correction.correction?.reason, 'full-replay-no-safe-checkpoint');
