@@ -112,7 +112,8 @@ assert.deepEqual(correctedLive.state.locals, referenceLive.state.locals,
 assert.deepEqual(observableOutputs(correctedLive), observableOutputs(referenceLive),
   'live output and order-intent observables must remain equivalent after correction recovery');
 assert.ok(runtime.getRecoveryStats().checkpointsRestored > 0,
-  'compatible pre-bar checkpoints should be counted when the forming bar is revised: ' + JSON.stringify(runtime.getRecoveryStats()));
+  'compatible pre-bar checkpoints should be counted when the forming bar is revised: ' +
+  JSON.stringify({ recovery:runtime.getRecoveryStats(), checkpointRestoreDiagnostics:runtime.getCheckpointRestoreDiagnostics() }));
 
 // Even a stateless correction is currently handled by executeIr's full replay.
 // The diagnostic must not claim a narrower replay range than was actually run.
