@@ -107,7 +107,7 @@ function containsCoreSpiritEventHandler(nodes: readonly CoreSpiritAstNode[]): bo
         // Market/session/system event handlers are System Builder features; a
         // signal handler becomes system-level when its body invokes automation
         // (detected separately from the semantic graph).
-        return !/^signal\\s*\\(/i.test(node.eventName.trim()) ||
+        return !/^signal\s*\(/i.test(node.eventName.trim()) ||
           containsCoreSpiritEventHandler(node.body);
       case 'program': return containsCoreSpiritEventHandler(node.body);
       case 'if':
