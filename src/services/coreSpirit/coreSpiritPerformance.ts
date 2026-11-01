@@ -145,7 +145,7 @@ export class CoreSpiritPerformanceMonitor {
         p50Ms: nearestRank(values, 0.50),
         p95Ms: nearestRank(values, 0.95),
         p99Ms: nearestRank(values, 0.99),
-        worstMs: Math.max(...values),
+        worstMs: values.reduce((max, value) => Math.max(max, value), 0),
       });
     }));
   }
