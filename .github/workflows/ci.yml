@@ -32,6 +32,7 @@ jobs:
       - name: Run contract suite (VM differential + backend parity)
         run: npm run test:contracts
       - name: Typecheck
+        if: always()
         run: npm run typecheck
       - name: Production build and bundle budgets
         run: npm run build

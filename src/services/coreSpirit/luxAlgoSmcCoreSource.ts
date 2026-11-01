@@ -4,8 +4,9 @@
  * This deliberately describes the implemented semantics rather than claiming a
  * line-for-line LuxAlgo Pine clone. It uses right-confirmed pivots (the configured
  * lookback bars on both sides), causal BOS/CHoCH transitions, swing-point labels,
- * equal-high/low detection, latest active order-block/FVG lifecycle, current
- * premium/discount ranges and gap-inferred prior-session levels.
+ * equal-high/low detection, latest-active OB/FVG mitigation state with
+ * origin-anchored historical zone retention, premium/discount ranges and
+ * gap-inferred prior-session levels.
  *
  * Still not source-equivalent to the complete LuxAlgo original: the original
  * multi-timeframe request.security graph, per-zone mitigation for every
@@ -210,7 +211,8 @@ if internalBearBreak == true {
 }
 
 // Track the most recent opposite candle as a displacement-origin candidate.
-// This is explicitly a latest-zone model, not the original's full OB array.
+// Earlier zone origins remain visible at their last geometry, but only the
+// latest bullish/bearish OB receives independent mitigation-state updates.
 let lastBearishTime: state<number> = 0
 let lastBearishHigh: state<number> = 0
 let lastBearishLow: state<number> = 0
@@ -298,9 +300,9 @@ if showOrderBlockZones == true and bearObExists == true {
     zone(bearObLeft, bearObRight, bearObTop, bearObBottom, "#B22833", "#B22833", bearObOpacity)
 }
 
-// Keep the most recent bullish/bearish fair-value gap as a retained object.
-// Re-emission uses the same output call-site + left-time identity; the output
-// collector upserts the geometry instead of manufacturing a new rectangle per bar.
+// Maintain the latest bullish/bearish fair-value gap's mitigation state.
+// Earlier gap origins remain retained at their last emitted geometry; only the
+// latest bullish/bearish gap receives independent mitigation-state updates.
 let bullFvgExists: state<bool> = false
 let bullFvgActive: state<bool> = false
 let bullFvgLeft: state<number> = 0
