@@ -47,6 +47,8 @@ includes(chrome, 'embedded: true', 'CoreSpirit is docked rather than rendered as
 includes(chrome, "ctx.togglePanel('tco.corespirit-code', false)", 'terminal close button closes the Vela side panel');
 includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart bridge for Add to Chart');
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
+includes(dock, 'monacoAdapterRef.current?.setSymbolInfo([])', 'source changes invalidate completion and hover symbols from the previous compiled revision');
+includes(dock, 'monacoAdapterRef.current?.setSymbolInfo(result.symbols ?? [])', 'successful compile publishes symbols for the exact current source revision');
 includes(dock, 'getCoreSpiritAuthoringProfileForLevel', 'the embedded terminal reuses the canonical four-level authoring profiles');
 includes(dock, 'CoreSpirit authoring guidance', 'the embedded terminal exposes level guidance inside the active chart dock');
 includes(dock, 'compiledRequiredLevel', 'the required language level comes from the compiled program, not the selected view');
