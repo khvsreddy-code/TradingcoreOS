@@ -145,7 +145,9 @@ assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must n
 assert.match(apiClient,/Authenticated TradingCore user identity is required for FYERS quota enforcement/,'FYERS clients must not default to rotating access-token identities');
 assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable per-user quota bucket');
 assert.match(quoteRoute,/new FyersApiClient\(EncryptionService\.decrypt\(session\.accessTokenEncrypted\), undefined, capabilities, userId\)/,'the dedicated quote client must be keyed by authenticated user, not rotating token');
-assert.match(canonicalHistory,/new FyersApiClient\(accessToken, undefined, capabilities, userId\)/,'canonical history requests must share the same stable quota identity');
+assert.match(canonicalHistory,/String\(session\.clientCode \|\| userId\)\.trim\(\)\.toUpperCase\(\)/,'canonical history prefers a stable broker account identity and falls back to the authenticated user');
+assert.match(canonicalHistory,/createHash\('sha256'\)[\s\S]*tradingcore:fyers-account:v1:[\s\S]*\.update\(stableFyersAccount\)[\s\S]*\.digest\('hex'\)/,'canonical history hashes the stable broker identity before using it as a quota key');
+assert.match(canonicalHistory,/new FyersApiClient\(accessToken, undefined, capabilities, quotaIdentity\)/,'canonical history shares quota across TradingCore users connected to the same FYERS account');
 assert.match(brokerAdapter,/Authenticated TradingCore user identity is required for FYERS quota enforcement/,'legacy adapter requests must reject absent user identity instead of using rotating tokens');
 assert.doesNotMatch(brokerAdapter,/rateLimitIdentity\s*=\s*accessToken/,'no legacy adapter may fall back to access-token quota identity');
 assert.match(streamRoute,/capabilities, session\.userId\)/,'legacy history requests must pass authenticated user identity');
