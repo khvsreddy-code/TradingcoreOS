@@ -29,7 +29,8 @@ assert.match(terminal, /downColor:'#f23645'/, 'live chart should use Vela bearis
 assert.match(terminal, /animations:\{ zoom:true, pan:true, liveBar:false \}/, 'chart interactions should retain Vela eased zoom/pan');
 const topbar = terminal.match(/topbar:\{([\s\S]*?)\n    \},/);
 assert.ok(topbar, 'TCO should explicitly define a compact topbar');
-assert.doesNotMatch(topbar[1], /tco\.chart-settings|tco\.journal|tco\.positions/, 'avoid duplicate settings and secondary topbar buttons');
+assert.doesNotMatch(topbar[1], /tco\.chart-settings/, 'native Vela chart settings must not be duplicated by a TCO topbar action');
+assert.match(topbar[1], /tco\.journal[\s\S]*tco\.positions/, 'Journal and Positions remain accessible as dedicated TCO actions');
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'native Vela chart settings must remain enabled');
 assert.match(nativeRenderer, /this\.openSettingsDialog\(\)/, 'native Vela gear must open its settings dialog');
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'upstream native-indicator history gating stays available');
