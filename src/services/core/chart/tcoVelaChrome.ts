@@ -1,6 +1,5 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CoreSpiritDock } from '../../../components/corespirit/CoreSpiritDock';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
 import type { CoreSpiritExecutableArtifact } from '../../coreSpirit/artifact';
 import {
@@ -933,27 +932,53 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     const shellHeader = panel?.querySelector('.vela-panel-header') as HTMLElement | null;
     if (shellHeader) shellHeader.style.display = 'none';
     const root = createRoot(body);
-    root.render(createElement(CoreSpiritDock, {
-      embedded: true,
-      onClose: () => {
-        panel?.removeAttribute('data-maximized');
-        ctx.togglePanel('tco.corespirit-code', false);
-      },
-      onFullscreenChange: (fullscreen: boolean) => {
-        panel?.toggleAttribute('data-maximized', fullscreen);
-      },
-      onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => {
-        const addToChart = (window as Window & {
-          __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
-        }).__TCO_ADD_CORESPIRIT_TO_CHART__;
-        if (typeof addToChart !== 'function') {
-          throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
-        }
-        await addToChart(scriptName, scriptSource, artifact, scriptId);
-      },
-    }));
+    let cancelled = false;
+    body.textContent = 'Loading CoreSpirit Studio…';
+    // The chart chrome stays small. Only opening Code loads the studio model,
+    // Monaco adapter and dock component; the compiler client is deferred until
+    // the user invokes Compile & Run inside that dock.
+    void Promise.all([
+      import('../../../components/corespirit/CoreSpiritDock'),
+      import('../../coreSpirit/editorModel'),
+      import('../../coreSpirit/monacoAdapter'),
+    ]).then(([dockModule, editorModelModule, monacoModule]) => {
+      if (cancelled) return;
+      root.render(createElement(dockModule.CoreSpiritDock, {
+        embedded: true,
+        editorModelClass: editorModelModule.CoreSpiritEditorModel,
+        mountMonaco: monacoModule.mountCoreSpiritMonaco,
+        compileCoreSpiritSourceOffThread: async (
+          source: string,
+          sourceVersion: number,
+          contextId: string,
+          options: { layer: 'script' | 'automation' },
+        ) => {
+          const compiler = await import('../../coreSpirit/coreSpiritCompilerClient');
+          return compiler.compileCoreSpiritSourceOffThread(source, sourceVersion, contextId, options);
+        },
+        onClose: () => {
+          panel?.removeAttribute('data-maximized');
+          ctx.togglePanel('tco.corespirit-code', false);
+        },
+        onFullscreenChange: (fullscreen: boolean) => {
+          panel?.toggleAttribute('data-maximized', fullscreen);
+        },
+        onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => {
+          const addToChart = (window as Window & {
+            __TCO_ADD_CORESPIRIT_TO_CHART__?: (name: string, source: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => Promise<void>;
+          }).__TCO_ADD_CORESPIRIT_TO_CHART__;
+          if (typeof addToChart !== 'function') {
+            throw new Error('The active Vela chart is not ready. Close this panel and retry after the chart finishes loading.');
+          }
+          await addToChart(scriptName, scriptSource, artifact, scriptId);
+        },
+      }));
+    }).catch(error => {
+      if (!cancelled) body.textContent = 'CoreSpirit Studio could not load: ' + (error instanceof Error ? error.message : String(error));
+    });
     return {
       destroy() {
+        cancelled = true;
         root.unmount();
         panel?.removeAttribute('data-maximized');
         if (shellHeader) shellHeader.style.display = '';
