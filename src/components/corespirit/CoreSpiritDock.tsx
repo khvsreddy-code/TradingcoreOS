@@ -133,6 +133,9 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
     }
     monacoAdapterRef.current?.setSource(next);
     monacoAdapterRef.current?.setDiagnostics([], next);
+    // Symbols belong to the compiled source revision too; never offer completion
+    // or hover metadata from the previous source while the new one is edited.
+    monacoAdapterRef.current?.setSymbolInfo([]);
     setSource(next);
   };
   const authoringProfile = getCoreSpiritAuthoringProfileForLevel(level);
