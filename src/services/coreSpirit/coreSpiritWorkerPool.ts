@@ -329,7 +329,7 @@ export class CoreSpiritWorkerPool {
       for(let index=0;index<this.queue.length;index+=1){
         const job=this.queue[index]!;
         if(!canDispatchCoreSpiritWorkerWorkload(
-          this.jobDataPointCount(job),activeDataPoints,pendingDataPoints,
+          this.jobDataPointCount(job),activeDataPoints,pendingDataPoints,index,
         ))continue;
         let slot=this.contextSlots.get(job.contextKey);
         if(slot?.busy)continue;
