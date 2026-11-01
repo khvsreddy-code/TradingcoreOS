@@ -20,7 +20,7 @@ const rendererPorts = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const rendererImpl = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const nativeExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 
-assert.match(velaProvenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'live chart integration must be pinned to the 0.8.5 source baseline');
+assert.match(velaProvenance, /Upstream source version: \*\*0\.9\.0\*\*/, 'live chart integration must match the verified Vela 0.9.0 source baseline');
 assert.match(velaReleaseNotes, /^## \[0\.8\.5\]/m, '0.8.5 integration contract must be backed by the vendored upstream release notes');
 assert.match(velaReleaseNotes, /waitsForHistory: true/, 'release notes should cover the history-gated native indicator lifecycle');
 assert.match(terminal, /background:'#141518'/, 'live chart should use Vela charcoal canvas');
