@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritLaneScheduler } from './coreSpiritPerformance.ts';
+import { CoreSpiritLaneScheduler, CoreSpiritPerformanceMonitor } from './coreSpiritPerformance.ts';
 
 const scheduler = new CoreSpiritLaneScheduler();
 const events = [];
@@ -72,5 +72,37 @@ assert.equal(scheduler.flush('hot', Number.POSITIVE_INFINITY), 1,
 assert.equal(afterClearRuns, 0, 'no task queued before clear may execute after clear returns');
 assert.equal(scheduler.pending(), 0);
 assert.equal(scheduler.flushAll(), 0);
+
+// Metric retention is a fixed-capacity ring: writes stay O(1) and snapshots
+// preserve chronological order after the buffer wraps.
+const monitor = new CoreSpiritPerformanceMonitor(undefined, 4);
+monitor.record('hot', 'evicted-sample', 0.5);
+monitor.record('hot', 'same-bar-update', 1);
+monitor.record('hot', 'same-bar-update', 2);
+monitor.record('cold', 'historical-correction', 60);
+monitor.record('hot', 'same-bar-update', 4);
+assert.equal(monitor.size, 4, 'the monitor must never retain more than its configured sample capacity');
+assert.deepEqual(monitor.snapshot().samples.map(item => item.name), [
+  'same-bar-update', 'historical-correction', 'same-bar-update',
+], 'ring wrap must evict only the oldest sample and retain chronological order');
+const liveAggregate = monitor.summarizeByName().find(item => item.name === 'same-bar-update');
+assert.ok(liveAggregate, 'named performance stages must be aggregatable outside the recording hot path');
+assert.equal(liveAggregate.sampleCount, 2);
+assert.equal(liveAggregate.p50Ms, 2);
+assert.equal(liveAggregate.p95Ms, 4);
+assert.equal(liveAggregate.p99Ms, 4);
+assert.equal(liveAggregate.worstMs, 4);
+const correctionAggregate = monitor.summarizeByName().find(item => item.name === 'historical-correction');
+assert.equal(correctionAggregate?.overBudgetCount, 1,
+  'cold correction work must be compared with the background-lane budget');
+assert.throws(() => monitor.record('hot', 'invalid', Number.NaN), /finite non-negative number/,
+  'invalid timing values must not poison the performance aggregates');
+
+const asyncValue = await monitor.measureAsync('warm', 'async-dependency-refresh', async () => 42);
+assert.equal(asyncValue, 42, 'async instrumentation must preserve the task result');
+assert.equal(monitor.summarizeByName().find(item => item.name === 'async-dependency-refresh')?.sampleCount, 1);
+monitor.clear();
+assert.equal(monitor.size, 0, 'clearing telemetry must release every retained sample');
+assert.deepEqual(monitor.snapshot().samples, []);
 
 console.log('CORESPIRIT_PERFORMANCE_SCHEDULER_CONTRACT_OK');
