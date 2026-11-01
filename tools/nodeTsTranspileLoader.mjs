@@ -17,8 +17,15 @@ export async function resolve(specifier, context, defaultResolve) {
     // so map a missing explicit .js target back to its .ts/.tsx source file.
     const sourceBase = base.endsWith('.js') ? base.slice(0, -3) : base;
     const candidates = base.endsWith('.js')
-      ? [sourceBase + '.ts', sourceBase + '.tsx']
-      : ['.ts', '.tsx', '.js', '.mjs'].map(extension => base + extension);
+      ? [sourceBase + '.ts', sourceBase + '.tsx', sourceBase + '/index.ts', sourceBase + '/index.tsx']
+      : [
+          ...['.ts', '.tsx', '.js', '.mjs'].map(extension => base + extension),
+          // Match the directory-index resolution already supported by Vite and
+          // TypeScript projects. Node ESM rejects bare directory imports, but
+          // source-only contract tests need to resolve vendored modules that
+          // intentionally expose an index.ts barrel.
+          ...['/index.ts', '/index.tsx', '/index.js', '/index.mjs'].map(suffix => base + suffix),
+        ];
 
     for (const candidate of candidates) {
       try {
