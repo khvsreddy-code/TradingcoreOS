@@ -83,11 +83,11 @@ monitor.record('cold', 'historical-correction', 60);
 monitor.record('hot', 'same-bar-update', 4);
 assert.equal(monitor.size, 4, 'the monitor must never retain more than its configured sample capacity');
 assert.deepEqual(monitor.snapshot().samples.map(item => item.name), [
-  'same-bar-update', 'historical-correction', 'same-bar-update',
+  'same-bar-update', 'same-bar-update', 'historical-correction', 'same-bar-update',
 ], 'ring wrap must evict only the oldest sample and retain chronological order');
 const liveAggregate = monitor.summarizeByName().find(item => item.name === 'same-bar-update');
 assert.ok(liveAggregate, 'named performance stages must be aggregatable outside the recording hot path');
-assert.equal(liveAggregate.sampleCount, 2);
+assert.equal(liveAggregate.sampleCount, 3);
 assert.equal(liveAggregate.p50Ms, 2);
 assert.equal(liveAggregate.p95Ms, 4);
 assert.equal(liveAggregate.p99Ms, 4);
