@@ -145,7 +145,7 @@ export class CoreSpiritLaneScheduler {
     const queue = this.queues[lane];
     const head = this.heads[lane];
     const threshold = Math.max(64, this.activeCounts[lane] * 2);
-    if (head < threshold && queue.length <= threshold) return;
+    if (this.activeCounts[lane] > 0 && head < threshold && queue.length <= threshold) return;
 
     const live: QueuedTask[] = [];
     for (let index = head; index < queue.length; index += 1) {
