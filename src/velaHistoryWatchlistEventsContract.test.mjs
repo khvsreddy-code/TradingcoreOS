@@ -34,5 +34,5 @@ assert.match(chrome, /function parseNewsTimestamp/);
 assert.match(chrome, /const publishedAt = parseNewsTimestamp\(item\.publishedAt\)/);
 assert.match(chrome, /replaceVelaMarksForGroup\(chart, 'trades', marks\)/, 'news markers must not be overwritten by trade markers');
 assert.match(callback, /AbortSignal\.timeout\(20_000\)/);
-assert.match(adapter, /signal: timeoutSignal\(12_000\)/);
+assert.match(adapter, /signal: gateSignal \|\| timeoutSignal\(12_000\)/, 'OAuth token exchange must retain both quota-gate cancellation and the upstream request timeout');
 console.log('TRADINGCORE_VELA_HISTORY_WATCHLIST_NEWS_MARKERS_OK');
