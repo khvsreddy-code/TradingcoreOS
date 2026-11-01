@@ -256,7 +256,17 @@ try {
   evaluate(`(() => {
     window.__TCO_SMC_VISUAL_COMMITS__ = [];
     window.addEventListener('tco:corespirit:visual-commit', event => {
-      window.__TCO_SMC_VISUAL_COMMITS__.push(event.detail || {});
+      const memory = performance.memory;
+      const measuredAtMs = performance.now();
+      window.__TCO_SMC_VISUAL_COMMITS__.push({
+        ...(event.detail || {}),
+        __measuredAtMs: measuredAtMs,
+        __heapUsedBytes: memory ? memory.usedJSHeapSize : null,
+        __firstRunLatencyMs: Number.isFinite(window.__TCO_SMC_FIRST_RUN_STARTED_AT__)
+          ? measuredAtMs - window.__TCO_SMC_FIRST_RUN_STARTED_AT__ : null,
+        __recompileLatencyMs: Number.isFinite(window.__TCO_SMC_RECOMPILE_STARTED_AT__)
+          ? measuredAtMs - window.__TCO_SMC_RECOMPILE_STARTED_AT__ : null
+      });
       if (window.__TCO_SMC_VISUAL_COMMITS__.length > 50) window.__TCO_SMC_VISUAL_COMMITS__.shift();
     });
     return 'SMC_NATIVE_SCENE_COMMIT_LISTENER_ARMED';
@@ -264,6 +274,8 @@ try {
   evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
     if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled.');
+    window.__TCO_SMC_FIRST_RUN_STARTED_AT__ = performance.now();
+    window.__TCO_SMC_HEAP_BEFORE_FIRST_RUN__ = performance.memory ? performance.memory.usedJSHeapSize : null;
     button.click();
     return 'SMC_COMPILE_RUN_CLICKED';
   })()`);
@@ -318,6 +330,8 @@ try {
       evaluate(`(() => {
         const button = Array.from(document.querySelectorAll('button')).find(item => (item.innerText || '').includes('Compile & Run'));
         if (!button || button.disabled) throw new Error('Compile & Run is missing or disabled during idempotency check.');
+        window.__TCO_SMC_RECOMPILE_STARTED_AT__ = performance.now();
+        window.__TCO_SMC_HEAP_BEFORE_RECOMPILE__ = performance.memory ? performance.memory.usedJSHeapSize : null;
         button.click();
         return 'SMC_RECOMPILE_CLICKED';
       })()`);
@@ -419,9 +433,32 @@ try {
         comparedPixels: viewportPixelDiff.comparedPixels,
         changedRatio: viewportPixelDiff.changedRatio,
       };
+      const browserTelemetry = evaluateJson(`(() => {
+        const memory = performance.memory;
+        return {
+          hardwareConcurrency: navigator.hardwareConcurrency || null,
+          deviceMemoryGiB: Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null,
+          jsHeapSizeLimitBytes: memory ? memory.jsHeapSizeLimit : null,
+          heapBeforeFirstRunBytes: window.__TCO_SMC_HEAP_BEFORE_FIRST_RUN__ ?? null,
+          heapBeforeRecompileBytes: window.__TCO_SMC_HEAP_BEFORE_RECOMPILE__ ?? null
+        };
+      })()`);
+      const browserPerformance = {
+        firstPlotReadyMs: Number.isFinite(commit.__firstRunLatencyMs) ? Number(commit.__firstRunLatencyMs.toFixed(2)) : null,
+        recompilePlotReadyMs: Number.isFinite(recompileCommit.__recompileLatencyMs) ? Number(recompileCommit.__recompileLatencyMs.toFixed(2)) : null,
+        heapAtFirstPlotBytes: commit.__heapUsedBytes ?? null,
+        heapAtRecompileBytes: recompileCommit.__heapUsedBytes ?? null,
+        firstRunHeapDeltaBytes: Number.isFinite(browserTelemetry.heapBeforeFirstRunBytes) && Number.isFinite(commit.__heapUsedBytes)
+          ? commit.__heapUsedBytes - browserTelemetry.heapBeforeFirstRunBytes : null,
+        heapDeltaAcrossRecompileBytes: Number.isFinite(commit.__heapUsedBytes) && Number.isFinite(recompileCommit.__heapUsedBytes)
+          ? recompileCommit.__heapUsedBytes - commit.__heapUsedBytes : null,
+        note: 'Times end at the browser visual-commit event; heap values are Chromium performance.memory samples when exposed, not total process or GPU memory.'
+      };
       const visualEvidence = {
         url: baseUrl,
         acceptance: 'compile-and-run + native Vela drawing commit + chart plot screenshot diffs before/after compile and after zoom/pan',
+        browserTelemetry,
+        browserPerformance,
         priorSmcInstancesRemoved: clearedPriorSmc.removed,
         revision: { streamId: commit.streamId, datasetRevision: commit.datasetRevision, outputRevision: commit.outputRevision },
         objectCount: commit.objectCount,
