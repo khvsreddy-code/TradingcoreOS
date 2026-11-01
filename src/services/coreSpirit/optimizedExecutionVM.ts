@@ -205,11 +205,15 @@ function expandDirtyInstructionSet(
       list.push(index);
       consumers.set(register, list);
     }
-    // Loads from mutable state/locals and calls without an explicit pure,
-    // deterministic contract may change on every tick; propagate their
-    // invalidation to downstream expressions even if the caller omitted them.
+    // Mutable state/locals and calls without an explicit pure, deterministic
+    // contract may change on every pass, so they are conservatively invalidated.
+    // Market/history reads are different: the dirty graph owns their invalidation.
+    // Re-reading every loadSeries/index here would erase the distinction between an
+    // unchanged source and a changed one, forcing derived-only updates to refetch
+    // source data and defeating graph-scoped incremental execution.
     const instruction = instructions[index]!;
-    if (isComputationalInstruction(instruction) && !isSafeToSkipDirty(instruction)) dirty.add(index);
+    if (isComputationalInstruction(instruction) && !isSafeToSkipDirty(instruction) &&
+        instruction.op !== 'loadSeries' && instruction.op !== 'index') dirty.add(index);
   }
 
   // Event gates can change independently of bar fields. A dirty conditional
