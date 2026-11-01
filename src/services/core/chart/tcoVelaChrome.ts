@@ -42,8 +42,6 @@ import {
 } from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
 import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
-import type { CoreSpiritEditorModel as CoreSpiritEditorModelType } from '../../coreSpirit/editorModel';
-import type { CoreSpiritMonacoAdapter } from '../../coreSpirit/monacoAdapter';
 import { versionedStorageKey } from '../../coreSpirit/storageSchema';
 import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
 import { themeTokens } from '../../../../vendor/vela/src/core/tokens';
