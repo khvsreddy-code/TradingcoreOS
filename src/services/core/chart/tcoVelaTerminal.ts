@@ -84,7 +84,6 @@ export function createTcoVelaTerminalOptions(
         'tco.positions',
         'tco.save-workspace',
         'tco.workspace-frame',
-        'tco.chart-settings',
         'alerts',
       ],
     },
