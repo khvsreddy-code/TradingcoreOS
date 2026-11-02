@@ -794,7 +794,7 @@ try {
         cleanup:paneCleanup,
       };
 
-      const workerPerformance = evaluateJson(``(() => {
+      const workerPerformance = evaluateJson(`(() => {
         const samples = Array.isArray(window.__TCO_SMC_WORKER_METRICS__) ? window.__TCO_SMC_WORKER_METRICS__ : [];
         const quantile = (values, p) => {
           const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
