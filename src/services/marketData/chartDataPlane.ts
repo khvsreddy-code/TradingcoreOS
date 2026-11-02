@@ -249,10 +249,43 @@ export class ChartDataPlane {
     this.replayBufferedTicks(activation.ticks);
   }
 
-  private columnarSnapshot(latest: HistoricalCandle, bucketChanged: boolean): ChartColumnarSnapshot {
+  private columnarSnapshot(latest?: HistoricalCandle, bucketChanged = false): ChartColumnarSnapshot {
     const market = this.canonicalPlane.market;
     const previous = this.state.columns;
     const count = market.time.length;
+    if (!latest) {
+      // Historical correction/reconciliation can rebuild the canonical OHLCV
+      // arrays without a new live tick. Re-align existing provenance by candle
+      // timestamp instead of dropping it or attaching it to the wrong bar.
+      const align = <T,>(values: ArrayLike<T> | undefined, fallback: (index: number, timestampMs: number) => T): T[] | undefined => {
+        if (!values) return undefined;
+        const byTimestamp = new Map<number, T>();
+        const previousTime = previous?.time;
+        if (previousTime) {
+          const length = Math.min(previousTime.length, values.length);
+          for (let index = 0; index < length; index += 1) {
+            const timestampMs = Number(previousTime[index]) * (previous?.timeUnit === 'seconds' ? 1000 : 1);
+            if (Number.isFinite(timestampMs)) byTimestamp.set(timestampMs, values[index]);
+          }
+        }
+        return Array.from({ length: count }, (_, index) => {
+          const timestampMs = Number(market.time[index]) * 1000;
+          return byTimestamp.get(timestampMs) ?? fallback(index, timestampMs);
+        });
+      };
+      return Object.freeze({
+        time: market.time, open: market.open, high: market.high, low: market.low, close: market.close, volume: market.volume,
+        timeUnit: 'seconds',
+        ...(previous?.source ? { source: align(previous.source, () => 'unknown') } : {}),
+        exchangeTime: align(previous?.exchangeTime, (_index, timestampMs) => timestampMs) || Array.from(market.time, value => Number(value) * 1000),
+        ...(previous?.ingestedAt ? { ingestedAt: align(previous.ingestedAt, () => Number.NaN) } : {}),
+        ...(previous?.phase ? { phase: align(previous.phase, () => 'historical') } : {}),
+        ...(previous?.confirmed ? { confirmed: align(previous.confirmed, () => true) } : {}),
+        ...(previous?.availableAt ? { availableAt: align(previous.availableAt, () => Number.NaN) } : {}),
+        ...(previous?.revision ? { revision: align(previous.revision, () => Number.NaN) } : {}),
+        ...(previous?.timeframe ? { timeframe: previous.timeframe } : {}),
+      });
+    }
     const previousCount = Math.max(0, count - (bucketChanged ? 1 : 0));
     const mergeSidecar = <T,>(values: ArrayLike<T> | undefined, fallback: (index: number) => T, latestValue: T): T[] => {
       const next = values ? Array.from(values).slice(0, previousCount) : Array.from({ length: previousCount }, (_, index) => fallback(index));
