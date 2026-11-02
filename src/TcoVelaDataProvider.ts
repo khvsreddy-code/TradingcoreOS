@@ -601,9 +601,26 @@ export class TcoVelaDataProvider implements DataProvider {
       if (first.length) onBatch(first);
     }
 
-    // Request the complete window after cached candles have painted. A cold ticker
-    // uses one full request; a cached ticker shows saved bars while refreshing.
+    // A cold chart fetches and publishes one viewport-sized page first. The larger
+    // range request follows only after that first real dataset is available.
     let initialHistoryError: unknown;
+    if (first.length < firstPaintBars) {
+      try {
+        await plane.ensureReadyHistory(firstPaintBars);
+        if (abort()) return [];
+        const earlyCanonical = plane.readCanonical();
+        const early = earlyCanonical.length
+          ? marketViewToBars(earlyCanonical, range, firstPaintBars)
+          : historicalToVelaBars(plane.getCompatibilityCandles(firstPaintBars));
+        if (early.length > first.length) {
+          first = early;
+          onBatch(first);
+        }
+      } catch (error) {
+        initialHistoryError = error;
+      }
+    }
+
     const historyPromise = plane.ensureReadyHistory(requested)
       .then(historicalToVelaBars)
       .catch((error: unknown) => { initialHistoryError = error; return [] as OHLCV[]; });
@@ -614,7 +631,7 @@ export class TcoVelaDataProvider implements DataProvider {
       const cached = canonical.length
         ? marketViewToBars(canonical, range, firstPaintBars)
         : historicalToVelaBars(plane.getCompatibilityCandles(firstPaintBars));
-      if (cached.length && cached.length >= first.length) {
+      if (cached.length && cached.length > first.length) {
         first = cached.slice(-requested);
         onBatch(first);
       }
@@ -645,32 +662,37 @@ export class TcoVelaDataProvider implements DataProvider {
     }
     if (!first.length) return [];
 
-    // First paint stays small, but backfill repeatedly until the requested history
-    // window is actually filled. A single 1,500-bar older page may still leave the
-    // chart below 2,000 candles when starting from a short three-session cache.
+    // Keep delivering older batches but resolve only once this request is complete
+    // or the provider reports that no older candles are available.
     if (first.length < requested) {
-      void (async () => {
-        let loadedCount = first.length;
-        const maxPages = Math.min(8, Math.ceil((requested - loadedCount) / 250) + 2);
-        for (let page = 0; page < maxPages && loadedCount < requested; page += 1) {
-          if (abort()) return;
-          const before = Math.max(
-            plane.readCanonical().length,
-            plane.getCompatibilityCandles(requested).length,
-          );
-          await plane.loadOlderHistory('warm', { visibleBars: Math.min(300, requested - loadedCount) });
-          if (abort()) return;
-          const canonical = plane.readCanonical();
-          const expanded = canonical.length
-            ? marketViewToBars(canonical, range, requested)
-            : historicalToVelaBars(plane.getCompatibilityCandles(requested));
-          if (expanded.length <= loadedCount) break;
-          const next = expanded.slice(-requested);
-          onBatch(next);
-          loadedCount = next.length;
-          if (loadedCount >= requested || expanded.length <= before) break;
+      let loadedCount = first.length;
+      const maxPages = Math.min(24, Math.ceil((requested - loadedCount) / 250) + 4);
+      for (let page = 0; page < maxPages && loadedCount < requested; page += 1) {
+        if (abort()) return [];
+        const before = Math.max(
+          plane.readCanonical().length,
+          plane.getCompatibilityCandles(requested).length,
+        );
+        await plane.loadOlderHistory('warm', { visibleBars: Math.min(375, requested - loadedCount) });
+        if (abort()) return [];
+        const canonical = plane.readCanonical();
+        const expanded = canonical.length
+          ? marketViewToBars(canonical, range, requested)
+          : historicalToVelaBars(plane.getCompatibilityCandles(requested));
+        if (expanded.length <= loadedCount) {
+          if (!plane.isOlderHistoryExhausted()) {
+            throw new Error(`Historical backfill incomplete: loaded ${loadedCount} of ${requested} candles without source-exhaustion confirmation.`);
+          }
+          break;
         }
-      })().catch(() => { /* preserve rendered bars if older-history backfill fails */ });
+        const next = expanded.slice(-requested);
+        onBatch(next);
+        loadedCount = next.length;
+        if (loadedCount >= requested || expanded.length <= before) break;
+      }
+      if (loadedCount < requested && !plane.isOlderHistoryExhausted()) {
+        throw new Error(`Historical backfill stopped at ${loadedCount}/${requested} candles before source exhaustion was confirmed.`);
+      }
     }
     return first;
   }

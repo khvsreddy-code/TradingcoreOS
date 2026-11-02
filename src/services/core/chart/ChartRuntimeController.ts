@@ -14,7 +14,7 @@ import { candleSeriesOptions, type CandleAppearance } from './candleAppearance';
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import type { NormalizedMarketTick } from '../../../types/market';
 import { CHART_TIMEFRAME_INTERVALS } from '../../marketData/chartDataPlane';
-import { shouldLoadOlderHistory } from '../../marketData/chartHistoryPolicy';
+import { requiredIndicatorHistoryBars, shouldLoadOlderHistory } from '../../marketData/chartHistoryPolicy';
 import type { ChartDataPlane, ChartDataPlaneSnapshot } from '../../marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../marketData/levelEngine';
 import type { OIChartAnalytics } from '../../marketData/oiEngine';
@@ -85,6 +85,17 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
   const chartUpdateScheduler:Ref<ChartUpdateScheduler>={current:new ChartUpdateScheduler()};
   const calculationEngine=new RealtimeCalculationEngine();
   const visibleLogicalRangeRef:Ref<{from:number;to:number}|null>={current:null};
+  let requestedIndicatorHistoryBars = 0;
+  const getRequiredIndicatorHistoryBars = () => requiredIndicatorHistoryBars(deps.indicatorsRef.current ?? []);
+  const hasRequiredIndicatorHistory = () => deps.chartDataPlane.isHistoryDepthSatisfied(getRequiredIndicatorHistoryBars());
+  const requestRequiredIndicatorHistory = () => {
+    const required = getRequiredIndicatorHistoryBars();
+    if (required <= requestedIndicatorHistoryBars) return;
+    requestedIndicatorHistoryBars = required;
+    void deps.chartDataPlane.ensureHistoryDepth(required).catch(error => {
+      console.warn('[TradingCore] required indicator history could not be completed', error);
+    });
+  };
 
   return {
     mount():undefined|(()=>void){
@@ -179,10 +190,15 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         candleAppearanceRef:deps.appearanceRef,chartStore:deps.chartStore,brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,
         timeframe:deps.timeframe,chartMarketKey:chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey),computeIntervalMs:50,
         onLegacyIndicatorTick:(data,bucketChanged)=>{
+          if(!hasRequiredIndicatorHistory())return;
           if(deps.indicatorsRef.current.some(x=>x.enabled&&!isIncrementalIndicatorSupported(x.kind)))chartIndicatorController.renderStudies(data,true);
           void bucketChanged;
         },
-        onIndicatorWorker:(data,bucketChanged)=>{chartPerformanceTelemetry.recordIndicatorIncrementalUpdate(chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey));chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');},
+        onIndicatorWorker:(data,bucketChanged)=>{
+          if(!hasRequiredIndicatorHistory())return;
+          chartPerformanceTelemetry.recordIndicatorIncrementalUpdate(chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey));
+          chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');
+        },
         onPredictionTick:(data)=>{chartPredictionController.setInputs({predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,resolvedInstrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe});void chartPredictionController.renderPredictionOverlay(data);},
         onAnalyticsTick:(data,spot)=>chartAnalyticsController.publishAnalytics(data,spot,true),
         onOiTick:(spot)=>chartAnalyticsController.updateOiSpot(spot),
@@ -229,10 +245,15 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
 
         realtimeController.hydrateHistory({...snapshot,candles:data});
         if(!canonical.length)deps.rendererController.setHistory(data,deps.appearanceRef.current,false);
+        requestRequiredIndicatorHistory();
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
         try{
-          chartIndicatorController.renderStudies(data);
-          chartIndicatorController.requestIndicatorWorker(data);
+          if (hasRequiredIndicatorHistory()) {
+            chartIndicatorController.renderStudies(data);
+            chartIndicatorController.requestIndicatorWorker(data);
+          } else {
+            coreEventBus.emit('chart.telemetry',{chartId:deps.chartId.current,symbol:deps.resolvedInstrumentKey,timeframe:deps.timeframe,metric:'indicator_history_waiting',value:Math.max(0,getRequiredIndicatorHistoryBars()-data.length),timestamp:Date.now()});
+          }
         }catch(indicatorError){
           console.warn('[TradingCore] indicator render skipped',indicatorError);
         }
@@ -247,6 +268,9 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         publishLifecycle('ready');
         if(deps.viewStateRef.current.showOI)void chartAnalyticsController.refreshOI();
 
+        if (deps.chartDataPlane.isOlderHistoryExhausted() && data.length < getRequiredIndicatorHistoryBars()) {
+          coreEventBus.emit('chart.telemetry',{chartId:deps.chartId.current,symbol:deps.resolvedInstrumentKey,timeframe:deps.timeframe,metric:'indicator_history_requirement_unmet',value:getRequiredIndicatorHistoryBars()-data.length,timestamp:Date.now()});
+        }
         const visibleBars=Math.min(data.length,({'1m':1125,'3m':375,'5m':225,'15m':75,'30m':45,'1H':36,'1D':30} as Record<string,number>)[deps.timeframe]||60);
         try{c.timeScale().setVisibleLogicalRange({from:Math.max(0,data.length-visibleBars-.5),to:data.length-.5+8});}
         catch{try{c.timeScale().fitContent();}catch{}}

@@ -105,6 +105,7 @@ type PlaneState = {
   historyLoading: boolean;
   olderHistoryLoading: boolean;
   historyPromise?: Promise<HistoricalCandle[]>;
+  historyPromiseLimit?: number;
   olderHistoryPromise?: Promise<HistoricalCandle[]>;
   olderHistoryRequestKey?: string;
   olderHistoryPriority?: 'visible' | 'warm';
@@ -792,10 +793,21 @@ export class ChartDataPlane {
   }
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
-    if (this.state.historyPromise) return this.state.historyPromise;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const inFlight = this.state.historyPromise;
+    if (inFlight) {
+      const inFlightLimit = this.state.historyPromiseLimit ?? baseLimit;
+      if (inFlightLimit >= requestedLimit) return inFlight;
+      return inFlight.catch(() => []).then(() => {
+        const resident = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
+        if (resident >= requestedLimit) return this.state.candles.length
+          ? this.activeWindow(this.state.candles, requestedLimit)
+          : this.getCompatibilityCandles(requestedLimit);
+        return this.ensureReadyColumns(requestedLimit);
+      });
+    }
     if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
       const residentCount = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
       if (!this.state.historyLoading && !this.state.recoveryPending && !this.state.recoveryInFlight && this.liveCandle.buffering) {
@@ -846,6 +858,7 @@ export class ChartDataPlane {
           // Let the object-history fallback own its own generation. The outer
           // finally block is generation-guarded and cannot clear the new request.
           this.state.historyPromise = undefined;
+          this.state.historyPromiseLimit = undefined;
           return this.ensureHistory(requestedLimit);
         }
         const active = this.setColumnarHistory(columns, requestedLimit, 'history');
@@ -869,18 +882,33 @@ export class ChartDataPlane {
       .finally(() => {
         if (!this.liveCandle.isCurrentGeneration(generation)) return;
         this.state.historyLoading = false;
-        this.state.historyPromise = undefined;
+        if (this.state.historyPromise === promise) {
+          this.state.historyPromise = undefined;
+          this.state.historyPromiseLimit = undefined;
+        }
         if (this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         if (this.state.recoveryPending && this.state.feedStatus === 'connected') this.maybeRecoverAfterReconnect();
       });
     this.state.historyPromise = promise;
+    this.state.historyPromiseLimit = requestedLimit;
     return promise;
   }
   private async ensureHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
-    if (this.state.historyPromise) return this.state.historyPromise;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const inFlight = this.state.historyPromise;
+    if (inFlight) {
+      const inFlightLimit = this.state.historyPromiseLimit ?? baseLimit;
+      if (inFlightLimit >= requestedLimit) return inFlight;
+      return inFlight.catch(() => []).then(() => {
+        const resident = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
+        if (resident >= requestedLimit) return this.state.candles.length
+          ? this.activeWindow(this.state.candles, requestedLimit)
+          : this.getCompatibilityCandles(requestedLimit);
+        return this.ensureHistory(requestedLimit);
+      });
+    }
     const initialLimit = requestedLimit;
     const residentCount = Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0, this.state.compatibilityCandles.length);
     if (this.state.historyReady && residentCount >= requestedLimit) {
@@ -957,17 +985,54 @@ export class ChartDataPlane {
       .finally(() => {
         if (!this.liveCandle.isCurrentGeneration(generation)) return;
         this.state.historyLoading = false;
-        this.state.historyPromise = undefined;
+        if (this.state.historyPromise === promise) {
+          this.state.historyPromise = undefined;
+          this.state.historyPromiseLimit = undefined;
+        }
         if (this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         if (this.state.recoveryPending && this.state.feedStatus === 'connected') this.maybeRecoverAfterReconnect();
       });
     this.state.historyPromise = promise;
+    this.state.historyPromiseLimit = initialLimit;
     return promise;
   }
 
   /** Cold-start contract: use the compact columnar path first, then fall back to object history. */
   ensureReady(limit?: number): Promise<HistoricalCandle[]> {
     return this.ensureReadyColumns(limit).catch(() => this.ensureHistory(limit));
+  }
+
+  private retainedHistoryCount(): number {
+    return Math.max(this.state.candles.length, this.state.columns?.time.length ?? 0,
+      this.state.compatibilityCandles.length);
+  }
+
+  /** Load a declared study lookback using bounded, low-priority older pages. */
+  async ensureHistoryDepth(requiredBars: number): Promise<number> {
+    const target = Math.max(initialHistoryCandles(this.timeframe),
+      Math.min(MAX_HISTORY_CANDLES, Math.ceil(Number(requiredBars) || 0)));
+    await this.ensureReadyHistory(Math.min(2_000, target));
+    let available = this.retainedHistoryCount();
+    let pages = 0;
+    const maxPages = Math.min(192, Math.ceil(Math.max(0, target - available) / 250) + 4);
+    while (available < target && !this.state.olderHistoryExhausted && pages < maxPages) {
+      const before = available;
+      await this.loadOlderHistory('warm', { visibleBars: Math.min(375, target - available) });
+      available = this.retainedHistoryCount();
+      pages += 1;
+      if (available <= before) break;
+    }
+    return available;
+  }
+
+  /** True once the requested history is resident or the source confirms exhaustion. */
+  isHistoryDepthSatisfied(requiredBars: number): boolean {
+    const target = Math.max(0, Math.ceil(Number(requiredBars) || 0));
+    return this.retainedHistoryCount() >= target || this.state.olderHistoryExhausted;
+  }
+
+  isOlderHistoryExhausted(): boolean {
+    return this.state.olderHistoryExhausted;
   }
 
   /** Borrow the shared typed-array market view. No candle objects are created. */
