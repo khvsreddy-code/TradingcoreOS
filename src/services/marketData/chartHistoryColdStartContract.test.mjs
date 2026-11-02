@@ -35,12 +35,14 @@ const plane = new ChartDataPlane('contract-broker', 'NSE:CONTRACT-HISTORY', '5m'
 try {
   const viewportRequest = plane.ensureReadyHistory(300);
   await new Promise(resolve => setTimeout(resolve, 2));
-  const lookbackRequest = plane.ensureReadyHistory(1200);
+  // A declared script/indicator lookback may exceed the former 2,000-bar
+  // compatibility cap. The chart must fetch and retain the requested suffix.
+  const lookbackRequest = plane.ensureReadyHistory(3200);
   const [viewportBars, requiredBars] = await Promise.all([viewportRequest, lookbackRequest]);
   assert.equal(viewportBars.length, 300);
-  assert.equal(requiredBars.length, 1200);
-  assert.deepEqual(requests, [300, 1200]);
-  assert.equal(plane.isHistoryDepthSatisfied(1200), true);
+  assert.equal(requiredBars.length, 3200);
+  assert.deepEqual(requests, [300, 3200]);
+  assert.equal(plane.isHistoryDepthSatisfied(3200), true);
 } finally {
   plane.dispose();
   tradingCoreRuntime.getHistoricalDataColumns = originalColumns;
