@@ -21,6 +21,8 @@ assert.equal(provenance[0]?.source, 'fyers');
 assert.equal(provenance[0]?.exchangeTimestamp, collisionTimestamp);
 assert.equal(provenance[0]?.ingestedAt, '2026-10-29T09:15:00.250Z');
 assert.equal(provenance[0]?.timeframe, '5minute');
+assert.equal(provenance[0]?.phase, 'historical');
+assert.equal(provenance[0]?.confirmed, true);
 const newlyIngested = normalizeHistoricalCandles([[1793265300, 100, 102, 99, 101, 10]], 'investiny', '5minute');
 assert.ok(Date.parse(String(newlyIngested[0]?.ingestedAt)) > 0, 'new provider rows receive server-ingest time');
 assert.equal(newlyIngested[0]?.exchangeTimestamp, collisionTimestamp);

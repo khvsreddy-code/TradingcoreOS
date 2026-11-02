@@ -194,7 +194,7 @@ function parseTimestamp(value: unknown): number {
   const parsed = Date.parse(text);
   return Number.isFinite(parsed) ? parsed : NaN;
 }
-function rowParts(row: unknown): { time: unknown; exchangeTime: unknown; ingestedAt: unknown; timeframe: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
+function rowParts(row: unknown): { time: unknown; exchangeTime: unknown; ingestedAt: unknown; timeframe: unknown; phase: unknown; confirmed: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
   if (Array.isArray(row) && row.length >= 5) return { time: row[0], exchangeTime: row[0], ingestedAt: undefined, timeframe: undefined, open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] };
   if (!row || typeof row !== 'object') return null;
   const v = row as Record<string, unknown>;
@@ -202,6 +202,7 @@ function rowParts(row: unknown): { time: unknown; exchangeTime: unknown; ingeste
   return { time: v.timestamp ?? v.time ?? v.datetime,
     exchangeTime: v.exchangeTimestamp ?? v.exchange_timestamp ?? v.exchange_time ?? v.timestamp ?? v.time ?? v.datetime,
     ingestedAt: v.ingestedAt ?? v.ingestionTimestamp ?? v.receivedAt, timeframe: v.timeframe ?? v.interval,
+    phase: v.phase, confirmed: v.confirmed,
     open: v.open ?? v.Open, high: v.high ?? v.High, low: v.low ?? v.Low, close: v.close ?? v.Close, volume: v.volume ?? v.Volume ?? 0 };
 }
 function normalizeRows(rows: unknown[], source: StoredBar['source'], timeframe?: string, assignIngestionTime = true): StoredBar[] {
@@ -225,7 +226,12 @@ function normalizeRows(rows: unknown[], source: StoredBar['source'], timeframe?:
     const rawIngestedAt = parseTimestamp(row.ingestedAt);
     const ingestedAt = Number.isFinite(rawIngestedAt) && rawIngestedAt > 0 ? new Date(rawIngestedAt).toISOString() : ingestionFallback;
     const normalizedTimeframe = String(row.timeframe ?? timeframe ?? '').trim() || undefined;
+    const normalizedPhase = row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast'
+      ? row.phase
+      : 'historical';
+    const confirmed = typeof row.confirmed === 'boolean' ? row.confirmed : normalizedPhase === 'historical' || normalizedPhase === 'confirmed';
     const bar: StoredBar = { timestamp: exchangeTimestamp, exchangeTimestamp, timestampMs, open, high, low, close, volume, source,
+      phase: normalizedPhase, confirmed,
       ...(ingestedAt ? { ingestedAt } : {}), ...(normalizedTimeframe ? { timeframe: normalizedTimeframe } : {}) };
     const old = byTime.get(timestampMs);
     if (!old || historicalSourcePriority(source) >= historicalSourcePriority(old.source)) byTime.set(timestampMs, bar);

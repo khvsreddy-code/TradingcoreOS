@@ -19,6 +19,8 @@ const provenanceRows = normalizeHistory([{ timestamp: '2026-10-24T10:00:00.000Z'
 assert.equal(provenanceRows[0]?.exchangeTimestamp, '2026-10-24T10:00:00.000Z');
 assert.equal(provenanceRows[0]?.ingestedAt, '2026-10-24T10:00:01.000Z');
 assert.equal(provenanceRows[0]?.timeframe, '5minute');
+assert.equal(provenanceRows[0]?.phase, 'historical');
+assert.equal(provenanceRows[0]?.confirmed, true);
 
 const seconds = Date.parse('2026-10-24T10:00:00.000Z') / 1000;
 const converted = columnarHistoryToCandles({
@@ -35,6 +37,8 @@ assert.equal(converted[1]?.confirmed, false);
 assert.equal(converted[1]?.revision, 2);
 assert.equal(converted[0]?.exchangeTimestamp, '2026-10-24T10:00:00.000Z');
 assert.equal(converted[0]?.ingestedAt, '2026-10-24T10:00:01.000Z');
+assert.equal(converted[0]?.phase, 'historical');
+assert.equal(converted[0]?.confirmed, true);
 assert.equal(converted[1]?.timeframe, '5minute');
 const untrustedColumns = columnarHistoryToCandles({
   time: [seconds + 600],

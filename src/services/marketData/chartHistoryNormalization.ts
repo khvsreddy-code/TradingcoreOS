@@ -16,8 +16,8 @@ export function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
       open: values[0], high: values[1], low: values[2], close: values[3],
       volume: Number.isFinite(volume) ? volume : 0,
       ...(row.source === 'nse' || row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' || row.source === 'unknown' ? { source: row.source } : {}),
-      ...(row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? { phase: row.phase } : {}),
-      ...(typeof row.confirmed === 'boolean' ? { confirmed: row.confirmed } : {}),
+      phase: row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical',
+      confirmed: typeof row.confirmed === 'boolean' ? row.confirmed : row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? false : true,
       ...(typeof row.availableAt === 'string' || typeof row.availableAt === 'number' ? { availableAt: row.availableAt } : {}),
       ...(typeof row.exchangeTimestamp === 'string' || typeof row.exchangeTimestamp === 'number' ? { exchangeTimestamp: row.exchangeTimestamp } : {}),
       ...(typeof row.ingestedAt === 'string' || typeof row.ingestedAt === 'number' ? { ingestedAt: row.ingestedAt } : {}),
@@ -47,8 +47,12 @@ export function columnarHistoryToCandles(columns: {
     if (source === 'unknown') continue;
     if (time === previous) continue;
     previous = time;
-    const phase = columns.phase?.[i];
-    const confirmed = columns.confirmed?.[i];
+    const phaseRaw = columns.phase?.[i];
+    const phase = phaseRaw === 'historical' || phaseRaw === 'confirmed' || phaseRaw === 'developing' || phaseRaw === 'realtime' || phaseRaw === 'forecast'
+      ? phaseRaw
+      : 'historical';
+    const confirmedRaw = columns.confirmed?.[i];
+    const confirmed = typeof confirmedRaw === 'boolean' ? confirmedRaw : phase === 'historical' || phase === 'confirmed';
     const availableAtRaw = columns.availableAt?.[i];
     const revisionRaw = columns.revision?.[i];
     const exchangeTimeRaw = columns.exchangeTime?.[i];
@@ -60,8 +64,8 @@ export function columnarHistoryToCandles(columns: {
     out[written++] = {
       timestamp: new Date(time).toISOString(), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0,
       ...(source === 'nse' || source === 'investiny' || source === 'fyers' || source === 'tvdatafeed' || source === 'unknown' ? { source } : {}),
-      ...(phase === 'historical' || phase === 'confirmed' || phase === 'developing' || phase === 'realtime' || phase === 'forecast' ? { phase } : {}),
-      ...(typeof confirmed === 'boolean' ? { confirmed } : {}),
+      phase,
+      confirmed,
       ...(Number.isFinite(availableAtMs) && availableAtMs > 0 ? { availableAt: new Date(availableAtMs).toISOString() } : {}),
       exchangeTimestamp: new Date(exchangeTimeMs).toISOString(),
       ...(Number.isFinite(ingestedAtMs) && ingestedAtMs > 0 ? { ingestedAt: new Date(ingestedAtMs).toISOString() } : {}),
