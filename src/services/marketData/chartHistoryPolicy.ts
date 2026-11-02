@@ -36,6 +36,7 @@ export function requiredIndicatorHistoryBars(
   safetyBars = HISTORY_LOOKBACK_SAFETY_BARS,
 ): number {
   let largestWindow = DEFAULT_INITIAL_HISTORY_CANDLES;
+  let hasEnabledLookback = false;
   const numeric = (value: unknown): number => {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? Math.ceil(parsed) : 0;
@@ -51,12 +52,14 @@ export function requiredIndicatorHistoryBars(
     const signal = numeric(item.signal);
     const displacement = numeric(item.displacement);
     const mtf = Math.max(1, numeric(item.mtf) || 1);
-    largestWindow = Math.max(largestWindow, Math.ceil(Math.max(
+    const declaredWindow = Math.max(
       period, lookback, slow, fast + signal, period + displacement, slow + displacement,
-    ) * mtf));
+    );
+    if (declaredWindow > 0) hasEnabledLookback = true;
+    largestWindow = Math.max(largestWindow, Math.ceil(declaredWindow * mtf));
   }
   return Math.min(HISTORY_MAX_CANDLES,
-    Math.max(DEFAULT_INITIAL_HISTORY_CANDLES, largestWindow + Math.max(0, Math.ceil(Number(safetyBars) || 0))));
+    Math.max(DEFAULT_INITIAL_HISTORY_CANDLES, largestWindow + (hasEnabledLookback ? Math.max(0, Math.ceil(Number(safetyBars) || 0)) : 0)));
 }
 
 export function historyPageCandles(timeframe: string): number {
