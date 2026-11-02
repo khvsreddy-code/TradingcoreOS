@@ -679,7 +679,7 @@ export class ChartDataPlane {
   }
 
   private activeWindow(rows: HistoricalCandle[], limitOverride?: number): HistoricalCandle[] {
-    const limit = Math.max(initialHistoryCandles(this.timeframe), Math.min(2_000, Math.floor(Number(limitOverride) || initialHistoryCandles(this.timeframe))));
+    const limit = Math.max(initialHistoryCandles(this.timeframe), Math.min(MAX_HISTORY_CANDLES, Math.floor(Number(limitOverride) || initialHistoryCandles(this.timeframe))));
     return rows.length > limit ? rows.slice(-limit) : rows;
   }
 
