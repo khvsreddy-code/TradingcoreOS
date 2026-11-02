@@ -174,7 +174,7 @@ async function withDistributedHistoricalPage<T>(
 async function fallbackQuoteSnapshot(client: FyersApiClient, symbol: string): Promise<HistoricalQuoteSnapshot | null> {
   try {
     const signal = timeoutSignal(API_LATENCY_BUDGET_MS.quote);
-    const payload = await client.dataGet<any>('/quotes', { symbols: symbol }, signal, API_LATENCY_BUDGET_MS.quote);
+    const payload = await client.dataGet<any>('/quotes', { symbols: symbol }, signal, API_LATENCY_BUDGET_MS.quote, 'high');
     const quote = Array.isArray(payload?.d)
       ? payload.d.find((item: any) => String(item?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0]
       : undefined;
@@ -250,7 +250,7 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
               range_from: String(Math.floor(range.fromMs / 1000)),
               range_to: String(Math.floor(range.toMs / 1000)),
               cont_flag: '1',
-            }, signal, API_LATENCY_BUDGET_MS.history, 'interactive');
+            }, signal, API_LATENCY_BUDGET_MS.history, 'high');
             const bars = Array.isArray(payload?.candles) ? payload.candles : [];
             // A historical "before" page must not trigger a second quote request
             // merely because that older range contains no candles.
@@ -353,6 +353,9 @@ export function historicalBarsToColumns(rows: readonly HistoricalCandle[], metad
     volume: rows.map(row => row.volume),
     timeUnit: 'milliseconds',
     source: rows.map(row => row.source === 'investiny' || row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
+    exchangeTime: rows.map(row => availableAtMs(row.exchangeTimestamp ?? row.timestamp)),
+    ingestedAt: rows.map(row => availableAtMs(row.ingestedAt)),
+    ...(rows.find(row => typeof row.timeframe === 'string' && row.timeframe.trim())?.timeframe ? { timeframe: rows.find(row => typeof row.timeframe === 'string' && row.timeframe.trim())!.timeframe } : {}),
     phase: rows.map(row => row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical'),
     confirmed: rows.map(row => row.confirmed === true),
     availableAt: rows.map(row => availableAtMs(row.availableAt)),

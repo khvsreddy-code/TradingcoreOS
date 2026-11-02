@@ -41,6 +41,12 @@ assert.equal(first.bar?.open, 100);
 assert.equal(first.bar?.high, 102);
 assert.equal(first.bar?.low, 99);
 assert.equal(first.bar?.close, 102);
+assert.equal(first.bar?.source, 'fyers');
+assert.equal(first.bar?.exchangeTimestamp, '2026-10-14T10:04:30.000Z');
+assert.equal(first.bar?.ingestedAt, '2026-10-14T10:04:30.000Z');
+assert.equal(first.bar?.timeframe, '5m');
+assert.equal(first.bar?.phase, 'developing');
+assert.equal(first.bar?.confirmed, false);
 
 const noChange = machine.transition(tick('2026-10-14T10:04:40.000Z', 102, 4), first.bar!, 300);
 assert.equal(noChange.kind, 'duplicate');
@@ -59,6 +65,8 @@ assert.equal(next.bar?.open, 103);
 assert.equal(next.bar?.high, 103);
 assert.equal(next.bar?.low, 103);
 assert.equal(next.bar?.close, 103);
+assert.equal(next.bar?.phase, 'developing');
+assert.equal(next.bar?.confirmed, false);
 
 const gap = machine.transition(tick('2026-10-14T10:20:01.000Z', 105, 7), next.bar!, 300);
 assert.equal(gap.kind, 'session-boundary');

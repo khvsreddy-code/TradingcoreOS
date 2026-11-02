@@ -207,6 +207,14 @@ export class LiveCandleStateMachine {
     }
 
     const bucketChanged = !Number.isFinite(lastTimeSeconds) || bucketTime > lastTimeSeconds;
+    const rawReceivedAt = tick.receivedAtEpoch ?? tick.receivedAt;
+    const receivedAtNumber = typeof rawReceivedAt === 'number' ? rawReceivedAt : Number(rawReceivedAt);
+    const receivedAtParsed = Number.isFinite(receivedAtNumber) ? (receivedAtNumber > 1e12 ? receivedAtNumber : receivedAtNumber * 1000) : Date.parse(String(rawReceivedAt ?? ''));
+    const provenance = { ...(tick.source === 'fyers' ? { source: 'fyers' as const } : {}),
+      exchangeTimestamp: new Date(timestampMs).toISOString(),
+      ingestedAt: new Date(Number.isFinite(receivedAtParsed) && receivedAtParsed > 0 ? receivedAtParsed : Date.now()).toISOString(),
+      timeframe: this.timeframe, phase: 'developing' as const, confirmed: false,
+      ...(Number.isSafeInteger(tick.revision) && Number(tick.revision) >= 0 ? { revision: Number(tick.revision) } : {}) };
     let kind: LiveCandleTransitionKind;
     let bar: HistoricalCandle;
     if (!Number.isFinite(lastTimeSeconds) || !latest) {
@@ -238,6 +246,7 @@ export class LiveCandleStateMachine {
       };
     }
 
+    bar = { ...bar, ...provenance };
     this.lastAcceptedTradeTimestampMs = timestampMs;
     const changed = bucketChanged || !latest
       || bar.open !== lastOpen || bar.high !== lastHigh || bar.low !== lastLow

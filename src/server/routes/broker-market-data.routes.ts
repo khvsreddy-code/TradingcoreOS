@@ -93,7 +93,7 @@ async function requestFyersHistory(
     date_format: '1',
     range_from: from,
     range_to: to,
-  }, undefined, API_LATENCY_BUDGET_MS.history, 'interactive');
+  }, undefined, API_LATENCY_BUDGET_MS.history, 'high');
   return mapFyersCandles(payload?.candles || []);
 }
 

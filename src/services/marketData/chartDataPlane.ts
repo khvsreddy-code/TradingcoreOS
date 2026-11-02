@@ -61,7 +61,7 @@ export type ChartDataPlaneKey = string;
 
 type ChartColumnarSnapshot = Readonly<{
   time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds';
-  source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number>;
+  source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number>; exchangeTime?: ArrayLike<number>; ingestedAt?: ArrayLike<number>; timeframe?: string;
 }>;
 export type ChartDataPlaneSnapshot = Readonly<{
   key: ChartDataPlaneKey;
@@ -249,17 +249,37 @@ export class ChartDataPlane {
     this.replayBufferedTicks(activation.ticks);
   }
 
-  private columnarSnapshot(): ChartColumnarSnapshot {
+  private columnarSnapshot(latest: HistoricalCandle, bucketChanged: boolean): ChartColumnarSnapshot {
     const market = this.canonicalPlane.market;
-    return Object.freeze({
-      time: market.time,
-      open: market.open,
-      high: market.high,
-      low: market.low,
-      close: market.close,
-      volume: market.volume,
-      timeUnit: 'seconds',
-    });
+    const previous = this.state.columns;
+    const count = market.time.length;
+    const previousCount = Math.max(0, count - (bucketChanged ? 1 : 0));
+    const mergeSidecar = <T,>(values: ArrayLike<T> | undefined, fallback: (index: number) => T, latestValue: T): T[] => {
+      const next = values ? Array.from(values).slice(0, previousCount) : Array.from({ length: previousCount }, (_, index) => fallback(index));
+      while (next.length < previousCount) next.push(fallback(next.length));
+      if (bucketChanged) next.push(latestValue);
+      else if (count > 0) next[count - 1] = latestValue;
+      next.length = count;
+      return next;
+    };
+    const exchangeTimestamp = Date.parse(String(latest.exchangeTimestamp ?? latest.timestamp));
+    const ingestedAt = Date.parse(String(latest.ingestedAt ?? ''));
+    const exchangeTime = mergeSidecar(previous?.exchangeTime, index => Number(market.time[index]) * 1000,
+      Number.isFinite(exchangeTimestamp) ? exchangeTimestamp : Number.NaN);
+    const ingestedTimes = mergeSidecar(previous?.ingestedAt, () => Number.NaN, Number.isFinite(ingestedAt) ? ingestedAt : Number.NaN);
+    const phases = mergeSidecar(previous?.phase, () => 'historical', latest.phase ?? 'developing');
+    const confirmations = mergeSidecar(previous?.confirmed, () => true, latest.confirmed ?? false);
+    if (bucketChanged && previousCount > 0 && phases[previousCount - 1] === 'developing') {
+      phases[previousCount - 1] = 'confirmed';
+      confirmations[previousCount - 1] = true;
+    }
+    const source = previous?.source ? mergeSidecar(previous.source, () => 'unknown', latest.source ?? 'unknown') : undefined;
+    const availableAt = previous?.availableAt ? mergeSidecar(previous.availableAt, () => Number.NaN, Number.NaN) : undefined;
+    const revision = previous?.revision ? mergeSidecar(previous.revision, () => Number.NaN, Number(latest.revision ?? Number.NaN)) : undefined;
+    return Object.freeze({ time: market.time, open: market.open, high: market.high, low: market.low, close: market.close, volume: market.volume,
+      timeUnit: 'seconds', exchangeTime, ingestedAt: ingestedTimes, phase: phases, confirmed: confirmations,
+      timeframe: latest.timeframe || CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,
+      ...(source ? { source } : {}), ...(availableAt ? { availableAt } : {}), ...(revision ? { revision } : {}) });
   }
 
   private latestCanonicalCandle(): HistoricalCandle | undefined {
@@ -407,7 +427,23 @@ export class ChartDataPlane {
 
     const ingestionStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const previousRevision = this.state.revision;
-    const bar = transition.bar;
+    const rawReceivedAt = tick.receivedAtEpoch ?? tick.receivedAt;
+    const receivedAtNumber = typeof rawReceivedAt === 'number' ? rawReceivedAt : Number(rawReceivedAt);
+    const receivedAtParsed = Number.isFinite(receivedAtNumber) ? (receivedAtNumber > 1e12 ? receivedAtNumber : receivedAtNumber * 1000) : Date.parse(String(rawReceivedAt ?? ''));
+    const bar: HistoricalCandle = { ...transition.bar, ...(tick.source === 'fyers' ? { source: 'fyers' as const } : {}),
+      exchangeTimestamp: new Date(transition.timestampMs ?? tradeTimeMs).toISOString(),
+      ingestedAt: new Date(Number.isFinite(receivedAtParsed) && receivedAtParsed > 0 ? receivedAtParsed : Date.now()).toISOString(),
+      timeframe: CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, phase: 'developing', confirmed: false,
+      ...(Number.isSafeInteger(tick.revision) && Number(tick.revision) >= 0 ? { revision: Number(tick.revision) } : {}) };
+    const previousRows = this.state.candles.length ? this.state.candles : this.state.compatibilityCandles;
+    const previousTail = previousRows[previousRows.length - 1] || (this.state.columns ? columnarHistoryToCandles(this.state.columns, 1)[0] : undefined);
+    if (transition.bucketChanged && previousTail?.phase === 'developing') {
+      const confirmedPrevious = { ...previousTail, phase: 'confirmed' as const, confirmed: true };
+      for (const rows of [this.state.candles, this.state.compatibilityCandles]) {
+        if (rows.length && rows[rows.length - 1]?.timestamp === previousTail.timestamp) rows[rows.length - 1] = confirmedPrevious;
+      }
+      historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, confirmedPrevious);
+    }
     const traceSequence = this.state.revision + 1;
     const canonicalStartedAt = globalThis.performance?.now?.() ?? Date.now();
     marketLatencyTrace.record(this.key, traceSequence, 'feed', ingressStartedAt, canonicalStartedAt);
@@ -434,7 +470,7 @@ export class ChartDataPlane {
     const fullCompatibility = this.updateCompatibilityTail(bar, transition.bucketChanged, previousRevision);
 
     if (wasColumnar) {
-      this.state.columns = this.columnarSnapshot();
+      this.state.columns = this.columnarSnapshot(bar, transition.bucketChanged);
       this.state.candles = [];
     } else {
       this.state.columns = undefined;
@@ -705,7 +741,7 @@ export class ChartDataPlane {
     return merged;
   }
 
-  private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds'; source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number> }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
+  private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds'; source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number>; exchangeTime?: ArrayLike<number>; ingestedAt?: ArrayLike<number>; timeframe?: string }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
     const startedAt = globalThis.performance?.now?.() ?? Date.now();
     const previousRevision = this.state.revision;
     const candlesForCache = columnarHistoryToCandles(columns, Math.min(MAX_HISTORY_CANDLES, requestedLimit));

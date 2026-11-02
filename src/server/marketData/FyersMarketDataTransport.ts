@@ -214,7 +214,8 @@ export class FyersMarketDataTransport {
         if (!tick) return;
         session.lastTickAt = Date.now();
         const domainEvent = buildDomainEvent(tick, session.feedClass);
-        // Publish only normalized domain data to internal chart/indicator/orderbook/CoreSpirit/ML consumers.
+        // WebSocket frames are the critical live-data lane: they do not consume REST quota
+        // or wait behind historical backfill admission. Publish normalized events directly.
         // Depth stays on its own socket and is routed only to subscribers requesting depth-oriented consumers.
         marketEventBus.publish(domainEvent);
         this.emit(session, { type: 'tick', tick, domainEvent });
