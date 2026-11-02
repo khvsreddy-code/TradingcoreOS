@@ -10,6 +10,7 @@ import { FyersMarketDataTransport } from '../src/server/marketData/FyersMarketDa
 import { FyersOrderStreamTransport, type FyersOrderStreamEvent } from '../src/server/fyers/trading/FyersOrderStreamTransport.js';
 import type { MarketFeedEvent } from '../src/types/market.js';
 import { verifyRealtimeTicket } from '../src/server/realtime/ticket.js';
+import { resolveFyersQuotaIdentity } from '../src/server/fyers/core/FyersQuotaIdentity.js';
 
 const PORT = Number(process.env.REALTIME_GATEWAY_PORT || process.env.PORT || 8080);
 const INSTANCE_ID = String(process.env.REALTIME_GATEWAY_INSTANCE_ID || crypto.randomUUID());
@@ -141,10 +142,14 @@ async function loadDesiredConnections(userId:string):Promise<ConnectionRecord[]>
   }));
 }
 
-async function brokerToken(userId:string):Promise<string>{
+async function brokerCredentials(userId:string):Promise<{token:string;quotaIdentity:string}>{
   const session=await BrokerRepository.getSession('fyers',userId);
   if(!session||session.status!=='Connected')throw new Error('Fyers is not connected for this account.');
-  return EncryptionService.decrypt(session.accessTokenEncrypted);
+  return {
+    token: EncryptionService.decrypt(session.accessTokenEncrypted),
+    // A shared FYERS account must share one admission budget across TradingCore users.
+    quotaIdentity: resolveFyersQuotaIdentity(session.clientCode),
+  };
 }
 
 async function syncOwnedUser(userId:string):Promise<void>{
@@ -155,14 +160,14 @@ async function syncOwnedUser(userId:string):Promise<void>{
   const symbols=[...new Set(market.flatMap(item=>item.symbols))];
   if(!desired.length){await stopOwnership(userId);return;}
   try{
-    const token=await brokerToken(userId);
+    const {token,quotaIdentity}=await brokerCredentials(userId);
     if(symbols.length){
       const owned=ownedUsers.get(userId)!;
       FyersMarketDataTransport.subscribe(userId,token,symbols,owned.marketListener);
     }else FyersMarketDataTransport.disconnect(userId);
     if(orders){
       const owned=ownedUsers.get(userId)!;
-      FyersOrderStreamTransport.subscribe(userId,token,owned.orderListener);
+      FyersOrderStreamTransport.subscribe(userId,token,owned.orderListener,quotaIdentity);
     }else FyersOrderStreamTransport.disconnect(userId);
   }catch(error){
     await broadcast('order',{type:'order',userId,event:{type:'error',error:error instanceof Error?error.message:'Unable to initialize broker realtime session'}}).catch(()=>undefined);
