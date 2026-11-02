@@ -236,9 +236,11 @@ export class FyersOrderStateEngine {
     nextSequence: () => number,
     isCurrent: () => boolean,
     publish: (event: DomainMarketEvent) => void,
+    quotaIdentity: string,
   ): Promise<FyersReconciliationSummary> {
     this.requireStore();
-    const client = new FyersApiClient(accessToken, undefined, resolveFyersCapabilities(userId), userId);
+    if (!quotaIdentity) throw Object.assign(new Error('A hashed FYERS broker-account quota identity is required for reconciliation.'), { status: 503, code: 'BROKER_IDENTITY_REQUIRED' });
+    const client = new FyersApiClient(accessToken, undefined, resolveFyersCapabilities(userId), quotaIdentity);
     // Fetch all three before applying any of them. A partial REST failure is not
     // a valid snapshot and must not leave the local state half-reconciled.
     const [ordersPayload, tradesPayload, positionsPayload] = await Promise.all([

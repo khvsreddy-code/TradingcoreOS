@@ -17,6 +17,7 @@ interface Session {
   socket?: WebSocket;
   listeners: Set<Listener>;
   accessToken: string;
+  quotaIdentity: string;
   closing: boolean;
   reconnectAttempt: number;
   reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -37,11 +38,12 @@ const MAX_RECONCILIATION_QUEUE = 5_000;
 export class FyersOrderStreamTransport {
   private static sessions = new Map<string, Session>();
 
-  static subscribe(userId: string, accessToken: string, listener: Listener): () => void {
+  static subscribe(userId: string, accessToken: string, listener: Listener, quotaIdentity: string): () => void {
+    if (!quotaIdentity) throw Object.assign(new Error('A hashed FYERS broker-account quota identity is required for the order stream.'), { status: 503, code: 'BROKER_IDENTITY_REQUIRED' });
     let session = this.sessions.get(userId);
     if (!session) {
       session = {
-        listeners: new Set(), accessToken, closing: false, reconnectAttempt: 0, generation: 0, sequence: 0,
+        listeners: new Set(), accessToken, quotaIdentity, closing: false, reconnectAttempt: 0, generation: 0, sequence: 0,
         reconciling: false, reconciliationBlocked: true, reconciliationOverflowed: false,
         reconciliationAttempt: 0, pendingFrames: [], processingTail: Promise.resolve(),
       };
@@ -49,6 +51,7 @@ export class FyersOrderStreamTransport {
     }
     const tokenChanged = session.accessToken !== accessToken;
     session.accessToken = accessToken;
+    session.quotaIdentity = quotaIdentity;
     session.closing = false;
     session.listeners.add(listener);
     if (tokenChanged && session.socket) {
@@ -239,6 +242,7 @@ export class FyersOrderStreamTransport {
           () => ++session.sequence,
           () => this.isCurrent(session, generation),
           event => this.publishDomainEvent(session, event),
+          session.quotaIdentity,
         );
         if (!this.isCurrent(session, generation)) return;
 

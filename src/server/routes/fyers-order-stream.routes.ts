@@ -4,6 +4,7 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersOrderStreamTransport, type FyersOrderStreamEvent } from '../fyers/trading/FyersOrderStreamTransport.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
+import { resolveFyersQuotaIdentity } from '../fyers/core/FyersQuotaIdentity.js';
 
 export const fyersOrderStreamRoutes = Router();
 fyersOrderStreamRoutes.use(requireUser);
@@ -12,6 +13,7 @@ fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedR
   const userId=req.tradingCoreUserId!; const session=await BrokerRepository.getSession('fyers',userId);
   if(!session||session.status!=='Connected')return res.status(401).json({success:false,error:'Fyers is not connected for this account.'});
   let token:string; try{token=EncryptionService.decrypt(session.accessTokenEncrypted)}catch{return res.status(500).json({success:false,error:'Unable to decrypt the Fyers session.'});}
+  let quotaIdentity: string; try { quotaIdentity = resolveFyersQuotaIdentity(session.clientCode); } catch { return res.status(503).json({success:false,error:'A shared FYERS account quota identity is unavailable.'}); }
   res.status(200);
   res.setHeader('Content-Type','application/x-ndjson');
   res.setHeader('Cache-Control','no-cache, no-transform');
@@ -21,7 +23,7 @@ fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedR
   res.setHeader('X-TradingCore-Stream-Lease-Ms', String(API_LATENCY_BUDGET_MS.streamLease));
   res.flushHeaders();
   const write=(event: FyersOrderStreamEvent)=>{try{res.write(JSON.stringify(event)+'\n')}catch{}};
-  const unsubscribe=FyersOrderStreamTransport.subscribe(userId,token,write);
+  const unsubscribe=FyersOrderStreamTransport.subscribe(userId,token,write,quotaIdentity);
   // Heartbeats must reflect reconciliation gates; never announce connected
   // while REST snapshots are still catching up missed broker events.
   const heartbeat=setInterval(()=>write(FyersOrderStreamTransport.getStatus(userId)),5000);
