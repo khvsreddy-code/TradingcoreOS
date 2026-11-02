@@ -12,6 +12,8 @@ const contracts = [
   ['stitch-workspace-wiring', ['src/stitchWorkspaceWiringContract.test.mjs', false]],
   ['yahoo-delayed-fallback', ['src/yahooDelayedFallbackContract.test.mjs', false]],
   ['shared-broker-coordination', ['src/sharedBrokerCoordinationContract.test.mjs', false]],
+  ['fyers-quota-identity', ['src/fyersQuotaIdentityContract.test.mjs', true]],
+  ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
   ['corespirit-right-dock', ['src/corespiritDockContract.test.mjs', false]],
   ['market-latency-trace', ['src/services/core/performance/marketLatencyTrace.test.ts', true]],
   ['chart-data-flow-observability', ['src/chartDataFlowObservabilityContract.test.mjs', false]],
@@ -136,7 +138,7 @@ const contracts = [
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
   ['fyers-compliance-symbol-catalog', ['src/fyersComplianceSymbolCatalogContract.test.mjs', false]],
   ['realtime-service-build-skip', ['src/realtimeServiceBuildIgnoreContract.test.mjs', false]],
-  ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
+
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
   ['external-automation-trading', ['src/externalAutomationTradingContract.test.mjs', false]],
   ['automation-engine-regressions', ['src/services/automationEngineRegression.test.ts', true]],
