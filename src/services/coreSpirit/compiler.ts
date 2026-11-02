@@ -73,7 +73,7 @@ function containsCoreSpiritSystemEventHandler(nodes: readonly CoreSpiritAstNode[
   return nodes.some(node => {
     switch (node.type) {
       case 'onEvent':
-        return !/^signal\\s*\\(/i.test(node.eventName.trim()) ||
+        return !/^signal\s*\(/i.test(node.eventName.trim()) ||
           containsCoreSpiritSystemEventHandler(node.body);
       case 'program':
         return containsCoreSpiritSystemEventHandler(node.body);
