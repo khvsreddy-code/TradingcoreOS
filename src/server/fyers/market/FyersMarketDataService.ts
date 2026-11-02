@@ -52,7 +52,7 @@ export class FyersMarketDataService {
       range_to: rangeTo,
       oi_flag: options.oi ? 1 : undefined,
       cont_flag: options.continuous ? 1 : undefined,
-    }, options.signal, API_LATENCY_BUDGET_MS.history, 'interactive');
+    }, options.signal, API_LATENCY_BUDGET_MS.history, 'high');
   }
 
   quotes(symbols: string[], signal?: AbortSignal): Promise<unknown> {
@@ -75,7 +75,7 @@ export class FyersMarketDataService {
       // caller must not cancel the upstream request for all other consumers.
       sharedRequest = this.client.dataGet('/quotes', {
         symbols: uniqueSymbols.join(','),
-      }, undefined, API_LATENCY_BUDGET_MS.quote, 'interactive');
+      }, undefined, API_LATENCY_BUDGET_MS.quote, 'low');
       // Bound the in-flight registry under unusual multi-user bursts; every
       // untracked request still passes through the distributed FYERS quota gate.
       if (quoteRequestsInFlight.size < QUOTE_IN_FLIGHT_MAX_ENTRIES) {
@@ -96,7 +96,7 @@ export class FyersMarketDataService {
   }
 
   depth(symbol: string, signal?: AbortSignal) {
-    return this.client.dataGet('/depth', { symbol }, signal, API_LATENCY_BUDGET_MS.depth, 'interactive');
+    return this.client.dataGet('/depth', { symbol }, signal, API_LATENCY_BUDGET_MS.depth, 'high');
   }
 
   optionChain(symbol: string, options: { strikeCount?: number; timestamp?: string | number; greeks?: boolean; signal?: AbortSignal } = {}) {
@@ -105,23 +105,23 @@ export class FyersMarketDataService {
       strikecount: options.strikeCount ?? 50,
       timestamp: options.timestamp,
       greeks: options.greeks === false ? 0 : 1,
-    }, options.signal, API_LATENCY_BUDGET_MS.depth, 'interactive');
+    }, options.signal, API_LATENCY_BUDGET_MS.depth, 'high');
   }
 
   marketStatus(signal?: AbortSignal) {
-    return this.client.dataGet('/marketStatus', {}, signal, API_LATENCY_BUDGET_MS.account, 'interactive');
+    return this.client.dataGet('/marketStatus', {}, signal, API_LATENCY_BUDGET_MS.account, 'low');
   }
 
   futuresChain(symbol: string, signal?: AbortSignal) {
-    return this.client.dataGet('/futures-chain', { symbol }, signal, API_LATENCY_BUDGET_MS.depth, 'normal');
+    return this.client.dataGet('/futures-chain', { symbol }, signal, API_LATENCY_BUDGET_MS.depth, 'medium');
   }
 
   expiredExpiryDates(symbol: string, rangeFrom: string, rangeTo: string, dateFormat: '0' | '1' = '1', signal?: AbortSignal) {
-    return this.client.dataGet('/history/fno/expired/expiry-dates', { symbol, range_from: rangeFrom, range_to: rangeTo, date_format: dateFormat }, signal, API_LATENCY_BUDGET_MS.history, 'background');
+    return this.client.dataGet('/history/fno/expired/expiry-dates', { symbol, range_from: rangeFrom, range_to: rangeTo, date_format: dateFormat }, signal, API_LATENCY_BUDGET_MS.history, 'lowest');
   }
 
   expiredUnderlyingSymbols(symbol: string, expiryDate: string, signal?: AbortSignal) {
-    return this.client.dataGet('/history/fno/expired/underlying-symbols', { symbol, expiry_date: expiryDate }, signal, API_LATENCY_BUDGET_MS.history, 'background');
+    return this.client.dataGet('/history/fno/expired/underlying-symbols', { symbol, expiry_date: expiryDate }, signal, API_LATENCY_BUDGET_MS.history, 'lowest');
   }
 
   expiredHistoricalData(symbol: string, resolution: string, rangeFrom: string, rangeTo: string, options: { greeks?: boolean; oi?: boolean; signal?: AbortSignal } = {}) {
@@ -129,6 +129,6 @@ export class FyersMarketDataService {
       symbol, resolution, date_format: '1', range_from: rangeFrom, range_to: rangeTo,
       include_greeks: options.greeks ? 1 : undefined,
       include_oi: options.oi ? 1 : undefined,
-    }, options.signal, API_LATENCY_BUDGET_MS.history, 'background');
+    }, options.signal, API_LATENCY_BUDGET_MS.history, 'lowest');
   }
 }

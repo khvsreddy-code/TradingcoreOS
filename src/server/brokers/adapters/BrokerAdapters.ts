@@ -141,9 +141,8 @@ export class FyersAdapter extends BaseBroker {
       signal: options.signal || timeoutSignal(timeoutMs),
       timeoutMs,
       category: resolvedCategory,
-      // This adapter is used by interactive account/order surfaces; speculative
-      // history and F&O warm-up use the explicit background priority elsewhere.
-      priority: 'interactive',
+      // Order mutations are critical; account/profile reads retain a high band.
+      priority: resolvedCategory === 'transactions' ? 'critical' : 'high',
     });
   }
 
@@ -242,7 +241,7 @@ export class FyersAdapter extends BaseBroker {
       { symbols: symbols.join(',') },
       timeoutSignal(API_LATENCY_BUDGET_MS.quote),
       API_LATENCY_BUDGET_MS.quote,
-      'interactive',
+      'low',
     );
     return Object.fromEntries((data?.d || []).map((quote: any) => [
       quote.n || quote.v?.symbol,
@@ -337,7 +336,7 @@ export class FyersAdapter extends BaseBroker {
         },
         timeoutSignal(API_LATENCY_BUDGET_MS.history),
         API_LATENCY_BUDGET_MS.history,
-        'interactive',
+        'high',
       );
       for (const candle of Array.isArray(payload?.candles) ? payload.candles : []) {
         const timestampMs = Number(candle?.[0]) * 1000;
@@ -383,7 +382,7 @@ export class FyersAdapter extends BaseBroker {
       params,
       timeoutSignal(API_LATENCY_BUDGET_MS.depth),
       API_LATENCY_BUDGET_MS.depth,
-      'interactive',
+      'high',
     );
 
     const data = payload?.data || {};

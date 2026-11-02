@@ -2,6 +2,7 @@ import { withBrokerRequestGate } from '../../brokers/BrokerRequestGate.js';
 import {
   DEFAULT_FYERS_CAPABILITIES,
   resolveFyersAdmissionBudget,
+  toFyersAdmissionPriority,
   type FyersApiCategory,
   type FyersCapabilities,
   type FyersRequestPriority,
@@ -111,7 +112,7 @@ export class FyersApiClient {
     params: Record<string, string | number | undefined>,
     signal?: AbortSignal,
     timeoutMs: number = API_LATENCY_BUDGET_MS.quote,
-    priority: FyersRequestPriority = 'normal',
+    priority: FyersRequestPriority = 'medium',
   ): Promise<T> {
     return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'data', priority);
   }
@@ -121,7 +122,7 @@ export class FyersApiClient {
     params: Record<string, string | number | undefined> = {},
     signal?: AbortSignal,
     timeoutMs: number = API_LATENCY_BUDGET_MS.account,
-    priority: FyersRequestPriority = 'interactive',
+    priority: FyersRequestPriority = 'high',
   ): Promise<T> {
     return this.request<T>(API_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'user-info', priority);
   }
@@ -132,7 +133,7 @@ export class FyersApiClient {
     signal?: AbortSignal,
     timeoutMs: number = API_LATENCY_BUDGET_MS.order,
     category: FyersApiCategory = 'transactions',
-    priority: FyersRequestPriority = 'interactive',
+    priority: FyersRequestPriority = 'critical',
   ): Promise<T> {
     return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs, category, priority);
   }
@@ -141,7 +142,7 @@ export class FyersApiClient {
   apiRequest<T = unknown>(path: string, options: FyersApiRequestOptions = {}): Promise<T> {
     const method = String(options.method || 'GET').toUpperCase();
     const category = options.category || (method === 'GET' ? 'user-info' : 'transactions');
-    const priority = options.priority || (category === 'transactions' ? 'interactive' : 'normal');
+    const priority = options.priority || (category === 'transactions' ? 'critical' : 'high');
     const timeoutMs = options.timeoutMs ?? (category === 'transactions' ? API_LATENCY_BUDGET_MS.order : API_LATENCY_BUDGET_MS.account);
     return this.request<T>(API_BASE, path, options.params || {}, options.signal, method, options.body, timeoutMs, category, priority);
   }
@@ -262,7 +263,7 @@ export class FyersApiClient {
       minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
       maxPerMinute: budget.requestsPerMinute,
       maxPerDay: budget.requestsPerDay,
-      priority,
+      priority: toFyersAdmissionPriority(priority),
     });
   }
 }

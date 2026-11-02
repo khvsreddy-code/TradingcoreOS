@@ -5,7 +5,17 @@
 export type FyersApiPlan = 'standard' | 'prime';
 export type FyersCapabilitySource = 'user-override' | 'standard-default';
 export type FyersApiCategory = 'data' | 'user-info' | 'transactions';
-export type FyersRequestPriority = 'interactive' | 'normal' | 'background';
+export type FyersRequestPriority = 'critical' | 'high' | 'medium' | 'low' | 'lowest';
+export type FyersAdmissionPriority = 'interactive' | 'normal' | 'background';
+/** Map named workload classes into the shared, backwards-compatible three-band quota gate. */
+export function toFyersAdmissionPriority(priority: FyersRequestPriority): FyersAdmissionPriority {
+  switch (priority) {
+    case 'critical': case 'high': return 'interactive';
+    case 'medium': return 'normal';
+    case 'low': case 'lowest': return 'background';
+    default: return 'normal';
+  }
+}
 
 export type FyersApiRateLimits = Readonly<{
   requestsPerSecond: number;

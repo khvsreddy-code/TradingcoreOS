@@ -5,6 +5,7 @@ import {
   assertFyersQuoteBatch,
   FyersCapabilityError,
   resolveFyersAdmissionBudget,
+  toFyersAdmissionPriority,
 } from './server/fyers/core/FyersCapabilities.ts';
 import { clampFyersHistoryRange, FYERS_HISTORY_WINDOW_DAYS, fyersHistoryWindowFloorMs } from './server/fyers/core/FyersHistoryWindow.ts';
 
@@ -42,6 +43,11 @@ assert.deepEqual(prime.transactionApiRateLimits, { requestsPerSecond:10, request
 assert.deepEqual(resolveFyersAdmissionBudget(standard, 'data'), { category:'data', requestsPerSecond:4, requestsPerMinute:40, requestsPerDay:4_000, safetyMargin:0.2 });
 assert.deepEqual(resolveFyersAdmissionBudget(standard, 'user-info'), { category:'user-info', requestsPerSecond:8, requestsPerMinute:160, requestsPerDay:80_000, safetyMargin:0.2 });
 assert.deepEqual(resolveFyersAdmissionBudget(prime, 'transactions'), { category:'transactions', requestsPerSecond:8, requestsPerMinute:400, requestsPerDay:400_000, safetyMargin:0.2 });
+assert.equal(toFyersAdmissionPriority('critical'), 'interactive');
+assert.equal(toFyersAdmissionPriority('high'), 'interactive');
+assert.equal(toFyersAdmissionPriority('medium'), 'normal');
+assert.equal(toFyersAdmissionPriority('low'), 'background');
+assert.equal(toFyersAdmissionPriority('lowest'), 'background');
 
 assert.doesNotThrow(() => assertFyersQuoteBatch(Array.from({length:50},(_,i)=>String(i)),standard));
 assert.throws(
@@ -132,8 +138,8 @@ assert.match(historyDataRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/, 'the legacy 
 assert.match(historyDataRoute, /Math\.min\(2_000/, 'the direct history endpoint must enforce the per-request 2,000-bar ceiling');
 assert.match(historyDataRoute, /fetchFyersHistoryTarget\(session\.token, symbol, interval, limit, capabilities, session\.quotaIdentity\)/, 'legacy history must pass the resolved plan and broker-account quota identity');
 assert.match(legacyHistoryRoute, /rateLimitIdentity: string/, 'legacy history helper APIs require an explicit stable identity');
-assert.match(legacyHistoryRoute, /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'user-requested legacy history uses interactive admission priority');
-assert.match(read('./server/fyers/market/FyersMarketDataService.ts'), /API_LATENCY_BUDGET_MS\.history, 'interactive'/, 'the shared FYERS history service prioritizes visible chart requests');
+assert.match(legacyHistoryRoute, /API_LATENCY_BUDGET_MS\.history, 'high'/, 'user-requested legacy history receives high admission priority');
+assert.match(read('./server/fyers/market/FyersMarketDataService.ts'), /API_LATENCY_BUDGET_MS\.history, 'high'/, 'the shared FYERS history service prioritizes visible chart requests');
 assert.doesNotMatch(legacyHistoryRoute, /rateLimitIdentity\s*=\s*accessToken/, 'legacy history must never fall back to rotating access-token quota identity');
 assert.match(canonicalHistory, /client!\.dataGet<any>\('\/history'/, 'canonical history requests must use the capability-aware Data API client');
 assert.match(canonicalHistory, /fallbackQuoteSnapshot\(client!/, 'only initial empty history may fetch a quote snapshot');
@@ -144,10 +150,17 @@ assert.doesNotMatch(brokerAdapter,/Promise\.all\(ranges\.map/, 'legacy history p
 assert.match(brokerAdapter,/if \(byTimestamp\.size >= requestedLimit\) break/, 'legacy history stops once the requested newest-bar target is met');
 assert.match(brokerAdapter,/FYERS_SECONDS_DATA_REQUIRES_PRIME/,'legacy adapter must reject Standard seconds-data requests');
 assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy option-chain requests must use the Data API gate');
+assert.match(brokerAdapter,/API_LATENCY_BUDGET_MS\.quote,[\s\S]*'low'/,'legacy watchlist quotes receive low priority');
+assert.match(brokerAdapter,/API_LATENCY_BUDGET_MS\.history,[\s\S]*'high'/,'legacy active chart history receives high priority');
 assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities, session\.userId\)/,'option-chain route must pass plan and stable user quota identity');
 assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must not be retried as provider errors');
 assert.match(apiClient,/Stable FYERS account or application identity is required for quota enforcement/,'FYERS clients reject absent stable broker/application quota identity');
 assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable broker-account quota bucket');
+assert.match(apiClient,/toFyersAdmissionPriority\(priority\)/,'five named workloads map into shared account-level admission bands');
+assert.match(apiClient,/isHistoricalEndpoint[\s\S]*clampFyersHistoryRange/,'regular and expired-F&O OHLCV requests share the seven-day history window');
+assert.match(quoteService,/expiredHistoricalData[\s\S]*'lowest'/,'expired derivative OHLCV uses the lowest request priority');
+assert.match(quoteService,/expiredExpiryDates[\s\S]*'lowest'/,'expired derivative expiry lookup uses the lowest request priority');
+assert.match(quoteService,/expiredUnderlyingSymbols[\s\S]*'lowest'/,'expired derivative contract lookup uses the lowest request priority');
 assert.match(quoteRoute,/new FyersApiClient\(EncryptionService\.decrypt\(session\.accessTokenEncrypted\), undefined, capabilities, resolveFyersQuotaIdentity\(session\.clientCode\)\)/,'quote routes share the FYERS account-level quota');
 assert.match(canonicalHistory,/resolveFyersQuotaIdentity\(session\.clientCode\)/,'canonical history resolves one shared FYERS account identity');
 assert.match(canonicalHistory,/withDistributedHistoricalPage/,'canonical history shares provider pages through distributed single-flight');
@@ -167,7 +180,7 @@ assert.match(requestGate,/lockDeadline = Date\.now\(\) \+ 3_000/,'a contention s
 assert.match(accountService,/apiRequest\('\/orders',[\s\S]*category: 'user-info'/,'read-only order book requests consume the User Info quota');
 assert.match(accountService,/apiRequest\('\/tradebook',[\s\S]*category: 'user-info'/,'read-only trade book requests consume the User Info quota');
 assert.match(brokerAdapter,/fyersFetch\('\/orders', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only order-book calls consume User Info quota');
-assert.match(brokerAdapter,/priority: 'interactive'/,'legacy account reads and order mutations receive interactive quota priority');
+assert.match(brokerAdapter,/priority: resolvedCategory === 'transactions' \? 'critical' : 'high'/,'legacy order mutations receive critical priority and account reads receive high priority');
 assert.match(brokerAdapter,/fyersFetch\('\/tradebook', accessToken, \{\}, rateLimitIdentity, 'user-info'\)/,'legacy read-only trade-book calls consume User Info quota');
 assert.match(accountService,/API_LATENCY_BUDGET_MS\.account, 'user-info'/,'margin calculation consumes the User Info quota');
 assert.match(legacyHistoryRoute,/datasetComplete: false/,'legacy history responses do not imply full dataset completeness');
