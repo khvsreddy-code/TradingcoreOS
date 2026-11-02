@@ -258,12 +258,33 @@ export class FyersApiClient {
     // account reads and transaction calls so they cannot each consume the full
     // documented account/API ceiling independently.
     const budgetKey = category === 'data' ? 'data' : 'account';
-    return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, {
+    const primaryAdmission = {
       budgetKey,
       minIntervalMs: Math.ceil(1000 / budget.requestsPerSecond),
       maxPerMinute: budget.requestsPerMinute,
       maxPerDay: budget.requestsPerDay,
       priority: toFyersAdmissionPriority(priority),
-    });
+    } as const;
+    if (priority !== 'lowest') {
+      return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, primaryAdmission);
+    }
+
+    // Historical/backfill work consumes both the shared background reserve and
+    // a smaller nested reserve. This makes "lowest" pause before watchlist work
+    // while keeping both counters atomic and account-scoped across app users.
+    const lowestReserve = {
+      budgetKey: `${budgetKey}:lowest`,
+      minIntervalMs: 0,
+      maxPerMinute: Math.max(1, Math.floor(budget.requestsPerMinute * 0.1)),
+      maxPerDay: Math.max(1, Math.floor(budget.requestsPerDay * 0.1)),
+      priority: 'background' as const,
+    };
+    return withBrokerRequestGate(
+      'fyers',
+      this.rateLimitIdentity,
+      admissionSignal => withBrokerRequestGate('fyers', this.rateLimitIdentity, task, admissionSignal, lowestReserve),
+      signal,
+      primaryAdmission,
+    );
   }
 }
