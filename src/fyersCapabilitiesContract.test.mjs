@@ -157,6 +157,7 @@ assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must n
 assert.match(apiClient,/Stable FYERS account or application identity is required for quota enforcement/,'FYERS clients reject absent stable broker/application quota identity');
 assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable broker-account quota bucket');
 assert.match(apiClient,/toFyersAdmissionPriority\(priority\)/,'five named workloads map into shared account-level admission bands');
+assert.match(apiClient,/const resolvedPriority = priority \\?\\? \\(category === 'transactions' \\? 'critical' : 'high'\\)/,'account-info POSTs stay high while transaction POSTs default to critical');
 assert.match(apiClient,/budgetKey: `\$\{budgetKey\}:lowest`[\s\S]*budget\.requestsPerMinute \* 0\.1[\s\S]*budget\.requestsPerDay \* 0\.1/,'lowest-priority backfill has a separate nested 10% account-wide reserve');
 assert.match(apiClient,/isHistoricalEndpoint[\s\S]*clampFyersHistoryRange/,'regular and expired-F&O OHLCV requests share the seven-day history window');
 assert.match(quoteService,/expiredHistoricalData[\s\S]*'lowest'/,'expired derivative OHLCV uses the lowest request priority');

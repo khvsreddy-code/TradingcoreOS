@@ -133,9 +133,10 @@ export class FyersApiClient {
     signal?: AbortSignal,
     timeoutMs: number = API_LATENCY_BUDGET_MS.order,
     category: FyersApiCategory = 'transactions',
-    priority: FyersRequestPriority = 'critical',
+    priority?: FyersRequestPriority,
   ): Promise<T> {
-    return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs, category, priority);
+    const resolvedPriority = priority ?? (category === 'transactions' ? 'critical' : 'high');
+    return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs, category, resolvedPriority);
   }
 
   /** Shared quota-aware API v3 boundary for legacy adapter verbs and account calls. */
