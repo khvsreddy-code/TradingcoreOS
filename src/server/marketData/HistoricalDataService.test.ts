@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { HISTORICAL_SOURCE_POLICY, getPreferredHistoryPageRange, historicalFallbackCacheTtlMs, historicalSourcePriority } from './HistoricalDataService';
+import { HISTORICAL_SOURCE_POLICY, getPreferredHistoryPageRange, historicalFallbackCacheTtlMs, historicalSourcePriority, normalizeHistoricalCandles, mergeStoredBars } from './HistoricalDataService';
 
 const sources = ['nse', 'investiny', 'fyers', 'tvdatafeed'] as const;
 const ordered = [...sources].sort((left, right) => historicalSourcePriority(right) - historicalSourcePriority(left));
@@ -8,6 +8,22 @@ assert.ok(historicalSourcePriority('fyers') > historicalSourcePriority('investin
 assert.ok(historicalSourcePriority('investiny') > historicalSourcePriority('nse'));
 assert.match(HISTORICAL_SOURCE_POLICY, /fyers-primary-7d\+investiny-2to5y-historical-backfill/);
 assert.ok(historicalSourcePriority('fyers') > historicalSourcePriority('tvdatafeed'));
+const collisionTimestamp = '2026-10-29T09:15:00.000Z';
+const olderInvestiny = normalizeHistoricalCandles([{ timestamp: collisionTimestamp, open: 100, high: 102, low: 99, close: 101, volume: 10 }], 'investiny', '5minute');
+const recentFyers = normalizeHistoricalCandles([{ timestamp: collisionTimestamp, open: 101, high: 103, low: 100, close: 102, volume: 12 }], 'fyers', '5minute');
+const handedOver = mergeStoredBars(olderInvestiny, recentFyers);
+assert.equal(handedOver.length, 1, 'provider collisions collapse to one canonical timestamp');
+assert.equal(handedOver[0]?.source, 'fyers', 'FYERS deterministically wins timestamp collisions in the recent window');
+assert.equal(handedOver[0]?.close, 102, 'selected provider controls OHLC values for the shared timestamp');
+assert.equal(normalizeHistoricalCandles([{ timestamp: collisionTimestamp, liveSeed: true, open: 100, high: 102, low: 99, close: 101, volume: 10 }], 'fyers').length, 0, 'quote-only rows never enter OHLCV normalization');
+const provenance = normalizeHistoricalCandles([{ timestamp: collisionTimestamp, exchangeTimestamp: collisionTimestamp, ingestedAt: '2026-10-29T09:15:00.250Z', timeframe: '5minute', open: 100, high: 102, low: 99, close: 101, volume: 10 }], 'fyers', '5minute');
+assert.equal(provenance[0]?.source, 'fyers');
+assert.equal(provenance[0]?.exchangeTimestamp, collisionTimestamp);
+assert.equal(provenance[0]?.ingestedAt, '2026-10-29T09:15:00.250Z');
+assert.equal(provenance[0]?.timeframe, '5minute');
+const newlyIngested = normalizeHistoricalCandles([[1793265300, 100, 102, 99, 101, 10]], 'investiny', '5minute');
+assert.ok(Date.parse(String(newlyIngested[0]?.ingestedAt)) > 0, 'new provider rows receive server-ingest time');
+assert.equal(newlyIngested[0]?.exchangeTimestamp, collisionTimestamp);
 
 const now = 1_000_000;
 const anchor = Date.UTC(2026, 9, 29, 12);

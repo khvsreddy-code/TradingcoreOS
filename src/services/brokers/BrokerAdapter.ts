@@ -82,6 +82,12 @@ export interface HistoricalCandle {
   volume: number;
   /** Source of this validated bar. Unknown for legacy/caller-supplied rows. */
   source?: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'unknown';
+  /** Exchange/provider event time in epoch milliseconds or ISO-8601. */
+  exchangeTimestamp?: string | number;
+  /** Time the normalized provider row entered the canonical history pipeline. */
+  ingestedAt?: string | number;
+  /** Canonical normalized interval (for example 1minute or 5minute). */
+  timeframe?: string;
   /** Historical/confirmed rows are separate from developing/live quote updates. */
   phase?: 'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast';
   confirmed?: boolean;
@@ -130,8 +136,12 @@ export interface HistoricalCandleColumns {
   close: number[];
   volume: number[];
   timeUnit: 'milliseconds' | 'seconds';
-  /** Per-bar lineage sidecars; availableAt contains epoch milliseconds (NaN means unavailable). */
+  /** Per-bar lineage sidecars; timestamp arrays contain epoch milliseconds (NaN means unavailable). */
   source?: Array<'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'unknown'>;
+  exchangeTime?: number[];
+  ingestedAt?: number[];
+  /** One canonical interval for every row in this response. */
+  timeframe?: string;
   phase?: Array<'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast'>;
   confirmed?: boolean[];
   availableAt?: number[];

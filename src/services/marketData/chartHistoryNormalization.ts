@@ -19,6 +19,9 @@ export function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
       ...(row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? { phase: row.phase } : {}),
       ...(typeof row.confirmed === 'boolean' ? { confirmed: row.confirmed } : {}),
       ...(typeof row.availableAt === 'string' || typeof row.availableAt === 'number' ? { availableAt: row.availableAt } : {}),
+      ...(typeof row.exchangeTimestamp === 'string' || typeof row.exchangeTimestamp === 'number' ? { exchangeTimestamp: row.exchangeTimestamp } : {}),
+      ...(typeof row.ingestedAt === 'string' || typeof row.ingestedAt === 'number' ? { ingestedAt: row.ingestedAt } : {}),
+      ...(typeof row.timeframe === 'string' && row.timeframe.trim() ? { timeframe: row.timeframe } : {}),
       ...(typeof row.revision === 'number' && Number.isSafeInteger(row.revision) && row.revision >= 0 ? { revision: row.revision } : {}),
     });
   }
@@ -28,6 +31,7 @@ export function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
 export function columnarHistoryToCandles(columns: {
   time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds';
   source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number>;
+  exchangeTime?: ArrayLike<number>; ingestedAt?: ArrayLike<number>; timeframe?: string;
 }, limit = 5000): HistoricalCandle[] {
   const count = Math.min(columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length);
   const start = Math.max(0, count - Math.max(1, limit));
@@ -47,7 +51,11 @@ export function columnarHistoryToCandles(columns: {
     const confirmed = columns.confirmed?.[i];
     const availableAtRaw = columns.availableAt?.[i];
     const revisionRaw = columns.revision?.[i];
+    const exchangeTimeRaw = columns.exchangeTime?.[i];
+    const ingestedAtRaw = columns.ingestedAt?.[i];
     const availableAtMs = typeof availableAtRaw === 'number' ? availableAtRaw : Number.NaN;
+    const exchangeTimeMs = typeof exchangeTimeRaw === 'number' && Number.isFinite(exchangeTimeRaw) && exchangeTimeRaw > 0 ? exchangeTimeRaw : time;
+    const ingestedAtMs = typeof ingestedAtRaw === 'number' ? ingestedAtRaw : Number.NaN;
     const revision = typeof revisionRaw === 'number' ? revisionRaw : Number.NaN;
     out[written++] = {
       timestamp: new Date(time).toISOString(), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0,
@@ -55,6 +63,9 @@ export function columnarHistoryToCandles(columns: {
       ...(phase === 'historical' || phase === 'confirmed' || phase === 'developing' || phase === 'realtime' || phase === 'forecast' ? { phase } : {}),
       ...(typeof confirmed === 'boolean' ? { confirmed } : {}),
       ...(Number.isFinite(availableAtMs) && availableAtMs > 0 ? { availableAt: new Date(availableAtMs).toISOString() } : {}),
+      exchangeTimestamp: new Date(exchangeTimeMs).toISOString(),
+      ...(Number.isFinite(ingestedAtMs) && ingestedAtMs > 0 ? { ingestedAt: new Date(ingestedAtMs).toISOString() } : {}),
+      ...(typeof columns.timeframe === 'string' && columns.timeframe.trim() ? { timeframe: columns.timeframe } : {}),
       ...(Number.isSafeInteger(revision) && revision >= 0 ? { revision } : {}),
     };
   }

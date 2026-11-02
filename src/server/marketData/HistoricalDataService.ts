@@ -194,19 +194,23 @@ function parseTimestamp(value: unknown): number {
   const parsed = Date.parse(text);
   return Number.isFinite(parsed) ? parsed : NaN;
 }
-function rowParts(row: unknown): { time: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
-  if (Array.isArray(row) && row.length >= 5) return { time: row[0], open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] };
+function rowParts(row: unknown): { time: unknown; exchangeTime: unknown; ingestedAt: unknown; timeframe: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
+  if (Array.isArray(row) && row.length >= 5) return { time: row[0], exchangeTime: row[0], ingestedAt: undefined, timeframe: undefined, open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] };
   if (!row || typeof row !== 'object') return null;
   const v = row as Record<string, unknown>;
   if (v.liveSeed === true || v.isQuote === true) return null;
-  return { time: v.timestamp ?? v.time ?? v.datetime, open: v.open ?? v.Open, high: v.high ?? v.High, low: v.low ?? v.Low, close: v.close ?? v.Close, volume: v.volume ?? v.Volume ?? 0 };
+  return { time: v.timestamp ?? v.time ?? v.datetime,
+    exchangeTime: v.exchangeTimestamp ?? v.exchange_timestamp ?? v.exchange_time ?? v.timestamp ?? v.time ?? v.datetime,
+    ingestedAt: v.ingestedAt ?? v.ingestionTimestamp ?? v.receivedAt, timeframe: v.timeframe ?? v.interval,
+    open: v.open ?? v.Open, high: v.high ?? v.High, low: v.low ?? v.Low, close: v.close ?? v.Close, volume: v.volume ?? v.Volume ?? 0 };
 }
-function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[] {
+function normalizeRows(rows: unknown[], source: StoredBar['source'], timeframe?: string, assignIngestionTime = true): StoredBar[] {
   const byTime = new Map<number, StoredBar>();
+  const ingestionFallback = assignIngestionTime ? new Date().toISOString() : undefined;
   for (const raw of rows || []) {
     const row = rowParts(raw);
     if (!row) continue;
-    const timestampMs = parseTimestamp(row.time);
+    const timestampMs = parseTimestamp(row.exchangeTime ?? row.time);
     const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
     // Missing volume is valid for feeds that do not publish it; an explicitly
     // malformed volume is not. Never silently turn corrupt source data into a
@@ -217,21 +221,26 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
     const volume = parsedVolume;
     if (!Number.isFinite(timestampMs) || timestampMs <= 0 || ![open, high, low, close].every(Number.isFinite) ||
         volume < 0 || high < low || high < Math.max(open, close) || low > Math.min(open, close)) continue;
-    const bar: StoredBar = { timestamp: new Date(timestampMs).toISOString(), timestampMs, open, high, low, close, volume, source };
+    const exchangeTimestamp = new Date(timestampMs).toISOString();
+    const rawIngestedAt = parseTimestamp(row.ingestedAt);
+    const ingestedAt = Number.isFinite(rawIngestedAt) && rawIngestedAt > 0 ? new Date(rawIngestedAt).toISOString() : ingestionFallback;
+    const normalizedTimeframe = String(row.timeframe ?? timeframe ?? '').trim() || undefined;
+    const bar: StoredBar = { timestamp: exchangeTimestamp, exchangeTimestamp, timestampMs, open, high, low, close, volume, source,
+      ...(ingestedAt ? { ingestedAt } : {}), ...(normalizedTimeframe ? { timeframe: normalizedTimeframe } : {}) };
     const old = byTime.get(timestampMs);
     if (!old || historicalSourcePriority(source) >= historicalSourcePriority(old.source)) byTime.set(timestampMs, bar);
   }
   return [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 }
 /** Pure normalization hook used by server contracts and source adapters. */
-export function normalizeHistoricalCandles(rows: unknown[], source: StoredBar['source']): StoredBar[] {
-  return normalizeRows(rows, source);
+export function normalizeHistoricalCandles(rows: unknown[], source: StoredBar['source'], timeframe?: string): StoredBar[] {
+  return normalizeRows(rows, source, timeframe);
 }
 export function historicalSourcePriority(source: 'nse' | 'investiny' | 'fyers' | 'tvdatafeed'): number {
   // FYERS wins overlapping recent bars; Investiny contributes only older history.
   switch (source) { case 'fyers': return 4; case 'investiny': return 3; case 'nse': return 2; case 'tvdatafeed': return 1; default: return 0; }
 }
-function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
+export function mergeStoredBars(existing: readonly StoredBar[], incoming: readonly StoredBar[]): StoredBar[] {
   const byTime = new Map<number, StoredBar>();
   for (const bar of [...existing, ...incoming]) {
     const old = byTime.get(bar.timestampMs);
@@ -259,7 +268,7 @@ async function fetchProviderBars(
   try {
     const raw = await fetcher(mapping, timeframe, range);
     if (!Array.isArray(raw)) throw Object.assign(new Error(source + ' returned an invalid history envelope'), { code: 'INVALID_HISTORY_ENVELOPE' });
-    const bars = normalizeRows(raw, source).filter(bar => bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs);
+    const bars = normalizeRows(raw, source, timeframe).filter(bar => bar.timestampMs >= range.fromMs && bar.timestampMs <= range.toMs);
     if (!bars.length && raw.length === 0) return { bars: [], status: { status: 'empty', rawCount: 0, validatedCount: 0 } };
     if (!bars.length) throw Object.assign(new Error(source + ' returned no validated candles for the requested range'), { code: 'EMPTY_VALIDATED_HISTORY' });
     const health = await marketDataAutoFixer.recordSuccess(source, 'history', resource);
@@ -571,7 +580,7 @@ export class HistoricalDataService {
           const bars = (result.data.bars as unknown[]).map((row) => {
             if (!isRecord(row)) return null;
             const source = row.source === 'investiny' || row.source === 'fyers' ? row.source : 'tvdatafeed';
-            return normalizeRows([row], source)[0] || null;
+            return normalizeRows([row], source, timeframe, false)[0] || null;
           }).filter((bar): bar is StoredBar => bar !== null).slice(-HISTORICAL_MAX_BARS);
           const updatedAt = Date.parse(String(result.data.updated_at || ''));
           const expiresAt = Date.parse(String(result.data.expires_at || ''));
@@ -692,7 +701,7 @@ export class HistoricalDataService {
             const result = await fetchFyersRecent(mapping, pageRange);
             const raw = Array.isArray(result?.bars) ? result.bars : [];
             if (!quote && result?.quote) quote = result.quote;
-            const bars = normalizeRows(raw, 'fyers').filter(bar => bar.timestampMs >= fyersFloorMs && bar.timestampMs <= pageRange.toMs);
+            const bars = normalizeRows(raw, 'fyers', timeframe).filter(bar => bar.timestampMs >= fyersFloorMs && bar.timestampMs <= pageRange.toMs);
             for (const bar of bars) fyersByTime.set(bar.timestampMs, bar);
             fyersPages.push({ page: page + 1, fromMs: pageRange.fromMs, toMs: pageRange.toMs, rawCount: raw.length, validatedCount: bars.length });
             if (!bars.length) break;
@@ -843,7 +852,7 @@ export class HistoricalDataService {
                 };
                 const fetched = await request.fetchFyersRecent(mapping, boundedRecentRange);
                 pageSource = 'fyers';
-                pageBars = normalizeRows(fetched.bars || [], 'fyers').filter(bar =>
+                pageBars = normalizeRows(fetched.bars || [], 'fyers', timeframe).filter(bar =>
                   bar.timestampMs < beforeTimestamp &&
                   bar.timestampMs >= boundedRecentRange.fromMs &&
                   bar.timestampMs <= boundedRecentRange.toMs,

@@ -34,7 +34,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     if (!loaded.bars.length && beforeTimestamp === undefined) {
       return res.status(502).json({
         success: false,
-        error: 'No validated historical candles are available from the configured NSE, Investiny, FYERS, or compatible historical sources.',
+        error: 'No validated historical candles are available from recent FYERS data or the configured Investiny historical backfill source.',
         data: columnar ? historicalBarsToColumns([], loaded.metadata, loaded.quote) : [],
         metadata: loaded.metadata,
         quote: loaded.quote,
