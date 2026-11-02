@@ -195,7 +195,7 @@ function parseTimestamp(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 function rowParts(row: unknown): { time: unknown; exchangeTime: unknown; ingestedAt: unknown; timeframe: unknown; phase: unknown; confirmed: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
-  if (Array.isArray(row) && row.length >= 5) return { time: row[0], exchangeTime: row[0], ingestedAt: undefined, timeframe: undefined, open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] };
+  if (Array.isArray(row) && row.length >= 5) return { time: row[0], exchangeTime: row[0], ingestedAt: undefined, timeframe: undefined, phase: undefined, confirmed: undefined, open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] };
   if (!row || typeof row !== 'object') return null;
   const v = row as Record<string, unknown>;
   if (v.liveSeed === true || v.isQuote === true) return null;
