@@ -86,8 +86,9 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
   const calculationEngine=new RealtimeCalculationEngine();
   const visibleLogicalRangeRef:Ref<{from:number;to:number}|null>={current:null};
   let requestedIndicatorHistoryBars = 0;
+  let reportedIndicatorHistoryShortfall = false;
   const getRequiredIndicatorHistoryBars = () => requiredIndicatorHistoryBars(deps.indicatorsRef.current ?? []);
-  const hasRequiredIndicatorHistory = () => deps.chartDataPlane.isHistoryDepthSatisfied(getRequiredIndicatorHistoryBars());
+  const hasRequiredIndicatorHistory = (availableBars = 0) => availableBars >= getRequiredIndicatorHistoryBars() || deps.chartDataPlane.isHistoryDepthSatisfied(getRequiredIndicatorHistoryBars());
   const requestRequiredIndicatorHistory = () => {
     const required = getRequiredIndicatorHistoryBars();
     if (required <= requestedIndicatorHistoryBars) return;
@@ -190,12 +191,12 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         candleAppearanceRef:deps.appearanceRef,chartStore:deps.chartStore,brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,
         timeframe:deps.timeframe,chartMarketKey:chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey),computeIntervalMs:50,
         onLegacyIndicatorTick:(data,bucketChanged)=>{
-          if(!hasRequiredIndicatorHistory())return;
+          if(!hasRequiredIndicatorHistory(data.length))return;
           if(deps.indicatorsRef.current.some(x=>x.enabled&&!isIncrementalIndicatorSupported(x.kind)))chartIndicatorController.renderStudies(data,true);
           void bucketChanged;
         },
         onIndicatorWorker:(data,bucketChanged)=>{
-          if(!hasRequiredIndicatorHistory())return;
+          if(!hasRequiredIndicatorHistory(data.length))return;
           chartPerformanceTelemetry.recordIndicatorIncrementalUpdate(chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey));
           chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');
         },
@@ -248,11 +249,11 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         requestRequiredIndicatorHistory();
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
         try{
-          if (hasRequiredIndicatorHistory()) {
+          if (hasRequiredIndicatorHistory(data.length)) {
             chartIndicatorController.renderStudies(data);
             chartIndicatorController.requestIndicatorWorker(data);
           } else {
-            coreEventBus.emit('chart.telemetry',{chartId:deps.chartId.current,symbol:deps.resolvedInstrumentKey,timeframe:deps.timeframe,metric:'indicator_history_waiting',value:Math.max(0,getRequiredIndicatorHistoryBars()-data.length),timestamp:Date.now()});
+            // Keep the candle view responsive while required history is loading.
           }
         }catch(indicatorError){
           console.warn('[TradingCore] indicator render skipped',indicatorError);
@@ -268,8 +269,9 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         publishLifecycle('ready');
         if(deps.viewStateRef.current.showOI)void chartAnalyticsController.refreshOI();
 
-        if (deps.chartDataPlane.isOlderHistoryExhausted() && data.length < getRequiredIndicatorHistoryBars()) {
-          coreEventBus.emit('chart.telemetry',{chartId:deps.chartId.current,symbol:deps.resolvedInstrumentKey,timeframe:deps.timeframe,metric:'indicator_history_requirement_unmet',value:getRequiredIndicatorHistoryBars()-data.length,timestamp:Date.now()});
+        if (deps.chartDataPlane.isOlderHistoryExhausted() && data.length < getRequiredIndicatorHistoryBars() && !reportedIndicatorHistoryShortfall) {
+          reportedIndicatorHistoryShortfall = true;
+          console.warn('[TradingCore] Indicator history source exhausted before the declared lookback was satisfied.', { availableBars:data.length, requiredBars:getRequiredIndicatorHistoryBars(), symbol:deps.resolvedInstrumentKey, timeframe:deps.timeframe });
         }
         const visibleBars=Math.min(data.length,({'1m':1125,'3m':375,'5m':225,'15m':75,'30m':45,'1H':36,'1D':30} as Record<string,number>)[deps.timeframe]||60);
         try{c.timeScale().setVisibleLogicalRange({from:Math.max(0,data.length-visibleBars-.5),to:data.length-.5+8});}

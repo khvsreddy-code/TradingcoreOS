@@ -568,21 +568,25 @@ export class TcoVelaDataProvider implements DataProvider {
       const firstBars = await loadCanonicalBarsForChart(symbol, tcoTimeframe, firstLimit, range, opts?.signal);
       if (abort()) return [];
       if (firstBars.length) onBatch(firstBars);
-      if (requested > firstLimit) {
-        void loadCanonicalBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal)
-          .then(fullBars => { if (!abort() && fullBars.length) onBatch(fullBars); })
-          .catch(() => { /* keep the first paint and report canonical source errors */ });
-      }
-      return firstBars;
+      if (requested <= firstLimit) return firstBars;
+      const fullBars = await loadCanonicalBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
+      if (abort()) return [];
+      if (fullBars.length) onBatch(fullBars);
+      return fullBars.length ? fullBars : firstBars;
     }
     let brokerId: string;
     try {
       brokerId = await activeBrokerId();
     } catch {
-      const canonicalBars = await loadCanonicalBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
+      const firstLimit = Math.min(requested, 300);
+      const firstBars = await loadCanonicalBarsForChart(symbol, tcoTimeframe, firstLimit, range, opts?.signal);
       if (abort()) return [];
-      if (canonicalBars.length) onBatch(canonicalBars);
-      return canonicalBars;
+      if (firstBars.length) onBatch(firstBars);
+      if (requested <= firstLimit) return firstBars;
+      const fullBars = await loadCanonicalBarsForChart(symbol, tcoTimeframe, requested, range, opts?.signal);
+      if (abort()) return [];
+      if (fullBars.length) onBatch(fullBars);
+      return fullBars.length ? fullBars : firstBars;
     }
     if (opts?.signal?.aborted) return [];
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);

@@ -8,6 +8,7 @@ const contracts = [
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
   ['chart-history-normalization', ['src/services/marketData/chartHistoryNormalization.test.ts', true]],
+  ['chart-history-cold-start', ['src/services/marketData/chartHistoryColdStartContract.test.mjs', true]],
   ['stitch-workspace-wiring', ['src/stitchWorkspaceWiringContract.test.mjs', false]],
   ['yahoo-delayed-fallback', ['src/yahooDelayedFallbackContract.test.mjs', false]],
   ['shared-broker-coordination', ['src/sharedBrokerCoordinationContract.test.mjs', false]],
@@ -155,7 +156,7 @@ const contracts = [
   ['terminal-visual-density', ['src/terminalVisualDensityContract.test.mjs', false]],
   ['multi-chart-data-plane', ['src/chartMultiChartDataPlaneContract.test.mjs', false]],
   ['chart-history-demand', ['src/chartHistoryDemandContract.test.mjs', false]],
-  ['chart-history-cold-start', ['src/services/marketData/chartHistoryColdStartContract.test.mjs', true]],
+
   ['historical-data-source-policy', ['src/historicalDataSourceContract.test.mjs', false]],
   ['historical-data-source-runtime', ['src/historicalDataSourceRuntime.test.ts', true]],
   ['chart-history-indicator', ['src/chartHistoryIndicatorGraphV106Contract.test.mjs', false]],
