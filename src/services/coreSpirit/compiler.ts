@@ -64,6 +64,28 @@ export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
   return declaration.expression;
 }
 
+/**
+ * A normal emitted trading signal is not a privileged system-event subscription.
+ * Only non-signal event handlers raise the source authoring level; a signal handler
+ * with automation is elevated independently by its automation semantic nodes.
+ */
+function containsCoreSpiritSystemEventHandler(nodes: readonly CoreSpiritAstNode[]): boolean {
+  return nodes.some(node => {
+    switch (node.type) {
+      case 'onEvent':
+        return !/^signal\\s*\\(/i.test(node.eventName.trim()) ||
+          containsCoreSpiritSystemEventHandler(node.body);
+      case 'program':
+        return containsCoreSpiritSystemEventHandler(node.body);
+      case 'if':
+        return containsCoreSpiritSystemEventHandler(node.thenBranch) ||
+          containsCoreSpiritSystemEventHandler(node.elseBranch ?? []);
+      default:
+        return false;
+    }
+  });
+}
+
 function traceSmcCompilerStage(sourceId: string, stage: string): void {
   if (sourceId === 'luxalgo-smc-port-contract') console.log('SMC_COMPILER_TRACE', stage);
 }
@@ -472,7 +494,7 @@ export class CoreSpiritCompiler {
       const hasTensor = semanticContainers.includes('tensor') || semanticTypeNames.some(type => /^tensor(?:<|$)/i.test(type));
       const hasMultiSymbol = tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
       const hasMultiTimeframe = tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
-      const hasSystemEvent = semanticDependencyGraph.nodes.some(node => node.kind === 'event');
+      const hasSystemEvent = containsCoreSpiritSystemEventHandler(ast.body);
       // `requires ai.invoke` is a host-job capability declaration, not a callable
       // function in the per-candle runtime. It still affects authoring level and
       // must be included in the canonical compiled capability manifest.
