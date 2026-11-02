@@ -25,7 +25,7 @@ const converted = columnarHistoryToCandles({
   time: [seconds, seconds, Number.NaN, seconds + 300],
   open: [100, 100, 1, 101], high: [102, 102, 1, 104], low: [99, 99, 1, 100], close: [101, 101, 1, 103], volume: [10, 10, 1, 15],
   timeUnit: 'seconds', phase: ['historical', 'historical', 'historical', 'realtime'], confirmed: [true, true, true, false], revision: [1, 1, 1, 2],
-  exchangeTime: [seconds, seconds, Number.NaN, seconds + 300], ingestedAt: [seconds + 1000, seconds + 1000, Number.NaN, seconds + 301000], timeframe: '5minute',
+  exchangeTime: [seconds * 1000, seconds * 1000, Number.NaN, (seconds + 300) * 1000], ingestedAt: [seconds * 1000 + 1000, seconds * 1000 + 1000, Number.NaN, (seconds + 300) * 1000 + 1000], timeframe: '5minute',
 }, 5000);
 assert.equal(converted.length, 2, 'invalid timestamps and adjacent duplicate timestamps are dropped');
 assert.equal(converted[0]?.timestamp, '2026-10-24T10:00:00.000Z');
