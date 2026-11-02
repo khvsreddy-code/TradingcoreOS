@@ -601,7 +601,200 @@ try {
         comparedPixels: viewportPixelDiff.comparedPixels,
         changedRatio: viewportPixelDiff.changedRatio,
       };
-      const workerPerformance = evaluateJson(`(() => {
+
+      // Resize the actual Vela root element so the workspace and chart-cell
+      // ResizeObserver paths run; restore the exact inline sizing afterwards.
+      const resizeBeforeRegion = getLargestChartCanvasRegion();
+      assert(resizeBeforeRegion, 'Cannot exercise Vela resize: no chart canvas region was found.');
+      const resizeBeforePath = takeScreenshot('before-workspace-resize');
+      const resizeBeforeScreenshot = await screenshotBytes(resizeBeforePath);
+      const resizeSetup = evaluateJson(`(() => {
+        const root = document.querySelector('.vela-workspace');
+        if (!root) return { supported:false, reason:'Vela workspace root not found' };
+        const rect = root.getBoundingClientRect();
+        if (rect.width < 520 || rect.height < 360) {
+          return { supported:false, reason:'Workspace is too small for deterministic resize verification', width:rect.width, height:rect.height };
+        }
+        const originalWidth = root.style.width;
+        const originalHeight = root.style.height;
+        const targetWidth = Math.max(480, Math.floor(rect.width * 0.86));
+        const targetHeight = Math.max(320, Math.floor(rect.height * 0.86));
+        root.style.width = targetWidth + 'px';
+        root.style.height = targetHeight + 'px';
+        window.dispatchEvent(new Event('resize'));
+        const after = root.getBoundingClientRect();
+        return {
+          supported:true, originalWidth, originalHeight,
+          before:{width:rect.width,height:rect.height},
+          target:{width:targetWidth,height:targetHeight},
+          after:{width:after.width,height:after.height}
+        };
+      })()`);
+      assert(resizeSetup.supported,
+        'Vela workspace could not be resized for browser verification: ' + (resizeSetup.reason || 'unknown reason'));
+      let resizeAfterRegion = null;
+      let resizePixelDiff = null;
+      let resizeAfterRoot = null;
+      try {
+        await pause(450);
+        resizeAfterRegion = getLargestChartCanvasRegion();
+        assert(resizeAfterRegion, 'Vela chart canvas disappeared after workspace resize.');
+        resizeAfterRoot = evaluateJson(`(() => {
+          const root = document.querySelector('.vela-workspace');
+          if (!root) return null;
+          const rect = root.getBoundingClientRect();
+          return {width:rect.width,height:rect.height};
+        })()`);
+        assert(resizeAfterRoot &&
+          (Math.abs(resizeAfterRoot.width - resizeSetup.before.width) > 40 ||
+           Math.abs(resizeAfterRoot.height - resizeSetup.before.height) > 30),
+          'Changing the workspace container size did not propagate to the Vela layout.');
+        const resizeAfterPath = takeScreenshot('after-workspace-resize');
+        const resizeAfterScreenshot = await screenshotBytes(resizeAfterPath);
+        resizePixelDiff = countChartPixelDiff(
+          resizeBeforeScreenshot, resizeAfterScreenshot, resizeBeforeRegion, resizeAfterRegion,
+        );
+        assert(resizePixelDiff.passed,
+          'Vela chart pixels did not respond to the real workspace resize: ' +
+          resizePixelDiff.changedPixels + '/' + resizePixelDiff.comparedPixels + '.');
+      } finally {
+        evaluate(`(() => {
+          const root = document.querySelector('.vela-workspace');
+          if (root) {
+            root.style.width = ${JSON.stringify(resizeSetup.originalWidth)};
+            root.style.height = ${JSON.stringify(resizeSetup.originalHeight)};
+          }
+          window.dispatchEvent(new Event('resize'));
+          return true;
+        })()`);
+        await pause(250);
+      }
+      const resizeVerification = {
+        before: resizeSetup.before,
+        constrained: resizeAfterRoot,
+        changedPixels: resizePixelDiff?.changedPixels ?? 0,
+        comparedPixels: resizePixelDiff?.comparedPixels ?? 0,
+        changedRatio: resizePixelDiff?.changedRatio ?? 0,
+        passed: Boolean(resizePixelDiff?.passed),
+      };
+
+      // Add a real native RSI, move it into a fresh study pane, prove the pane
+      // is rendered, then remove the test indicator so the workspace is clean.
+      const paneSetup = evaluateJson(`(() => {
+        const workspace = window.__TCO_VELA__?.workspace;
+        const cell = workspace?.active;
+        const chart = cell?.chart;
+        if (!workspace || !cell || !chart || !chart.panes?.supported ||
+            typeof chart.addNativeIndicatorAsync !== 'function') {
+          return {supported:false, reason:'Active Vela cell does not expose native pane management'};
+        }
+        const before = chart.panes.list();
+        window.__TCO_SMC_MULTIPANE_STATE__ = {status:'pending', indicatorId:null, error:null};
+        window.__TCO_SMC_MULTIPANE_HANDLE__ = null;
+        chart.addNativeIndicatorAsync('rsi').then(handle => {
+          try {
+            handle.moveTo({newPane:true});
+            window.__TCO_SMC_MULTIPANE_HANDLE__ = handle;
+            window.__TCO_SMC_MULTIPANE_STATE__ = {status:'ready', indicatorId:handle.id, error:null};
+          } catch (error) {
+            try { handle.remove(); } catch {}
+            window.__TCO_SMC_MULTIPANE_STATE__ = {status:'error', indicatorId:null, error:String(error)};
+          }
+        }).catch(error => {
+          window.__TCO_SMC_MULTIPANE_STATE__ = {status:'error', indicatorId:null, error:String(error)};
+        });
+        return {
+          supported:true,
+          cellId:cell.id,
+          beforePaneCount:before.length,
+          beforePanes:before.map(pane => ({id:pane.id,kind:pane.kind,indicatorCount:pane.indicators.length}))
+        };
+      })()`);
+      assert(paneSetup.supported,
+        'Vela native pane management is unavailable: ' + (paneSetup.reason || 'unknown reason'));
+      let paneState = null;
+      const paneDeadline = Date.now() + 8_000;
+      while (Date.now() < paneDeadline) {
+        paneState = evaluateJson(`(() => {
+          const workspace = window.__TCO_VELA__?.workspace;
+          const state = window.__TCO_SMC_MULTIPANE_STATE__;
+          if (!workspace || !state) return {status:'missing'};
+          const chart = workspace.active.chart;
+          const panes = chart.panes.list();
+          const studyPane = state.indicatorId
+            ? panes.find(pane => pane.indicators.some(indicator => indicator.id === state.indicatorId))
+            : null;
+          return {
+            status:state.status, error:state.error, indicatorId:state.indicatorId,
+            paneCount:panes.length,
+            studyPane:studyPane ? {
+              id:studyPane.id,kind:studyPane.kind,order:studyPane.order,
+              indicatorCount:studyPane.indicators.length
+            } : null,
+            cellRect:(() => {
+              const rect=workspace.active.host.getBoundingClientRect();
+              return {width:rect.width,height:rect.height};
+            })()
+          };
+        })()`);
+        if (paneState.status === 'ready' || paneState.status === 'error') break;
+        await pause(150);
+      }
+      assert(paneState?.status === 'ready',
+        'Native RSI could not be added for multi-pane verification: ' + (paneState?.error || paneState?.status || 'timeout'));
+      assert(paneState.studyPane && paneState.studyPane.kind === 'study',
+        'RSI must be attached to a real Vela study pane: ' + JSON.stringify(paneState));
+      assert(paneState.paneCount > paneSetup.beforePaneCount,
+        'Moving RSI into a new pane must increase Vela pane count.');
+      assert(paneState.cellRect.width > 160 && paneState.cellRect.height > 160,
+        'Vela cell must retain usable geometry while the study pane is rendered.');
+      const paneBeforeRegion = getLargestChartCanvasRegion();
+      assert(paneBeforeRegion, 'Cannot measure Vela plot before adding the study pane.');
+      const paneBeforePath = takeScreenshot('before-study-pane');
+      const paneBeforeScreenshot = await screenshotBytes(paneBeforePath);
+      await pause(250);
+      const paneAfterRegion = getLargestChartCanvasRegion();
+      assert(paneAfterRegion, 'Vela chart canvas disappeared after adding a study pane.');
+      const paneAfterPath = takeScreenshot('after-study-pane');
+      const paneAfterScreenshot = await screenshotBytes(paneAfterPath);
+      const panePixelDiff = countChartPixelDiff(
+        paneBeforeScreenshot, paneAfterScreenshot, paneBeforeRegion, paneAfterRegion,
+      );
+      assert(panePixelDiff.passed,
+        'The new study pane did not change visible chart pixels: ' +
+        panePixelDiff.changedPixels + '/' + panePixelDiff.comparedPixels + '.');
+      let paneCleanup = {removed:false, remainingPaneCount:null};
+      try {
+        evaluate(`(() => {
+          const handle = window.__TCO_SMC_MULTIPANE_HANDLE__;
+          try { handle?.remove(); } catch {}
+          window.__TCO_SMC_MULTIPANE_HANDLE__ = null;
+          return true;
+        })()`);
+        await pause(250);
+        paneCleanup = evaluateJson(`(() => {
+          const chart = window.__TCO_VELA__?.workspace?.active?.chart;
+          if (!chart) return {removed:false,remainingPaneCount:null};
+          const panes = chart.panes.list();
+          const leaked = panes.some(pane => pane.indicators.some(indicator => indicator.id === ${JSON.stringify(paneState.indicatorId)}));
+          return {removed:!leaked,remainingPaneCount:panes.length};
+        })()`);
+      } finally {
+        evaluate(`(() => { window.__TCO_SMC_MULTIPANE_STATE__ = null; window.__TCO_SMC_MULTIPANE_HANDLE__ = null; return true; })()`);
+      }
+      assert(paneCleanup.removed,
+        'Temporary RSI must be removed cleanly after multi-pane rendering verification.');
+      const multiPaneRendering = {
+        cellId:paneSetup.cellId,
+        beforePaneCount:paneSetup.beforePaneCount,
+        afterPaneCount:paneState.paneCount,
+        studyPane:paneState.studyPane,
+        cellRect:paneState.cellRect,
+        pixelDiff:{changedPixels:panePixelDiff.changedPixels,comparedPixels:panePixelDiff.comparedPixels,changedRatio:panePixelDiff.changedRatio},
+        cleanup:paneCleanup,
+      };
+
+      const workerPerformance = evaluateJson(``(() => {
         const samples = Array.isArray(window.__TCO_SMC_WORKER_METRICS__) ? window.__TCO_SMC_WORKER_METRICS__ : [];
         const quantile = (values, p) => {
           const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
@@ -708,6 +901,8 @@ try {
           threshold: viewportPixelDiff.threshold,
         },
         viewportInteraction,
+        resizeVerification,
+        multiPaneRendering,
         recompileIdempotency,
       };
       // Reload after the successful chart commit and confirm that the source
