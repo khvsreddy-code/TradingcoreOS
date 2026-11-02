@@ -708,7 +708,7 @@ export class ChartDataPlane {
   private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds'; source?: ArrayLike<string>; phase?: ArrayLike<string>; confirmed?: ArrayLike<boolean>; availableAt?: ArrayLike<number>; revision?: ArrayLike<number> }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
     const startedAt = globalThis.performance?.now?.() ?? Date.now();
     const previousRevision = this.state.revision;
-    const candlesForCache = columnarHistoryToCandles(columns, Math.min(2_000, requestedLimit));
+    const candlesForCache = columnarHistoryToCandles(columns, Math.min(MAX_HISTORY_CANDLES, requestedLimit));
     if (!candlesForCache.length) return [];
     const retainedForCache = candlesForCache.slice(-MAX_HISTORY_CANDLES);
 
@@ -795,7 +795,7 @@ export class ChartDataPlane {
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
-    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(MAX_HISTORY_CANDLES, Math.floor(Number(limitOverride)))) : baseLimit;
     const inFlight = this.state.historyPromise;
     if (inFlight) {
       const inFlightLimit = this.state.historyPromiseLimit ?? baseLimit;
@@ -896,7 +896,7 @@ export class ChartDataPlane {
   private async ensureHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
-    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(2_000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(MAX_HISTORY_CANDLES, Math.floor(Number(limitOverride)))) : baseLimit;
     const inFlight = this.state.historyPromise;
     if (inFlight) {
       const inFlightLimit = this.state.historyPromiseLimit ?? baseLimit;
@@ -1011,7 +1011,7 @@ export class ChartDataPlane {
   async ensureHistoryDepth(requiredBars: number): Promise<number> {
     const target = Math.max(initialHistoryCandles(this.timeframe),
       Math.min(MAX_HISTORY_CANDLES, Math.ceil(Number(requiredBars) || 0)));
-    await this.ensureReadyHistory(Math.min(2_000, target));
+    await this.ensureReadyHistory(Math.min(MAX_HISTORY_CANDLES, target));
     let available = this.retainedHistoryCount();
     let pages = 0;
     const maxPages = Math.min(192, Math.ceil(Math.max(0, target - available) / 250) + 4);
