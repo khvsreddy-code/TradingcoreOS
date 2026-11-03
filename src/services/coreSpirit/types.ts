@@ -7,6 +7,9 @@ import type { CoreSpiritVisualGeometry, CoreSpiritVisualPlacement, CoreSpiritVis
 export type HistoricalCandle = CoreSpiritMarketBar;
 
 export type CoreSpiritValue = number | boolean | string | null;
+
+/** Authoritative lifecycle phase for one bar evaluation. */
+export type CoreSpiritBarPhase = 'historical' | 'forming' | 'confirmed' | 'correction' | 'replay';
 export type CoreSpiritTrade = Readonly<{
   timestamp:number;
   price:number;
@@ -56,6 +59,7 @@ export type CoreSpiritBarState = {
   isLast: boolean;
   isRealtime: boolean;
   isConfirmed: boolean;
+  barPhase?: CoreSpiritBarPhase;
   revision: number;
   symbol?: string;
   timeframe?: string;
@@ -280,6 +284,7 @@ export type CoreSpiritExecutionFrame = {
   mode: CoreSpiritExecutionMode;
   isRealtime: boolean;
   isConfirmed: boolean;
+  barPhase?: CoreSpiritBarPhase;
   isNewBar: boolean;
   revision: number;
   isFirst: boolean;
