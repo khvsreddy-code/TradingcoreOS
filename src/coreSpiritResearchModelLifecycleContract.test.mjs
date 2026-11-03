@@ -123,6 +123,6 @@ assert.match(replayWorker, /suppressExternalEffects:true/);
 assert.match(replayWorker, /executeIrReadOnly/);
 assert.match(replayWorker, /outputChecksum:coreSpiritChecksum\(outputs\)/);
 assert.match(docs, /It is not a tunable seed for this HMM backend/);
-assert.match(docs, /Posterior confidence is \\*\\*not\\*\\* a measure of trading accuracy/);
+assert.match(docs, /Posterior confidence is \*\*not\*\* a measure of trading accuracy/);
 assert.match(docs, /out-of-sample trade outcomes/);
 console.log('CORESPIRIT_MODEL_PROVENANCE_AND_RELEASE_OK');
