@@ -141,7 +141,10 @@ function inferNodeLookback(ins: CoreSpiritIrInstruction, instructions: readonly 
     const length = Math.max(0, Math.floor(constantValueForInstruction(instructions, ins.args[1]) ?? 0));
     if (/^(sma|mean|sum|highest|lowest|stdev|wma|median|variance|zscore|normalize|persistence|rising|falling)$/.test(ins.name)) return Math.max(0, length - 1);
   }
-  return stateful ? Number.POSITIVE_INFINITY : 0;
+  // JSON-safe semantic-graph sentinel: -1 means a stateful node has
+  // unbounded lookback. Do not put Infinity in compiled IR; artifacts and
+  // worker payloads must remain portable JSON data.
+  return stateful ? -1 : 0;
 }
 
 function instructionName(ins: CoreSpiritIrInstruction): string | undefined {
