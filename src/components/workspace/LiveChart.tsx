@@ -123,7 +123,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const [oiAnalytics,setOiAnalytics]=useState<OIChartAnalytics|null>(null);
   const [analytics,setAnalytics]=useState<ChartAnalytics|null>(null);
 
-  useEffect(()=>{const refresh=()=>{const tick=latestTick.current;setMarketHealth(classifyMarketDataHealth({source:tick?.source,lastUpdateAt:tick?.brokerTimestamp??tick?.timestamp??tick?.lastTradeTimestamp,receivedAt:tick?.receivedAtEpoch??tick?.receivedAt,providerConnected:tick?.source?(tick.source==='fyers'||tick.source==='upstox'):undefined,expectedIntervalMs:5_000}));};refresh();const timer=window.setInterval(refresh,1_000);return()=>window.clearInterval(timer);},[resolvedInstrumentKey]);
+  useEffect(()=>{const refresh=()=>{const tick=latestTick.current;setMarketHealth(classifyMarketDataHealth({source:tick?.source,lastUpdateAt:tick?.brokerTimestamp??tick?.timestamp??tick?.lastTradeTimestamp,receivedAt:tick?.receivedAtEpoch??tick?.receivedAt,providerConnected:tick?.source==='fyers'||tick?.source==='upstox'?true:undefined,expectedIntervalMs:5_000}));};refresh();const timer=window.setInterval(refresh,1_000);return()=>window.clearInterval(timer);},[resolvedInstrumentKey]);
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
