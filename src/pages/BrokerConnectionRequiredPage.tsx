@@ -22,10 +22,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { BROKERS_CONFIG, BrokerItem } from '../constants/brokers';
-import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
-import { BrokerOAuthService } from '../services/oauth/BrokerOAuthService';
-import { BROKER_OAUTH_CHANNEL, PopupManager } from '../services/oauth/PopupManager';
-import { useAuth } from '../auth/hooks/useAuth';
+import { BROKER_OAUTH_CHANNEL } from '../services/oauth/PopupManager';
 
 interface BrokerConnectionRequiredPageProps {
   onBrokerConnected: () => void;
@@ -45,8 +42,9 @@ interface VerificationCheck {
 export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPageProps> = ({
   onBrokerConnected,
   onBack,
+  userEmail,
+  onLogout,
 }) => {
-  const { user, logout } = useAuth();
   const [currentStep, setCurrentStep] = useState<SetupStep>('choose');
   const [selectedBroker, setSelectedBroker] = useState<BrokerItem | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -70,9 +68,12 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
     oauthCompletionInFlightRef.current = true;
     setIsConnecting(true);
     setError(null);
-    PopupManager.closePopup();
-
     try {
+      const [{ tradingCoreRuntime }, { PopupManager }] = await Promise.all([
+        import('../services/runtime/TradingCoreRuntime'),
+        import('../services/oauth/PopupManager'),
+      ]);
+      PopupManager.closePopup();
       await tradingCoreRuntime.restoreBrokerConnections();
       const connected = tradingCoreRuntime.getAllConnections().some((connection) =>
         connection.brokerId.toLowerCase() === normalizedBrokerId
@@ -107,8 +108,8 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
   const [verificationProgress, setVerificationProgress] = useState(0);
 
   // User Display Name
-  const userDisplayName = user?.email
-    ? user.email.split('@')[0]
+  const userDisplayName = userEmail
+    ? userEmail.split('@')[0]
     : 'Trader';
 
   // Run Animated Verification Sequence when in 'verifying' step
@@ -189,6 +190,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
       if (oauthCompletionInFlightRef.current) return;
 
       try {
+        const { tradingCoreRuntime } = await import('../services/runtime/TradingCoreRuntime');
         await tradingCoreRuntime.restoreBrokerConnections();
         const connected = tradingCoreRuntime.getAllConnections().some((connection) =>
           connection.brokerId.toLowerCase() === brokerId
@@ -226,7 +228,9 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
     setError(null);
 
     try {
-      // Initiate OAuth authorization using BrokerOAuthService & PopupManager
+      // Keep the route's first paint independent from the broker runtime and
+      // OAuth graph. Load the heavier execution modules only after a click.
+      const { BrokerOAuthService } = await import('../services/oauth/BrokerOAuthService');
       const initResult = await BrokerOAuthService.initiateOAuth(broker.id);
       if (!initResult.success) {
         setError(initResult.error || 'Failed to launch broker OAuth window.');
@@ -286,14 +290,14 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
           </span>
         </div>
 
-        {user && (
+        {userEmail && (
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block font-mono text-xs">
               <p className="text-slate-400">User</p>
-              <p className="font-medium text-slate-200">{user.email}</p>
+              <p className="font-medium text-slate-200">{userEmail}</p>
             </div>
             <button
-              onClick={() => logout()}
+              onClick={() => onLogout()}
               className="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-xs text-slate-300 hover:text-white transition flex items-center gap-1.5 border border-slate-800"
               title="Sign Out"
             >
