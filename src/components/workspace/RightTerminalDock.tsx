@@ -250,6 +250,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   const newsLoading = Boolean(selectedItem && newsLoadingByKey[selectedItem.key]);
   const selectedTechnical = selectedItem ? technicalByKey[selectedItem.key] : undefined;
   const selectedTechnicalLoading = Boolean(selectedItem && technicalLoadingByKey[selectedItem.key]);
+  const selectedHealth = classifyMarketDataHealth({ source: selectedTick?.source, lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp, receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt, providerConnected: selectedTick?.source ? selectedTick.source === 'fyers' : undefined, expectedIntervalMs: 5_000 });
 
   const groups = useMemo(() => {
     const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
@@ -310,7 +311,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       <div className="tct-ticker-top"><div className="tct-ticker-ident"><span className="tct-wl-badge large">{(selectedItem.short || selectedItem.label).slice(0, 3).toUpperCase()}</span><div><b>{selectedItem.short || selectedItem.label}</b><small>{selectedItem.label} · {selectedItem.type || 'Instrument'}</small></div></div></div>
       <div className="tct-ticker-price">{formatPrice(selectedTick?.ltp)} <span>LAST</span></div>
       <div className={`tct-ticker-change ${(selectedTick?.changePercent ?? selectedTick?.change ?? 0) >= 0 ? 'tct-wl-up' : 'tct-wl-down'}`}>{selectedTick?.change == null ? '—' : `${selectedTick.change >= 0 ? '+' : ''}${formatPrice(selectedTick.change)}`} <b>{selectedTick?.changePercent == null ? '—' : `${selectedTick.changePercent >= 0 ? '+' : ''}${Number(selectedTick.changePercent).toFixed(2)}%`}</b></div>
-      <div className="tct-market-state"><span className="tct-state-dot"/> Market data live <small>{selectedTick?.receivedAt ? new Date(selectedTick.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</small></div>
+      <div className={`tct-market-state tct-wl-data-health-${selectedHealth.state}`} title={selectedHealth.reason}><span className="tct-state-dot"/> {selectedHealth.label} · {selectedHealth.source.toUpperCase()} <small>{selectedHealth.lastUpdateAt ? new Date(selectedHealth.lastUpdateAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</small></div>
       <div className={selectedTechnical ? `tct-ticker-technical tct-wl-tech-${selectedTechnical.trend.toLowerCase()}` : 'tct-ticker-technical'}>
         <div className="tct-ticker-technical-title"><b>TECHNICALS</b><span>{selectedTechnical?.trend.toUpperCase() || (selectedTechnicalLoading ? 'CALCULATING…' : 'UNAVAILABLE')}</span></div>
         {selectedTechnical && <div className="tct-ticker-technical-values">
