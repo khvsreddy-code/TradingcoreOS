@@ -210,7 +210,7 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
   {
     id: 'broker-route',
     apply: line => line.replace(
-      /^(\\s*)route\\s+order\\s+through\\s+broker\\s*\\(\\s*(["'])([^"']+)\\2\\s*\\)\\s*;?$/i,
+      /^(\s*)route\s+order\s+through\s+broker\s*\(\s*(["'])([^"']+)\2\s*\)\s*;?$/i,
       '$1automation.route("broker.$3")',
     ),
   },
