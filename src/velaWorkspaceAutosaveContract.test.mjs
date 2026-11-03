@@ -54,7 +54,7 @@ assert.match(chrome, /tco:workspace-appearance-changed/, 'appearance-only change
 assert.match(live, /addEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'appearance-only changes refresh the active named snapshot');
 assert.match(live, /removeEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'appearance autosave listeners are removed on workspace teardown');
 assert.match(chrome, /Tickers, intervals, chart type, pan\/zoom, indicators and their settings, drawings[\s\S]*panel\/layout choices and UI\/chart colors are saved/, 'the saved-workspace UI describes the complete restored trading configuration');
-assert.match(chrome, /Broker positions and orders refresh live from your broker and are never replayed from an old snapshot/, 'broker positions and orders must be refreshed live, not replayed from old data');
+assert.match(chrome, /Live broker positions and orders refresh from your broker after reload and are never replayed from an old snapshot/, 'broker positions and orders must be refreshed live, not replayed from old data');
 assert.match(chrome, /saveTcoVelaAppearance\(preferences\)/, 'workspace appearance changes are independently persisted');
 assert.match(chrome, /tco:workspace-appearance-changed/, 'UI-only appearance edits notify the active workspace autosave');
 assert.match(live, /window\.addEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'named workspace snapshots also autosave when only UI appearance changes');
