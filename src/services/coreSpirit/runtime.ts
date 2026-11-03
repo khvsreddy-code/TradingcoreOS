@@ -43,6 +43,9 @@ import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot, type Core
 import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandbox } from './capabilitySandbox';
 import { validateSynchronizedSnapshot } from './multiSymbolTimeframe';
 import type { CoreSpiritSessionWindow } from './sessionCalendar';
+import { CoreSpiritResourceGovernor, type CoreSpiritResourceBudget, CoreSpiritResourceLimitError } from './resourceGovernor';
+import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent } from './executionSemantics';
+import type { CoreSpiritBarPhase } from './types';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -70,6 +73,8 @@ export type CoreSpiritRuntimeOptions = {
   suppressExternalEffects?: boolean;
   /** Zero-copy numeric inputs for quant/ML feature adapters. */
   marketFrame?: () => CoreSpiritMarketFrame;
+  /** Per-script limits enforced inside the VM and host capability boundary. */
+  resourceBudget?: Partial<CoreSpiritResourceBudget>;
 };
 export type CoreSpiritKernelState =
   | { family:'fused'; state:CoreSpiritFusedSeriesCursor }
@@ -162,7 +167,7 @@ function componentSignatureForIr(ir: CoreSpiritIrProgram): string {
 }
 
 export type CoreSpiritRuntimeState = {
-  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
+  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; barPhase:CoreSpiritBarPhase; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
   workspaceState: { ui: CoreSpiritUiState; app: CoreSpiritVisualAppState; visuals: CoreSpiritDeclarativeVisualState };
 };
 export type CoreSpiritExecutionResult = { outputs: CoreSpiritObject[]; state: CoreSpiritRuntimeState; diagnostics: string[] };
@@ -230,7 +235,7 @@ export class CoreSpiritRuntime {
   private readonly maxOutputsPerBar: number;
   private readonly maxHistoryBars: number;
   private readonly executionContext: CoreSpiritExecutionContext;
-  private state: CoreSpiritRuntimeState = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:'', timeframe:'unknown', mode:'historical' }, workspaceState: { ui:{version:1,revision:0,panels:[]}, app:null, visuals:{version:1,revision:0,specs:[]} } };
+  private state: CoreSpiritRuntimeState = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, barPhase:'historical', revision:0, symbol:'', timeframe:'unknown', mode:'historical' }, workspaceState: { ui:{version:1,revision:0,panels:[]}, app:null, visuals:{version:1,revision:0,specs:[]} } };
   private compiledIr?: CoreSpiritIrProgram;
   private loadedProgramId?: string;
   private history: HistoricalCandle[] = [];
@@ -313,6 +318,7 @@ export class CoreSpiritRuntime {
   private readonly capabilityHost: CoreSpiritCapabilityHost;
   private readonly debugHost = new CoreSpiritDebugHost();
   private readonly profiler: CoreSpiritProfiler;
+  private readonly resourceGovernor: CoreSpiritResourceGovernor;
   private dirtyGraph?: CoreSpiritDirtyGraph;
   private lastDirtyPlan?: CoreSpiritDirtyExecutionPlan;
   private readonly columnarHistory = new CoreSpiritColumnarHistory();
@@ -325,6 +331,7 @@ export class CoreSpiritRuntime {
     this.dataResolver = options.dataResolver;
     this.marketFrameResolver = options.marketFrame;
     this.profiler = new CoreSpiritProfiler(options.profiler);
+    this.resourceGovernor = new CoreSpiritResourceGovernor(options.resourceBudget);
     this.modelOutputResolver = options.modelOutputResolver;
     this.modelPredictionResolver = options.modelPredictionResolver;
     this.modelTrainingMode = options.modelTrainingMode === 'research' ? 'research' : 'disabled';
@@ -340,15 +347,15 @@ export class CoreSpiritRuntime {
     this.executionTier = options.executionTier === 'reference' ? 'reference' : 'optimized';
     this.layer = options.layer || 'script';
     this.reactiveExecution = options.reactiveExecution !== false;
-    this.options = { symbol: options.symbol || '', timeframe: options.timeframe || 'unknown', sourceId: options.sourceId || 'coreSpirit', maxStepsPerBar: Math.max(100, options.maxStepsPerBar || 10000), timezone: options.timezone || 'Asia/Kolkata', stateHistoryLimit: Math.max(512, Math.floor(options.stateHistoryLimit || 2048)) };
+    this.options = { symbol: options.symbol || '', timeframe: options.timeframe || 'unknown', sourceId: options.sourceId || 'coreSpirit', maxStepsPerBar: Math.max(1, Math.min(this.resourceGovernor.budget.maxInstructionsPerRevision, Math.floor(options.maxStepsPerBar || 10000))), timezone: options.timezone || 'Asia/Kolkata', stateHistoryLimit: Math.max(512, Math.floor(options.stateHistoryLimit || 2048)) };
     this.timezone = this.options.timezone;
     this.abortSignal = options.abortSignal;
     this.stateHistoryLimit = this.options.stateHistoryLimit;
-    this.maxOutputsPerBar = Math.max(100, Math.floor(options.maxOutputsPerBar || 10000));
-    this.maxHistoryBars = Math.max(2048, Math.floor(options.maxHistoryBars || 60000));
+    this.maxOutputsPerBar = Math.max(1, Math.floor(options.maxOutputsPerBar || 10000));
+    this.maxHistoryBars = Math.max(1, Math.min(this.resourceGovernor.budget.maxLookbackBars, Math.floor(options.maxHistoryBars || 60000)));
     this.executionContext = createCoreSpiritExecutionContext({ mode: options.executionMode || 'historical', symbol: this.options.symbol, timeframe: this.options.timeframe, timezone: this.timezone, runId: options.runId, policy: options.executionPolicy, sessionCalendar: this.sessionCalendar });
     this.bus = bus;
-    this.outputCollector = new CoreSpiritOutputCollector(this.maxOutputsPerBar);
+    this.outputCollector = new CoreSpiritOutputCollector(this.maxOutputsPerBar, this.resourceGovernor);
     this.eventRouter = new CoreSpiritEventRouter(this.bus);
     this.capabilityHost = new CoreSpiritCapabilityHost(
       this.executionTarget,
@@ -359,6 +366,11 @@ export class CoreSpiritRuntime {
         binding: input.binding as { kind:string; locator:string } | undefined,
       }) ?? null,
       this.eventResolver,
+      {
+        onDataRequest: request => this.resourceGovernor.recordDataRequest(request),
+        onModelCall: () => this.resourceGovernor.recordModelCall(),
+        onResolvedValue: value => this.resourceGovernor.recordResolvedData(value),
+      },
     );
   }
 
