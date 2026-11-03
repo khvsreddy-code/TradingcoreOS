@@ -127,11 +127,6 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
         ],
     },
     {
-        id: 'price-action',
-        label: 'Price Action',
-        sections: [{ label: 'Price Action', types: PRICE_ACTION_TYPES }],
-    },
-    {
         id: 'patterns-waves-harmonics',
         label: msg('drawing.toolbar.group.patternsWavesHarmonics', 'Patterns'),
         sections: [
