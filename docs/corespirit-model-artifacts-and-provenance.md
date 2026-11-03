@@ -13,7 +13,7 @@ Immutable research artifact (source, IR, feature graph, safety manifest)
     ↓
 Immutable dataset snapshot (canonical hash + decision-time metadata)
     ↓
-Chronological train/holdout split
+Chronological holdout split (earlier training segment followed by later validation segment)
     ↓
 Background model fitting on the earlier segment
     ↓
