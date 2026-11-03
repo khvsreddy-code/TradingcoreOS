@@ -84,10 +84,12 @@ assert.equal(cancelled.ledger.some(e=>e.eventType==='fill'&&e.orderId==='cancel-
 
 const partial=runStrategySimulation({strategyId:'volume-limited',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
  actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{orderId:'partial-1',signalId:'partial-signal',symbol:'NSE:TEST',side:'buy',type:'limit',quantity:30,limitPrice:101}}],
- config:{...config,maxParticipationRate:0.1,defaultTimeInForceBars:2}});
+ config:{...config,maxParticipationRate:0.1,defaultTimeInForceBars:2,maxPositionQuantity:100}});
 assert.ok(partial.ledger.some(e=>e.eventType==='partial_fill'));
 assert.ok(partial.ledger.some(e=>e.eventType==='order_expired'));
-
+const expiredPartial = partial.ledger.find(e=>e.eventType==='order_expired'&&e.orderId==='partial-1');
+assert.ok(expiredPartial,'an unfilled remainder expires when the configured two eligible bars elapse');
+assert.equal(expiredPartial?.remainingQuantity,10,'TIF expiry preserves the unfilled remainder after two partial fills');
 const conflictBars=[bars[0]!,{...bars[1]!,low:98},...bars.slice(2)];
 const conflict=runStrategySimulation({strategyId:'bracket-conflict',sourceProgramChecksum:checksum,datasetId:'dataset-v1',
  datasets:[{symbol:'NSE:TEST',timeframe:'5m',bars:conflictBars}],
