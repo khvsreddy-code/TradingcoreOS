@@ -13,6 +13,12 @@ export type CoreSpiritResourceBudget = Readonly<{
   maxMultiSymbolRequestsPerRevision: number;
   maxMultiTimeframeRequestsPerRevision: number;
   maxExecutionTimeMs: number;
+  maxInstructionsPerRun: number;
+  maxVisualObjectsPerRun: number;
+  maxMemoryBytesPerRun: number;
+  maxDataRequestsPerRun: number;
+  maxModelCallsPerRun: number;
+  maxExecutionTimeMsPerRun: number;
 }>;
 
 export const CORE_SPIRIT_DEFAULT_RESOURCE_BUDGET: CoreSpiritResourceBudget = Object.freeze({
@@ -26,6 +32,12 @@ export const CORE_SPIRIT_DEFAULT_RESOURCE_BUDGET: CoreSpiritResourceBudget = Obj
   maxMultiSymbolRequestsPerRevision: 16,
   maxMultiTimeframeRequestsPerRevision: 16,
   maxExecutionTimeMs: 50,
+  maxInstructionsPerRun: 20_000_000,
+  maxVisualObjectsPerRun: 100_000,
+  maxMemoryBytesPerRun: 128 * 1024 * 1024,
+  maxDataRequestsPerRun: 10_000,
+  maxModelCallsPerRun: 500,
+  maxExecutionTimeMsPerRun: 30_000,
 });
 
 export type CoreSpiritResourceUsage = Readonly<{
@@ -97,17 +109,24 @@ const VISUAL_KINDS = new Set([
 export class CoreSpiritResourceGovernor {
   readonly budget: CoreSpiritResourceBudget;
   private startedAt = 0;
+  private executionStartedAt = 0;
   private barIndex = -1;
   private barPhase: CoreSpiritBarPhase = 'historical';
   private instructions = 0;
+  private runInstructions = 0;
   private visualObjects = 0;
+  private runVisualObjects = 0;
   private dataRequests = 0;
+  private runDataRequests = 0;
   private modelCalls = 0;
+  private runModelCalls = 0;
   private allocatedBytes = 0;
+  private runAllocatedBytes = 0;
   private activeDependencies = 0;
   private readonly symbols = new Set<string>();
   private readonly timeframes = new Set<string>();
   private readonly dependencies = new Set<string>();
+  private readonly runDependencies = new Set<string>();
 
   constructor(overrides: Partial<CoreSpiritResourceBudget> = {}, private readonly clock: () => number = () => {
     return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -115,6 +134,17 @@ export class CoreSpiritResourceGovernor {
     const merged = { ...CORE_SPIRIT_DEFAULT_RESOURCE_BUDGET, ...overrides };
     for (const [key, value] of Object.entries(merged)) positiveInteger(Number(value), key as keyof CoreSpiritResourceBudget);
     this.budget = Object.freeze(merged);
+  }
+
+  /** Start one whole script evaluation/replay; run-level caps survive per-bar resets. */
+  beginExecution(): void {
+    this.executionStartedAt = this.clock();
+    this.runInstructions = 0;
+    this.runVisualObjects = 0;
+    this.runDataRequests = 0;
+    this.runModelCalls = 0;
+    this.runAllocatedBytes = 0;
+    this.runDependencies.clear();
   }
 
   beginRevision(barIndex: number, phase: CoreSpiritBarPhase): void {
@@ -142,6 +172,7 @@ export class CoreSpiritResourceGovernor {
 
   consumeInstructions(amount = 1): void {
     this.instructions = this.consume('maxInstructionsPerRevision', this.instructions, amount);
+    this.runInstructions = this.consume('maxInstructionsPerRun', this.runInstructions, amount);
   }
 
   assertLookback(requiredBars: number): void {
@@ -164,6 +195,7 @@ export class CoreSpiritResourceGovernor {
 
   recordDataRequest(request: Pick<CoreSpiritDataRequest, 'symbol' | 'timeframe' | 'field'>): void {
     this.dataRequests = this.consume('maxDataRequestsPerRevision', this.dataRequests, 1);
+    this.runDataRequests = this.consume('maxDataRequestsPerRun', this.runDataRequests, 1);
     const symbol = String(request.symbol || '').trim().toUpperCase();
     const timeframe = String(request.timeframe || '').trim().toLowerCase();
     if (symbol) this.symbols.add(symbol);
@@ -172,6 +204,10 @@ export class CoreSpiritResourceGovernor {
     this.consume('maxMultiTimeframeRequestsPerRevision', 0, Math.max(0, this.timeframes.size - 1));
     const dependency = [symbol, timeframe, request.field].join(':');
     this.dependencies.add(dependency);
+    this.runDependencies.add(dependency);
+    if (this.runDependencies.size > this.budget.maxDependenciesPerRevision) {
+      throw new CoreSpiritResourceLimitError('maxDependenciesPerRevision', this.budget.maxDependenciesPerRevision, this.runDependencies.size);
+    }
     if (this.dependencies.size > this.budget.maxDependenciesPerRevision) {
       throw new CoreSpiritResourceLimitError('maxDependenciesPerRevision', this.budget.maxDependenciesPerRevision, this.dependencies.size);
     }
@@ -180,11 +216,13 @@ export class CoreSpiritResourceGovernor {
 
   recordModelCall(): void {
     this.modelCalls = this.consume('maxModelCallsPerRevision', this.modelCalls, 1);
+    this.runModelCalls = this.consume('maxModelCallsPerRun', this.runModelCalls, 1);
   }
 
   recordOutput(value: CoreSpiritObject): void {
     if (VISUAL_KINDS.has(value.kind)) {
       this.visualObjects = this.consume('maxVisualObjectsPerRevision', this.visualObjects, 1);
+      this.runVisualObjects = this.consume('maxVisualObjectsPerRun', this.runVisualObjects, 1);
     }
     this.recordAllocation(estimateBytes(value));
   }
@@ -194,13 +232,19 @@ export class CoreSpiritResourceGovernor {
   }
 
   recordAllocation(bytes: number): void {
-    this.allocatedBytes = this.consume('maxMemoryBytesPerRevision', this.allocatedBytes, Math.max(0, Math.ceil(Number(bytes) || 0)));
+    const amount = Math.max(0, Math.ceil(Number(bytes) || 0));
+    this.allocatedBytes = this.consume('maxMemoryBytesPerRevision', this.allocatedBytes, amount);
+    this.runAllocatedBytes = this.consume('maxMemoryBytesPerRun', this.runAllocatedBytes, amount);
   }
 
   assertExecutionTime(): void {
     const elapsed = Math.max(0, this.clock() - this.startedAt);
     if (this.startedAt > 0 && elapsed > this.budget.maxExecutionTimeMs) {
       throw new CoreSpiritResourceLimitError('maxExecutionTimeMs', this.budget.maxExecutionTimeMs, elapsed);
+    }
+    const runElapsed = Math.max(0, this.clock() - this.executionStartedAt);
+    if (this.executionStartedAt > 0 && runElapsed > this.budget.maxExecutionTimeMsPerRun) {
+      throw new CoreSpiritResourceLimitError('maxExecutionTimeMsPerRun', this.budget.maxExecutionTimeMsPerRun, runElapsed);
     }
   }
 
