@@ -1436,13 +1436,16 @@ export class CoreSpiritRuntime {
         const requestKey=`${symbol}:${timeframe}:${field}`;
         if(requestKeys.has(requestKey)) continue;
         requestKeys.add(requestKey);
-        requests.push({symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0});
+        const request={symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0};
+        this.resourceGovernor.recordDataRequest(request);
+        requests.push(request);
       }
     }
     if(!requests.length) return;
     const value=batchResolver(requests,{asOfTimestamp,baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'});
     if(value && typeof (value as any).then==='function') return;
     const snapshots=value as CoreSpiritDataSnapshot[];
+    this.resourceGovernor.recordResolvedData(snapshots);
     if(snapshots.length!==requests.length) return;
     for(let i=0;i<requests.length;i+=1){
       const request=requests[i]!;
@@ -1632,6 +1635,7 @@ export class CoreSpiritRuntime {
       const inputs:Record<string,unknown>={};
       for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
       const field=name==='__model_probability' ? 'probability' : 'prediction';
+      this.resourceGovernor.recordModelCall();
       const resolved=this.modelPredictionResolver?.({modelName,field,inputs})
         ?? this.modelOutputResolver?.({modelName,field,binding:(()=>{const d=this.loadedSurface?.declarations.find((item): item is Extract<CoreSpiritSurfaceDeclaration,{kind:'model'}> => item.kind==='model'&&item.name===modelName);return d?.binding;})(),inputs})
         ?? null;
@@ -1642,7 +1646,10 @@ export class CoreSpiritRuntime {
       const inputs:Record<string,unknown>={};
       for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
       const field=name==='model.probability' ? 'probability' : 'prediction';
-      return finish(this.modelPredictionResolver?.({modelName,field,inputs}) ?? this.modelOutputResolver?.({modelName,field,inputs}) ?? null);
+      this.resourceGovernor.recordModelCall();
+      const modelResult=this.modelPredictionResolver?.({modelName,field,inputs}) ?? this.modelOutputResolver?.({modelName,field,inputs}) ?? null;
+      this.resourceGovernor.recordResolvedData(modelResult);
+      return finish(modelResult);
     }
     if(name==='risk.allowed') {
       const quantity=Number(args[0]);
@@ -1652,8 +1659,8 @@ export class CoreSpiritRuntime {
       const action=name==='automation.notify' ? 'automation.notify' : 'automation.route';
       const message=String(args[0]??'');
       const target=args[1]==null ? undefined : String(args[1]);
-      if (!this.suppressExternalEffects) {
-        this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time:this.toEpoch(bar.timestamp),name:action,metadata:{message,target,barIndex:index,action}});
+      if (this.canDispatchConfirmedStrategyEvent()) {
+        this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time:this.toEpoch(bar.timestamp),name:action,metadata:{message,target,barIndex:index,action,execution:this.currentOutputSemantics}});
       }
       return finish({__coreSpiritAutomationEvent:true,action,message,target});
     }
@@ -1738,8 +1745,11 @@ export class CoreSpiritRuntime {
           revision:this.state.barState.revision,
           alignment:'last-confirmed',
         };
+        this.resourceGovernor.recordDataRequest({symbol,timeframe,field:'close',offset:0});
+        this.resourceGovernor.recordDataRequest({symbol,timeframe,field:'close',offset:1});
         const now=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:0},ctx);
         const prior=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:1},ctx);
+        this.resourceGovernor.recordResolvedData([now,prior]);
         if ((now && typeof (now as any).then==='function') || (prior && typeof (prior as any).then==='function')) return finish(null);
         const confirmedNow=now && typeof now==='object' ? validateSynchronizedSnapshot(now as CoreSpiritDataSnapshot,ctx) : null;
         const confirmedPrior=prior && typeof prior==='object' ? validateSynchronizedSnapshot(prior as CoreSpiritDataSnapshot,ctx) : null;
@@ -1877,7 +1887,9 @@ export class CoreSpiritRuntime {
         executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment,
       };
       const request:CoreSpiritDataRequest={symbol,timeframe,field,offset};
+      this.resourceGovernor.recordDataRequest(request);
       const value=requestAt?requestAt(request,ctx):(alignment==='developing'?null:requestCurrent!(request));
+      this.resourceGovernor.recordResolvedData(value);
       // Async providers must prefetch into the host-owned snapshot before VM execution.
       if(value && typeof (value as any).then==='function') return finish(null);
       const snapshot=value as CoreSpiritDataSnapshot|undefined;
@@ -1892,11 +1904,13 @@ export class CoreSpiritRuntime {
       const timeframe=String(args[0] ?? ''), field=String(args[1] ?? 'close') as any;
       const resolver=this.dataResolver?.lowerTimeframe; if(resolver){
         const key=`ltf:${index}:${timeframe}:${field}`; if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
-        const values=resolver(timeframe,field); if(values && typeof (values as any).then==='function') return finish(null);
+        this.resourceGovernor.recordDataRequest({symbol:this.executionContext.symbol,timeframe,field,offset:0});
+        const values=resolver(timeframe,field); this.resourceGovernor.recordResolvedData(values); if(values && typeof (values as any).then==='function') return finish(null);
         const latest=(values as number[]).length ? Number((values as number[]).at(-1)) : null; this.dataMemo.set(key,latest); return finish(latest);
       }
       const intrabarsResolver=this.dataResolver?.intrabars; if(!intrabarsResolver) return finish(null);
-      const rows=intrabarsResolver(timeframe); if(rows && typeof (rows as any).then==='function') return finish(null);
+      this.resourceGovernor.recordDataRequest({symbol:this.executionContext.symbol,timeframe,field:'time',offset:0});
+      const rows=intrabarsResolver(timeframe); this.resourceGovernor.recordResolvedData(rows); if(rows && typeof (rows as any).then==='function') return finish(null);
       const resolvedRows=rows as CoreSpiritIntrabar[]; const latest=resolvedRows?.at(-1) as any; return finish(latest?.[field] ?? null);
     }
     if(name==='scan.emit') {
