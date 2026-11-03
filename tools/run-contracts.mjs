@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 
 const contracts = [
+  ['market-data-health', ['src/marketDataHealthContract.test.mjs', false]],
+  ['options-data-domain', ['src/optionsDataDomainContract.test.mjs', false]],
   ['ml-training-input-security', ['src/mlTrainingSecurityContract.test.mjs', false]],
   ['corescript-capability-maturity', ['src/coreScriptCapabilityMaturityContract.test.mjs', true]],
   ['vela-scene-graph', ['src/velaSceneGraphContract.test.mjs', false]],
