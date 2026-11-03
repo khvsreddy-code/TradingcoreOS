@@ -197,8 +197,22 @@ export async function validateModelPromotion(input: {
     contract.temporal.validationProtocol === validation.protocol
   );
   try {
-    assertNoKnownLabelLeakage(snapshot?.featureNames ?? []);
-    checks.labelLeakageCheckPassed = Boolean(snapshot?.featureNames.length);
+    // Check every declared feature boundary independently. A malicious or stale
+    // artifact must not hide a future-derived model input by presenting a
+    // different, apparently safe dataset snapshot schema.
+    const leakageFeatureNames = [
+      ...(snapshot?.featureNames ?? []),
+      ...modelFeatureNames.filter((name): name is string => typeof name === 'string'),
+      ...graphFeatureNames.filter((name): name is string => typeof name === 'string'),
+    ];
+    assertNoKnownLabelLeakage(leakageFeatureNames);
+    checks.labelLeakageCheckPassed = Boolean(
+      snapshot?.featureNames.length &&
+      modelFeatureNames.length &&
+      modelFeatureNames.every(name => typeof name === 'string' && name.trim()) &&
+      graphFeatureNames.length &&
+      graphFeatureNames.every(name => typeof name === 'string' && name.trim())
+    );
   } catch {
     checks.labelLeakageCheckPassed = false;
   }
