@@ -1,4 +1,6 @@
 import type { CoreSpiritObject } from './types';
+import type { CoreSpiritOutputSemantics } from './executionSemantics';
+import type { CoreSpiritResourceGovernor } from './resourceGovernor';
 
 /**
  * Retained output collector for one execution pass.
@@ -14,8 +16,13 @@ export class CoreSpiritOutputCollector {
   private readonly items: CoreSpiritObject[] = [];
   private readonly indexById = new Map<string, number>();
   private count = 0;
+  private semantics?: CoreSpiritOutputSemantics;
 
-  constructor(private readonly maxPerBar: number) {}
+  constructor(private readonly maxPerBar: number, private readonly resourceGovernor?: Pick<CoreSpiritResourceGovernor, 'recordOutput'>) {}
+
+  setExecutionSemantics(semantics: CoreSpiritOutputSemantics | undefined): void {
+    this.semantics = semantics;
+  }
 
   beginBar(clear = false): void {
     this.count = 0;
@@ -30,18 +37,28 @@ export class CoreSpiritOutputCollector {
       throw new Error(`output limit exceeded (${this.maxPerBar})`);
     }
 
-    const rawId = (value as unknown as { id?: unknown }).id;
+    const enriched = this.semantics
+      ? {
+          ...value,
+          metadata: {
+            ...((value as unknown as { metadata?: Record<string, unknown> }).metadata ?? {}),
+            coreSpiritExecution: this.semantics,
+          },
+        } as CoreSpiritObject
+      : value;
+    this.resourceGovernor?.recordOutput(enriched);
+    const rawId = (enriched as unknown as { id?: unknown }).id;
     const id = typeof rawId === 'string' ? rawId.trim() : '';
     if (id) {
       const existingIndex = this.indexById.get(id);
       if (existingIndex !== undefined) {
-        this.items[existingIndex] = value;
+        this.items[existingIndex] = enriched;
         return;
       }
       this.indexById.set(id, this.items.length);
     }
 
-    this.items.push(value);
+    this.items.push(enriched);
   }
 
   addDiagnostic(diagnostics: string[], message: string): void {
