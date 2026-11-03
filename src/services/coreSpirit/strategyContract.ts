@@ -7,7 +7,8 @@
  */
 
 import type { CoreSpiritOrderSizing } from './orderIntent';
-import type { CoreSpiritExecutionMode } from './types';
+import type { CoreSpiritBarPhase, CoreSpiritExecutionMode } from './types';
+import type { CoreSpiritCausality, CoreSpiritLookahead } from './repaintSafety';
 
 export const CORE_SPIRIT_STRATEGY_VERSION = 1 as const;
 
@@ -32,6 +33,12 @@ export interface CoreSpiritStrategyEvent {
   timeframe: string;
   /** Trusted host event context used to suppress live broker effects during history/replay. */
   executionMode?: CoreSpiritExecutionMode;
+  /** Host-stamped execution phase; script payloads cannot override it. */
+  barPhase?: CoreSpiritBarPhase;
+  isConfirmed?: boolean;
+  causality?: CoreSpiritCausality;
+  lookahead?: CoreSpiritLookahead;
+  realtimeSafe?: boolean | 'unknown';
   reason: string;
   metadata?: Readonly<Record<string, string | number | boolean | null>>;
 }
