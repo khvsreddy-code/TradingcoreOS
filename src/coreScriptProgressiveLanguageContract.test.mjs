@@ -110,6 +110,11 @@ assert.equal(quantIr?.authoringLevel, 'quant');
 assert.ok(quantIr?.languageFeatures?.includes('matrix'));
 assert.ok(quantIr?.languageFeatures?.includes('models'));
 
+const normalizedSystem = normalizeCoreSpiritSource(system);
+assert.match(normalizedSystem, /on market\\.tick \\{/);
+assert.match(normalizedSystem, /on order\\.fill \\{/);
+assert.match(normalizedSystem, /on position\\.update \\{/);
+assert.match(normalizedSystem, /automation\\.route\\(\"broker\\.fyers\"\\)/);
 const systemIr = compile(system, 'corescript-system', 'automation');
 assert.equal(systemIr?.authoringLevel, 'system');
 assert.ok(systemIr?.languageFeatures?.includes('system-events'));
