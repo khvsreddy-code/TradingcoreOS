@@ -65,7 +65,9 @@ assert.match(chrome, /persistActiveTcoVelaSavedWorkspace/, 'manual save and peri
 assert.match(chrome, /stateForNamedWorkspaceSnapshot/, 'saving from the settings panel must not restore that manager as the active trading panel');
 assert.match(chrome, /key: 'tco\.corespirit\.live-editor'/, 'the live CoreSpirit source is included in versioned global workspace state');
 assert.match(chrome, /tco:corespirit-live-source-restored/, 'restoring a workspace updates an already-open CoreSpirit editor');
-assert.match(chrome, /queueLiveSourceSave/, 'CoreSpirit edits trigger a debounced workspace save as well as local recovery');
+assert.match(live, /queueLiveSourceSave/, 'CoreSpirit edits trigger a debounced workspace save as well as local recovery');
+assert.match(live, /tco:corespirit:source-changed/, 'the workspace listens for locally recovered CoreSpirit editor drafts');
+assert.match(live, /localStorage\.setItem\(CORESPIRIT_LIVE_SOURCE_KEY, source\)/, 'the latest editor draft is included in Vela workspace snapshots');
 assert.match(chrome, /Journal autosave is on/, 'the trade journal exposes its autosave status');
 assert.match(chrome, /scheduleJournalSave/, 'journal edits autosave without requiring a manual click');
 assert.match(chrome, /onJournalPageHide/, 'journal text flushes when the page is backgrounded or closed');
