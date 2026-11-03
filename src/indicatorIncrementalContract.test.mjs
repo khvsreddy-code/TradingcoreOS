@@ -39,7 +39,11 @@ if (/const rollingStd = .*\.slice\(/.test(indicatorEngine) || /const normalized 
 if (!/mode\?:'snapshot'\|'incremental'/.test(worker) || !/operation\?:'replace'\|'append'/.test(worker)) throw new Error('Incremental worker protocol missing');
 if (!/incrementalMode:'update'/.test(worker) || !/incrementalMode:'reset'/.test(worker)) throw new Error('Incremental worker result modes missing');
 if (!/tailKey/.test(coordinator) || !/JSON\.stringify\(\[market\.open\[i\], market\.high\[i\], market\.low\[i\], market\.close\[i\], market\.volume\[i\]\]\)/.test(coordinator)) throw new Error('Same-bar indicator cache identity is not tail-aware');
-if (!/indicatorQueue\.run\(payload, incrementalKey, transfer\)/.test(coordinator)) throw new Error('Incremental snapshot/tick worker affinity is not pinned');
+if (!/indicatorQueue\.run\(payload, incrementalKey, transfer, \{/.test(coordinator) ||
+    !/private readonly affinity = new Map<string, Worker>\(\)/.test(coordinator) ||
+    !/this\.affinity\.set\(item\.affinityKey, idle\)/.test(coordinator)) {
+  throw new Error('Incremental snapshot/tick worker affinity is not pinned');
+}
 if (!/if \(result\.resetRequired\)/.test(coordinator) || !/seedOnMiss: true/.test(coordinator)) throw new Error('Incremental reset/resync path missing');
 if (!/requestIndicatorWorker\(data,visibleLogicalRangeRef\.current,'incremental'/.test(live+runtime+indicatorController)) throw new Error('Live chart does not request incremental forming-bar updates');
 if (!/series\.update|\.update\(points\[points\.length-1\]/.test(indicatorController)) throw new Error('Indicator controller lacks tail-only series updates');
