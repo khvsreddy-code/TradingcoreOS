@@ -47,7 +47,7 @@ export interface NormalizedMarketTick {
   timestamp?: number;
   receivedAtEpoch?: number;
   brokerTimestamp?: number;
-  source?: 'fyers' | 'investiny' | 'yahoo' | 'paper' | 'replay' | 'backtest' | 'simulator';
+  source?: 'fyers' | 'upstox' | 'investiny' | 'yahoo' | 'paper' | 'replay' | 'backtest' | 'simulator';
   revision?: number;
   feedClass?: 'lite' | 'full' | 'depth';
 }
