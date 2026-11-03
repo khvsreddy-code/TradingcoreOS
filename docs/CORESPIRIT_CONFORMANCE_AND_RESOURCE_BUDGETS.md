@@ -116,7 +116,7 @@ Default limits are conservative and may be overridden per runtime:
 | Active dependencies | 1,024 | 1,024 |
 | Distinct additional symbols | 16 | bounded by run data-request limit |
 | Distinct additional timeframes | 16 | bounded by run data-request limit |
-| Execution time | 50 ms | 30 seconds |
+| Execution time | 150 ms | 30 seconds |
 
 The VM charges actual executed instructions. Lookback and dependency counts are checked when a program is loaded. Data and model requests are charged at the resolver boundary. Visual identity creation and output memory are charged before retaining output. Time and cancellation are checked by VM execution checkpoints and after each bar pass. Exceeding a limit raises `CORESPIRIT_RESOURCE_LIMIT_EXCEEDED` and terminates that execution rather than merely adding an editor warning.
 
