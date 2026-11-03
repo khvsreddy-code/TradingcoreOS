@@ -33,7 +33,7 @@ export function AdvancedOrderTicket({ busy, message, onSubmit }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   useEffect(() => { const id = window.setInterval(() => { const next = focusedChart(); setMeta(next); setMarketTick(next.symbol ? tradingCoreRuntime.getMarketSnapshot(next.symbol) || null : null); }, 500); return () => window.clearInterval(id); }, []);
-  const marketHealth = classifyMarketDataHealth({ source: marketTick?.source, lastUpdateAt: marketTick?.brokerTimestamp ?? marketTick?.timestamp ?? marketTick?.lastTradeTimestamp, receivedAt: marketTick?.receivedAtEpoch ?? marketTick?.receivedAt, providerConnected: marketTick?.source ? marketTick.source === 'fyers' || marketTick.source === 'upstox' : undefined, expectedIntervalMs: 5_000 });
+  const marketHealth = classifyMarketDataHealth({ source: marketTick?.source, lastUpdateAt: marketTick?.brokerTimestamp ?? marketTick?.timestamp ?? marketTick?.lastTradeTimestamp, receivedAt: marketTick?.receivedAtEpoch ?? marketTick?.receivedAt, providerConnected: marketTick?.source === 'fyers' || marketTick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 });
   const brokerId = tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() || '';
   const isIndex = /NIFTY|SENSEX|FINNIFTY|MIDCP/i.test(`${meta.label} ${meta.symbol}`); const isOption = /(?:CE|PE)$/i.test(meta.symbol) || /OPTION/i.test(meta.label); const isFuture = /(?:FUT)$/i.test(meta.symbol) || /FUTURE/i.test(meta.label); const isEquity = !isIndex && !isOption && !isFuture; const segment = isIndex ? 'INDEX' : isFuture ? 'FUTURE' : isOption ? 'OPTION' : 'EQUITY';
   const optionUnderlying = brokerId === 'upstox' ? upstoxUnderlyingKey(meta.symbol, meta.label) : meta.symbol;
