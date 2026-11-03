@@ -8,6 +8,7 @@ import {
 } from './executionSemantics.ts';
 import { compareCoreSpiritConformance } from './coreSpiritConformanceLab.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
+import { CoreSpiritAutomationOrchestrator } from './automationPipeline.ts';
 
 const safetyReport = {
   version: 1,
@@ -42,6 +43,31 @@ assert.equal(canCoreSpiritSubmitConfirmedLiveIntent(createCoreSpiritOutputSemant
   barPhase: 'confirmed', executionMode: 'realtime', isRealtime: true, isConfirmed: true,
 }, { ...safetyReport, lookahead: 'true' })), false, 'lookahead-enabled programs cannot trigger live broker execution');
 assert.equal(coreSpiritOutputSemanticsFromMetadata({ coreSpiritExecution: confirmed })?.barPhase, 'confirmed');
+
+let riskEvaluations = 0;
+let executionSubmissions = 0;
+const automation = new CoreSpiritAutomationOrchestrator(
+  { evaluate: async intent => { riskEvaluations += 1; return { orderIntentId: intent.id, allowed: true, reason: 'test risk approved', approvedQuantity: 1 }; } },
+  { authorize: async () => ({ allowed: true, policyId: 'test', reason: 'test policy approved' }) },
+  { submit: async () => { executionSubmissions += 1; return { accepted: true, executionId: 'test-execution' }; } },
+  { allowLiveExecution: true, hostExecutionMode: 'live', maxQuantityPerIntent: 10 },
+);
+const formingRuntimeIntent = {
+  kind: 'orderIntent',
+  id: 'forming-order-intent',
+  time: 1_800_000_000,
+  side: 'long',
+  confidence: 1,
+  stop: null,
+  target: null,
+  tag: 'forming',
+  metadata: { source: 'confirmation-test', barIndex: 10, mode: 'realtime', coreSpiritExecution: forming },
+};
+const provisionalAutomationResult = await automation.handleRuntimeOrderIntent(formingRuntimeIntent, 'NSE:NIFTY50-INDEX', 1_800_000_001);
+assert.equal(provisionalAutomationResult.risk.allowed, false);
+assert.match(provisionalAutomationResult.risk.reason, /forming-bar/);
+assert.equal(riskEvaluations, 0, 'provisional forming-bar events must be rejected before risk evaluation');
+assert.equal(executionSubmissions, 0, 'a provisional signal must never reach the execution gateway');
 
 let clock = 100;
 const governor = new CoreSpiritResourceGovernor({
