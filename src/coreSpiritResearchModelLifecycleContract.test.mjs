@@ -44,7 +44,7 @@ assert.match(worker, /splitChronologicalResearchRows\(/);
 assert.match(worker, /const trainingRows = split\.trainingRows/);
 assert.match(worker, /const validationRows = split\.validationRows/);
 assert.match(worker, /index < trainingRows\.length/);
-assert.match(worker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/,
+assert.match(worker, /validationModel\.predict\(row\.values, payload\.featureNames, row\.timestamp\)/);
 assert.match(worker, /validationResults/);
 assert.match(worker, /runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION/);
 assert.match(worker, /researchSafety: safety/);
@@ -106,7 +106,7 @@ assert.match(worker, /initializer: 'deterministic-quantile-v1'/);
 assert.match(worker, /seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic'/);
 assert.match(worker, /const validationModel = CoreSpiritGaussianHMM\.fromTrainedState\(hmmState\)/,
   'holdout evaluation must use a frozen copy of the trained model');
-assert.match(worker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\),
+assert.match(worker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/,
   'holdout inference must be forward-only and exclusive of the training range');
 assert.match(batchWorker, /const validationModel = CoreSpiritGaussianHMM\.fromTrainedState\(hmmState\)/,
   'chunked holdout evaluation must also use a frozen trained-model copy');
