@@ -1,6 +1,7 @@
 import type { CoreSpiritExecutionContext, CoreSpiritExecutionFrame, CoreSpiritExecutionMode } from './types';
 import { resolveSession } from './session';
 import type { CoreSpiritSessionWindow } from './sessionCalendar';
+import type { CoreSpiritBarPhase } from './types';
 
 export function createCoreSpiritExecutionContext(options: Partial<CoreSpiritExecutionContext> & { sessionCalendar?: CoreSpiritSessionWindow } = {}): CoreSpiritExecutionContext {
   const mode: CoreSpiritExecutionMode = options.mode || 'historical';
@@ -23,7 +24,7 @@ export function createCoreSpiritExecutionContext(options: Partial<CoreSpiritExec
 
 export function createCoreSpiritExecutionFrame(options: {
   timestamp:number; barIndex:number; symbol:string; timeframe:string; timezone:string; mode:CoreSpiritExecutionMode;
-  isRealtime:boolean; isConfirmed:boolean; isNewBar:boolean; revision:number; isFirst:boolean; isLast:boolean;
+  isRealtime:boolean; isConfirmed:boolean; barPhase?:CoreSpiritBarPhase; isNewBar:boolean; revision:number; isFirst:boolean; isLast:boolean;
   sessionCalendar?: CoreSpiritSessionWindow;
 }): CoreSpiritExecutionFrame & { index:number; time:number; isFirst:boolean; isLast:boolean } {
   return {
@@ -38,6 +39,7 @@ export function createCoreSpiritExecutionFrame(options: {
     mode: options.mode,
     isRealtime: options.isRealtime,
     isConfirmed: options.isConfirmed,
+    barPhase: options.barPhase ?? (options.isConfirmed ? 'historical' : 'forming'),
     isNewBar: options.isNewBar,
     revision: options.revision,
     isFirst: options.isFirst,
