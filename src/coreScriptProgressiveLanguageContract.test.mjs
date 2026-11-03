@@ -5,6 +5,7 @@ import { getCoreSpiritAuthoringProfile, detectCoreSpiritAuthoringLevel, buildCor
 import { CORE_SCRIPT_LANGUAGE, CORE_SCRIPT_LANGUAGE_VERSION } from './services/coreSpirit/coreScriptLanguagePolicy.ts';
 import { canUseCapability } from './services/coreSpirit/layeredPlatformContract.ts';
 import { createCoreSpiritSandbox } from './services/coreSpirit/capabilitySandbox.ts';
+import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurface.ts';
 
 const beginner = `
 indicator "EMA Cross"
@@ -51,10 +52,8 @@ zScoreSeries = zscore(returnSeries, 50)
 betaSeries = beta(returnSeries, returnSeries, 50)
 
 model RegimeModel:
-    feature returnFeature = returnSeries
-    feature zScoreFeature = zScoreSeries
-    feature betaFeature = betaSeries
-    output forward_return(10)
+    features: returnSeries, zScoreSeries, betaSeries
+    target: forward_return(10)
 `;
 
 const system = `
@@ -103,6 +102,10 @@ assert.ok(strategyBacktestSandbox.can('order-intents'), 'strategy intents are av
 assert.ok(!strategyChartSandbox.can('order-intents'), 'chart execution must not gain an order-intent side-effect capability');
 
 const quantIr = compile(quant, 'corescript-quant', 'model');
+const quantPlan = buildCoreSpiritResearchPlan(quant);
+assert.equal(quantPlan.modelSpecs[0]?.name, 'RegimeModel');
+assert.deepEqual(quantPlan.modelSpecs[0]?.features, ['returnSeries', 'zScoreSeries', 'betaSeries']);
+assert.equal(quantPlan.modelSpecs[0]?.target, 'forward_return(10)');
 assert.equal(quantIr?.authoringLevel, 'quant');
 assert.ok(quantIr?.languageFeatures?.includes('matrix'));
 assert.ok(quantIr?.languageFeatures?.includes('models'));

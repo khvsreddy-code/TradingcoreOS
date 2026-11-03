@@ -1,6 +1,8 @@
-// CoreSpirit Model: deterministic feature definitions + typed model output
+// CoreSpirit Model: deterministic feature bindings + typed research target
+returns20 = returns(close, 20)
+volatility20 = stdev(close, 20)
+volumeZ = volume_zscore(volume, 30)
+
 model MomentumModel:
-    feature returns20 = returns(close, 20)
-    feature volatility20 = stdev(close, 20)
-    feature volumeZ = volume_zscore(volume, 30)
-    output probability_up
+    features: returns20, volatility20, volumeZ
+    target: probability_up

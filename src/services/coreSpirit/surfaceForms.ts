@@ -700,6 +700,17 @@ export function normalizeCoreSpiritSource(source: string): string {
     const topLevel = wrappers.length === 0;
     if (topLevel && /^strategy\s*\(.*\)\s*$/i.test(trimmed)) continue;
 
+    // Lower indentation-style model declarations to the same canonical model handle
+    // used by brace-style declarations. The indented body remains declarative metadata.
+    const indentedModelHeader = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*:\s*$/i);
+    if (indentedModelHeader) {
+      const modelName = indentedModelHeader[1] ?? indentedModelHeader[2] ?? indentedModelHeader[3] ?? 'Model';
+      wrappers.push({ indent, kind:'model' });
+      const indentText = raw.match(/^[ \t]*/)?.[0] ?? '';
+      out.push(`${indentText}let ${modelName} = model(${JSON.stringify(modelName)});`);
+      continue;
+    }
+
     const wrapperHeader = trimmed.match(/^(indicator|strategy|model|automate)\s+(?:"[^"]*"|'[^']*')\s*(?::)?\s*$/i);
     if (wrapperHeader) {
       wrappers.push({ indent, kind: wrapperHeader[1].toLowerCase() as any });

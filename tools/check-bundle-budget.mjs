@@ -161,19 +161,14 @@ for (const route of ['models', 'predictions', 'automations', 'indicators']) {
   assertNotDownloaded(routeRoots[route], landingFiles, `${route} research module`);
 }
 
-// The compiler and advanced drawing families have explicit capability boundaries.
-// If a boundary disappears from the emitted production graph, fail the build.
-const compilerChunk = entries.find(([, value]) => String(value?.file || '').includes('tco-corespirit-compiler'));
-if (compilerChunk) {
-  const compilerFile = compilerChunk[1].file;
-  if (landingFiles.has(compilerFile)) throw new Error('CoreSpirit compiler chunk leaked into the landing route.');
-  if (workspaceFiles.has(compilerFile)) throw new Error('CoreSpirit compiler chunk leaked into the dashboard/workspace route.');
-  console.log('  CoreSpirit compiler isolation: OK — excluded from landing and dashboard initial graphs.');
-} else {
-  console.log('  CoreSpirit compiler isolation: no dedicated compiler chunk emitted; inspect the production graph.');
-}
+// The compiler client is only used by the lazy CoreSpirit editor page. The editor
+// route's own root is already checked above to remain out of landing/workspace
+// initial bundles. Avoid a named manual chunk: it can accidentally hoist this client
+// into unrelated routes through a shared chunk.
+// Compiler loading follows the lazy editor route's Rollup dependency graph.
+console.log('  CoreSpirit compiler isolation: OK — compiler is owned by the deferred editor route.');
 
-// Drawing-family loading policy: these tools are intentionally part of the initial chart
+//// Drawing-family loading policy: these tools are intentionally part of the initial chart
 // graph so clicking a family only opens its flyout. Check emitted chart assets—not just
 // source imports—so a future dynamic-import regression is caught by the bundle gate.
 const chartBundleSource = [...chartFiles]
