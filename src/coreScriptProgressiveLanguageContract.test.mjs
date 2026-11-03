@@ -3,6 +3,8 @@ import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { normalizeCoreSpiritSource } from './services/coreSpirit/syntax.ts';
 import { getCoreSpiritAuthoringProfile, detectCoreSpiritAuthoringLevel, buildCoreSpiritAuthoringExperience, getCoreSpiritDebugProfile } from './services/coreSpirit/coreSpiritAuthoring.ts';
 import { CORE_SCRIPT_LANGUAGE, CORE_SCRIPT_LANGUAGE_VERSION } from './services/coreSpirit/coreScriptLanguagePolicy.ts';
+import { canUseCapability } from './services/coreSpirit/layeredPlatformContract.ts';
+import { createCoreSpiritSandbox } from './services/coreSpirit/capabilitySandbox.ts';
 
 const beginner = `
 indicator "EMA Cross"
@@ -36,8 +38,6 @@ when fastLine crossesAbove slowLine and trend:
 `;
 
 const quant = `
-indicator "Quant Regime"
-
 type QuantFeatureVector {
     values: matrix<float>
 }
@@ -46,23 +46,15 @@ type QuantTensor {
     values: tensor<float>
 }
 
-returns = roc(close, 1)
-z = zscore(returns, 50)
-betaFactor = beta(returns, returns, 50)
+returnSeries = roc(close, 1)
+zScoreSeries = zscore(returnSeries, 50)
+betaSeries = beta(returnSeries, returnSeries, 50)
 
-model "regime" {
-    inputs:
-        returns,
-        z,
-        betaFactor
-    predict:
-        forward_return(10)
-}
-
-prediction: prediction<number> = regime.predict()
-confidence: probability = regime.probability()
-
-plot prediction
+model RegimeModel:
+    feature returnFeature = returnSeries
+    feature zScoreFeature = zScoreSeries
+    feature betaFeature = betaSeries
+    output forward_return(10)
 `;
 
 const system = `
@@ -104,6 +96,11 @@ assert.ok(!normalizeCoreSpiritSource(beginner).includes(';;'));
 const traderIr = compile(trader, 'corescript-trader', 'strategy');
 assert.equal(traderIr?.authoringLevel, 'trader');
 assert.ok(traderIr?.languageFeatures?.includes('order-intent'));
+assert.ok(canUseCapability('strategy', 'order-intents'), 'strategy authoring must be able to emit broker-neutral order intents');
+const strategyBacktestSandbox = createCoreSpiritSandbox({ layer: 'strategy', target: 'backtest' });
+const strategyChartSandbox = createCoreSpiritSandbox({ layer: 'strategy', target: 'chart' });
+assert.ok(strategyBacktestSandbox.can('order-intents'), 'strategy intents are available to the backtest target');
+assert.ok(!strategyChartSandbox.can('order-intents'), 'chart execution must not gain an order-intent side-effect capability');
 
 const quantIr = compile(quant, 'corescript-quant', 'model');
 assert.equal(quantIr?.authoringLevel, 'quant');
