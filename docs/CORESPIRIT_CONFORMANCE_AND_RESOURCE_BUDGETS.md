@@ -110,7 +110,8 @@ Default limits are conservative and may be overridden per runtime:
 | VM instructions | 10,000 | 20,000,000 |
 | Declared lookback | 50,000 bars | 50,000 bars |
 | Visual object identities | 1,500 | 100,000 |
-| Retained/estimated payload memory | 24 MiB | 128 MiB |
+| Retained/estimated payload memory | 24 MiB | bounded by history, visual and dependency limits |
+| Cumulative allocation volume | — | 512 MiB |
 | Data requests | 128 | 10,000 |
 | Model calls | 32 | 500 |
 | Active dependencies | 1,024 | 1,024 |
@@ -120,7 +121,7 @@ Default limits are conservative and may be overridden per runtime:
 
 The VM charges actual executed instructions. Lookback and dependency counts are checked when a program is loaded. Data and model requests are charged at the resolver boundary. Visual identity creation and output memory are charged before retaining output. Time and cancellation are checked by VM execution checkpoints and after each bar pass. Exceeding a limit raises `CORESPIRIT_RESOURCE_LIMIT_EXCEEDED` and terminates that execution rather than merely adding an editor warning.
 
-Memory numbers are conservative retained-payload estimates, not an operating-system heap profiler. Browser performance and memory telemetry remain separate validation requirements.
+Per-revision memory is a conservative retained-payload estimate, not an operating-system heap profiler. Whole-run allocation volume is accounted separately so a long replay does not confuse total objects processed with simultaneously retained memory. Browser performance and heap telemetry remain separate validation requirements.
 
 ## 5. Incremental execution path
 
