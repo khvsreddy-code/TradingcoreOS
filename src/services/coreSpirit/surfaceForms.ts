@@ -575,6 +575,13 @@ export function normalizeCoreSpiritSource(source: string): string {
   source = normalizeReadableOperatorsWithTokens(source);
   source = normalizeCoreSpiritEventSource(source);
   source = normalizeCoreSpiritAutomationSource(source);
+  // Explicit broker routing is a statement-level surface form and can occur
+  // inside WHEN/event blocks. Lower it before indentation/block handling so
+  // nested statements receive the same canonical capability call as top-level ones.
+  source = source.replace(
+    /^(\\s*)route\\s+order\\s+through\\s+broker\\s*\\(\\s*(["'])([^"']+)\\2\\s*\\)\\s*;?$/gim,
+    '$1automation.route("broker.$3");',
+  );
   const sourceLines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
   const lines: string[] = [];
   for (let i=0;i<sourceLines.length;i+=1) {
