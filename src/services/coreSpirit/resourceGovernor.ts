@@ -31,7 +31,7 @@ export const CORE_SPIRIT_DEFAULT_RESOURCE_BUDGET: CoreSpiritResourceBudget = Obj
   maxModelCallsPerRevision: 32,
   maxMultiSymbolRequestsPerRevision: 16,
   maxMultiTimeframeRequestsPerRevision: 16,
-  maxExecutionTimeMs: 50,
+  maxExecutionTimeMs: 150,
   maxInstructionsPerRun: 20_000_000,
   maxVisualObjectsPerRun: 100_000,
   maxMemoryBytesPerRun: 128 * 1024 * 1024,
