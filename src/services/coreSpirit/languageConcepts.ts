@@ -222,7 +222,9 @@ export function parseCoreSpiritInputDeclaration(line:string,start:number,end:num
       scanned.attrs[attr[1]!]=attr[2]!.trim();
     }
   }
-  const sourceDefault=scanned.base.trim().toLowerCase();
+  // Built-in OHLCV series identifiers are case-sensitive. Do not turn an arbitrary
+  // identifier such as `Close` into the supported `close` source default.
+  const sourceDefault=scanned.base.trim();
   // Source selectors may default to canonical OHLCV fields. Detect this before
   // literal parsing so a valid identifier is not rejected as an unquoted string.
   const implicitSource= !declaredType && CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
