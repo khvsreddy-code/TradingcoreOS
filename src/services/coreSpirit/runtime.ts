@@ -641,7 +641,7 @@ export class CoreSpiritRuntime {
     this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:executionIsRealtime, isConfirmed:executionIsConfirmed, barPhase:phase, revision:this.realtimeRevision, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:executionIsRealtime, isConfirmed:executionIsConfirmed, barPhase:phase, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false, sessionCalendar:this.sessionCalendar });
     this.executionContext.session = this.executionContext.frame.session;
-    this.lastBarWasRealtime = phase === 'forming';
+    this.lastBarWasRealtime = phase === 'forming' || phase === 'replay';
     if (canIncremental && dirtyPlan) {
       this.realtimeDirtyInstructions.clear();
       for (const instruction of dirtyPlan.instructions) this.realtimeDirtyInstructions.add(instruction);
@@ -1924,6 +1924,15 @@ export class CoreSpiritRuntime {
   }
 
   private sessionDay(timestamp:string):string { const d=new Date(timestamp); return new Intl.DateTimeFormat('en-CA',{timeZone:this.timezone}).format(d); }
+  private canDispatchConfirmedStrategyEvent(): boolean {
+    const semantics = this.currentOutputSemantics;
+    if (this.suppressExternalEffects || !semantics || !semantics.isConfirmed || semantics.barPhase === 'forming') return false;
+    // Live strategy events require confirmed, causal, non-lookahead semantics.
+    // Replay/backtest/history can still produce simulation records, but their
+    // execution mode is never accepted as live automation authority.
+    return semantics.executionMode !== 'realtime' || canCoreSpiritSubmitConfirmedLiveIntent(semantics);
+  }
+
   private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritOutputCollector,diagnostics:string[],outputId?:string):void {
     // Viewport/backfill rendering passes evaluate a bounded slice of history and
     // are not an execution clock. Suppress any order/alert/webhook side effects
@@ -2072,34 +2081,36 @@ export class CoreSpiritRuntime {
         const name=String(args[0]??'event');
         const event={kind:'event' as const,id:`${this.options.sourceId}:event:${barIndex}:${outputId||name}`,time,name,metadata:{source:this.options.sourceId,barIndex}};
         outputs.push(event);
-        if (!this.suppressExternalEffects) this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time,name,metadata:{barIndex}});
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time,name,metadata:{barIndex,execution:this.currentOutputSemantics}});
       }
       else if(kind==='orderIntent'){
         const side=normalizeCoreSpiritOrderDirection(String(args[0]??'long'));
         const sizing=normalizeCoreSpiritOrderSizing(String(args[1]??'quantity'),Number(args[2]));
-        const intent=createCoreSpiritOrderIntent({
+        const baseIntent=createCoreSpiritOrderIntent({
           side: side==='flat' ? 'exit' : side,
           sizing,
           stop:Number.isFinite(Number(args[3]))?Number(args[3]):null,
           target:Number.isFinite(Number(args[4]))?Number(args[4]):null,
-        },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||'orderIntent'}`,time,sourceId:this.options.sourceId,barIndex,mode:this.executionContext.mode,runId:this.executionContext.runId});
+        },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||'orderIntent'}`,time,sourceId:this.options.sourceId,barIndex,mode:this.currentOutputSemantics?.executionMode ?? this.executionContext.mode,runId:this.executionContext.runId});
+        const intent={...baseIntent,metadata:{...baseIntent.metadata,coreSpiritExecution:this.currentOutputSemantics}};
         outputs.push(intent);
-        if (!this.suppressExternalEffects) this.eventRouter.executionIntent(this.options.sourceId,intent);
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='buy' || kind==='sell'){
         const quantity=Number(args[0]);
         if(!Number.isFinite(quantity) || quantity<=0) throw new Error(`${kind} requires a positive quantity`);
-        const intent=createCoreSpiritOrderIntent({
+        const baseIntent=createCoreSpiritOrderIntent({
           side:kind==='buy'?'long':'short',
           sizing:{kind:'quantity',value:quantity},
           tag:typeof args[1]==='string'?args[1]:undefined,
-        },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||kind}`,time,sourceId:this.options.sourceId,barIndex,mode:this.executionContext.mode,runId:this.executionContext.runId});
+        },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||kind}`,time,sourceId:this.options.sourceId,barIndex,mode:this.currentOutputSemantics?.executionMode ?? this.executionContext.mode,runId:this.executionContext.runId});
+        const intent={...baseIntent,metadata:{...baseIntent.metadata,coreSpiritExecution:this.currentOutputSemantics}};
         outputs.push(intent);
-        this.eventRouter.executionIntent(this.options.sourceId,intent);
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='signal'){
         const type=String(args[0]??'signal'); outputs.push({kind:'signal',time,type,metadata:{source:this.options.sourceId,barIndex}});
-        if (!this.suppressExternalEffects) this.eventRouter.scriptSignal({scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptSignal({scriptId:this.options.sourceId,time,type,metadata:{barIndex,execution:this.currentOutputSemantics}});
       }
       else if(kind==='entry') {
         const condition=Boolean(args[0]); if(!condition) return;
@@ -2110,20 +2121,20 @@ export class CoreSpiritRuntime {
         const target=Number.isFinite(Number(args[4]))?Number(args[4]):null;
         const tag=typeof args[5]==='string'?args[5]:undefined;
         const id=`${this.options.sourceId}:entry:${barIndex}:${tag||normalizedSide}`;
-        const intent={kind:'orderIntent' as const,id,time,side:normalizedSide,confidence,stop,target,tag,metadata:{source:this.options.sourceId,barIndex,mode:this.executionContext.mode}};
+        const intent={kind:'orderIntent' as const,id,time,side:normalizedSide,confidence,stop,target,tag,metadata:{source:this.options.sourceId,barIndex,mode:this.currentOutputSemantics?.executionMode ?? this.executionContext.mode,coreSpiritExecution:this.currentOutputSemantics}};
         outputs.push(intent);
-        this.eventRouter.executionIntent(this.options.sourceId,intent);
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='exit') {
         const condition=Boolean(args[0]); if(!condition) return;
         const tag=typeof args[1]==='string'?args[1]:undefined;
-        const intent={kind:'orderIntent' as const,id:`${this.options.sourceId}:exit:${barIndex}:${tag||'exit'}`,time,side:'flat' as const,confidence:1,stop:null,target:null,tag,metadata:{source:this.options.sourceId,barIndex,exit:true,mode:this.executionContext.mode}};
+        const intent={kind:'orderIntent' as const,id:`${this.options.sourceId}:exit:${barIndex}:${tag||'exit'}`,time,side:'flat' as const,confidence:1,stop:null,target:null,tag,metadata:{source:this.options.sourceId,barIndex,exit:true,mode:this.currentOutputSemantics?.executionMode ?? this.executionContext.mode,coreSpiritExecution:this.currentOutputSemantics}};
         outputs.push(intent);
-        this.eventRouter.executionIntent(this.options.sourceId,intent);
+        if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
-      else if(kind==='alert' && !this.suppressExternalEffects) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex}});
-      else if(kind==='webhook' && !this.suppressExternalEffects) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
-    } catch(error) { diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
+      else if(kind==='alert' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex,execution:this.currentOutputSemantics}});
+      else if(kind==='webhook' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex,execution:this.currentOutputSemantics}});
+    } catch(error) { if (error instanceof CoreSpiritResourceLimitError) throw error; diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }
   private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(this.seriesRegistry.idFor(key),Number(value),this.stateHistoryLimit); }
   private pushLocalState(id:CoreSpiritSeriesId,value:CoreSpiritValue):void { this.stateStore.pushLocal(id,value,this.stateHistoryLimit); }
