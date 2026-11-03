@@ -58,7 +58,7 @@ assert.match(route, /validationCount < MIN_RESEARCH_VALIDATION_ROWS/);
 assert.match(route, /confirm !== true/);
 assert.match(route, /Model is not eligible for production inference/);
 assert.match(promotion, /statesSeen\.size >= 2[\s\S]*validation\.distinctPredictedStates >= 2/);
-assert.match(route, /status: 'approved'/);
+assert.match(route, /action === 'approve' \? 'approved' : action === 'revoke' \? 'revoked' : 'retired'/, 'release state is selected explicitly by the audited transition action');
 assert.match(route, /release\.status !== 'approved'/);
 assert.match(route, /storedArtifact\.provenance\.validationRange\.to/);
 assert.match(route, /Inference timestamp must be after the chronological training and validation windows/);
