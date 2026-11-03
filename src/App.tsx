@@ -224,9 +224,10 @@ function AppContent() {
         <BrokerConnectionRequiredPage
           onBack={() => navigate('/dashboard')}
           onBrokerConnected={() => {
-            // The broker setup screen is a real route. Once OAuth verification
-            // completes, the Launch Workspace action must advance the app shell
-            // to the command center rather than leaving the user on /broker.
+            // This route remains a protected entry route before and after OAuth,
+            // so the restoration effect does not rerun on the route transition.
+            // Publish the verified connection immediately for workspace gates.
+            window.dispatchEvent(new CustomEvent('tco:broker-readiness', { detail: { status: 'connected' } }));
             navigate('/dashboard');
           }}
         />
