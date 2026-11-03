@@ -102,7 +102,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       const chart = document.querySelector('.tc4-chart.focused') as HTMLElement | null;
       const symbol = (chart?.querySelector('select') as HTMLSelectElement | null)?.value || '';
       const tick = symbol ? tradingCoreRuntime.getMarketSnapshot(symbol) : undefined;
-      setMarketHealth(classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source ? tick.source === 'fyers' || tick.source === 'upstox' : undefined, expectedIntervalMs: 5_000 }));
+      setMarketHealth(classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source === 'fyers' || tick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 }));
     };
     refreshHealth();
     const timer = window.setInterval(refreshHealth, 1_000);
