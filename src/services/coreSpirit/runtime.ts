@@ -1848,10 +1848,15 @@ export class CoreSpiritRuntime {
           // explicit timeframe instead of silently falling back to the chart TF.
           const timeframe=String(r.timeframe ?? this.executionContext.timeframe);
           const field=member;
-          if(field==='trade') return finish(this.dataResolver?.trade?.(symbol,timeframe) ?? null);
-          if(field==='orderbook') return finish(this.dataResolver?.orderbook?.(symbol,timeframe) ?? null);
-          if(field==='footprint') return finish(this.dataResolver?.footprint?.(symbol,timeframe) ?? null);
-          if(field==='volumeProfile') return finish(this.dataResolver?.volumeProfile?.(symbol,timeframe) ?? null);
+          if(field==='trade' || field==='orderbook' || field==='footprint' || field==='volumeProfile') {
+            this.resourceGovernor.recordDataRequest({symbol,timeframe,field:'volume'});
+            const resolved = field === 'trade' ? this.dataResolver?.trade?.(symbol,timeframe)
+              : field === 'orderbook' ? this.dataResolver?.orderbook?.(symbol,timeframe)
+              : field === 'footprint' ? this.dataResolver?.footprint?.(symbol,timeframe)
+              : this.dataResolver?.volumeProfile?.(symbol,timeframe);
+            this.resourceGovernor.recordResolvedData(resolved);
+            return finish(resolved ?? null);
+          }
           if(['open','high','low','close','volume','time'].includes(field)) {
             const alignment = r.alignment === 'developing' ? 'developing' : 'last-confirmed';
             // Historical higher-timeframe rows may already contain final values;
@@ -1926,8 +1931,15 @@ export class CoreSpiritRuntime {
       const score=Number(args[0]??0); const label=String(args[1]??''); const metadata=typeof args[2]==='object' && args[2] ? args[2] as Record<string,unknown> : {};
       return finish({ __coreSpiritScanRef:true, score:Number.isFinite(score)?score:0, label, metadata });
     }
-    if(name==='depthImbalance') return finish(this.dataResolver?.depthImbalance?.() ?? null);
+    if(name==='depthImbalance') {
+      this.resourceGovernor.recordDataRequest({symbol:this.executionContext.symbol,timeframe:this.executionContext.timeframe,field:'volume'});
+      const value=this.dataResolver?.depthImbalance?.() ?? null;
+      this.resourceGovernor.recordResolvedData(value);
+      return finish(value);
+    }
+    this.resourceGovernor.recordDataRequest({symbol:this.executionContext.symbol,timeframe:this.executionContext.timeframe,field:'volume'});
     const footprint=this.dataResolver?.footprint?.();
+    this.resourceGovernor.recordResolvedData(footprint);
     if(name==='footprintDelta') return finish(footprint?.delta ?? null);
     if(name==='footprintBuy') return finish(footprint?.buyVolume ?? null);
     if(name==='footprintSell') return finish(footprint?.sellVolume ?? null);
@@ -2011,7 +2023,9 @@ export class CoreSpiritRuntime {
           outputs.push({kind:'label',id:`${this.options.sourceId}:show-signal:${idBase}:${type}`,time,price,text:type,position:relative.kind==='belowBar'?'below':'above',relativePosition:relative,visual:placement(area,'time'),style:{background:'#2563eb',color:'#ffffff',fontSize:12,shape:'pill'},metadata:{semanticRole:'signal',type,...metadata}});
         } else if(visualKind==='model'){
           const ref=args[1]; const modelName=ref&&typeof ref==='object'?String((ref as Record<string,unknown>).modelName??'model'):String(ref??'model');
+          this.resourceGovernor.recordModelCall();
           const modelValue=this.modelOutputResolver?.({modelName,field:'*',binding:(()=>{const d=this.loadedSurface?.declarations.find((item): item is Extract<CoreSpiritSurfaceDeclaration,{kind:'model'}> => item.kind==='model'&&item.name===modelName);return d?.binding;})()}) ?? null;
+          this.resourceGovernor.recordResolvedData(modelValue);
           outputs.push({kind:'customVisual',id:`${this.options.sourceId}:show-model:${idBase}:${modelName}`,time,geometry:{kind:'point',point:coreSpiritTimePricePoint(time,Number.isFinite(Number(modelValue))?Number(modelValue):Number(bar.close))},visual:placement({kind:'chart',area:'price',id:'price'},'time'),metadata:{semanticRole:'model',model:modelName,value:typeof modelValue==='object'?JSON.stringify(modelValue):modelValue,...metadata}});
         }
       }
