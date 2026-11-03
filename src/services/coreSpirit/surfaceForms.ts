@@ -579,7 +579,7 @@ export function normalizeCoreSpiritSource(source: string): string {
   // inside WHEN/event blocks. Lower it before indentation/block handling so
   // nested statements receive the same canonical capability call as top-level ones.
   source = source.replace(
-    /^(\\s*)route\\s+order\\s+through\\s+broker\\s*\\(\\s*(["'])([^"']+)\\2\\s*\\)\\s*;?$/gim,
+    /^(\s*)route\s+order\s+through\s+broker\s*\(\s*(["'])([^"']+)\2\s*\)\s*;?$/gim,
     '$1automation.route("broker.$3");',
   );
   const sourceLines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
