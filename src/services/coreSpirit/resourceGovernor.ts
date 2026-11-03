@@ -1,6 +1,6 @@
 import type { CoreSpiritDataRequest } from './types';
 import type { CoreSpiritObject } from './types';
-import type { CoreSpiritBarPhase } from './executionSemantics';
+import type { CoreSpiritBarPhase } from './types';
 
 export type CoreSpiritResourceBudget = Readonly<{
   maxInstructionsPerRevision: number;
