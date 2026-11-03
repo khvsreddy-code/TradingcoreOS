@@ -650,7 +650,7 @@ export function normalizeCoreSpiritSource(source: string): string {
       out.push('}');
     }
 
-    const eventHeader = trimmed.match(/^on\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s*:\\s*$/i);
+    const eventHeader = trimmed.match(/^on\s+([A-Za-z_][A-Za-z0-9_.]*)\s*:\s*$/i);
     if (eventHeader) {
       const indentText = raw.match(/^[ \\t]*/)?.[0] ?? '';
       out.push(`${indentText}on ${eventHeader[1]} {`);
