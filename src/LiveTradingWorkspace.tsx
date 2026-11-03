@@ -321,6 +321,22 @@ const browserRuntimeMetrics = useRef({
       window.addEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged);
       workspaceListenerDisposers.push(() => window.removeEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged));
 
+      // CoreSpirit editor drafts are persisted locally by the dock. Mirror the
+      // changed source into Vela's global workspace state and enqueue the same
+      // debounced named-workspace save, so a restored workspace has the latest
+      // editor content rather than the previous compiled source.
+      const queueLiveSourceSave = (source: string) => {
+        if (typeof source !== 'string' || source.length > 1_000_000) return;
+        try { localStorage.setItem(CORESPIRIT_LIVE_SOURCE_KEY, source); } catch {}
+        scheduleNamedWorkspaceAutosave?.();
+      };
+      const onCoreSpiritSourceChanged = (event: Event) => {
+        const detail = (event as CustomEvent<{ source?: unknown }>).detail;
+        if (typeof detail?.source === 'string') queueLiveSourceSave(detail.source);
+      };
+      window.addEventListener('tco:corespirit:source-changed', onCoreSpiritSourceChanged);
+      workspaceListenerDisposers.push(() => window.removeEventListener('tco:corespirit:source-changed', onCoreSpiritSourceChanged));
+
       // Warm common index history in the background once the broker is ready.
       // The workspace itself is already mounted, and its own getBars call is
       // allowed to drive first-candle loading concurrently.
