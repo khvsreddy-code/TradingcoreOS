@@ -80,6 +80,28 @@ clock += 11;
 assert.throws(() => governor.assertExecutionTime(), error =>
   error instanceof CoreSpiritResourceLimitError && error.resource === 'maxExecutionTimeMs');
 
+const runGovernor = new CoreSpiritResourceGovernor({ maxInstructionsPerRun: 1 }, () => clock);
+runGovernor.beginExecution();
+runGovernor.beginRevision(0, 'historical');
+runGovernor.consumeInstructions();
+runGovernor.beginRevision(1, 'historical');
+assert.throws(() => runGovernor.consumeInstructions(), error =>
+  error instanceof CoreSpiritResourceLimitError && error.resource === 'maxInstructionsPerRun',
+  'historical replay cannot reset the whole-run instruction budget at every bar');
+const fanoutGovernor = new CoreSpiritResourceGovernor({
+  maxDataRequestsPerRevision: 20,
+  maxMultiSymbolRequestsPerRevision: 1,
+  maxMultiTimeframeRequestsPerRevision: 1,
+}, () => clock);
+fanoutGovernor.beginExecution();
+fanoutGovernor.beginRevision(0, 'forming');
+fanoutGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '5m', field: 'close' });
+fanoutGovernor.recordDataRequest({ symbol: 'NSE:BANKNIFTY-INDEX', timeframe: '5m', field: 'close' });
+assert.throws(() => fanoutGovernor.recordDataRequest({ symbol: 'BSE:SENSEX-INDEX', timeframe: '5m', field: 'close' }), error =>
+  error instanceof CoreSpiritResourceLimitError && error.resource === 'maxMultiSymbolRequestsPerRevision');
+assert.throws(() => fanoutGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '15m', field: 'close' }), error =>
+  error instanceof CoreSpiritResourceLimitError && error.resource === 'maxMultiTimeframeRequestsPerRevision');
+
 const reference = {
   engine: 'pine-reference',
   engineVersion: 'pinned-reference-1',
@@ -117,6 +139,30 @@ assert.equal(match.passed, true, 'identical reference and CoreSpirit traces must
 assert.equal(match.comparedSeriesValues, 4);
 assert.equal(match.comparedDrawingChanges, 2);
 assert.equal(match.comparedEvents, 2);
+
+const formingReference = {
+  ...reference,
+  dataSamples: [],
+  drawings: [],
+  events: [],
+  bars: [
+    { barIndex: 0, timestamp: 1000, revision: 1, phase: 'forming', series: { close: 99, pivotHigh: null } },
+    { barIndex: 0, timestamp: 1000, revision: 2, phase: 'forming', series: { close: 100, pivotHigh: null } },
+    { barIndex: 0, timestamp: 1000, revision: 3, phase: 'confirmed', series: { close: 101, pivotHigh: 105 } },
+  ],
+};
+const formingCandidate = { ...formingReference, engine: 'corespirit' };
+assert.equal(compareCoreSpiritConformance(formingReference, formingCandidate).passed, true,
+  'the lab must compare intrabar replacements for one stable bar identity and its final confirmed pivot');
+const replacedCandidate = {
+  ...formingCandidate,
+  bars: formingCandidate.bars.map((bar, index) => index === 1
+    ? { ...bar, series: { ...bar.series, close: 99.5 } }
+    : bar),
+};
+assert.ok(compareCoreSpiritConformance(formingReference, replacedCandidate).mismatches.some(item =>
+  item.category === 'series-value' && item.barIndex === 0),
+  'the lab must detect a forming-bar value which was not replaced by the latest tick revision');
 
 const diverged = {
   ...matching,
