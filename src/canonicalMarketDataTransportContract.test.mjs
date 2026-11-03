@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const transport = fs.readFileSync(path.join(root, 'src/services/core/data/canonicalMarketDataTransport.ts'), 'utf8');
+const canonicalPlane = fs.readFileSync(path.join(root, 'src/services/core/data/canonicalDataPlane.ts'), 'utf8');
 const coordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartComputeCoordinator.ts'), 'utf8');
 const indicatorWorker = fs.readFileSync(path.join(root, 'src/services/marketData/indicator.worker.ts'), 'utf8');
 const analyticsWorker = fs.readFileSync(path.join(root, 'src/services/marketData/chartAnalytics.worker.ts'), 'utf8');
@@ -19,7 +20,9 @@ assert.match(transport, /Float64Array/);
 assert.match(transport, /packetTransferables/);
 assert.match(transport, /sourceFrom: sliced\.sourceFrom/);
 assert.match(transport, /sourceTo: sliced\.sourceFrom \+ sliced\.length/);
-assert.match(transport, /timeUnit: 'epoch-seconds'/);
+assert.match(transport, /timeUnit: sliced\.timeUnit/);
+assert.match(transport, /packet\.timeUnit !== 'epoch-seconds'/);
+assert.match(canonicalPlane, /timeUnit: 'epoch-seconds' as const/);
 assert.match(transport, /assertRevisionRange\(packet\.dirtyRange, packet\)/);
 assert.match(transport, /new Float64Array\(sliced\.time\)/);
 assert.match(coordinator, /market\?: CanonicalMarketDataPacket/);
