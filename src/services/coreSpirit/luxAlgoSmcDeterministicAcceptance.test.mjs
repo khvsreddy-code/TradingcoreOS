@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from './luxAlgoSmcCoreSource.ts';
-import { compileCoreSpirit, executeCoreSpirit } from './coreSpiritPipeline.ts';
+import { compileCoreSpirit, executeCoreSpirit as executeCoreSpiritWithPolicy } from './coreSpiritPipeline.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { requireCoreSpiritOutputs } from './boundaryValidation.ts';
 import { adaptCoreSpiritOutputsForVela, normalizeVelaBarsToCoreSpirit } from './velaOutputAdapter.ts';
 import { CoreSpiritVisualAbiStore, createCoreSpiritVisualSnapshot, projectCoreSpiritObjectsToVela } from '../core/chart/coreSpiritVisualAbi.ts';
 
 const SOURCE_ID = 'corespirit-smc-acceptance';
+// This suite proves deterministic semantics and rendering contracts, not wall-clock performance.
+// Production runtime limits remain at 150 ms/bar and are tested independently with deterministic clocks.
+const ACCEPTANCE_RESOURCE_BUDGET = Object.freeze({ maxExecutionTimeMs: 1_000, maxExecutionTimeMsPerRun: 120_000 });
+function executeAcceptance(source, bars, sourceId) {
+  return executeCoreSpiritWithPolicy(source, bars, sourceId, { resourceBudget: ACCEPTANCE_RESOURCE_BUDGET });
+}
 const source = CORESPIRIT_LUXALGO_SMC_SOURCE;
 const compiled = compileCoreSpirit(source, SOURCE_ID, { layer: 'script' });
 const errors = compiled.diagnostics.filter(item => item.severity === 'error');
@@ -69,9 +75,9 @@ function semanticFingerprint(outputs) {
 }
 
 const bars = fixedDataset();
-const first = executeCoreSpirit(source, bars, SOURCE_ID);
-const replay = executeCoreSpirit(source, bars, SOURCE_ID);
-const referenceRuntime = new CoreSpiritRuntime({ sourceId: SOURCE_ID, executionTier: 'reference' });
+const first = executeAcceptance(source, bars, SOURCE_ID);
+const replay = executeAcceptance(source, bars, SOURCE_ID);
+const referenceRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: SOURCE_ID, executionTier: 'reference' });
 const referenceReplay = referenceRuntime.executeIr(compiled.ir, bars);
 assert.deepEqual(first.diagnostics, [], 'fixed SMC history must execute without runtime diagnostics');
 assert.deepEqual(referenceReplay.diagnostics, [], 'reference SMC history must execute without runtime diagnostics');
@@ -96,7 +102,7 @@ assert.ok(outputs.some(item => item.kind === 'zone' && item.style?.fillColor ===
   'bearish FVGs must preserve their original bounds');
 const bullishOrderBlock = outputs.find(item => item.kind === 'zone' && item.style?.fillColor === '#1848CC');
 const hasBullishOrderBlock = Boolean(bullishOrderBlock);
-const bullishOrderBlockDebug = hasBullishOrderBlock ? [] : executeCoreSpirit(source + `
+const bullishOrderBlockDebug = hasBullishOrderBlock ? [] : executeAcceptance(source + `
 if bar_index == 167 {
     if close < open { label("DBG_BAR167_BEARISH_TRUE", "below", "#00FF00", "#000000", 8, "pill") }
     if close >= open { label("DBG_BAR167_BEARISH_FALSE", "below", "#FF0000", "#FFFFFF", 8, "pill") }
@@ -140,7 +146,7 @@ assert.equal(bullishOrderBlock.bottom, bars[167].low,
 // The active → mitigated transition is part of the observable SMC contract.
 // Keep one runtime/instance so the test proves retained identity, state rollback,
 // and in-place geometry updates rather than comparing unrelated snapshots.
-const orderBlockLifecycleRuntime = new CoreSpiritRuntime({ sourceId: SOURCE_ID + '-ob-lifecycle' });
+const orderBlockLifecycleRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: SOURCE_ID + '-ob-lifecycle' });
 const orderBlockSeed = orderBlockLifecycleRuntime.executeIr(compiled.ir, bars.slice(0, 171));
 assert.deepEqual(orderBlockSeed.diagnostics, [], 'the unmitigated order-block prefix must execute cleanly');
 const activeBullishOrderBlock = orderBlockSeed.outputs.find(item =>
@@ -204,7 +210,7 @@ assert.equal(
 
 // Mirror the lifecycle for bearish blocks. Bar 185 creates the bearish break
 // from the most recent bullish origin at bar 183; bar 186 trades above its top.
-const bearOrderBlockRuntime = new CoreSpiritRuntime({ sourceId: SOURCE_ID + '-bear-ob-lifecycle' });
+const bearOrderBlockRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: SOURCE_ID + '-bear-ob-lifecycle' });
 const bearOrderBlockSeed = bearOrderBlockRuntime.executeIr(compiled.ir, bars.slice(0, 186));
 const activeBearishOrderBlock = bearOrderBlockSeed.outputs.find(item =>
   item.kind === 'zone' && item.style?.fillColor === '#B22833');
@@ -298,7 +304,7 @@ assert.ok(scene.boxes.every(box => box.xloc === 'bar_time' && box.left < box.rig
 
 // Input changes are a different semantic artifact. They must produce a fresh,
 // internally consistent result rather than leaving stale drawings from the old input.
-const shortSwingRuntime = new CoreSpiritRuntime({
+const shortSwingRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET,
   sourceId: SOURCE_ID,
   inputValues: { swingLength: 20 },
 });
@@ -317,11 +323,11 @@ const revisedBar = {
   high: Math.max(liveBar.high, liveBar.close + 0.18),
   low: Math.min(liveBar.low, liveBar.close - 0.06),
 };
-const liveRuntime = new CoreSpiritRuntime({ sourceId: 'smc-forming-bar' });
+const liveRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: 'smc-forming-bar' });
 liveRuntime.executeIr(compiled.ir, prefix);
 liveRuntime.executeBar(liveBar, 'realtime');
 const revisedLive = liveRuntime.executeBar(revisedBar, 'realtime');
-const referenceLiveRuntime = new CoreSpiritRuntime({ sourceId: 'smc-forming-bar' });
+const referenceLiveRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: 'smc-forming-bar' });
 referenceLiveRuntime.executeIr(compiled.ir, prefix);
 const referenceLive = referenceLiveRuntime.executeBar(revisedBar, 'realtime');
 assert.equal(semanticFingerprint(revisedLive.outputs), semanticFingerprint(referenceLive.outputs),
@@ -338,7 +344,7 @@ const finalRevisionBar = {
   low: Math.min(liveBar.low, liveBar.close - 0.21),
 };
 const repeatedRevision = liveRuntime.executeBar(finalRevisionBar, 'realtime');
-const repeatedRevisionReferenceRuntime = new CoreSpiritRuntime({ sourceId: 'smc-forming-bar' });
+const repeatedRevisionReferenceRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: 'smc-forming-bar' });
 repeatedRevisionReferenceRuntime.executeIr(compiled.ir, prefix);
 const repeatedRevisionReference = repeatedRevisionReferenceRuntime.executeBar(finalRevisionBar, 'realtime');
 assert.equal(semanticFingerprint(repeatedRevision.outputs), semanticFingerprint(repeatedRevisionReference.outputs),
@@ -350,10 +356,10 @@ assert.equal(repeatedRevision.state.barIndex, repeatedRevisionReference.state.ba
 // same outputs as a clean run of the corrected immutable dataset.
 const correctedBars = bars.map(bar => ({ ...bar }));
 correctedBars[42] = { ...correctedBars[42], close: correctedBars[42].close + 0.08 };
-const correctionRuntime = new CoreSpiritRuntime({ sourceId: 'smc-correction' });
+const correctionRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET, sourceId: 'smc-correction' });
 correctionRuntime.executeIr(compiled.ir, bars);
 const corrected = correctionRuntime.executeIr(compiled.ir, correctedBars);
-const cleanCorrected = executeCoreSpirit(source, correctedBars, 'smc-correction');
+const cleanCorrected = executeAcceptance(source, correctedBars, 'smc-correction');
 assert.deepEqual(corrected.diagnostics, [], 'historical correction replay must remain runtime-valid');
 assert.equal(semanticFingerprint(corrected.outputs), semanticFingerprint(cleanCorrected.outputs),
   'corrected history must equal a clean full replay; no stale drawing objects may survive correction');
@@ -373,11 +379,11 @@ function epochSeconds(bar) {
 // confirmation window closes. The label is anchored to the candidate candle,
 // but must only become observable after the full 50-bar confirmation delay.
 const pivotCandidateTime = epochSeconds(bars[55]);
-const beforePivotConfirmation = executeCoreSpirit(source, bars.slice(0, 105), SOURCE_ID + '-pivot-before-confirmation');
+const beforePivotConfirmation = executeAcceptance(source, bars.slice(0, 105), SOURCE_ID + '-pivot-before-confirmation');
 assert.ok(!beforePivotConfirmation.outputs.some(item =>
   item.kind === 'label' && ['SH', 'HH', 'LH'].includes(item.text) && item.time === pivotCandidateTime
 ), 'a swing-high label must not appear before its right-side confirmation bars exist');
-const atPivotConfirmation = executeCoreSpirit(source, bars.slice(0, 106), SOURCE_ID + '-pivot-at-confirmation');
+const atPivotConfirmation = executeAcceptance(source, bars.slice(0, 106), SOURCE_ID + '-pivot-at-confirmation');
 assert.ok(atPivotConfirmation.outputs.some(item =>
   item.kind === 'label' && item.text === 'SH' && item.time === pivotCandidateTime
 ), 'the first swing high must appear on the original pivot candle exactly when confirmation becomes available');
@@ -396,11 +402,11 @@ assert.ok(outputs.some(item => item.kind === 'label' && item.text === 'EQL' &&
 // candle's high at the left and the current candle's low at the right bound.
 const bullishGapLeft = epochSeconds(bars[168]);
 const bullishGapRight = epochSeconds(bars[170]);
-const beforeBullishGap = executeCoreSpirit(source, bars.slice(0, 170), SOURCE_ID + '-before-bull-fvg');
+const beforeBullishGap = executeAcceptance(source, bars.slice(0, 170), SOURCE_ID + '-before-bull-fvg');
 assert.ok(!beforeBullishGap.outputs.some(item => item.kind === 'zone' &&
   item.style?.fillColor === '#00FF68' && item.left === bullishGapLeft),
   'a bullish FVG must not be emitted before the third candle establishes the imbalance');
-const atBullishGap = executeCoreSpirit(source, bars.slice(0, 171), SOURCE_ID + '-at-bull-fvg');
+const atBullishGap = executeAcceptance(source, bars.slice(0, 171), SOURCE_ID + '-at-bull-fvg');
 const bullishGap = atBullishGap.outputs.find(item => item.kind === 'zone' &&
   item.style?.fillColor === '#00FF68' && item.left === bullishGapLeft);
 assert.ok(bullishGap, 'the fixture bullish FVG should be emitted on its third candle');
@@ -411,7 +417,7 @@ assert.equal(bullishGap.bottom, bars[168].high, 'bullish FVG bottom must equal t
 // Mirror the exact-boundary check for a bearish three-candle gap.
 const bearishGapLeft = epochSeconds(bars[183]);
 const bearishGapRight = epochSeconds(bars[185]);
-const atBearishGap = executeCoreSpirit(source, bars.slice(0, 186), SOURCE_ID + '-at-bear-fvg');
+const atBearishGap = executeAcceptance(source, bars.slice(0, 186), SOURCE_ID + '-at-bear-fvg');
 const bearishGap = atBearishGap.outputs.find(item => item.kind === 'zone' &&
   item.style?.fillColor === '#FF0008' && item.left === bearishGapLeft);
 assert.ok(bearishGap, 'the fixture bearish FVG should be emitted on its third candle');
@@ -422,7 +428,7 @@ assert.equal(bearishGap.bottom, bars[185].high, 'bearish FVG bottom must equal t
 // Input switches are part of the indicator's public surface. A setting change
 // must remove disabled visual families rather than leaving stale historical
 // drawings behind in a newly evaluated output snapshot.
-const hiddenFvgRuntime = new CoreSpiritRuntime({
+const hiddenFvgRuntime = new CoreSpiritRuntime({ resourceBudget: ACCEPTANCE_RESOURCE_BUDGET,
   sourceId: SOURCE_ID + '-hide-fvg',
   inputValues: { showFairValueGaps: false },
 });
@@ -465,7 +471,7 @@ const recompilation = compileCoreSpirit(source, SOURCE_ID, { layer: 'script' });
 assert.ok(recompilation.ir && recompilation.artifact &&
   !recompilation.diagnostics.some(item => item.severity === 'error'),
   'recompilation must continue to produce a validated SMC artifact');
-const recompiledRun = executeCoreSpirit(source, bars, SOURCE_ID);
+const recompiledRun = executeAcceptance(source, bars, SOURCE_ID);
 assert.deepEqual(recompiledRun.diagnostics, [], 'recompiled SMC must execute without runtime diagnostics');
 assert.equal(semanticFingerprint(recompiledRun.outputs), semanticFingerprint(outputs),
   'recompile must reproduce the fixed-data SMC output before replacing chart objects');
