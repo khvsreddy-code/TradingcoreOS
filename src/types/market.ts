@@ -47,7 +47,7 @@ export interface NormalizedMarketTick {
   timestamp?: number;
   receivedAtEpoch?: number;
   brokerTimestamp?: number;
-  source?: 'fyers' | 'paper' | 'replay' | 'backtest' | 'simulator';
+  source?: 'fyers' | 'investiny' | 'yahoo' | 'paper' | 'replay' | 'backtest' | 'simulator';
   revision?: number;
   feedClass?: 'lite' | 'full' | 'depth';
 }
@@ -68,12 +68,18 @@ export interface OptionQuote {
   bidQuantity?: number;
   askPrice?: number;
   askQuantity?: number;
+  observedAt?: string;
+  source?: string;
 }
 
 export interface OptionContract {
   strike: number;
   expiry?: string;
   underlyingKey?: string;
+  instrumentId?: string;
+  exchange?: 'NSE' | 'BSE';
+  lotSize?: number;
+  tickSize?: number;
   call?: OptionQuote;
   put?: OptionQuote;
 }
