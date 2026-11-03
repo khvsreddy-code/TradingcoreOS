@@ -16,13 +16,13 @@ export class CoreSpiritCapabilityHost {
   ) {}
 
   private track<T>(value: T): T {
-    this.accounting.onResolvedValue?.(value);
     if (value && typeof (value as any).then === 'function') {
       return (value as any).then((resolved: unknown) => {
         this.accounting.onResolvedValue?.(resolved);
         return resolved;
       }) as T;
     }
+    this.accounting.onResolvedValue?.(value);
     return value;
   }
 
