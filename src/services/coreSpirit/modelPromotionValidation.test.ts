@@ -117,24 +117,24 @@ async function validate(artifact: ModelArtifact<unknown>, data: PromotionDataset
 
 const forgedFlags = await validate(makeArtifact(), null);
 assert.equal(forgedFlags.productionEligible, false, 'forged all-true report flags cannot replace missing source/data evidence');
-assert.equal(forgedFlags.checks.researchArtifactBound, false);
-assert.equal(forgedFlags.checks.datasetSnapshotBound, false);
-assert.equal(forgedFlags.checks.datasetSourceVerified, false);
+assert.equal(forgedFlags.checks.researchArtifactBound, false, 'missing research source cannot bind an artifact');
+assert.equal(forgedFlags.checks.datasetSnapshotBound, false, 'null dataset snapshot cannot be considered bound');
+assert.equal(forgedFlags.checks.datasetSourceVerified, false, 'missing dataset snapshot cannot verify source provenance');
 
 const unconfirmedRows = rows.map((row, index) => index === 20 ? { ...row, confirmed: false } : row);
 const unconfirmed = await validate(makeArtifact(), snapshot({ rows: unconfirmedRows }));
 assert.equal(unconfirmed.productionEligible, false, 'unconfirmed feature rows cannot be promoted');
-assert.equal(unconfirmed.checks.confirmedRowsOnly, false);
+assert.equal(unconfirmed.checks.confirmedRowsOnly, false, 'developing/unconfirmed rows must fail confirmed-row validation');
 
 const leakage = await validate(makeArtifact(['future_return']), snapshot({ rows }));
 assert.equal(leakage.productionEligible, false, 'a known future-derived feature cannot be promoted');
-assert.equal(leakage.checks.labelLeakageCheckPassed, false);
+assert.equal(leakage.checks.labelLeakageCheckPassed, false, 'known future-derived feature names must fail leakage checks');
 
 const twoFeatureRows = rows.map(row => ({ ...row, values: [row.values[0]!, row.values[0]! / 2] }));
 const mismatchedSchema = await validate(makeArtifact(['close']), snapshot({ rows: twoFeatureRows, featureNames: ['close', 'volume'] }));
 assert.equal(mismatchedSchema.productionEligible, false, 'a dataset feature schema different from the model must fail closed');
-assert.equal(mismatchedSchema.checks.datasetSnapshotBound, false);
-assert.equal(mismatchedSchema.checks.featureSchemaMatched, false);
+assert.equal(mismatchedSchema.checks.datasetSnapshotBound, false, 'snapshot feature schema must be bound to the model schema');
+assert.equal(mismatchedSchema.checks.featureSchemaMatched, false, 'mismatched feature schema cannot pass promotion');
 
 const overlappingRanges = {
   trainingRange: { from: new Date(rows[0]!.timestamp).toISOString(), to: new Date(rows[50]!.timestamp).toISOString() },
@@ -142,6 +142,6 @@ const overlappingRanges = {
 };
 const overlap = await validate(makeArtifact(['close'], overlappingRanges), snapshot({ rows }));
 assert.equal(overlap.productionEligible, false, 'overlapping train/validation timestamps cannot be promoted');
-assert.equal(overlap.checks.temporalRangesDisjoint, false);
-assert.equal(overlap.checks.forecastHorizonPurged, false);
+assert.equal(overlap.checks.temporalRangesDisjoint, false, 'overlapping training and validation windows must fail');
+assert.equal(overlap.checks.forecastHorizonPurged, false, 'overlapping/purged horizon requirements must fail closed');
 console.log('CORESPIRIT_MODEL_PROMOTION_FAILS_CLOSED_OK');
