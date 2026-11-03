@@ -36,10 +36,11 @@ unsubscribe();
 unsubscribeAttach();
 assert.equal(stopped, true);
 
-assert.equal(INITIAL_HISTORY_CANDLES['5m'], 900);
-assert.equal(INITIAL_HISTORY_CANDLES['1m'], 1200);
+// Cold chart startup is intentionally bounded to a fast 300-bar viewport page.
+assert.equal(INITIAL_HISTORY_CANDLES['5m'], 300);
+assert.equal(INITIAL_HISTORY_CANDLES['1m'], 300);
 assert.equal(historyDemandPageCandles('5m', 225), 900);
-assert.equal(historyDemandPageCandles('5m', 400), 1600);
+assert.equal(historyDemandPageCandles('5m', 400), 1500, 'demand history pages are capped at 1,500 bars');
 
 const coordinator = new ChartHistoryCoordinator();
 assert.equal(coordinator.maxConcurrent, 6);
