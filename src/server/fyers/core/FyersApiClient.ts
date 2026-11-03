@@ -310,8 +310,9 @@ export class FyersApiClient {
         primaryAdmission,
       );
     };
-    if (!expiredFnoIntraday) return primary();
-    const dailyLimit = Math.max(1, Number(this.capabilities.historyDepth.expiredFnoIntradayRequestsPerDay) || 10);
+    const configuredDailyLimit = this.capabilities.historyDepth.expiredFnoIntradayRequestsPerDay;
+    if (!expiredFnoIntraday || configuredDailyLimit == null || !Number.isFinite(Number(configuredDailyLimit))) return primary();
+    const dailyLimit = Math.max(1, Math.floor(Number(configuredDailyLimit)));
     // This separate counter is still keyed by the hashed FYERS account identity.
     // Admission happens inside each retry attempt, so retries consume quota too.
     return withBrokerRequestGate('fyers', this.rateLimitIdentity, primary, signal, {
