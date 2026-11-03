@@ -98,7 +98,7 @@ const reference = {
     field: 'close',
     asOfTimestamp: 1300,
     sampleTimestamp: 600,
-    closeTimestamp: 1500,
+    closeTimestamp: 1200,
     value: 100,
     confirmation: 'confirmed',
   }],
