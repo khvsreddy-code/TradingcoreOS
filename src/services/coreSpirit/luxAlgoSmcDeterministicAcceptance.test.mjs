@@ -56,7 +56,11 @@ function fixedDataset() {
 }
 
 function semanticFingerprint(outputs) {
-  return JSON.stringify(outputs, (_key, value) => {
+  return JSON.stringify(outputs, (key, value) => {
+    // Runtime provenance is intentionally compared by its own assertions below.
+    // A corrected replay and a clean historical run must share numerical/drawing
+    // semantics even though their host execution phases are necessarily distinct.
+    if (key === 'coreSpiritExecution') return undefined;
     if (typeof value === 'number' && Number.isNaN(value)) return '__NaN__';
     if (value === Number.POSITIVE_INFINITY) return '__Infinity__';
     if (value === Number.NEGATIVE_INFINITY) return '__-Infinity__';
@@ -353,6 +357,12 @@ const cleanCorrected = executeCoreSpirit(source, correctedBars, 'smc-correction'
 assert.deepEqual(corrected.diagnostics, [], 'historical correction replay must remain runtime-valid');
 assert.equal(semanticFingerprint(corrected.outputs), semanticFingerprint(cleanCorrected.outputs),
   'corrected history must equal a clean full replay; no stale drawing objects may survive correction');
+const correctedExecutionSemantics = corrected.outputs.find(item => item.metadata?.coreSpiritExecution)?.metadata?.coreSpiritExecution;
+const cleanExecutionSemantics = cleanCorrected.outputs.find(item => item.metadata?.coreSpiritExecution)?.metadata?.coreSpiritExecution;
+assert.equal(correctedExecutionSemantics?.barPhase, 'correction',
+  'outputs from a historical correction replay retain their explicit correction provenance');
+assert.equal(cleanExecutionSemantics?.barPhase, 'historical',
+  'outputs from a clean dataset replay retain their historical execution provenance');
 
 
 function epochSeconds(bar) {
