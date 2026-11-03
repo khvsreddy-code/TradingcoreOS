@@ -770,3 +770,14 @@ html[data-tco-theme="white"] .tco-fyers-prompt-copy p { color:#4b626d; }
   .tco-fyers-prompt-actions { grid-column: 1 / -1; display:grid; grid-template-columns:1fr 1fr; min-width:0; }
   .tco-fyers-prompt-caption { gap:5px 9px; }
 }
+
+/* Market-data truth states: labels remain readable in both terminal themes. */
+.tct-wl-data-health-live { color: #16a36a; }
+.tct-wl-data-health-delayed { color: #d69b35; }
+.tct-wl-data-health-stale, .tct-wl-data-health-disconnected { color: #e05b5b; }
+.tct-wl-data-health-unknown { color: #8b96a5; }
+.tct-market-state.tct-wl-data-health-live .tct-state-dot { background: #16a36a; }
+.tct-market-state.tct-wl-data-health-delayed .tct-state-dot { background: #d69b35; }
+.tct-market-state.tct-wl-data-health-stale .tct-state-dot,
+.tct-market-state.tct-wl-data-health-disconnected .tct-state-dot { background: #e05b5b; }
+.tct-market-state.tct-wl-data-health-unknown .tct-state-dot { background: #8b96a5; }
