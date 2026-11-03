@@ -44,7 +44,7 @@ import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandb
 import { validateSynchronizedSnapshot } from './multiSymbolTimeframe';
 import type { CoreSpiritSessionWindow } from './sessionCalendar';
 import { CoreSpiritResourceGovernor, type CoreSpiritResourceBudget, CoreSpiritResourceLimitError } from './resourceGovernor';
-import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent } from './executionSemantics';
+import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent, type CoreSpiritOutputSemantics } from './executionSemantics';
 import type { CoreSpiritBarPhase } from './types';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
@@ -314,6 +314,7 @@ export class CoreSpiritRuntime {
   /** Numeric IDs are stable for one loaded runtime/program. Names are resolved only during lowering. */
   private readonly seriesRegistry: CoreSpiritSeriesRegistry = this.stateStore.series;
   private readonly outputCollector: CoreSpiritOutputCollector;
+  private currentOutputSemantics?: CoreSpiritOutputSemantics;
   private readonly eventRouter: CoreSpiritEventRouter;
   private readonly capabilityHost: CoreSpiritCapabilityHost;
   private readonly debugHost = new CoreSpiritDebugHost();
@@ -532,6 +533,9 @@ export class CoreSpiritRuntime {
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
     this.updateOptimizedComponentDefinitionSignature(compiled.ir);
     this.installSeriesFusion(compiled.ir);
+    // Enforce script lookback and graph fan-out before the program touches market data.
+    this.resourceGovernor.assertLookback(compiled.ir.maxLookback);
+    this.resourceGovernor.assertDependencies(compiled.ir.graphs?.semantic?.nodes?.map(node => node.id) ?? Object.keys(compiled.ir.semanticEnvironment ?? {}));
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
@@ -546,7 +550,7 @@ export class CoreSpiritRuntime {
     return this.executeIr(this.compiledIr!, bars).outputs;
   }
 
-  executeBar(bar: HistoricalCandle, profilePhase: 'historical'|'realtime' = 'realtime'): CoreSpiritExecutionResult {
+  executeBar(bar: HistoricalCandle, profilePhase: 'historical'|'realtime'|'confirmed'|'replay'|'correction' = 'realtime'): CoreSpiritExecutionResult {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
     const normalized = { ...bar };
@@ -557,7 +561,20 @@ export class CoreSpiritRuntime {
     if (currentTail && this.toEpoch(normalized.timestamp) < this.toEpoch(currentTail.timestamp)) {
       throw new Error('out-of-order bar update rejected; use executeIr() to reconcile historical corrections');
     }
-    this.profiler.beginBar(profilePhase, this.compiledIr.entry.instructions.length);
+    const phase: CoreSpiritBarPhase = profilePhase === 'historical' ? 'historical'
+      : profilePhase === 'confirmed' ? 'confirmed'
+      : profilePhase === 'replay' ? 'replay'
+      : profilePhase === 'correction' ? 'correction'
+      : 'forming';
+    const executionIsRealtime = phase === 'forming' || phase === 'confirmed';
+    const executionIsConfirmed = phase !== 'forming';
+    const executionMode = this.executionContext.mode;
+    this.resourceGovernor.beginRevision(Math.max(0, this.history.length), phase);
+    this.currentOutputSemantics = createCoreSpiritOutputSemantics({
+      barPhase: phase, executionMode, isRealtime: executionIsRealtime, isConfirmed: executionIsConfirmed,
+    }, this.compiledIr.repaintSafety);
+    this.outputCollector.setExecutionSemantics(this.currentOutputSemantics);
+    this.profiler.beginBar(phase === 'historical' ? 'historical' : 'realtime', this.compiledIr.entry.instructions.length);
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
@@ -621,10 +638,10 @@ export class CoreSpiritRuntime {
     this.plotOrdinal = 0;
     this.indicatorMemo.clear();
     this.outputCount = 0;
-    this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:true, isConfirmed:false, revision:this.realtimeRevision, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
-    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false, sessionCalendar:this.sessionCalendar });
+    this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:executionIsRealtime, isConfirmed:executionIsConfirmed, barPhase:phase, revision:this.realtimeRevision, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
+    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:executionIsRealtime, isConfirmed:executionIsConfirmed, barPhase:phase, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false, sessionCalendar:this.sessionCalendar });
     this.executionContext.session = this.executionContext.frame.session;
-    this.lastBarWasRealtime = true;
+    this.lastBarWasRealtime = phase === 'forming';
     if (canIncremental && dirtyPlan) {
       this.realtimeDirtyInstructions.clear();
       for (const instruction of dirtyPlan.instructions) this.realtimeDirtyInstructions.add(instruction);
@@ -639,8 +656,14 @@ export class CoreSpiritRuntime {
           : undefined,
       });
     }
-    catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      diagnostics.push(`bar ${barIndex}: ${message}`);
+      this.debugHost.record({ kind:'execution-error', barIndex, message });
+      if (error instanceof CoreSpiritResourceLimitError) throw error;
+    }
     this.profiler.endBar();
+    if (phase === 'confirmed') this.commitConfirmedRealtimeBarState();
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
 
@@ -775,7 +798,7 @@ export class CoreSpiritRuntime {
 
   getExecutionFrame() {
     const b=this.state.barState;
-    return { timestamp:b.time*1000,barIndex:b.index,index:b.index,time:b.time,symbol:b.symbol,timeframe:b.timeframe,timezone:this.timezone,session:this.executionContext.session!,mode:b.mode,isRealtime:b.isRealtime,isConfirmed:b.isConfirmed,isNewBar:b.revision===0,revision:b.revision,isFirst:b.isFirst,isLast:b.isLast };
+    return { timestamp:b.time*1000,barIndex:b.index,index:b.index,time:b.time,symbol:b.symbol,timeframe:b.timeframe,timezone:this.timezone,session:this.executionContext.session!,mode:b.mode,isRealtime:b.isRealtime,isConfirmed:b.isConfirmed,barPhase:b.barPhase,isNewBar:b.revision===0,revision:b.revision,isFirst:b.isFirst,isLast:b.isLast };
   }
 
   getReactiveExecutionStats() { return { revision:this.reactiveRevision,recomputed:this.reactiveRecomputed,reused:this.reactiveReused,effects:this.reactiveEffects }; }
@@ -1152,6 +1175,8 @@ export class CoreSpiritRuntime {
     this.compiledIr = ir; this.updateOptimizedComponentDefinitionSignature(ir); this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan, this.optimizedExecutionCacheVersions());
     const historicalCorrectionPlan = this.planHistoricalCorrection(previousIr, previousBars, ir, bars);
     const priorEffectSuppression = this.suppressExternalEffects;
+    const replayMode = this.executionContext.mode === 'replay' || this.executionContext.mode === 'backtest' || this.executionContext.mode === 'historicalTick';
+    const historyPhase: CoreSpiritBarPhase = historicalCorrectionPlan ? 'correction' : replayMode ? 'replay' : 'historical';
     // Corrections rebuild semantic state without firing the same order intents,
     // alerts, webhooks, or host events a second time.
     if (historicalCorrectionPlan) this.suppressExternalEffects = true;
@@ -1160,21 +1185,34 @@ export class CoreSpiritRuntime {
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.recoveryStats.barsReplayed += 1;
-      this.profiler.beginBar('historical', ir.entry.instructions.length);
+      this.resourceGovernor.beginRevision(i, historyPhase);
+      this.currentOutputSemantics = createCoreSpiritOutputSemantics({
+        barPhase: historyPhase,
+        executionMode: this.executionContext.mode,
+        isRealtime: false,
+        isConfirmed: true,
+      }, ir.repaintSafety);
+      this.outputCollector.setExecutionSemantics(this.currentOutputSemantics);
+      this.profiler.beginBar(historyPhase === 'historical' ? 'historical' : 'realtime', ir.entry.instructions.length);
       this.plotOrdinal = 0;
       this.indicatorMemo.clear();
       this.outputCollector.beginBar();
       this.outputCount = 0;
       const bar = bars[i];
       this.validateBar(bar); this.state.barIndex = i; this.state.time = this.toEpoch(bar.timestamp); this.state.locals = {};
-      this.state.barState = { index:i, time:this.state.time, isFirst:i===0, isLast:i===bars.length-1, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
-      this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1,sessionCalendar:this.sessionCalendar});
+      this.state.barState = { index:i, time:this.state.time, isFirst:i===0, isLast:i===bars.length-1, isRealtime:false, isConfirmed:true, barPhase:historyPhase, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
+      this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,barPhase:historyPhase,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1,sessionCalendar:this.sessionCalendar});
       this.executionContext.session=this.executionContext.frame.session;
       this.history.push(bar);
       this.columnarHistory.append(bar);
       if (this.history.length > this.maxHistoryBars) { const drop=this.history.length-this.maxHistoryBars; this.history.splice(0,drop); this.columnarHistory.trimTo(this.history.length); }
       try { this.executeBlock(ir.entry.instructions, bar, this.history, i, this.outputCollector, diagnostics); }
-      catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        diagnostics.push(`bar ${i}: ${message}`);
+        this.debugHost.record({ kind:'execution-error', barIndex:i, message });
+        if (error instanceof CoreSpiritResourceLimitError) throw error;
+      }
       finally { this.profiler.endBar(); }
     }
     if (this.history.length) this.snapshotKernelsForBar(this.history.length - 1);
@@ -1318,7 +1356,8 @@ export class CoreSpiritRuntime {
     this.prefetchTradingNativeData(barIndex, this.toEpoch(bar.timestamp));
     const host: CoreSpiritExecutionVMHost = {
       maxStepsPerBar: this.options.maxStepsPerBar,
-      throwIfAborted: () => this.throwIfAborted(),
+      throwIfAborted: () => { this.throwIfAborted(); this.resourceGovernor.assertExecutionTime(); },
+      chargeInstruction: () => this.resourceGovernor.consumeInstructions(),
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
       moveLocal: (source) => this.state.locals[source],
       loadState: (name) => this.stateStore.getState(name),
@@ -2081,7 +2120,7 @@ export class CoreSpiritRuntime {
 
   private workspaceSnapshot() { return { ui:this.uiRuntime.snapshot(), app:this.appRuntime.snapshot(), visuals:this.declarativeVisualState }; }
 
-  private throwIfAborted(): void { if (this.abortSignal?.aborted) throw new DOMException('CoreSpirit execution aborted', 'AbortError'); }
+  private throwIfAborted(): void { if (this.abortSignal?.aborted) throw new DOMException('CoreSpirit execution aborted', 'AbortError'); this.resourceGovernor.assertExecutionTime(); }
   private toEpoch(timestamp:string):number{const n=Number(timestamp);if(Number.isFinite(n))return n>1e12?Math.floor(n/1000):n;const parsed=Date.parse(timestamp);return Number.isFinite(parsed)?Math.floor(parsed/1000):0;}
 }
 export const coreSpiritRuntime = new CoreSpiritRuntime();
