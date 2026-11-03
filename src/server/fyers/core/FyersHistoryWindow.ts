@@ -50,3 +50,32 @@ export function clampFyersHistoryRange(fromValue: unknown, toValue: unknown, now
 export function fyersHistoryWindowFloorMs(nowMs = Date.now()): number {
   return Number(nowMs) - FYERS_HISTORY_WINDOW_MS;
 }
+
+/**
+ * Expired F&O history is a separate FYERS product endpoint. It is deliberately
+ * not subject to the ordinary seven-day /history window. Daily expiry lookup
+ * and daily expired candles use the broker's configured lookback entitlement;
+ * intraday expired candles are bounded by their dedicated request/day budget.
+ */
+export function normalizeFyersExpiredFnoRange(
+  fromValue: unknown,
+  toValue: unknown,
+  maxLookbackYears: number | null = null,
+  nowMs = Date.now(),
+): FyersHistoryRange | null {
+  const requestedFrom = parseTimestamp(fromValue);
+  const requestedTo = parseTimestamp(toValue, true);
+  const now = Number(nowMs);
+  if (!Number.isFinite(requestedFrom) || !Number.isFinite(requestedTo)
+    || !Number.isFinite(now) || now <= 0 || requestedTo <= requestedFrom) {
+    throw new FyersHistoryWindowError('Expired FYERS F&O history requires a valid increasing range_from/range_to pair.');
+  }
+  const toMs = Math.min(requestedTo, now);
+  const lookbackMs = maxLookbackYears == null
+    ? Number.POSITIVE_INFINITY
+    : Math.max(1, Number(maxLookbackYears) || 1) * 365.25 * 86_400_000;
+  const floor = now - lookbackMs;
+  const fromMs = Math.max(requestedFrom, floor);
+  if (toMs <= fromMs) return null;
+  return Object.freeze({ fromMs, toMs, clipped: fromMs !== requestedFrom || toMs !== requestedTo });
+}
