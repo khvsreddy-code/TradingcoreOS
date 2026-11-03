@@ -63,7 +63,7 @@ function routeFallback(message = 'Loading Workspace...', submessage = 'Preparing
 }
 
 function AppContent() {
-  const { user, loading: authLoading, authStatus, isAuthenticated, authStep } = useAuth();
+  const { user, logout, loading: authLoading, authStatus, isAuthenticated, authStep } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   void profile;
 
@@ -222,6 +222,8 @@ function AppContent() {
     return (
       <Suspense fallback={routeFallback('Loading Broker Connection...', 'Preparing secure broker authorization')}>
         <BrokerConnectionRequiredPage
+          userEmail={user?.email ?? null}
+          onLogout={() => { void logout(); }}
           onBack={() => navigate('/dashboard')}
           onBrokerConnected={() => {
             // This route remains a protected entry route before and after OAuth,
