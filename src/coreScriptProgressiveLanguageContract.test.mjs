@@ -75,7 +75,7 @@ when risk.allowed():
 
 function compile(source, id, layer = 'script') {
   const result = compileCoreSpirit(source, id, { layer });
-  assert.deepEqual(result.diagnostics.filter(d => d.severity === 'error'), [], result.diagnostics.map(d => d.message).join('\\n'));
+  assert.deepEqual(result.diagnostics.filter(d => d.severity === 'error'), [], result.diagnostics.map(d => d.message).join('\\n') + '\\nNormalized source:\\n' + normalizeCoreSpiritSource(source));
   assert.ok(result.ir);
   return result.ir;
 }
