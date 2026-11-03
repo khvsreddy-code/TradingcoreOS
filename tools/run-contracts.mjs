@@ -13,6 +13,7 @@ const contracts = [
   ['yahoo-delayed-fallback', ['src/yahooDelayedFallbackContract.test.mjs', false]],
   ['shared-broker-coordination', ['src/sharedBrokerCoordinationContract.test.mjs', false]],
   ['fyers-quota-identity', ['src/fyersQuotaIdentityContract.test.mjs', true]],
+  ['fyers-standard-expired-fno-history-policy', ['src/fyersHistoryWindowContract.test.mjs', true]],
   ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
   ['corespirit-right-dock', ['src/corespiritDockContract.test.mjs', false]],
   ['market-latency-trace', ['src/services/core/performance/marketLatencyTrace.test.ts', true]],
