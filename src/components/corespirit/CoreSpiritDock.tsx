@@ -8,6 +8,8 @@ import { getSupabaseClient } from '../../services/auth/supabaseClient';
 import { loadEditorScript } from '../../services/coreSpirit/cloudPersistence';
 import { publishUserIndicator, saveUserIndicatorDraft } from '../../services/coreSpirit/indicatorPublicationService';
 import { versionedStorageKey } from '../../services/coreSpirit/storageSchema';
+import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
+import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
 import { CORE_SPIRIT_AUTHORING_LEVELS, getCoreSpiritAuthoringProfileForLevel } from '../../services/coreSpirit/coreSpiritAuthoring';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../services/coreSpirit/luxAlgoSmcCoreSource';
 import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from '../../services/coreSpirit/artifact';
@@ -94,6 +96,19 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const initialSource = useRef<string | null>(null);
   if (initialSource.current === null) initialSource.current = localSource() || DEFAULT_SOURCE;
   const [source, setSource] = useState(initialSource.current);
+  const [marketHealth, setMarketHealth] = useState(() => classifyMarketDataHealth({}));
+  useEffect(() => {
+    const refreshHealth = () => {
+      const chart = document.querySelector('.tc4-chart.focused') as HTMLElement | null;
+      const symbol = (chart?.querySelector('select') as HTMLSelectElement | null)?.value || '';
+      const tick = symbol ? tradingCoreRuntime.getMarketSnapshot(symbol) : undefined;
+      setMarketHealth(classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source ? tick.source === 'fyers' : undefined, expectedIntervalMs: 5_000 }));
+    };
+    refreshHealth();
+    const timer = window.setInterval(refreshHealth, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const editorModelRef = useRef<CoreSpiritEditorModel | null>(null);
   if (editorModelClass && !editorModelRef.current) editorModelRef.current = new editorModelClass(initialSource.current);
   const monacoContainerRef = useRef<HTMLDivElement | null>(null);
@@ -529,6 +544,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
           <div className="min-w-0">
             <div className="text-[11px] font-black tracking-[.18em] text-slate-100">CORESPIRIT</div>
             <div className="mt-1 truncate text-[10px] text-slate-400">Script terminal · live chart engine</div>
+            <div className={marketHealth.state === "live" ? "mt-1 text-[9px] font-semibold text-emerald-300" : marketHealth.state === "stale" || marketHealth.state === "disconnected" ? "mt-1 text-[9px] font-semibold text-rose-300" : marketHealth.state === "delayed" ? "mt-1 text-[9px] font-semibold text-amber-300" : "mt-1 text-[9px] font-semibold text-slate-500"} title={marketHealth.reason}>DATA {marketHealth.label} · {marketHealth.source.toUpperCase()}</div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
