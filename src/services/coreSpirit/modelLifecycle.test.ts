@@ -200,8 +200,14 @@ async function main(): Promise<void> {
   }
   assert(schemaMismatchRejected, 'inference must reject a feature vector with the wrong shape');
 
-  const tamperedStore = new InMemoryModelArtifactStore<typeof artifact.weights>();
-  await tamperedStore.put({ ...artifact, weights: { ...artifact.weights, featureNames: ['tampered'] } });
+  // Simulate a corrupted persistence read: the production store correctly
+  // refuses invalid writes, so tampering must be injected at the read boundary.
+  const tamperedArtifact = { ...artifact, weights: { ...artifact.weights, featureNames: ['tampered'] } };
+  const tamperedStore = {
+    put: async () => undefined,
+    getByName: async () => tamperedArtifact,
+    getByHash: async () => tamperedArtifact,
+  };
   let integrityMismatchRejected = false;
   try {
     await loadModelForInference(tamperedStore, artifact.hash, async () => ({ predict: async () => null }));
