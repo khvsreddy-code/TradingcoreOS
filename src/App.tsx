@@ -95,7 +95,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || publicIndicatorRoute || !protectedEntry || authStatus === 'degraded') return;
+    if (!isAuthenticated || publicIndicatorRoute || !protectedEntry || currentView === 'broker-connection' || authStatus === 'degraded') return;
 
     let cancelled = false;
     const publishBrokerReadiness = (status: 'restoring' | 'connected' | 'not-connected' | 'unavailable') => {
@@ -103,9 +103,10 @@ function AppContent() {
       window.dispatchEvent(new CustomEvent('tco:broker-readiness', { detail: { status } }));
     };
 
-    // Broker restoration is background work, not a route prerequisite. The chart
-    // can hydrate validated history while FYERS session restoration proceeds;
-    // account, order and live-feed operations remain broker-gated.
+    // Broker restoration is background work for the trading workspace. The
+    // broker-selection route deliberately skips this runtime import so its UI
+    // paints immediately; OAuth completion restores the session on demand.
+    // Account, order and live-feed operations remain broker-gated.
     publishBrokerReadiness('restoring');
     void loadTradingCoreRuntime()
       .then(async (nextRuntime) => {
@@ -120,7 +121,7 @@ function AppContent() {
       .catch(() => publishBrokerReadiness('unavailable'));
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, protectedEntry]);
+  }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, protectedEntry, currentView]);
 
   useEffect(() => {
     const isBrokerCallbackRoute = pathname.startsWith('/auth/broker-callback');
