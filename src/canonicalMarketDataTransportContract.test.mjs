@@ -35,7 +35,7 @@ assert.match(provider, /marketViewToBars/);
 assert.match(dataPlane, /replaceHistoricalCandleRows/);
 assert.match(dataPlane, /activeWindow\(fresh, requestedLimit\)/);
 assert.match(marketStore, /replaceHistoricalCandleRows/);
-assert.match(terminal, /bars:5000/);
+assert.match(terminal, /bars:2_000/);
 assert.match(terminal, /maxWebglCells:8/);
 assert.match(terminal, /indicatorPicker:true/);
 assert.doesNotMatch(workspace, /indicatorWheelOpen/);
