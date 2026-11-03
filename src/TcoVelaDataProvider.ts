@@ -822,6 +822,8 @@ export class TcoVelaDataProvider implements DataProvider {
       if (cancelled || !dirty || !plane) return;
       dirty = false;
       const normalizationStartedAt = performanceNow();
+      // A quote is a price, not OHLC history. Only canonical candle-plane mutations
+      // reach this adapter, so quote-only snapshots cannot fabricate Vela bars.
       const view = plane!.readCanonical();
       if (!view.length) {
         chartPerformanceTelemetry.recordStage(performanceKey, 'normalization', Math.max(0, performanceNow() - normalizationStartedAt));
