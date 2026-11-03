@@ -26,9 +26,6 @@ import { Signpost } from './types/Signpost';
 import { FairValueGap } from './types/FairValueGap';
 import { OrderBlock } from './types/OrderBlock';
 import { Liquidity } from './types/Liquidity';
-import { registerAdvancedDrawingTypes as registerAdvancedChannelTypes } from './advancedRegistryChannels';
-import { registerAdvancedDrawingTypes as registerAdvancedFibonacciTypes } from './advancedRegistryFibonacci';
-import { registerAdvancedDrawingTypes as registerAdvancedPatternTypes } from './advancedRegistryPatterns';
 /** What a drawing type contributes to the toolbar + factory (renderer-neutral). */
 export interface DrawingTypeMeta {
     type: DrawingTypeKey;
@@ -409,15 +406,26 @@ export function loadDrawingFamily(family: AdvancedDrawingFamily): Promise<void> 
     const existing = advancedFamilyPromises.get(family);
     if (existing) return existing;
 
-    // Advanced registries are eagerly bundled and synchronously registered below.
-    // Preserve this async-compatible API for existing callers without deferring tool
-    // availability until a family button or flyout is opened.
-    if (family === 'channels') registerAdvancedChannelTypes();
-    else if (family === 'fibonacci') registerAdvancedFibonacciTypes();
-    else registerAdvancedPatternTypes();
+    // Load only the requested family. The registry keeps lightweight placeholder
+    // metadata until a user opens that family, then hydrates its real factories.
+    const promise = (async () => {
+        if (family === 'channels') {
+            const module = await import('./advancedRegistryChannels');
+            module.registerAdvancedDrawingTypes();
+        } else if (family === 'fibonacci') {
+            const module = await import('./advancedRegistryFibonacci');
+            module.registerAdvancedDrawingTypes();
+        } else {
+            const module = await import('./advancedRegistryPatterns');
+            module.registerAdvancedDrawingTypes();
+        }
+    })();
 
-    const promise = Promise.resolve();
     advancedFamilyPromises.set(family, promise);
+    void promise.catch(() => {
+        // A failed chunk download must be retryable when the user opens the family again.
+        if (advancedFamilyPromises.get(family) === promise) advancedFamilyPromises.delete(family);
+    });
     return promise;
 }
 
@@ -440,15 +448,5 @@ registerDrawingType({ type:'fairvaluegap', group:'priceaction', label:'Fair Valu
 registerDrawingType({ type:'orderblock', group:'priceaction', label:'Order Block', icon:ORDER_BLOCK_ICON, defaultStyle:{lineColor:BULLISH,lineWidth:1,lineStyle:'solid'}, placementHint:'Click the candle that forms the block', create:(init)=>(new OrderBlock(init)) });
 registerDrawingType({ type:'liquidity', group:'priceaction', label:'Liquidity', icon:LIQUIDITY_ICON, defaultStyle:{lineColor:WARNING,lineWidth:1,lineStyle:'solid'}, placementHint:"Click near a candle's high or low", create:(init)=>(new Liquidity(init)) });
 
-// Eagerly hydrate every advanced family before the first chart toolbar is built.
-// This guarantees real drawing factories and recognisable icons are present on first
-// render: selecting a family only opens its tools; it does not initiate a code load.
-registerAdvancedChannelTypes();
-registerAdvancedFibonacciTypes();
-registerAdvancedPatternTypes();
-
-const preloadedDrawingFamilies = Promise.resolve();
-for (const family of ADVANCED_DRAWING_FAMILIES) {
-    advancedFamilyPromises.set(family, preloadedDrawingFamilies);
-}
+// Advanced families remain unloaded until requested by the toolbar or a saved drawing.
 
