@@ -605,6 +605,7 @@ export function normalizeCoreSpiritSource(source: string): string {
   const modelNames = modelSurfaceNames(source);
   const out: string[] = [];
   const whenBlocks: number[] = [];
+  const eventBlocks: number[] = [];
   const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' }> = [];
   const modelBraceIndents: number[] = [];
   // Track braces nested inside a brace-style indicator/strategy wrapper so an if-block
@@ -640,6 +641,21 @@ export function normalizeCoreSpiritSource(source: string): string {
     while (whenBlocks.length && indent <= whenBlocks[whenBlocks.length - 1]) {
       const blockIndent = whenBlocks.pop()!;
       out.push(`${' '.repeat(blockIndent)}}`);
+    }
+
+    // Indentation-style event declarations lower to the parser's canonical
+    // brace block. Close nested WHEN blocks first, then their containing event.
+    while (eventBlocks.length && indent <= eventBlocks[eventBlocks.length - 1]!) {
+      eventBlocks.pop();
+      out.push(`${' '.repeat(eventBlocks.length ? eventBlocks[eventBlocks.length - 1]! + 0 : indent)}}`);
+    }
+
+    const eventHeader = trimmed.match(/^on\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s*:\\s*$/i);
+    if (eventHeader) {
+      const indentText = raw.match(/^[ \\t]*/)?.[0] ?? '';
+      out.push(`${indentText}on ${eventHeader[1]} {`);
+      eventBlocks.push(indent);
+      continue;
     }
 
     const dataDecl = trimmed.match(/^data\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;?$/i);
@@ -780,6 +796,10 @@ export function normalizeCoreSpiritSource(source: string): string {
   while (whenBlocks.length) {
     out.push('}');
     whenBlocks.pop();
+  }
+  while (eventBlocks.length) {
+    out.push('}');
+    eventBlocks.pop();
   }
 
   return out.join('\n');
