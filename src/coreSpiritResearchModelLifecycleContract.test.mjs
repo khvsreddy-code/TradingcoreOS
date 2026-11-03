@@ -103,9 +103,9 @@ assert.match(docs, /production approval/i);
 assert.match(docs, /availableAt/);
 assert.match(worker, /initializer: 'deterministic-quantile-v1'/);
 assert.match(worker, /seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic'/);
-assert.match(worker, /const validationModel = CoreSpiritGaussianHMM.fromTrainedState(hmmState)/,
+assert.match(worker, /const validationModel = CoreSpiritGaussianHMM\\.fromTrainedState\\(hmmState\\)/,
   'holdout evaluation must use a frozen copy of the trained model');
-assert.match(worker, /validationModel.setInferenceBoundaryExclusive(trainingEndTimestamp)/,
+assert.match(worker, /validationModel\\.setInferenceBoundaryExclusive\\(trainingEndTimestamp\\)/,
   'holdout inference must be forward-only and exclusive of the training range');
 assert.match(worker, /validation.featureAvailabilityCheckPassed/);
 assert.match(worker, /validation.lookaheadCheckPassed/);
