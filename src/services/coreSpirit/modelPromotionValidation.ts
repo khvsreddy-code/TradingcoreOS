@@ -85,6 +85,7 @@ export async function validateModelPromotion(input: {
     temporalRangesDisjoint: false,
     forecastHorizonPurged: false,
     validationPredictionsRecomputed: false,
+    nonDegenerateValidation: false,
     sourceCausalityRecomputed: false,
     lookaheadCheckRecomputed: false,
     datasetSourceVerified: false,
@@ -282,6 +283,11 @@ export async function validateModelPromotion(input: {
       const mean = confidence.reduce((sum, value) => sum + value, 0) / confidence.length;
       const min = Math.min(...confidence);
       const max = Math.max(...confidence);
+      // A model that emits only one state across the holdout has no
+      // demonstrated regime separation and cannot be promoted to production.
+      checks.nonDegenerateValidation =
+        statesSeen.size >= 2 &&
+        validation.distinctPredictedStates >= 2;
       checks.validationPredictionsRecomputed =
         confidence.length === validation.sampleCount &&
         statesSeen.size === validation.distinctPredictedStates &&
