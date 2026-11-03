@@ -172,6 +172,29 @@ function normalizeArtifactValue(value: unknown, ancestors = new WeakSet<object>(
     ancestors.delete(value);
     return result;
   }
+  // Compiler IR contains runtime Maps/Sets (for example the specialized
+  // register-name slot table). Artifacts cross a JSON/storage boundary, so
+  // encode these collections as tagged, deterministically ordered plain data.
+  // The running compiler/VM keeps its original Map/Set instances untouched.
+  if (value instanceof Map) {
+    if (ancestors.has(value)) throw new Error('Artifact payload cannot contain circular references');
+    ancestors.add(value);
+    const entries = [...value.entries()].map(([key, entry]) => [
+      normalizeArtifactValue(key, ancestors) ?? null,
+      normalizeArtifactValue(entry, ancestors) ?? null,
+    ] as const);
+    entries.sort((left, right) => canonical(left[0]).localeCompare(canonical(right[0])));
+    ancestors.delete(value);
+    return { __artifactType: 'Map', entries };
+  }
+  if (value instanceof Set) {
+    if (ancestors.has(value)) throw new Error('Artifact payload cannot contain circular references');
+    ancestors.add(value);
+    const values = [...value.values()].map(entry => normalizeArtifactValue(entry, ancestors) ?? null);
+    values.sort((left, right) => canonical(left).localeCompare(canonical(right)));
+    ancestors.delete(value);
+    return { __artifactType: 'Set', values };
+  }
   if (value instanceof Date) {
     if (!Number.isFinite(value.getTime())) throw new Error('Artifact payload contains an invalid Date');
     return value.toISOString();
