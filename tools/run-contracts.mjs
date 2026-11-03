@@ -39,6 +39,7 @@ const contracts = [
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],
   ['repaint-profiler', ['src/services/coreSpirit/repaintProfilerContract.test.mjs', true]],
+  ['corespirit-execution-safety-and-conformance', ['src/services/coreSpirit/coreSpiritExecutionSafetyContract.test.mjs', true]],
   ['temporal-types', ['src/services/coreSpirit/temporalTypesContract.test.mjs', true]],
   ['trading-native-plan', ['src/services/coreSpirit/tradingNativePlanContract.test.mjs', true]],
   ['specialized-plan', ['src/services/coreSpirit/specializedPlanContract.test.mjs', true]],
