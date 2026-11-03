@@ -112,8 +112,11 @@ assert.match(batchWorker, /const validationModel = CoreSpiritGaussianHMM\.fromTr
   'chunked holdout evaluation must also use a frozen trained-model copy');
 assert.match(batchWorker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/,
   'chunked holdout inference must enforce the exclusive training cutoff');
-assert.match(worker, /validation.featureAvailabilityCheckPassed/);
-assert.match(worker, /validation.lookaheadCheckPassed/);
+assert.match(worker, /featureAvailabilityCheckPassed: payload\.rows\.every/);
+assert.match(worker, /lookaheadCheckPassed: safety\.lookahead === 'false'/);
+assert.match(batchWorker, /featureAvailabilityCheckPassed: true/,
+  'chunked rows are validated before the streamed validation result is sealed');
+assert.match(batchWorker, /lookaheadCheckPassed: safety\.lookahead === 'false'/);
 const replayWorker = read('./services/coreSpirit/coreSpiritReplay.worker.ts');
 assert.match(replayWorker, /executionMode:'replay'/);
 assert.match(replayWorker, /suppressExternalEffects:true/);
