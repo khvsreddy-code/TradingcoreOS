@@ -647,7 +647,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     // brace block. Close nested WHEN blocks first, then their containing event.
     while (eventBlocks.length && indent <= eventBlocks[eventBlocks.length - 1]!) {
       eventBlocks.pop();
-      out.push(`${' '.repeat(eventBlocks.length ? eventBlocks[eventBlocks.length - 1]! + 0 : indent)}}`);
+      out.push('}');
     }
 
     const eventHeader = trimmed.match(/^on\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s*:\\s*$/i);
