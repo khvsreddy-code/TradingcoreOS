@@ -23,7 +23,7 @@ assert.doesNotMatch(provider, /getMarketQuotes/);
 assert.doesNotMatch(provider, /quoteBars|kind:\s*'quote'/);
 assert.match(provider, /A quote is a price, not OHLC history/);
 assert.match(dataPlane, /prewarmHistory\(limitOverride\?: number\)/);
-assert.match(dataPlane, /'warm'\)\.then\(\(\) => undefined\)/);
+assert.match(dataPlane, /'warm'\)\.then\(rows => rows\.length\)/);
 assert.match(historyCoordinator, /queuedByKey\.get\(key\)/);
 assert.match(historyCoordinator, /queued\.priority = nextPriority/);
 assert.match(provider, /plane\.prewarmHistory\(requested\)/);
