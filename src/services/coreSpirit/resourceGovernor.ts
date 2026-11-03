@@ -219,8 +219,8 @@ export class CoreSpiritResourceGovernor {
     this.runModelCalls = this.consume('maxModelCallsPerRun', this.runModelCalls, 1);
   }
 
-  recordOutput(value: CoreSpiritObject): void {
-    if (VISUAL_KINDS.has(value.kind)) {
+  recordOutput(value: CoreSpiritObject, createsVisualObject = true): void {
+    if (createsVisualObject && VISUAL_KINDS.has(value.kind)) {
       this.visualObjects = this.consume('maxVisualObjectsPerRevision', this.visualObjects, 1);
       this.runVisualObjects = this.consume('maxVisualObjectsPerRun', this.runVisualObjects, 1);
     }
