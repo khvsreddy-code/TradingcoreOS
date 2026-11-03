@@ -177,7 +177,7 @@ export function compareCoreSpiritConformance(
       if (isNa(expectedValue) !== isNa(actualValue)) {
         add({ category: 'na-state', key: name, barIndex: expected.barIndex, expected: expectedValue, actual: actualValue, reason: 'Pine NA/initialization state differs from CoreSpirit.' });
       } else if (!sameValue(expectedValue, actualValue, tolerance)) {
-        add({ category: 'series-value', key: name, barIndex: index, expected: expectedValue, actual: actualValue, reason: 'Numerical series value differs beyond the configured tolerance.' });
+        add({ category: 'series-value', key: name, barIndex: expected.barIndex, expected: expectedValue, actual: actualValue, reason: 'Numerical series value differs beyond the configured tolerance.' });
       }
     }
   }
