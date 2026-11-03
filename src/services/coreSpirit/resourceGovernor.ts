@@ -193,7 +193,7 @@ export class CoreSpiritResourceGovernor {
     }
   }
 
-  recordDataRequest(request: Pick<CoreSpiritDataRequest, 'symbol' | 'timeframe' | 'field'>): void {
+  recordDataRequest(request: Pick<CoreSpiritDataRequest, 'symbol' | 'timeframe' | 'field' | 'offset'>): void {
     this.dataRequests = this.consume('maxDataRequestsPerRevision', this.dataRequests, 1);
     this.runDataRequests = this.consume('maxDataRequestsPerRun', this.runDataRequests, 1);
     const symbol = String(request.symbol || '').trim().toUpperCase();
