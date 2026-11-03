@@ -107,7 +107,10 @@ if fast crossesBelow slow {
 const parsedSample = new CoreSpiritParser(executableSample).parseDetailed();
 assert.deepEqual(parsedSample.diagnostics, [],
   'the editor starter sample must normalize to valid CoreSpirit syntax, including nested if-block braces');
-assert.doesNotMatch(executableSample, /^\s*}\s*$/m,
-  'the indicator declaration close must not leak into the executable program');
+assert.equal(
+  (executableSample.match(/^\\s*}\\s*$/gm) ?? []).length,
+  2,
+  'only the two executable if-blocks may contribute closing braces; the indicator declaration close must be removed',
+);
 
 console.log('CORESPIRIT_SOURCE_INPUT_DEFAULTS_CONTRACT_OK');
