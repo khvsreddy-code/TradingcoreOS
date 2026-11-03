@@ -250,7 +250,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   const newsLoading = Boolean(selectedItem && newsLoadingByKey[selectedItem.key]);
   const selectedTechnical = selectedItem ? technicalByKey[selectedItem.key] : undefined;
   const selectedTechnicalLoading = Boolean(selectedItem && technicalLoadingByKey[selectedItem.key]);
-  const selectedHealth = classifyMarketDataHealth({ source: selectedTick?.source, lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp, receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt, providerConnected: selectedTick?.source ? selectedTick.source === 'fyers' || selectedTick.source === 'upstox' : undefined, expectedIntervalMs: 5_000 });
+  const selectedHealth = classifyMarketDataHealth({ source: selectedTick?.source, lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp, receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt, providerConnected: selectedTick?.source === 'fyers' || selectedTick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 });
 
   const groups = useMemo(() => {
     const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
