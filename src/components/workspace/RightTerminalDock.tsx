@@ -279,7 +279,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
           const tick = ticks[item.key];
           const change = tick?.change;
           const pct = tick?.changePercent;
-          const health = classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source ? tick.source === 'fyers' || tick.source === 'upstox' : undefined, expectedIntervalMs: 5_000 });
+          const health = classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source === 'fyers' || tick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 });
           const positive = Number(pct ?? change ?? 0) >= 0;
           return <button type="button" key={item.key} className={`tct-wl-row ${selected === item.key ? 'selected' : ''}`} onClick={() => onSelect(item.key)}>
             <span className="tct-wl-badge">{(item.short || item.label || '?').slice(0, 3).toUpperCase()}</span>
