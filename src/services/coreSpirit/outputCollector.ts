@@ -46,11 +46,11 @@ export class CoreSpiritOutputCollector {
           },
         } as CoreSpiritObject
       : value;
-    this.resourceGovernor?.recordOutput(enriched);
     const rawId = (enriched as unknown as { id?: unknown }).id;
     const id = typeof rawId === 'string' ? rawId.trim() : '';
+    const existingIndex = id ? this.indexById.get(id) : undefined;
+    this.resourceGovernor?.recordOutput(enriched, !id || existingIndex === undefined);
     if (id) {
-      const existingIndex = this.indexById.get(id);
       if (existingIndex !== undefined) {
         this.items[existingIndex] = enriched;
         return;
