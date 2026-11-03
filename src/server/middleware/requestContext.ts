@@ -12,7 +12,7 @@ export interface TradingCoreRequest extends Request {
 export function requestContext(req: TradingCoreRequest, res: Response, next: NextFunction): void {
   const supplied = String(req.get('x-request-id') || '').trim();
   const id = /^[A-Za-z0-9._:-]{8,100}$/.test(supplied) ? supplied : crypto.randomUUID();
-  const reason = String(req.get('x-request-reason') || 'unspecified').trim().replace(/[^a-zA-Z0-9._:/ -]/g, '').slice(0, 80) || 'unspecified';
+  const reason = String(req.get('x-request-reason') || `api:${req.method.toLowerCase()}:${req.path}`).trim().replace(/[^a-zA-Z0-9._:/ -]/g, '').slice(0, 80) || 'unspecified';
   req.tradingCoreRequestReason = reason;
   req.tradingCoreRequestId = id;
   req.tradingCoreStartedAt = Date.now();
