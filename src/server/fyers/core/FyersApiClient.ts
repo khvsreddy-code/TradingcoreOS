@@ -178,12 +178,12 @@ export class FyersApiClient {
       // by a dedicated account-wide daily request budget (not the seven-day cap).
       const normalizedPath = pathOnly.toLowerCase();
       const isHistoricalEndpoint = normalizedPath.includes('history');
-      const isExpiredFnoEndpoint = /\\/history\\/fno\\/expired(?:\\/|$)/i.test(pathOnly);
+      const isExpiredFnoEndpoint = /\/history\/fno\/expired(?:\/|$)/i.test(pathOnly);
       const isExpiredFnoDailyRange = isExpiredFnoEndpoint
-        && (/\\/expiry-dates$/i.test(pathOnly)
-          || (/\\/historical-data$/i.test(pathOnly) && isDailyFnoResolution(combined.get('resolution'))));
+        && (/\/expiry-dates$/i.test(pathOnly)
+          || (/\/historical-data$/i.test(pathOnly) && isDailyFnoResolution(combined.get('resolution'))));
       const isExpiredFnoIntradayHistory = isExpiredFnoEndpoint
-        && /\\/historical-data$/i.test(pathOnly)
+        && /\/historical-data$/i.test(pathOnly)
         && !isDailyFnoResolution(combined.get('resolution'));
       if ((base === DATA_BASE || base === API_BASE) && isHistoricalEndpoint
         && combined.has('range_from') && combined.has('range_to')) {
