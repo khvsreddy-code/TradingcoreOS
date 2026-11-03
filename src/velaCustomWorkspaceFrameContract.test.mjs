@@ -42,7 +42,7 @@ assert.match(chrome, /ctx\.symbol.*ctx\.timeframe/, 'CoreSpirit Studio identifie
 assert.match(chrome, /tco-core-editor-frame/, 'CoreSpirit Studio uses the refreshed terminal-panel styling');
 assert.match(workspace, /this\.topbar = new Topbar/, 'Vela workspace remains the sole owner of the command bar');
 assert.doesNotMatch(workspace, /Quant toolbar|Quant topbar/i, 'do not add a second Quant-style header');
-assert.match(chrome, /Broker positions and orders refresh live from your broker/, 'workspace snapshots must not resurrect stale broker orders');
+assert.match(chrome, /Live broker positions and orders refresh from your broker after reload and are never replayed from an old snapshot/, 'workspace snapshots must not resurrect stale broker orders');
 assert.match(chrome, /flushTcoVelaAppearance/, 'manual workspace Save also flushes pending theme preferences');
 assert.match(storage, /function mutateUserSettings/, 'account appearance and named-workspace saves must serialize settings mutations');
 assert.match(live, /getState: \(\) => workspace\?\.getState\(\)/, 'live workspace state is exposed for named saves');
