@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 
 app.use((req: TradingCoreRequest, res, next) => {
   res.on('finish', () => {
-    recordRequest(res.statusCode, Date.now() - (req.tradingCoreStartedAt || Date.now()));
+    recordRequest(res.statusCode, Date.now() - (req.tradingCoreStartedAt || Date.now()), { requestId: req.tradingCoreRequestId, reason: req.tradingCoreRequestReason, route: `${req.method} ${req.route?.path || req.path}` });
   });
   next();
 });
