@@ -12,11 +12,11 @@ const brokerRoute = source.slice(brokerRouteStart, workspaceRouteStart);
 assert.match(brokerRoute, /<BrokerConnectionRequiredPage\s+/);
 assert.match(
   brokerRoute,
-  /onBrokerConnected=\{\(\) => \{[\s\S]*?setHasConnectedBroker\(true\);[\s\S]*?navigate\('\/dashboard'\);[\s\S]*?\}\}/,
+  /onBrokerConnected=\{\(\) => \{[\s\S]*?tco:broker-readiness[\s\S]*?status: 'connected'[\s\S]*?navigate\('\/dashboard'\);[\s\S]*?\}\}/,
 );
 assert.doesNotMatch(
   brokerRoute,
-  /onBrokerConnected=\{\(\) => \{[\s\S]*?setHasConnectedBroker\(true\);\s*\}\}/,
+  /onBrokerConnected=\{\(\) => \{[\s\S]*?tco:broker-readiness[\s\S]*?\}\}/,
 );
 
 const liveRoute = source.slice(workspaceRouteStart);
