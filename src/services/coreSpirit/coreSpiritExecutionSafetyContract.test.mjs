@@ -7,6 +7,7 @@ import {
   coreSpiritOutputSemanticsFromMetadata,
 } from './executionSemantics.ts';
 import { compareCoreSpiritConformance } from './coreSpiritConformanceLab.ts';
+import { CoreSpiritOutputCollector } from './outputCollector.ts';
 
 const safetyReport = {
   version: 1,
@@ -99,8 +100,35 @@ fanoutGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '5m',
 fanoutGovernor.recordDataRequest({ symbol: 'NSE:BANKNIFTY-INDEX', timeframe: '5m', field: 'close' });
 assert.throws(() => fanoutGovernor.recordDataRequest({ symbol: 'BSE:SENSEX-INDEX', timeframe: '5m', field: 'close' }), error =>
   error instanceof CoreSpiritResourceLimitError && error.resource === 'maxMultiSymbolRequestsPerRevision');
-assert.throws(() => fanoutGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '15m', field: 'close' }), error =>
+const timeframeGovernor = new CoreSpiritResourceGovernor({
+  maxDataRequestsPerRevision: 20,
+  maxMultiSymbolRequestsPerRevision: 10,
+  maxMultiTimeframeRequestsPerRevision: 1,
+}, () => clock);
+timeframeGovernor.beginExecution();
+timeframeGovernor.beginRevision(0, 'forming');
+timeframeGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '5m', field: 'close' });
+timeframeGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '15m', field: 'close' });
+assert.throws(() => timeframeGovernor.recordDataRequest({ symbol: 'NSE:NIFTY50-INDEX', timeframe: '60m', field: 'close' }), error =>
   error instanceof CoreSpiritResourceLimitError && error.resource === 'maxMultiTimeframeRequestsPerRevision');
+
+const outputGovernor = new CoreSpiritResourceGovernor({
+  maxVisualObjectsPerRevision: 1,
+  maxMemoryBytesPerRevision: 4096,
+}, () => clock);
+outputGovernor.beginExecution();
+outputGovernor.beginRevision(1, 'confirmed');
+const collector = new CoreSpiritOutputCollector(10, outputGovernor);
+collector.setExecutionSemantics(confirmed);
+collector.beginBar(true);
+collector.push({ kind: 'label', id: 'retained:1', time: 1, price: 100, text: 'A' });
+collector.push({ kind: 'label', id: 'retained:1', time: 1, price: 101, text: 'A moved' });
+assert.equal(collector.values().length, 1, 'forming/confirmed replacements upsert stable drawing identity rather than append duplicates');
+assert.equal(collector.values()[0].metadata.coreSpiritExecution.barPhase, 'confirmed',
+  'every output carries the authoritative execution phase and repaint metadata');
+assert.throws(() => collector.push({ kind: 'line', id: 'retained:2', start: { time: 1, price: 1 }, end: { time: 2, price: 2 } }), error =>
+  error instanceof CoreSpiritResourceLimitError && error.resource === 'maxVisualObjectsPerRevision',
+  'retained visual object budgets count new identities but reject unbounded new drawings');
 
 const reference = {
   engine: 'pine-reference',
