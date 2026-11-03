@@ -71,8 +71,12 @@ assert.match(artifactClient, /release\.approvalChecks\?\.productionEligible !== 
 assert.match(artifactClient, /artifact\.provenance\.validationRange\.to/);
 assert.match(artifactClient, /inferenceBoundaryTimestampMs: validationEndMs/);
 assert.match(artifactClient, /model\.setInferenceBoundaryExclusive\(runtimeInferenceBoundary\)/);
-assert.match(coreWorker, /inferenceBoundaryTimestampMs \?\? binding\.trainingEndTimestampMs/);
-assert.match(workerPool, /inferenceBoundaryTimestampMs \?\? binding\.trainingEndTimestampMs/);
+assert.match(coreWorker, /const inferenceBoundary=binding\?\.inferenceBoundaryTimestampMs/);
+assert.match(coreWorker, /inferenceBoundary! <= binding\.trainingEndTimestampMs!/,
+  'the worker must require a post-validation inference boundary, not silently fall back to the training end');
+assert.match(workerPool, /const inferenceBoundary=binding\.inferenceBoundaryTimestampMs/);
+assert.match(workerPool, /inferenceBoundary! <= binding\.trainingEndTimestampMs!/,
+  'the pooled worker must enforce the same strict post-validation boundary');
 assert.match(lifecycleTest, /status: 'approved', approvalChecks: \{ productionEligible: true \}/);
 assert.match(lifecycleTest, /throughout the holdout validation period/);
 
