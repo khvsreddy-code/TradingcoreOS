@@ -20,19 +20,19 @@ when fast crossesAbove slow:
 const trader = `
 indicator "Risk Cross"
 
-input fast: int = 20 min = 2 max = 200
-input slow: int = 50 min = 5 max = 400
+input fastLength: int = 20 min = 2 max = 200
+input slowLength: int = 50 min = 5 max = 400
 input risk: float = 1.0 min = 0.1 max = 5.0
 
-fast = ema(close, fast)
-slow = ema(close, slow)
+fastLine = ema(close, fastLength)
+slowLine = ema(close, slowLength)
 atr14 = atr(14)
 trend = close > ema(close, 200)
+stopPrice = close - 2 * atr14
+targetPrice = close + 3 * atr14
 
-when fast crossesAbove slow and trend:
-    stop = close - 2 * atr14
-    target = close + 3 * atr14
-    order("long", risk / (2 * atr14), stop, target)
+when fastLine crossesAbove slowLine and trend:
+    order("long", risk / (2 * atr14), stopPrice, targetPrice)
 `;
 
 const quant = `
