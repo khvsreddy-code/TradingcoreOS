@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const validation = read('./services/coreSpirit/researchValidation.ts');
+const promotion = read('./services/coreSpirit/modelPromotionValidation.ts');
 const artifact = read('./services/coreSpirit/modelArtifacts.ts');
 const artifactClient = read('./services/coreSpirit/modelArtifactClient.ts');
 const lifecycleTest = read('./services/coreSpirit/modelLifecycle.test.ts');
@@ -56,7 +57,7 @@ assert.match(route, /assertNoKnownLabelLeakage\(featureNames\)/);
 assert.match(route, /validationCount < MIN_RESEARCH_VALIDATION_ROWS/);
 assert.match(route, /confirm !== true/);
 assert.match(route, /Model is not eligible for production inference/);
-assert.match(route, /nonDegenerateValidation: validation\.distinctPredictedStates >= 2/);
+assert.match(promotion, /statesSeen\.size >= 2[\s\S]*validation\.distinctPredictedStates >= 2/);
 assert.match(route, /status: 'approved'/);
 assert.match(route, /release\.status !== 'approved'/);
 assert.match(route, /storedArtifact\.provenance\.validationRange\.to/);
