@@ -418,7 +418,7 @@ export class CoreSpiritRuntime {
     this.declarativeVisualState = { version:1, revision:0, specs:[] };
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
     this.realtimeRevision = 0; this.eventRouter.rollbackTransaction(); this.realtimeEventTransactionId = undefined; this.debugHost.reset(); this.realtimeLifecycle='idle';
-    this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
+    this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, barPhase:'historical', revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
     this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear(); this.viewportMemo.clear();
     this.seriesRegistry.reset();
     // A full execution/history replay must discard `var` and persistent state too;
