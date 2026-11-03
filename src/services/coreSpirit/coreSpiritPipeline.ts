@@ -6,6 +6,7 @@ import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity'
 export { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
+import type { CoreSpiritRuntimeOptions } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
@@ -118,6 +119,7 @@ export function executeCoreSpirit(
   source: string,
   bars: CoreSpiritMarketBar[],
   sourceId='coreSpirit',
+  runtimeOptions: Partial<CoreSpiritRuntimeOptions> = {},
 ): CoreSpiritExecutionResult {
   // This convenience entry point must use the same canonical executable
   // compiler/artifact boundary as editor, CLI and production runners. The
@@ -127,7 +129,7 @@ export function executeCoreSpirit(
     const detail = compiled.diagnostics.map(item => item.message).join('\n');
     throw new Error(detail || 'CoreSpirit compilation failed; no executable artifact was produced.');
   }
-  const runtime = new CoreSpiritRuntime({ sourceId });
+  const runtime = new CoreSpiritRuntime({ ...runtimeOptions, sourceId });
   return runtime.executeIr(compiled.ir, bars);
 }
 
