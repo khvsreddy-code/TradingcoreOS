@@ -10,6 +10,8 @@ export type CoreSpiritConformanceScalar = number | string | boolean | null;
 export type CoreSpiritConformanceBar = Readonly<{
   barIndex: number;
   timestamp: number;
+  /** Revision order allows the same forming candle to be compared across ticks. */
+  revision?: number;
   phase: 'historical' | 'forming' | 'confirmed' | 'correction' | 'replay';
   series: Readonly<Record<string, CoreSpiritConformanceScalar>>;
 }>;
@@ -158,7 +160,7 @@ export function compareCoreSpiritConformance(
   for (let index = 0; index < bars; index += 1) {
     const expected = reference.bars[index]!;
     const actual = candidate.bars[index]!;
-    if (expected.barIndex !== actual.barIndex || expected.timestamp !== actual.timestamp || expected.phase !== actual.phase) {
+    if (expected.barIndex !== actual.barIndex || expected.timestamp !== actual.timestamp || expected.revision !== actual.revision || expected.phase !== actual.phase) {
       add({ category: 'bar-alignment', key: 'bar:' + index, barIndex: index, expected, actual, reason: 'Bar index, timestamp or execution phase differs.' });
     }
     for (const name of seriesNames) {
