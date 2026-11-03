@@ -371,6 +371,7 @@ export class CoreSpiritOptimizedExecutionVM {
       let steps = 0;
       while (pc < plan.instructions.length) {
         if (++steps > host.maxStepsPerBar) throw new Error('execution step limit exceeded');
+        host.chargeInstruction?.();
         if ((steps & 1023) === 0) host.throwIfAborted();
         const instructionPc = pc;
         const computational = isComputationalInstruction(instructions[instructionPc]!);
