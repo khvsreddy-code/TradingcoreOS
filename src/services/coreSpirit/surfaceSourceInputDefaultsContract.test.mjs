@@ -108,7 +108,7 @@ const parsedSample = new CoreSpiritParser(executableSample).parseDetailed();
 assert.deepEqual(parsedSample.diagnostics, [],
   'the editor starter sample must normalize to valid CoreSpirit syntax, including nested if-block braces');
 assert.equal(
-  (executableSample.match(/^\\s*}\\s*$/gm) ?? []).length,
+  executableSample.split('\n').filter(line => line.trim() === '}').length,
   2,
   'only the two executable if-blocks may contribute closing braces; the indicator declaration close must be removed',
 );
