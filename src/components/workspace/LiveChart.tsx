@@ -30,6 +30,7 @@ import type { createChartAnalyticsController } from '../../services/core/chart/C
 import type { createChartInteractionController } from '../../services/core/chart/ChartInteractionController';
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
+import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
 import { getWorkspaceAppearance, subscribeWorkspaceAppearance } from '../../theme/workspaceAppearance';
 import { CoreSpiritChartAssistant } from './CoreSpiritChartAssistant';
 
@@ -117,9 +118,12 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const [chartLocale,setChartLocale]=useState<string>(loadSavedChartLocale);
   const [error,setError]=useState('');
   const [historyLoading,setHistoryLoading]=useState(false);
+  const [marketHealth,setMarketHealth]=useState(()=>classifyMarketDataHealth({}));
   const [candleAppearance,setCandleAppearance]=useState<CandleAppearance>(()=>loadCandleAppearance(brokerId,resolvedInstrumentKey));
   const [oiAnalytics,setOiAnalytics]=useState<OIChartAnalytics|null>(null);
   const [analytics,setAnalytics]=useState<ChartAnalytics|null>(null);
+
+  useEffect(()=>{const refresh=()=>{const tick=latestTick.current;setMarketHealth(classifyMarketDataHealth({source:tick?.source,lastUpdateAt:tick?.brokerTimestamp??tick?.timestamp??tick?.lastTradeTimestamp,receivedAt:tick?.receivedAtEpoch??tick?.receivedAt,providerConnected:tick?.source?(tick.source==='fyers'||tick.source==='upstox'):undefined,expectedIntervalMs:5_000}));};refresh();const timer=window.setInterval(refresh,1_000);return()=>window.clearInterval(timer);},[resolvedInstrumentKey]);
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
@@ -328,7 +332,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     historyLoading={historyLoading}
     toolbar={null}
     depthPanel={<ChartDepthPanel brokerId={brokerId} instrumentKey={resolvedInstrumentKey} visible={showDepth}/>}
-    header={<div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 pb-2 text-[10px] font-mono"><span className="text-[var(--tco-dim)]">Normalized broker candles · native indicator engine</span><span className="text-[#3b82f6]">● LIVE ENGINE</span><label className="ml-auto flex items-center gap-1.5 text-[var(--tco-dim)]">LANGUAGE<select aria-label="Chart language" value={chartLocale} onChange={event=>setChartLocale(event.target.value)} className="rounded border border-[var(--tco-control)] bg-[var(--tco-surface-2)] px-2 py-1 text-[var(--tco-text)] outline-none focus:border-[var(--tco-accent)]">{VELA_LOCALES.map(locale=><option key={locale.value} value={locale.value}>{locale.label}</option>)}</select></label>{showOI&&oiAnalytics&&<span className="ml-2 text-[#a78bfa]">OI · PCR {oiAnalytics.pcr.toFixed(2)} · FLIP {oiAnalytics.flip?.strike??'—'}</span>}</div>}
+    header={<div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 pb-2 text-[10px] font-mono"><span className="text-[var(--tco-dim)]">Normalized broker candles · native indicator engine</span><span className="text-[#3b82f6]">● LIVE ENGINE</span><span className={marketHealth.state === "live" ? "text-emerald-400" : marketHealth.state === "stale" || marketHealth.state === "disconnected" ? "text-rose-400" : marketHealth.state === "delayed" ? "text-amber-400" : "text-[var(--tco-dim)]"} title={marketHealth.reason}>● DATA {marketHealth.label} · {marketHealth.source.toUpperCase()}</span><label className="ml-auto flex items-center gap-1.5 text-[var(--tco-dim)]">LANGUAGE<select aria-label="Chart language" value={chartLocale} onChange={event=>setChartLocale(event.target.value)} className="rounded border border-[var(--tco-control)] bg-[var(--tco-surface-2)] px-2 py-1 text-[var(--tco-text)] outline-none focus:border-[var(--tco-accent)]">{VELA_LOCALES.map(locale=><option key={locale.value} value={locale.value}>{locale.label}</option>)}</select></label>{showOI&&oiAnalytics&&<span className="ml-2 text-[#a78bfa]">OI · PCR {oiAnalytics.pcr.toFixed(2)} · FLIP {oiAnalytics.flip?.strike??'—'}</span>}</div>}
     overlay={<>
       {showEmbeddedDrawingToolbar&&<ChartToolbar activeTool={drawingTool} onSelectTool={tool=>selectDrawingTool(tool as DrawingTool)} onUndo={drawingUndo} onClear={drawingClear}/>}
       <ChartOverlay
