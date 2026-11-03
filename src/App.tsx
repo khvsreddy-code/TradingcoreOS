@@ -11,7 +11,19 @@ const LiveTradingShell = lazy(() => import('./appShells/LiveTradingShell').then(
 import { ThemeProvider } from './theme/ThemeContext';
 import { loadTradingCoreRuntime } from './services/runtime/tradingCoreRuntimeLoader';
 
-const BrokerConnectionRequiredPage = lazy(() => import('./pages/BrokerConnectionRequiredPage').then(m => ({ default: m.BrokerConnectionRequiredPage })));
+const BrokerConnectionRequiredPage = lazy(() => {
+  let timeoutId: number | undefined;
+  const importPage = import('./pages/BrokerConnectionRequiredPage')
+    .then(m => ({ default: m.BrokerConnectionRequiredPage }));
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error('Broker setup screen did not load within 15 seconds. Return to the workspace and reload the route.'));
+    }, 15_000);
+  });
+  return Promise.race([importPage, timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
+});
 const BrokerCallbackPage = lazy(() => import('./pages/BrokerCallbackPage').then(m => ({ default: m.BrokerCallbackPage })));
 const LegalPage = lazy(() => import('./pages/LegalPage').then(m => ({ default: m.LegalPage })));
 const IndicatorExplorePage = lazy(() => import('./pages/IndicatorExplorePage').then(m => ({ default: m.IndicatorExplorePage })));
@@ -220,20 +232,25 @@ function AppContent() {
 
   if (isAuthenticated && user && currentView === 'broker-connection') {
     return (
-      <Suspense fallback={routeFallback('Loading Broker Connection...', 'Preparing secure broker authorization')}>
-        <BrokerConnectionRequiredPage
-          userEmail={user?.email ?? null}
-          onLogout={() => { void logout(); }}
-          onBack={() => navigate('/dashboard')}
-          onBrokerConnected={() => {
-            // This route remains a protected entry route before and after OAuth,
-            // so the restoration effect does not rerun on the route transition.
-            // Publish the verified connection immediately for workspace gates.
-            window.dispatchEvent(new CustomEvent('tco:broker-readiness', { detail: { status: 'connected' } }));
-            navigate('/dashboard');
-          }}
-        />
-      </Suspense>
+      <RouteErrorBoundary
+        key={'broker:' + routeErrorReset}
+        onHome={() => navigate('/dashboard')}
+      >
+        <Suspense fallback={routeFallback('Loading Broker Connection...', 'Preparing secure broker authorization')}>
+          <BrokerConnectionRequiredPage
+            userEmail={user?.email ?? null}
+            onLogout={() => { void logout(); }}
+            onBack={() => navigate('/dashboard')}
+            onBrokerConnected={() => {
+              // This route remains a protected entry route before and after OAuth,
+              // so the restoration effect does not rerun on the route transition.
+              // Publish the verified connection immediately for workspace gates.
+              window.dispatchEvent(new CustomEvent('tco:broker-readiness', { detail: { status: 'connected' } }));
+              navigate('/dashboard');
+            }}
+          />
+        </Suspense>
+      </RouteErrorBoundary>
     );
   }
 
