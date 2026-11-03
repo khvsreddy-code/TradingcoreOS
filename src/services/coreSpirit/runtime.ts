@@ -241,6 +241,7 @@ export class CoreSpiritRuntime {
   private history: HistoricalCandle[] = [];
   private crossState: Record<string, { a: number; b: number }> = {};
   private currentBarSnapshot?: { historyLength:number };
+  private executionBatchDepth = 0;
   private realtime = false;
   private lastBarWasRealtime = false;
   private plotOrdinal = 0;
@@ -704,20 +705,26 @@ export class CoreSpiritRuntime {
   executeHistoricalTicks(ticks: CoreSpiritTick[], baseBar: HistoricalCandle): CoreSpiritExecutionResult[] {
     const results: CoreSpiritExecutionResult[] = [];
     let workingBar = { ...baseBar };
-    for (const tick of ticks) {
-      this.throwIfAborted();
-      results.push(this.executeTick(tick, workingBar, true));
-      const price=Number(tick.price);
-      workingBar={
-        ...workingBar,
-        timestamp:new Date(Number(tick.timestamp)).toISOString(),
-        high:Math.max(Number(workingBar.high),price),
-        low:Math.min(Number(workingBar.low),price),
-        close:price,
-        volume:Math.max(0,Number(workingBar.volume||0)+Number(tick.volume||0)),
-      };
+    this.resourceGovernor.beginExecution();
+    this.executionBatchDepth += 1;
+    try {
+      for (const tick of ticks) {
+        this.throwIfAborted();
+        results.push(this.executeTick(tick, workingBar, true));
+        const price=Number(tick.price);
+        workingBar={
+          ...workingBar,
+          timestamp:new Date(Number(tick.timestamp)).toISOString(),
+          high:Math.max(Number(workingBar.high),price),
+          low:Math.min(Number(workingBar.low),price),
+          close:price,
+          volume:Math.max(0,Number(workingBar.volume||0)+Number(tick.volume||0)),
+        };
+      }
+      return results;
+    } finally {
+      this.executionBatchDepth = Math.max(0, this.executionBatchDepth - 1);
     }
-    return results;
   }
 
   /** Commit a live bar only after executing its final, confirmed revision. */
@@ -1188,6 +1195,7 @@ export class CoreSpiritRuntime {
   }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
+    this.resourceGovernor.beginExecution();
     const previousIr = this.compiledIr;
     const previousBars = this.history.map(bar => ({ ...bar }));
     this.viewportMemo.clear();
@@ -1419,6 +1427,7 @@ export class CoreSpiritRuntime {
       specializedPlan:this.compiledIr?.specializedPlan,
       ...this.optimizedExecutionCacheVersions(),
     });
+    this.resourceGovernor.assertExecutionTime();
   }
 
   private prefetchTradingNativeData(barIndex:number, asOfTimestamp:number): void {
