@@ -9,7 +9,7 @@ import {
 } from './FyersCapabilities.js';
 import { recordFyersQuotaAttempt, recordFyersQuotaDenial, recordFyersQuotaResponse } from './FyersQuotaTelemetry.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
-import { clampFyersHistoryRange, FyersHistoryWindowError } from './FyersHistoryWindow.js';
+import { clampFyersHistoryRange, normalizeFyersExpiredFnoRange, FyersHistoryWindowError } from './FyersHistoryWindow.js';
 
 export class FyersApiError extends Error {
   status: number;
@@ -37,6 +37,9 @@ function retryDelay(response: Response): number | undefined {
   if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
   const date = Date.parse(header);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+}
+function isDailyFnoResolution(value: string | null): boolean {
+  return ['d', '1d', 'day', '1day', 'daily'].includes(String(value || '').trim().toLowerCase());
 }
 function isRetryableStatus(status: number): boolean { return status === 429 || status >= 500; }
 function isRetryableNetworkError(error: unknown): boolean {
@@ -169,14 +172,32 @@ export class FyersApiClient {
       const combined = new URLSearchParams(existing);
       query.forEach((value, key) => combined.set(key, value));
 
-      // Central boundary: clamp every FYERS endpoint whose path identifies a
-      // historical request (including expired F&O history) before quota admission.
-      // This prevents alternate history routes from bypassing the seven-day policy.
-      const isHistoricalEndpoint = pathOnly.toLowerCase().includes('history');
+      // Standard /history OHLCV is limited to seven calendar days. Expired
+      // F&O is a distinct product endpoint: daily history/expiry discovery uses
+      // its configured entitlement lookback, while intraday history is governed
+      // by a dedicated account-wide daily request budget (not the seven-day cap).
+      const normalizedPath = pathOnly.toLowerCase();
+      const isHistoricalEndpoint = normalizedPath.includes('history');
+      const isExpiredFnoEndpoint = /\\/history\\/fno\\/expired(?:\\/|$)/i.test(pathOnly);
+      const isExpiredFnoDailyRange = isExpiredFnoEndpoint
+        && (/\\/expiry-dates$/i.test(pathOnly)
+          || (/\\/historical-data$/i.test(pathOnly) && isDailyFnoResolution(combined.get('resolution'))));
+      const isExpiredFnoIntradayHistory = isExpiredFnoEndpoint
+        && /\\/historical-data$/i.test(pathOnly)
+        && !isDailyFnoResolution(combined.get('resolution'));
       if ((base === DATA_BASE || base === API_BASE) && isHistoricalEndpoint
         && combined.has('range_from') && combined.has('range_to')) {
-        const bounded = clampFyersHistoryRange(combined.get('range_from'), combined.get('range_to'));
-        if (!bounded) throw new FyersHistoryWindowError('This FYERS history page is older than the permitted seven-day window; use the configured historical backfill source.');
+        const bounded = isExpiredFnoEndpoint
+          ? normalizeFyersExpiredFnoRange(
+              combined.get('range_from'),
+              combined.get('range_to'),
+              isExpiredFnoDailyRange ? this.capabilities.historyDepth.expiredFnoDailyYears : null,
+            )
+          : clampFyersHistoryRange(combined.get('range_from'), combined.get('range_to'));
+        if (!bounded) {
+          const policy = isExpiredFnoEndpoint ? 'configured expired-F&O entitlement window' : 'seven-day standard history window';
+          throw new FyersHistoryWindowError('This FYERS history page is outside the permitted ' + policy + '.');
+        }
         combined.set('range_from', String(Math.floor(bounded.fromMs / 1000)));
         combined.set('range_to', String(Math.floor(bounded.toMs / 1000)));
         combined.set('date_format', '0');
@@ -207,7 +228,7 @@ export class FyersApiClient {
               recordFyersQuotaResponse(category, this.capabilities.plan, pathOnly, 0);
               throw error;
             }
-          }, deadlineSignal);
+          }, deadlineSignal, isExpiredFnoIntradayHistory);
           const text = await response.text();
           let payload: unknown = null;
           try { payload = text ? JSON.parse(text) : null; }
@@ -252,6 +273,7 @@ export class FyersApiClient {
     priority: FyersRequestPriority,
     task: (signal?: AbortSignal) => Promise<T>,
     signal: AbortSignal,
+    expiredFnoIntraday = false,
   ) {
     const budget = resolveFyersAdmissionBudget(this.capabilities, category);
     // FYERS publishes one Data API quota and one combined Transaction/User Info
@@ -266,26 +288,38 @@ export class FyersApiClient {
       maxPerDay: budget.requestsPerDay,
       priority: toFyersAdmissionPriority(priority),
     } as const;
-    if (priority !== 'lowest') {
-      return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, primaryAdmission);
-    }
-
-    // Historical/backfill work consumes both the shared background reserve and
-    // a smaller nested reserve. This makes "lowest" pause before watchlist work
-    // while keeping both counters atomic and account-scoped across app users.
-    const lowestReserve = {
-      budgetKey: `${budgetKey}:lowest`,
-      minIntervalMs: 0,
-      maxPerMinute: Math.max(1, Math.floor(budget.requestsPerMinute * 0.1)),
-      maxPerDay: Math.max(1, Math.floor(budget.requestsPerDay * 0.1)),
-      priority: 'background' as const,
+    const primary = () => {
+      if (priority !== 'lowest') {
+        return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, primaryAdmission);
+      }
+      // Historical/backfill work consumes both the shared background reserve and
+      // a smaller nested reserve. This makes "lowest" pause before watchlist work
+      // while keeping both counters atomic and account-scoped across app users.
+      const lowestReserve = {
+        budgetKey: `${budgetKey}:lowest`,
+        minIntervalMs: 0,
+        maxPerMinute: Math.max(1, Math.floor(budget.requestsPerMinute * 0.1)),
+        maxPerDay: Math.max(1, Math.floor(budget.requestsPerDay * 0.1)),
+        priority: 'background' as const,
+      };
+      return withBrokerRequestGate(
+        'fyers',
+        this.rateLimitIdentity,
+        admissionSignal => withBrokerRequestGate('fyers', this.rateLimitIdentity, task, admissionSignal, lowestReserve),
+        signal,
+        primaryAdmission,
+      );
     };
-    return withBrokerRequestGate(
-      'fyers',
-      this.rateLimitIdentity,
-      admissionSignal => withBrokerRequestGate('fyers', this.rateLimitIdentity, task, admissionSignal, lowestReserve),
-      signal,
-      primaryAdmission,
-    );
+    if (!expiredFnoIntraday) return primary();
+    const dailyLimit = Math.max(1, Number(this.capabilities.historyDepth.expiredFnoIntradayRequestsPerDay) || 10);
+    // This separate counter is still keyed by the hashed FYERS account identity.
+    // Admission happens inside each retry attempt, so retries consume quota too.
+    return withBrokerRequestGate('fyers', this.rateLimitIdentity, primary, signal, {
+      budgetKey: `${budgetKey}:expired-fno-intraday`,
+      minIntervalMs: 0,
+      maxPerMinute: dailyLimit,
+      maxPerDay: dailyLimit,
+      priority: 'background',
+    });
   }
 }
