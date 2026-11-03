@@ -17,6 +17,7 @@ import type { CoreSpiritEventEnvelope } from './eventSystem';
 import { strategyEventToOrderIntent } from './strategyContract';
 import { coreSpiritRuntimeOrderToStrategyIntent } from './orderIntent';
 import type { CoreSpiritObject } from './types';
+import { coreSpiritOutputSemanticsFromMetadata } from './executionSemantics';
 import { coreSpiritChecksum } from './artifact';
 import { appendExecutionAuthorityRecord, createExecutionAuthority, validateExecutionAuthority, type CoreSpiritOrderIntentAuthority } from './executionAuthority';
 import { buildAutomationDecisionTrace, buildSignalExplanation, buildAutomationExplanationRecord, CoreSpiritAutomationExplainabilityStore, type CoreSpiritAutomationExplainability, type CoreSpiritExplanationDecision } from './explainability';
@@ -133,11 +134,19 @@ export class CoreSpiritAutomationOrchestrator {
     positionId?: string,
   ): Promise<CoreSpiritAutomationResult> {
     const intent: CoreSpiritOrderIntent = coreSpiritRuntimeOrderToStrategyIntent(runtimeIntent, { symbol, requestedAt: now, positionId });
+    const semantics = coreSpiritOutputSemanticsFromMetadata(runtimeIntent.metadata as Record<string, unknown> | undefined);
     const event: CoreSpiritStrategyEvent = {
       id: runtimeIntent.id, strategyId: String(runtimeIntent.metadata?.source ?? this.lifecycle.automationId),
       kind: runtimeIntent.side === 'flat' ? 'exit' : 'entry', direction: runtimeIntent.side === 'short' ? 'short' : 'long',
       positionId: positionId ?? `${symbol}:${runtimeIntent.side}`, barIndex: Number(runtimeIntent.metadata?.barIndex ?? 0),
-      timestamp: runtimeIntent.time, symbol, timeframe: '', reason: String(runtimeIntent.metadata?.reason ?? 'declarative order intent'),
+      timestamp: runtimeIntent.time, symbol, timeframe: '',
+      executionMode: semantics?.executionMode,
+      barPhase: semantics?.barPhase,
+      isConfirmed: semantics?.isConfirmed,
+      causality: semantics?.causality,
+      lookahead: semantics?.lookahead,
+      realtimeSafe: semantics?.realtimeSafe,
+      reason: String(runtimeIntent.metadata?.reason ?? 'declarative order intent'),
     };
     return this.handleOrderIntent(intent, event, now);
   }
@@ -192,6 +201,19 @@ export class CoreSpiritAutomationOrchestrator {
       authority: appendExecutionAuthorityRecord(authority, { stage: 'ORDER_INTENT', disposition: 'NOT_APPLICABLE', timestamp: now, reason, actor: 'core-spirit' }),
       explainability: explain({ label: 'Automation', status: 'REJECTED', reason }),
     });
+
+    // A realtime signal is not an order trigger until the host confirms the
+    // candle and static analysis proves causal, no-lookahead, realtime-safe code.
+    // Reject before risk/policy evaluation so a transient forming-bar condition
+    // cannot become a queued trading signal.
+    if (event.executionMode === 'realtime') {
+      if (event.barPhase !== 'confirmed' || event.isConfirmed !== true) {
+        return this.recordResult(blockedResult('forming-bar strategy events are provisional and cannot trigger automation'));
+      }
+      if (event.causality !== 'causal' || event.lookahead !== 'false' || event.realtimeSafe !== true) {
+        return this.recordResult(blockedResult('live strategy execution requires proven causal, no-lookahead, realtime-safe semantics'));
+      }
+    }
 
     if (!isAutomationExecutionEnabled(lifecycleState)) {
       return this.recordResult(blockedResult(`automation lifecycle ${lifecycleState} does not permit execution`));
@@ -272,6 +294,36 @@ export function strategyEventFromEnvelope(
     symbol: String(p.symbol ?? ''),
     timeframe: String(p.timeframe ?? ''),
     executionMode: event.mode,
+    barPhase: (() => {
+      const value = p.coreSpiritExecution && typeof p.coreSpiritExecution === 'object'
+        ? (p.coreSpiritExecution as Record<string, unknown>).barPhase
+        : p.barPhase;
+      return value === 'historical' || value === 'forming' || value === 'confirmed' || value === 'correction' || value === 'replay' ? value : undefined;
+    })(),
+    isConfirmed: (() => {
+      const value = p.coreSpiritExecution && typeof p.coreSpiritExecution === 'object'
+        ? (p.coreSpiritExecution as Record<string, unknown>).isConfirmed
+        : p.isConfirmed;
+      return typeof value === 'boolean' ? value : undefined;
+    })(),
+    causality: (() => {
+      const value = p.coreSpiritExecution && typeof p.coreSpiritExecution === 'object'
+        ? (p.coreSpiritExecution as Record<string, unknown>).causality
+        : p.causality;
+      return value === 'causal' || value === 'noncausal' || value === 'future-dependent' || value === 'repainting' || value === 'unknown' ? value : undefined;
+    })(),
+    lookahead: (() => {
+      const value = p.coreSpiritExecution && typeof p.coreSpiritExecution === 'object'
+        ? (p.coreSpiritExecution as Record<string, unknown>).lookahead
+        : p.lookahead;
+      return value === 'false' || value === 'true' || value === 'unknown' ? value : undefined;
+    })(),
+    realtimeSafe: (() => {
+      const value = p.coreSpiritExecution && typeof p.coreSpiritExecution === 'object'
+        ? (p.coreSpiritExecution as Record<string, unknown>).realtimeSafe
+        : p.realtimeSafe;
+      return value === true || value === false || value === 'unknown' ? value : undefined;
+    })(),
     reason: String(p.reason ?? p.type ?? 'CoreSpirit strategy event'),
     metadata: Object.fromEntries(
       Object.entries(p).filter(([, value]) =>
