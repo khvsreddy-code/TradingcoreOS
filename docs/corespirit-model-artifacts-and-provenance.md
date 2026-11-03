@@ -74,7 +74,7 @@ The artifact provenance includes:
 
 - Exact source, compiler, runtime and IR versions.
 - Feature-graph hash and immutable dataset SHA-256.
-- Training and validation ranges, with no overlapping timestamps.
+- `trainingRange` records the timestamp range used to fit model parameters; `validationRange` records the later chronological holdout range used to evaluate/select the model. The two ranges must not overlap.
 - Training parameters, deterministic initializer policy, random seed and backend.
 - Training and holdout counts, validation state coverage, and min/mean/max holdout posterior confidence.
 - Checks for chronology, availability metadata, feature schema, label leakage, dataset hash, static causality and lookahead safety.
