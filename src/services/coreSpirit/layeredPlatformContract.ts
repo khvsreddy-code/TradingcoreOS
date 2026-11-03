@@ -88,7 +88,7 @@ export const CORE_SPIRIT_LAYER_PROFILES: Readonly<Record<CoreSpiritProgramLayer,
   },
   strategy: {
     layer: 'strategy',
-    capabilities: ['series', 'indicators', 'visuals', 'interactive-ui', 'signals', 'features', 'model-output', 'strategy-events'],
+    capabilities: ['series', 'indicators', 'visuals', 'interactive-ui', 'signals', 'features', 'model-output', 'strategy-events', 'order-intents'],
     forbidden: ['broker-credentials', 'direct-broker-api', 'direct-account-mutation', 'raw-network', 'filesystem', 'arbitrary-process'],
   },
   automation: {
