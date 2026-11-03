@@ -21,12 +21,14 @@ import {
   Activity,
   Layers,
 } from 'lucide-react';
-import { BROKERS_CONFIG, BrokerItem } from '../constants/brokers';
+import { BROKERS_CONFIG, type BrokerItem } from '../constants/brokers';
 import { BROKER_OAUTH_CHANNEL } from '../services/oauth/PopupManager';
 
 interface BrokerConnectionRequiredPageProps {
   onBrokerConnected: () => void;
   onBack: () => void;
+  userEmail?: string | null;
+  onLogout: () => void;
 }
 
 type SetupStep = 'welcome' | 'choose' | 'connect' | 'verifying' | 'ready';
