@@ -15,7 +15,7 @@ export type CoreSpiritResourceBudget = Readonly<{
   maxExecutionTimeMs: number;
   maxInstructionsPerRun: number;
   maxVisualObjectsPerRun: number;
-  maxMemoryBytesPerRun: number;
+  maxAllocationBytesPerRun: number;
   maxDataRequestsPerRun: number;
   maxModelCallsPerRun: number;
   maxExecutionTimeMsPerRun: number;
@@ -34,7 +34,7 @@ export const CORE_SPIRIT_DEFAULT_RESOURCE_BUDGET: CoreSpiritResourceBudget = Obj
   maxExecutionTimeMs: 150,
   maxInstructionsPerRun: 20_000_000,
   maxVisualObjectsPerRun: 100_000,
-  maxMemoryBytesPerRun: 128 * 1024 * 1024,
+  maxAllocationBytesPerRun: 512 * 1024 * 1024,
   maxDataRequestsPerRun: 10_000,
   maxModelCallsPerRun: 500,
   maxExecutionTimeMsPerRun: 30_000,
@@ -234,7 +234,7 @@ export class CoreSpiritResourceGovernor {
   recordAllocation(bytes: number): void {
     const amount = Math.max(0, Math.ceil(Number(bytes) || 0));
     this.allocatedBytes = this.consume('maxMemoryBytesPerRevision', this.allocatedBytes, amount);
-    this.runAllocatedBytes = this.consume('maxMemoryBytesPerRun', this.runAllocatedBytes, amount);
+    this.runAllocatedBytes = this.consume('maxAllocationBytesPerRun', this.runAllocatedBytes, amount);
   }
 
   assertExecutionTime(): void {
