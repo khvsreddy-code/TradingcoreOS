@@ -55,20 +55,17 @@ async function main(): Promise<void> {
     specializedPlan?: { slotByName?: { __artifactType?: string; entries?: Array<[string, number]> } };
   };
   const portableSlots = portableIr.specializedPlan?.slotByName;
-  assert.equal(portableSlots?.__artifactType, 'Map',
+  assert(portableSlots?.__artifactType === 'Map',
     'compiler Map metadata must be encoded as a portable tagged artifact value');
-  assert.ok(Array.isArray(portableSlots?.entries),
+  assert(Array.isArray(portableSlots?.entries),
     'serialized Map metadata must preserve its entries');
-  assert.deepEqual(
-    portableSlots!.entries!.map(([name]) => name),
-    [...portableSlots!.entries!.map(([name]) => name)].sort(),
-    'serialized Map entries must have deterministic key order',
-  );
-  assert.deepEqual(
-    (research.featureGraph as { extensionKinds?: { __artifactType?: string; values?: string[] } }).extensionKinds,
-    { __artifactType: 'Set', values: ['returns', 'volatility'] },
-    'compiler Set metadata must be encoded in stable order for JSON artifact storage',
-  );
+  const portableEntryKeys = portableSlots!.entries!.map(([name]) => name);
+  assert(JSON.stringify(portableEntryKeys) === JSON.stringify([...portableEntryKeys].sort()),
+    'serialized Map entries must have deterministic key order');
+  const portableFeatureGraph = research.featureGraph as { extensionKinds?: { __artifactType?: string; values?: string[] } };
+  assert(JSON.stringify(portableFeatureGraph.extensionKinds) === JSON.stringify({
+    __artifactType: 'Set', values: ['returns', 'volatility'],
+  }), 'compiler Set metadata must be encoded in stable order for JSON artifact storage');
 
   const hmm = new CoreSpiritGaussianHMM({
     states: 3,
