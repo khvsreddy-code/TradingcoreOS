@@ -6,6 +6,7 @@ import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '
 import { historyStore } from '../../services/marketData/HistoryStore';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
+import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
 
 export type RightDockTab = 'watchlist' | 'orderbook' | 'alerts';
 export type WatchlistDockTab = RightDockTab;
@@ -277,12 +278,14 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
           const tick = ticks[item.key];
           const change = tick?.change;
           const pct = tick?.changePercent;
+          const health = classifyMarketDataHealth({ source: tick?.source, lastUpdateAt: tick?.brokerTimestamp ?? tick?.timestamp ?? tick?.lastTradeTimestamp, receivedAt: tick?.receivedAtEpoch ?? tick?.receivedAt, providerConnected: tick?.source === 'fyers', expectedIntervalMs: 5_000 });
           const positive = Number(pct ?? change ?? 0) >= 0;
           return <button type="button" key={item.key} className={`tct-wl-row ${selected === item.key ? 'selected' : ''}`} onClick={() => onSelect(item.key)}>
             <span className="tct-wl-badge">{(item.short || item.label || '?').slice(0, 3).toUpperCase()}</span>
             <span className="tct-wl-symbol">
               <b>{item.short || item.label}</b>
               <small>{item.label !== item.short ? item.label : item.type || ''}</small>
+              <small className={`tct-wl-data-health tct-wl-data-health-${health.state}`} title={health.reason}>{health.label} · {health.source.toUpperCase()}</small>
               <small className={technicalByKey[item.key] ? `tct-wl-tech tct-wl-tech-${technicalByKey[item.key]!.trend.toLowerCase()}` : 'tct-wl-tech'}>
                 {technicalByKey[item.key]
                   ? `${technicalByKey[item.key]!.trend.toUpperCase()} · RSI ${technicalByKey[item.key]!.rsi14.toFixed(1)} · EMA20 ${formatPrice(technicalByKey[item.key]!.ema20)}`
