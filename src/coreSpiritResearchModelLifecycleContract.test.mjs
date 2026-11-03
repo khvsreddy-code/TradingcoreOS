@@ -8,6 +8,7 @@ const artifact = read('./services/coreSpirit/modelArtifacts.ts');
 const artifactClient = read('./services/coreSpirit/modelArtifactClient.ts');
 const lifecycleTest = read('./services/coreSpirit/modelLifecycle.test.ts');
 const worker = read('./server/jobs/coreSpiritModelTraining.ts');
+const batchWorker = read('./server/jobs/coreSpiritBatchModelTraining.ts');
 const route = read('./server/routes/coreSpirit-models.routes.ts');
 const repository = read('./server/storage/CoreSpiritArtifactRepository.ts');
 const coreWorker = read('./services/coreSpirit/coreSpirit.worker.ts');
@@ -43,7 +44,7 @@ assert.match(worker, /splitChronologicalResearchRows\(/);
 assert.match(worker, /const trainingRows = split\.trainingRows/);
 assert.match(worker, /const validationRows = split\.validationRows/);
 assert.match(worker, /index < trainingRows\.length/);
-assert.match(worker, /validationModel\.predict\(row\.values, payload\.featureNames, row\.timestamp\)/);
+assert.match(worker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/,
 assert.match(worker, /validationResults/);
 assert.match(worker, /runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION/);
 assert.match(worker, /researchSafety: safety/);
@@ -107,6 +108,10 @@ assert.match(worker, /const validationModel = CoreSpiritGaussianHMM\.fromTrained
   'holdout evaluation must use a frozen copy of the trained model');
 assert.match(worker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\),
   'holdout inference must be forward-only and exclusive of the training range');
+assert.match(batchWorker, /const validationModel = CoreSpiritGaussianHMM\.fromTrainedState\(hmmState\)/,
+  'chunked holdout evaluation must also use a frozen trained-model copy');
+assert.match(batchWorker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/,
+  'chunked holdout inference must enforce the exclusive training cutoff');
 assert.match(worker, /validation.featureAvailabilityCheckPassed/);
 assert.match(worker, /validation.lookaheadCheckPassed/);
 const replayWorker = read('./services/coreSpirit/coreSpiritReplay.worker.ts');
