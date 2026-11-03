@@ -23,7 +23,10 @@ assert.match(validation, /Object\.keys\(row\)\.some/);
 assert.match(validation, /assertNoKnownLabelLeakage/);
 assert.match(validation, /splitChronologicalResearchRows/);
 assert.match(validation, /trainingRows = rows\.slice\(0, trainingCount\)/);
-assert.match(validation, /validationRows = rows\.slice\(trainingCount\)/);
+assert.match(validation, /const boundaryGap = purgeBars \+ embargoBars;/);
+assert.match(validation, /const validationStart = trainingCount \+ boundaryGap;/);
+assert.match(validation, /validationRows = rows\.slice\(validationStart\)/,
+  'validation starts after the explicit purge plus embargo boundary gap');
 assert.match(validation, /CAUSALITY_FUTURE_INDEX/);
 assert.match(validation, /CAUSALITY_UNQUALIFIED_REQUEST/);
 assert.match(validation, /repaint\.backtestLiveEquivalent === true/);
