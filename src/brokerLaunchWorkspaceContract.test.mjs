@@ -22,8 +22,13 @@ assert.doesNotMatch(
 const liveRoute = source.slice(workspaceRouteStart);
 assert.match(
   liveRoute,
-  /setHasConnectedBroker\(true\);[\s\S]*?navigate\('\/live'\);/,
-  'live broker gate should still return to /live after connection',
+  /workspacePath === '\/live'\s*\?\s*<LiveTradingShell\s*\/>/,
+  'the /live workspace route must remain owned by the live trading shell',
+);
+assert.match(
+  liveRoute,
+  /<TradingWorkspaceShell\s+route=\{workspacePath\}/,
+  'dashboard and research routes must remain in the workspace shell',
 );
 
 console.log('BROKER_LAUNCH_WORKSPACE_CONTRACT_OK');
