@@ -161,13 +161,13 @@ export function compareCoreSpiritConformance(
     const expected = reference.bars[index]!;
     const actual = candidate.bars[index]!;
     if (expected.barIndex !== actual.barIndex || expected.timestamp !== actual.timestamp || expected.revision !== actual.revision || expected.phase !== actual.phase) {
-      add({ category: 'bar-alignment', key: 'bar:' + index, barIndex: index, expected, actual, reason: 'Bar index, timestamp or execution phase differs.' });
+      add({ category: 'bar-alignment', key: 'bar:' + index, barIndex: expected.barIndex, expected, actual, reason: 'Bar index, timestamp, revision or execution phase differs.' });
     }
     for (const name of seriesNames) {
       const hasExpected = Object.prototype.hasOwnProperty.call(expected.series, name);
       const hasActual = Object.prototype.hasOwnProperty.call(actual.series, name);
       if (hasExpected !== hasActual) {
-        add({ category: 'series-value', key: name, barIndex: index, expected: hasExpected, actual: hasActual, reason: 'Series value was omitted on one bar.' });
+        add({ category: 'series-value', key: name, barIndex: expected.barIndex, expected: hasExpected, actual: hasActual, reason: 'Series value was omitted on one bar.' });
         continue;
       }
       if (!hasExpected) continue;
@@ -175,7 +175,7 @@ export function compareCoreSpiritConformance(
       const expectedValue = expected.series[name];
       const actualValue = actual.series[name];
       if (isNa(expectedValue) !== isNa(actualValue)) {
-        add({ category: 'na-state', key: name, barIndex: index, expected: expectedValue, actual: actualValue, reason: 'Pine NA/initialization state differs from CoreSpirit.' });
+        add({ category: 'na-state', key: name, barIndex: expected.barIndex, expected: expectedValue, actual: actualValue, reason: 'Pine NA/initialization state differs from CoreSpirit.' });
       } else if (!sameValue(expectedValue, actualValue, tolerance)) {
         add({ category: 'series-value', key: name, barIndex: index, expected: expectedValue, actual: actualValue, reason: 'Numerical series value differs beyond the configured tolerance.' });
       }
