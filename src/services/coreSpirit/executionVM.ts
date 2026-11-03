@@ -10,6 +10,7 @@ type CoreSpiritEmitInstruction = Extract<CoreSpiritIrInstruction, { op:'emit' }>
 export type CoreSpiritExecutionVMHost = {
   maxStepsPerBar: number;
   throwIfAborted: () => void;
+  chargeInstruction?: () => void;
   loadSeries: (name: string, offset: number) => number | null;
   moveLocal: (source: string) => unknown;
   loadState: (name: string) => unknown;
@@ -43,6 +44,7 @@ export class CoreSpiritExecutionVM {
     let steps = 0;
     while (pc < instructions.length) {
       if (++steps > host.maxStepsPerBar) throw new Error('execution step limit exceeded');
+      host.chargeInstruction?.();
       if ((steps & 1023) === 0) host.throwIfAborted();
       const instructionPc = pc;
       const ins = instructions[instructionPc];
