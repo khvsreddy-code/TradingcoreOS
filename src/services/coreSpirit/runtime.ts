@@ -663,7 +663,8 @@ export class CoreSpiritRuntime {
       if (error instanceof CoreSpiritResourceLimitError) throw error;
     }
     this.profiler.endBar();
-    if (phase === 'confirmed') this.commitConfirmedRealtimeBarState();
+    if (phase === 'confirmed') this.commitConfirmedRealtimeBarState('confirmed');
+    else if (phase === 'historical' || phase === 'correction') this.commitConfirmedRealtimeBarState(phase);
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
 
@@ -690,9 +691,9 @@ export class CoreSpiritRuntime {
       close: price,
       volume: Math.max(0, Number(baseBar.volume || 0) + Number(tick.volume || 0)),
     };
-    const result = this.executeBar(bar, historicalTick ? 'historical' : 'realtime');
-    this.state.barState = { ...this.state.barState, isRealtime: !historicalTick, isConfirmed: historicalTick };
-    return result;
+    // Historical tick replays use the same forming-bar rollback path as live ticks,
+    // but their execution mode is explicitly replay and can never authorize live orders.
+    return this.executeBar(bar, historicalTick ? 'replay' : 'realtime');
   }
 
   /**
@@ -719,12 +720,33 @@ export class CoreSpiritRuntime {
     return results;
   }
 
-  /** Commit the current realtime bar as historical/confirmed state. */
+  /** Commit a live bar only after executing its final, confirmed revision. */
   confirmRealtimeBar(): void {
     if (this.state.barIndex < 0) return;
+    if (this.currentBarSnapshot && !this.state.barState.isConfirmed && this.compiledIr) {
+      const current = this.history.at(-1);
+      if (current) {
+        // The forming revision is rolled back and evaluated once more with
+        // confirmed semantics. Close-confirmed alerts/orders therefore see the
+        // final OHLC values rather than the preceding forming snapshot.
+        this.executeBar({ ...current }, 'confirmed');
+        return;
+      }
+    }
+    this.commitConfirmedRealtimeBarState('confirmed');
+  }
+
+  private commitConfirmedRealtimeBarState(phase: CoreSpiritBarPhase): void {
+    if (this.state.barIndex < 0) return;
     this.realtimeLifecycle = 'committed';
-    this.state.barState = { ...this.state.barState!, isRealtime:false, isConfirmed:true, isLast:true };
-    this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex:this.state.barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:false, isConfirmed:true, isNewBar:false, revision:this.state.barState.revision, isFirst:this.state.barState.isFirst, isLast:true, sessionCalendar:this.sessionCalendar });
+    this.state.barState = { ...this.state.barState!, isRealtime:false, isConfirmed:true, barPhase:phase, isLast:true };
+    this.executionContext.frame = createCoreSpiritExecutionFrame({
+      timestamp:this.state.time*1000, barIndex:this.state.barIndex,
+      symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone,
+      mode:this.executionContext.mode, isRealtime:false, isConfirmed:true, barPhase:phase,
+      isNewBar:false, revision:this.state.barState.revision,
+      isFirst:this.state.barState.isFirst, isLast:true, sessionCalendar:this.sessionCalendar,
+    });
     this.executionContext.session = this.executionContext.frame.session;
     this.committedSeriesState = cloneNumberMap(this.state.seriesState);
     this.committedLocalSeries = cloneValueMap(this.state.localSeries);
@@ -761,8 +783,8 @@ export class CoreSpiritRuntime {
     this.state.barIndex=this.history.length-1;
     this.state.time=this.history.length?this.toEpoch(this.history.at(-1)!.timestamp):0;
     this.realtimeRevision=0;
-    this.state.barState={ index:this.state.barIndex,time:this.state.time,isFirst:this.state.barIndex===0,isLast:false,isRealtime:false,isConfirmed:true,revision:0,symbol:this.options.symbol,timeframe:this.options.timeframe,mode:this.executionContext.mode };
-    if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false,sessionCalendar:this.sessionCalendar}); this.executionContext.session=this.executionContext.frame.session; }
+    this.state.barState={ index:this.state.barIndex,time:this.state.time,isFirst:this.state.barIndex===0,isLast:false,isRealtime:false,isConfirmed:true,barPhase:'historical',revision:0,symbol:this.options.symbol,timeframe:this.options.timeframe,mode:this.executionContext.mode };
+    if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,barPhase:'historical',isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false,sessionCalendar:this.sessionCalendar}); this.executionContext.session=this.executionContext.frame.session; }
     this.currentBarSnapshot=undefined;
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
