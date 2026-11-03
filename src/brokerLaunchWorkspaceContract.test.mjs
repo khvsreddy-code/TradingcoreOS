@@ -16,7 +16,7 @@ assert.match(
 );
 assert.doesNotMatch(
   brokerRoute,
-  /onBrokerConnected=\{\(\) => \{[\s\S]*?tco:broker-readiness[\s\S]*?\}\}/,
+  /onBrokerConnected=\{\(\) => \{(?:(?!navigate\('\/dashboard'\);)[\s\S])*?\}\}/,
 );
 
 const liveRoute = source.slice(workspaceRouteStart);
