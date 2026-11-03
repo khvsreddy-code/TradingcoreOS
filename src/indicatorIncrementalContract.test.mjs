@@ -42,7 +42,10 @@ if (!/tailKey/.test(coordinator) || !/JSON\.stringify\(\[market\.open\[i\], mark
 if (!/indicatorQueue\.run\(payload, incrementalKey, transfer, \{/.test(coordinator) ||
     !/private readonly affinity = new Map<string, Worker>\(\)/.test(coordinator) ||
     !/this\.affinity\.set\(item\.affinityKey, idle\)/.test(coordinator)) {
-  throw new Error('Incremental snapshot/tick worker affinity is not pinned');
+if (!/indicatorQueue\.run\(payload, incrementalKey, transfer, \{ priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false \} \)/.test(coordinator) ||
+    !/indicatorQueue\.run\(\s*\{ \.\.\.payloadBase, market: reseed, seedOnMiss: true \}, incrementalKey, packetTransferables\(reseed\),\s*\{ priority: 0, generationKey: scopeKey, generation: revision, cancelOlder: false \},?\s*\)/.test(coordinator)) {
+  throw new Error('Incremental snapshot/tick and reset/reseed work must stay on the same affinity-pinned worker and revision fence');
+}
 }
 if (!/if \(result\.resetRequired\)/.test(coordinator) || !/seedOnMiss: true/.test(coordinator)) throw new Error('Incremental reset/resync path missing');
 if (!/requestIndicatorWorker\(data,visibleLogicalRangeRef\.current,'incremental'/.test(live+runtime+indicatorController)) throw new Error('Live chart does not request incremental forming-bar updates');
