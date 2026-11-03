@@ -38,9 +38,11 @@ assert.match(apiClient, /expired-fno-intraday/,
   'expired F&O intraday requests use a dedicated account-scoped quota bucket');
 assert.match(apiClient, /maxPerDay: dailyLimit/,
   'expired F&O intraday requests are limited by the verified plan daily allowance');
-assert.match(marketService, /expiredHistoricalData[\\s\\S]*?'lowest'/,
+const expiredHistoryStart = marketService.indexOf('expiredHistoricalData(symbol');
+const expiredExpiryStart = marketService.indexOf('expiredExpiryDates(symbol');
+assert.ok(expiredHistoryStart >= 0 && marketService.slice(expiredHistoryStart, expiredHistoryStart + 700).includes("'lowest'"),
   'expired F&O history is admitted at the lowest request priority');
-assert.match(marketService, /expiredExpiryDates[\\s\\S]*?'lowest'/,
+assert.ok(expiredExpiryStart >= 0 && marketService.slice(expiredExpiryStart, expiredExpiryStart + 500).includes("'lowest'"),
   'expired F&O expiry discovery is admitted at the lowest request priority');
 
 console.log('FYERS_STANDARD_AND_EXPIRED_FNO_HISTORY_POLICY_OK');
