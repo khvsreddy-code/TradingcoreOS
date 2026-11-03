@@ -341,7 +341,7 @@ const browserRuntimeMetrics = useRef({
         } catch {}
         const activeHistorySymbols = [...new Set([...activeSymbols, ...watchlistSymbols])].slice(0, 12);
         prewarmTcoVelaHistory(
-          activeHistorySymbols.length ? activeHistorySymbols : ['NSE:NIFTY50-INDEX'],
+          activeHistorySymbols.length ? activeHistorySymbols : ['NSE:NIFTY50-INDEX', 'NSE:NIFTYBANK-INDEX', 'BSE:SENSEX-INDEX'],
           ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
           5000,
         );
