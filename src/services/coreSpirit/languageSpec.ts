@@ -100,7 +100,7 @@ export const CORE_SPIRIT_V1_2_SURFACE = Object.freeze({
     'array literals, bounded indexing, and array methods push/pop/shift/unshift/get/set/includes/indexOf/slice',
     'map literals with string keys, bounded indexing, and map methods get/set/has/delete/keys/values/entries',
     'while and for-in loops with break/continue, bounded by the VM instruction budget',
-    'value-only enums lowered to immutable-style scalar constants',
+    'value-only enums lowered to generated scalar bindings',
     'built-in module imports from registered CoreScript standard-library namespaces only',
     'typed pure expression functions lowered through the existing inliner',
     'matrix and vector methods routed through the existing bounded quant kernels',
