@@ -70,7 +70,7 @@ for (const [type, expected] of [
 ]) assert.equal(classifyCoreSpiritValueKind(type), expected);
 
 assert.equal(detectCoreSpiritAuthoringLevel('order("long", 1)'), 'trader');
-assert.equal(detectCoreSpiritAuthoringLevel('returns20 = returns(close, 20)\nmodel alpha:\n    features: returns20\n    target: probability_up'), 'quant');
+assert.equal(detectCoreSpiritAuthoringLevel('model alpha: XGBoost<float> {\n    inputs: close\n    target: forward_return(close, 3)\n}'), 'quant');
 assert.equal(detectCoreSpiritAuthoringLevel('on market.tick: signal "TICK"'), 'system');
 
 const beginner = compileCoreSpirit(`
