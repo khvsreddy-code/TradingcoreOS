@@ -19,6 +19,7 @@ import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { ATRState, RSIState, VWAPSessionState } from './statefulIndicatorKernel';
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './quantKernels';
 import { CoreSpiritGaussianHMM, coreSpiritDataset, coreSpiritIdentity, coreSpiritMatrix, coreSpiritMatrixAdd, coreSpiritMatrixMultiply, coreSpiritMatrixScale, coreSpiritMatrixTranspose, coreSpiritTensor, coreSpiritVector, coreSpiritVectorDot, coreSpiritZeros, type CoreSpiritDatasetRow } from './quantMath';
+import { createCoreScriptArray, createCoreScriptMap, coreScriptCollectionIndex, coreScriptCollectionMember, coreScriptCollectionMethod } from './coreScriptCollections';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
@@ -1537,6 +1538,21 @@ export class CoreSpiritRuntime {
     const memoKey = `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(',')}`;
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
     const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
+    if(name==='__array') return finish(createCoreScriptArray(args));
+    if(name==='__map') return finish(createCoreScriptMap(args));
+    if(name==='__collection_index') return finish(coreScriptCollectionIndex(args[0],args[1]));
+    if(name==='__collection_member') return finish(coreScriptCollectionMember(args[0],String(args[1]??'')));
+    if(name==='__collection_method') return finish(coreScriptCollectionMethod(args[0],String(args[1]??''),args.slice(2)));
+    if(name==='array') return finish(createCoreScriptArray(args));
+    if(name==='map') return finish(createCoreScriptMap(args));
+    if(name==='len') {
+      const value=args[0];
+      if(Array.isArray(value)||typeof value==='string') return finish(value.length);
+      if(value instanceof Map) return finish(value.size);
+      if(value && typeof value==='object' && 'length' in value && Number.isFinite(Number((value as any).length))) return finish(Number((value as any).length));
+      if(value && typeof value==='object' && 'rows' in value && 'columns' in value) return finish(Number((value as any).rows)*Number((value as any).columns));
+      throw new Error('len expects an array, map, string, vector or matrix');
+    }
     this.capabilityHost.assert(name);
     if (name === 'vector') return finish(coreSpiritVector(...args));
     if (name === 'matrix') return finish(coreSpiritMatrix(args[0], args[1], ...args.slice(2)));
