@@ -224,6 +224,16 @@ export function buildCoreSpiritSemanticDependencyGraph(
         return id;
       }
 
+      case 'arrayLiteral': {
+        const id=addNode({id:'expr:'+(node.span?.start ?? nodes.size),kind:'expression',name:'array',source:sourceSpan(node)});
+        for(const element of node.elements) addEdge(expression(element,conditionOwner),id,'depends-on');
+        return id;
+      }
+      case 'mapLiteral': {
+        const id=addNode({id:'expr:'+(node.span?.start ?? nodes.size),kind:'expression',name:'map',source:sourceSpan(node)});
+        for(const entry of node.entries) addEdge(expression(entry.value,conditionOwner),id,'depends-on');
+        return id;
+      }
       case 'index': {
         const target = expression(node.target, conditionOwner);
         const index = expression(node.index, conditionOwner);
@@ -430,6 +440,21 @@ export function buildCoreSpiritSemanticDependencyGraph(
         break;
       }
 
+      case 'while': {
+        const conditionId=addNode({id:'condition:'+(node.span?.start ?? nodes.size),kind:'condition',name:'while',type:'boolean',source:sourceSpan(node)});
+        addEdge(expression(node.condition,conditionOwner),conditionId,'depends-on');
+        node.body.forEach(child=>visit(child,conditionId));
+        break;
+      }
+      case 'forEach': {
+        const iterableId=expression(node.iterable,conditionOwner);
+        const itemId=addNode({id:'symbol:'+node.name,kind:'symbol',name:node.name,type:'unknown',source:sourceSpan(node)});
+        addEdge(iterableId,itemId,'depends-on');
+        const previous=bindings[node.name]; bindings[node.name]=itemId;
+        node.body.forEach(child=>visit(child,itemId));
+        if(previous===undefined) delete bindings[node.name]; else bindings[node.name]=previous;
+        break;
+      }
       case 'if': {
         const conditionId = addNode({
           id:'condition:' + (node.span?.start ?? nodes.size),
