@@ -37,6 +37,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const modelDeclarationMap = new Map(modelDeclarations.map(item => [item.name, item] as const));
   let maxLookback=0;
   let eventScopeDepth=0;
+  let loopDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
@@ -72,6 +73,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'string': return 'string';
       case 'boolean': return 'boolean';
       case 'null': return 'null';
+      case 'arrayLiteral': {
+        const elementTypes=n.elements.map(item=>infer(item,scope));
+        const elementType=elementTypes.length?elementTypes.reduce((current,next)=>current===next?current:joinTypes(current,next)):'unknown';
+        return `array<${elementType}>` as CoreSpiritType;
+      }
+      case 'mapLiteral': {
+        const valueTypes=n.entries.map(entry=>infer(entry.value,scope));
+        const valueType=valueTypes.length?valueTypes.reduce((current,next)=>current===next?current:joinTypes(current,next)):'unknown';
+        return `map<string,${valueType}>` as CoreSpiritType;
+      }
       case 'identifier':
         if(seriesNames.has(n.name)) return 'series<number>';
         if(n.name==='na') return 'null';
@@ -110,6 +121,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return 'unknown';
         }
         const target=infer(n.target,scope);
+        if(target.startsWith('array<') && n.member==='length') return 'number';
+        if(target.startsWith('map<') && n.member==='size') return 'number';
+        if(target.startsWith('matrix<') && ['rows','columns','cols'].includes(n.member)) return 'number';
+        if(target.startsWith('vector<') && n.member==='length') return 'number';
+        if(target==='string' && n.member==='length') return 'number';
         if(target==='model:ref') {
           return 'number';
         }
@@ -133,6 +149,19 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'index': {
         const target=infer(n.target,scope);
         const index=infer(n.index,scope);
+        if(target.startsWith('array<')) {
+          if(!isNumericScalarType(index)) report(n.index,'Array indexes must be integer numeric values','TYPE_ARRAY_INDEX');
+          return target.slice(6,-1) as CoreSpiritType;
+        }
+        if(target.startsWith('map<')) {
+          if(index!=='string' && index!=='unknown') report(n.index,'Map indexes must be string keys','TYPE_MAP_INDEX');
+          return target.slice(target.indexOf(',')+1,-1) as CoreSpiritType;
+        }
+        if(target.startsWith('matrix<') || target.startsWith('vector<')) {
+          if(!isNumericScalarType(index)) report(n.index,'Matrix/vector indexes must be integer numeric values','TYPE_NUMERIC_COLLECTION_INDEX');
+          return 'number';
+        }
+        if(target==='string') return 'string';
         const constantIndex=constantNumber(n.index);
         const inputIndex = n.index.type === 'identifier' ? findSurfaceInput(n.index.name) : undefined;
         if(constantIndex!==undefined&&Number.isInteger(constantIndex)){
@@ -324,6 +353,33 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           if (declaration && declaration.outputs.includes(n.member)) return 'prediction<number>' as CoreSpiritType;
           report(n, `Model '${modelName ?? 'runtime'}' does not expose member '${n.member}'`, 'UNKNOWN_MODEL_MEMBER');
           return 'unknown';
+        }
+        if(targetType.startsWith('array<')) {
+          const elementType=targetType.slice(6,-1) as CoreSpiritType;
+          n.args.forEach(arg=>infer(arg,scope));
+          if(['push','unshift'].includes(n.member)) return 'number';
+          if(['pop','shift','get','set'].includes(n.member)) return elementType;
+          if(n.member==='includes') return 'boolean';
+          if(n.member==='indexOf') return 'number';
+          if(n.member==='slice') return targetType;
+          report(n,`Array method '${n.member}' is not supported`,'UNKNOWN_ARRAY_METHOD'); return 'unknown';
+        }
+        if(targetType.startsWith('map<')) {
+          const valueType=targetType.slice(targetType.indexOf(',')+1,-1) as CoreSpiritType;
+          n.args.forEach(arg=>infer(arg,scope));
+          if(['get','set'].includes(n.member)) return valueType;
+          if(n.member==='has'||n.member==='delete') return 'boolean';
+          if(['keys','values','entries'].includes(n.member)) return 'array<unknown>';
+          report(n,`Map method '${n.member}' is not supported`,'UNKNOWN_MAP_METHOD'); return 'unknown';
+        }
+        if(targetType.startsWith('matrix<')) {
+          n.args.forEach(arg=>infer(arg,scope));
+          if(n.member==='get') return 'number';
+          if(['transpose','scale','add','multiply'].includes(n.member)) return 'matrix<float>';
+          report(n,`Matrix method '${n.member}' is not supported`,'UNKNOWN_MATRIX_METHOD'); return 'unknown';
+        }
+        if(targetType.startsWith('vector<') && n.member==='dot') {
+          n.args.forEach(arg=>infer(arg,scope)); return 'number';
         }
         if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
           const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
@@ -535,6 +591,30 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'program':
         n.body.forEach(x=>visit(x,scope));
         break;
+      case 'while': {
+        const condition=infer(n.condition,scope); visit(n.condition,scope);
+        if(!isBooleanType(condition)) report(n.condition,'while condition must be boolean','TYPE_WHILE_CONDITION');
+        loopDepth += 1; n.body.forEach(item=>visit(item,new Map(scope))); loopDepth -= 1;
+        break;
+      }
+      case 'forEach': {
+        const iterableType=infer(n.iterable,scope); visit(n.iterable,scope);
+        let itemType:CoreSpiritType='unknown';
+        if(iterableType.startsWith('array<')) itemType=iterableType.slice(6,-1) as CoreSpiritType;
+        else if(iterableType.startsWith('map<')) itemType='string';
+        else if(iterableType==='string') itemType='string';
+        else if(iterableType.startsWith('vector<')) itemType='number';
+        else report(n.iterable,'for-in expects an array, map, string or vector','TYPE_FOR_ITERABLE');
+        const loopScope=new Map(scope); loopScope.set(n.name,itemType);
+        symbols.set(n.name,itemType);
+        loopDepth += 1; n.body.forEach(item=>visit(item,loopScope)); loopDepth -= 1;
+        break;
+      }
+      case 'break': case 'continue':
+        if(loopDepth===0) report(n,`${n.type} is only valid inside a loop`,'TYPE_LOOP_CONTROL');
+        break;
+      case 'arrayLiteral': n.elements.forEach(item=>visit(item,scope)); break;
+      case 'mapLiteral': n.entries.forEach(entry=>visit(entry.value,scope)); break;
       case 'typeDeclaration': {
         if(udts.has(n.name)) report(n,`Type '${n.name}' is already declared`,'DUPLICATE_TYPE');
         const fields=n.fields.map(f=>({name:f.name,type:mapDeclaredType(f.typeName)}));
