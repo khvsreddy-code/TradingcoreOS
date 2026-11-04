@@ -77,7 +77,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
   const connected = Boolean(runtime?.hasConnectedBroker());
   const [marketQuotes, setMarketQuotes] = useState<MarketQuoteView[]>(() => MARKET_INDEXES.map(index => readMarketQuote(index)));
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
-  const [newsProvider, setNewsProvider] = useState('Yahoo Finance RSS');
+  const [newsProvider, setNewsProvider] = useState('Investing.com India + Moneycontrol RSS');
   const [newsError, setNewsError] = useState('');
   const [newsLoading, setNewsLoading] = useState(false);
   const [scripts, setScripts] = useState<IndicatorPublication[]>([]);
@@ -127,7 +127,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
       const payload = await response.json() as NewsPayload;
       if (!response.ok || payload.success === false) throw new Error(payload.error || `News request failed (${response.status})`);
       setNewsItems(Array.isArray(payload.items) ? payload.items.slice(0, 12) : []);
-      setNewsProvider(payload.provider || 'Yahoo Finance RSS');
+      setNewsProvider(payload.provider || 'Investing.com India + Moneycontrol RSS');
     } catch (e: unknown) {
       setNewsError(e instanceof Error ? e.message : 'Market news is temporarily unavailable.');
     } finally {
