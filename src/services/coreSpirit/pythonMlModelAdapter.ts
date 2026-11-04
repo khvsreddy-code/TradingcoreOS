@@ -57,7 +57,7 @@ export function createCoreSpiritPythonMlManifest(spec: CoreSpiritPythonMlModelSp
   const version = String(spec.version || '').trim();
   const horizon = spec.forecastHorizonBars ?? 1;
   if (!MODEL_ID_PATTERN.test(modelId)) throw new Error('Python ML modelId must be a normalized model identifier.');
-  if (!version || version.length > 200) throw new Error('Python ML model version is required.');
+  if (!/^[a-f0-9]{64}$/.test(version)) throw new Error('Python ML model version must be a lowercase SHA-256 artifact identity.');
   if (!Number.isInteger(horizon) || horizon < 1 || horizon > 100) throw new Error('Python ML forecast horizon must be an integer from 1 to 100.');
 
   const manifest: CoreSpiritStrictModelManifest = {
@@ -258,6 +258,13 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
     }
     if (String(result.model_version || '') !== manifest.version) {
       throw new Error('Python ML artifact version does not match the registered CoreSpirit model manifest.');
+    }
+    if (typeof result.artifact_hash !== 'string' || !/^[a-f0-9]{64}$/.test(result.artifact_hash)) {
+      throw new Error('Python ML service returned an invalid artifact SHA-256 identity.');
+    }
+    const returnedHorizon = Number(result.forecast_horizon_bars);
+    if (!Number.isSafeInteger(returnedHorizon) || returnedHorizon !== (manifest.forecastHorizonBars ?? 1)) {
+      throw new Error('Python ML artifact forecast horizon does not match the registered CoreSpirit model manifest.');
     }
     const probabilities = [
       finiteProbability(result.bullish_probability),
