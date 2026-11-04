@@ -14,10 +14,36 @@ except: SARIMAX=None
 def artifact_path(root,symbol,timeframe,model_id):
     return Path(root)/f"{symbol}__{timeframe}__{model_id}".replace('/','_').replace(':','_').replace('|','_').replace(' ','_')
 
-def load_artifact(root,symbol,timeframe,model_id):
-    d=artifact_path(root,symbol,timeframe,model_id); mp=d/'metadata.json'
+def load_artifact(root,symbol,timeframe,model_id,requested_version=None):
+    base=artifact_path(root,symbol,timeframe,model_id)
+    if requested_version is not None:
+        version=str(requested_version).strip().lower()
+        if not re.fullmatch(r'[a-f0-9]{64}',version):
+            raise ValueError('Requested model version must be a SHA-256 identity.')
+        version_dir=base/'versions'/version
+        if version_dir.is_dir():
+            d=version_dir
+        else:
+            legacy_meta_path=base/'metadata.json'
+            if not legacy_meta_path.exists():
+                raise FileNotFoundError(f'No trained artifact for {symbol}/{timeframe}/{model_id}@{version}')
+            legacy_meta=json.loads(legacy_meta_path.read_text())
+            if str(legacy_meta.get('version',''))!=version:
+                raise FileNotFoundError(f'No trained artifact version {version} for {symbol}/{timeframe}/{model_id}')
+            d=base
+    else:
+        d=base
+        pointer_path=base/'metadata.json'
+        if pointer_path.exists():
+            pointer=json.loads(pointer_path.read_text())
+            active=str(pointer.get('active_version','')).strip().lower()
+            if active and re.fullmatch(r'[a-f0-9]{64}',active) and (base/'versions'/active).is_dir():
+                d=base/'versions'/active
+    mp=d/'metadata.json'
     if not mp.exists(): raise FileNotFoundError(f'No trained artifact for {symbol}/{timeframe}/{model_id}')
     meta=json.loads(mp.read_text())
+    if requested_version is not None and str(meta.get('version','')) != str(requested_version):
+        raise ValueError('Loaded model artifact version does not match the requested model version.')
     if (d/'model.joblib').exists(): return d,meta,joblib.load(d/'model.joblib')
     if (d/'model.pt').exists():
         kind=meta['kind']; nf=len(meta.get('neural_features',FEATURE_COLUMNS)); seq=int(meta.get('sequence_length',60))
@@ -296,8 +322,8 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     }
 
 
-def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horizon=1):
-    d, meta, a = load_artifact(root, symbol, timeframe, model_id)
+def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horizon=1, requested_version=None):
+    d, meta, a = load_artifact(root, symbol, timeframe, model_id, requested_version=requested_version)
     if not isinstance(candles, (list, tuple)) or len(candles) > 5000:
         raise ValueError('Prediction candle window must contain at most 5000 rows.')
 
@@ -559,11 +585,16 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
         'session_calendar_holidays': frame.attrs.get('session_holidays', []),
     }
 
-def predict_many(root, symbol, timeframe, model_ids, candles, horizon=1):
+def predict_many(root, symbol, timeframe, model_ids, candles, horizon=1, model_versions=None):
     out = {}
+    versions = model_versions if isinstance(model_versions, dict) else {}
     for model_id in model_ids:
         try:
-            out[model_id] = predict_artifact(root, symbol, timeframe, model_id, candles, requested_horizon=horizon)
+            out[model_id] = predict_artifact(
+                root, symbol, timeframe, model_id, candles,
+                requested_horizon=horizon,
+                requested_version=versions.get(model_id),
+            )
         except Exception as error:
             out[model_id] = {
                 'error': str(error),
