@@ -226,22 +226,22 @@ assert.deepEqual(compactV12Result.ir.entry.instructions, expandedV12Result.ir.en
 assert.ok(validateCoreSpiritIr(compactV12Result.ir));
 
 const legacyV10Result = compileCoreSpirit('plot(vwap());', 'corescript-v10-legacy');
-const explicitV10Result = compileCoreSpirit('edition@1.0\\nplot(vwap());', 'corescript-v10-explicit');
+const explicitV10Result = compileCoreSpirit('edition@1.0\nplot(vwap());', 'corescript-v10-explicit');
 assert.ok(legacyV10Result.ir && explicitV10Result.ir);
 assert.equal(legacyV10Result.ir.languageEdition, '1.0');
 assert.equal(explicitV10Result.ir.languageEdition, '1.0');
 for (const [invalidSource, expectedCode] of [
-  ['edition@1.3\\nplot(vwap());', 'EDITION_UNSUPPORTED'],
-  ['plot(vwap());\\nedition@1.2', 'EDITION_HEADER_POSITION'],
-  ['edition@1.2\\nedition@1.0\\nplot(vwap());', 'EDITION_DUPLICATE'],
-  ['edition@one.two\\nplot(vwap());', 'EDITION_HEADER_SYNTAX'],
+  ['edition@1.3\nplot(vwap());', 'EDITION_UNSUPPORTED'],
+  ['plot(vwap());\nedition@1.2', 'EDITION_HEADER_POSITION'],
+  ['edition@1.2\nedition@1.0\nplot(vwap());', 'EDITION_DUPLICATE'],
+  ['edition@one.two\nplot(vwap());', 'EDITION_HEADER_SYNTAX'],
 ]) {
   const invalid = compileCoreSpirit(invalidSource, 'corescript-invalid-' + expectedCode);
   assert.ok(invalid.diagnostics.some(d => d.code === expectedCode));
   assert.equal(invalid.artifact, undefined);
 }
 const noV12SugarInV10 = compileCoreSpirit(
-  'edition@1.0\\nplot vwap() color=white width=1 style=line',
+  'edition@1.0\nplot vwap() color=white width=1 style=line',
   'corescript-v10-no-v12-sugar',
 );
 assert.ok(!noV12SugarInV10.artifact);
