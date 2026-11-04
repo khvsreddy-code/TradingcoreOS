@@ -4,6 +4,7 @@ import type { CoreSpiritAst } from './ast';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { normalizeCoreSpiritSource } from './syntax';
+import { readCoreScriptEdition } from './languageEdition.js';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
@@ -32,9 +33,13 @@ export function createCoreSpiritCompilationUnit(
   options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {},
 ): CoreSpiritCompilationUnit {
   const original = String(source ?? '');
+  const edition = readCoreScriptEdition(original);
   const normalizedSource = normalizeCoreSpiritSource(original);
   const parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
-  const syntaxDiagnostics = parsed.diagnostics;
+  const syntaxDiagnostics = [
+    ...edition.diagnostics.map(item => ({ message:item.message, line:item.line, column:item.column, start:item.start, end:item.end })),
+    ...parsed.diagnostics,
+  ];
   const semantic = syntaxDiagnostics.length ? null : analyzeCoreSpirit(parsed.ast, options);
   const diagnostics = [
     ...syntaxDiagnostics.map(d => ({ severity:'error' as const, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
