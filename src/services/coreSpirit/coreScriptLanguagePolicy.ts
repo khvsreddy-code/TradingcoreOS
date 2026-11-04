@@ -211,6 +211,22 @@ export function validateCoreScriptCapabilityRequirementsFromAst(
         node.thenBranch.forEach(visit);
         (node.elseBranch ?? []).forEach(visit);
         return;
+      case 'while':
+        visit(node.condition);
+        node.body.forEach(visit);
+        return;
+      case 'forEach':
+        visit(node.iterable);
+        node.body.forEach(visit);
+        return;
+      case 'arrayLiteral':
+        node.elements.forEach(visit);
+        return;
+      case 'mapLiteral':
+        node.entries.forEach(entry=>visit(entry.value));
+        return;
+      case 'break': case 'continue':
+        return;
       case 'unary':
         visit(node.operand);
         return;
