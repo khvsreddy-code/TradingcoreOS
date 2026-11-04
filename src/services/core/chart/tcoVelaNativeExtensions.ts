@@ -3,13 +3,11 @@ import {
   type NativeIndicator,
   type NativeIndicatorContext,
   type NativeIndicatorDescriptor,
-} from '../../../../vendor/vela/src/core/native-indicators';
-import type { InputSchema, InputValue } from '../../../../vendor/vela/src/core/model/inputs';
-import {
   registerRendererLayer,
   type RendererLayerDefinition,
   type RendererLayerArgs,
-} from '../../../../vendor/vela/src/renderers/native/layers';
+} from './velaChartFacade';
+import type { InputSchema, InputValue } from './velaNativeChartKernel';
 
 type RegimeLayerData = {
   state: -1 | 0 | 1;
