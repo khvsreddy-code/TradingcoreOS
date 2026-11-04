@@ -32,6 +32,10 @@ function children(node:CoreSpiritAstNode):CoreSpiritAstNode[] {
     case 'call': return node.args;
     case 'memberCall': return [node.target,...node.args];
     case 'index': return [node.target,node.index];
+    case 'arrayLiteral': return node.elements;
+    case 'mapLiteral': return node.entries.map(entry=>entry.value);
+    case 'while': return [node.condition,...node.body];
+    case 'forEach': return [node.iterable,...node.body];
     case 'member': return [node.target];
     default: return [];
   }
