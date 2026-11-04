@@ -4,6 +4,7 @@ import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepos
 import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
 import { createCoreSpiritResearchBudget, getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { runChunkedCoreSpiritModelTraining } from './coreSpiritBatchModelTraining.js';
+import { trainCoreSpiritPythonXgboost } from './coreSpiritPythonMlTraining.js';
 import {
   assertNoKnownLabelLeakage,
   splitChronologicalResearchRows,
@@ -141,14 +142,11 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       throw new Error('Research artifact source or feature-graph integrity check failed');
     }
 
-    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; researchSafety?: ResearchSafetySummary };
+    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; target?: unknown; binding?: { kind?: unknown; locator?: unknown }; researchSafety?: ResearchSafetySummary };
     if (!Array.isArray(featureGraph?.featureNames) ||
         featureGraph.featureNames.length !== payload.featureNames.length ||
         featureGraph.featureNames.some((name, index) => name !== payload.featureNames[index])) {
       throw new Error('Training feature schema does not match the compiled research artifact');
-    }
-    if (featureGraph.modelType !== 'HMM<float>' && featureGraph.modelType !== 'HMM') {
-      throw new Error('The built-in background trainer currently supports Gaussian HMM artifacts; other model families need a registered training backend');
     }
     if (!featureGraph.researchSafety || featureGraph.researchSafety.version !== 1) {
       throw new Error('Research artifact has no causal/lookahead safety manifest; recompile it with the current CoreSpirit research compiler.');
@@ -160,6 +158,109 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     });
     if (expectedDatasetVersion !== payload.datasetVersion) throw new Error('Dataset snapshot hash mismatch; refusing to train on changed data');
     budget.assertWithinBudget('dataset integrity validation');
+
+    const modelType = String(featureGraph.modelType ?? '').toLowerCase();
+    if (modelType === 'xgboost<float>' || modelType === 'xgboost') {
+      if (snapshot.storageMode !== 'inline-v1') {
+        throw new Error('CoreSpirit Python XGBoost currently supports immutable inline datasets up to 5000 bars; chunked batch training is not yet registered for this model family.');
+      }
+      const canonicalFeatures = ['open', 'high', 'low', 'close', 'volume'];
+      if (payload.featureNames.length !== canonicalFeatures.length ||
+          payload.featureNames.some((name, index) => name !== canonicalFeatures[index])) {
+        throw new Error('CoreSpirit XGBoost currently requires the ordered OHLCV feature schema: open, high, low, close, volume.');
+      }
+      if (featureGraph.binding?.kind !== 'python' || featureGraph.binding.locator !== 'xgb-direction') {
+        throw new Error('CoreSpirit XGBoost must be bound to the registered Python model "xgb-direction".');
+      }
+      const target = String(featureGraph.target ?? '').trim();
+      const targetMatch = target.match(/^forward_return\(\s*close\s*,\s*(\d+)\s*\)$/i);
+      if (!targetMatch) {
+        throw new Error('CoreSpirit XGBoost target must be forward_return(close, H), where H is an integer horizon from 1 to 100.');
+      }
+      const horizon = Number(targetMatch[1]);
+      if (!Number.isSafeInteger(horizon) || horizon < 1 || horizon > 100) {
+        throw new Error('CoreSpirit XGBoost target horizon must be an integer from 1 to 100 bars.');
+      }
+      if (payload.rows.length < 240 || payload.rows.length > 5_000) {
+        throw new Error('CoreSpirit Python XGBoost requires 240–5000 confirmed OHLCV candles.');
+      }
+      const symbol = String(payload.trainingParameters.symbol ?? '').trim();
+      const timeframe = String(payload.trainingParameters.timeframe ?? '').trim();
+      if (!symbol || symbol.length > 128 || !timeframe || timeframe.length > 32) {
+        throw new Error('CoreSpirit XGBoost trainingParameters must include the canonical symbol and timeframe.');
+      }
+      const suppliedHorizon = payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.horizon;
+      if (suppliedHorizon !== undefined && Number(suppliedHorizon) !== horizon) {
+        throw new Error('Training horizon does not match the forward_return target declared in CoreScript.');
+      }
+      const purgeBars = Number(payload.trainingParameters.purgeBars ?? horizon);
+      const embargoBars = Number(payload.trainingParameters.embargoBars ?? 0);
+      if (!Number.isSafeInteger(purgeBars) || purgeBars < horizon || purgeBars > 500 ||
+          !Number.isSafeInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+        throw new Error('XGBoost chronological validation requires purgeBars >= target horizon and embargoBars between 0 and 500.');
+      }
+      const modelVersion = await coreSpiritSha256({
+        ownerScope: ownerUserId,
+        researchArtifactId: payload.researchArtifactId,
+        researchSourceHash: research.sourceHash,
+        datasetVersion: payload.datasetVersion,
+        modelId: 'xgb-direction',
+        symbol,
+        timeframe,
+        horizon,
+        trainingParameters: payload.trainingParameters,
+        randomSeed: payload.randomSeed,
+      });
+      await repository.updateTrainingRun(payload.trainingRunId, { status: 'running', progress: 15 });
+      const trained = await trainCoreSpiritPythonXgboost({
+        symbol,
+        timeframe,
+        horizon,
+        modelVersion,
+        datasetVersion: payload.datasetVersion,
+        featureNames: payload.featureNames,
+        rows: payload.rows,
+      });
+      const metrics = {
+        ...trained.metrics,
+        training_rows: trained.training_rows,
+        validation_rows: trained.validation_rows,
+        test_rows: trained.test_rows,
+        external_backend: 'python',
+        external_model_id: trained.model_id,
+        external_model_version: trained.model_version,
+        external_artifact_hash: trained.artifact_hash,
+        external_dataset_hash: trained.dataset_hash,
+        release_status: trained.release_status,
+        calibration_status: trained.calibration_status,
+      };
+      await repository.updateTrainingRun(payload.trainingRunId, {
+        status: 'succeeded',
+        progress: 100,
+        metrics,
+        error: null,
+      });
+      return {
+        trainingRunId: payload.trainingRunId,
+        modelName: research.name,
+        modelBackend: 'python',
+        modelId: trained.model_id,
+        modelVersion: trained.model_version,
+        artifactHash: trained.artifact_hash,
+        datasetHash: trained.dataset_hash,
+        releaseStatus: trained.release_status,
+        calibrationStatus: trained.calibration_status,
+        productionEligible: false,
+        trainingRows: trained.training_rows,
+        validationRows: trained.validation_rows,
+        testRows: trained.test_rows,
+        metrics: trained.metrics,
+        idempotentReuse: trained.idempotent_reuse === true,
+      };
+    }
+    if (modelType !== 'hmm<float>' && modelType !== 'hmm') {
+      throw new Error('No CoreSpirit training backend is registered for model family "' + String(featureGraph.modelType ?? 'unknown') + '".');
+    }
 
     const states = Number(featureGraph.states ?? 3);
     const forecastHorizonBars = Number(payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.targetHorizonBars ?? payload.trainingParameters.horizon ?? 1);
