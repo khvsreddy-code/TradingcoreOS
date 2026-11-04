@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 from datetime import datetime, timezone
@@ -38,6 +39,15 @@ class PredictionRequest(BaseModel):
     horizon: int = Field(default=1, ge=1, le=100)
 
 
+def require_ml_service_auth(received_secret: str | None) -> None:
+    """Fail closed when the internal model-service credential is missing or invalid."""
+    configured_secret = os.getenv('ML_SERVICE_SECRET', '').strip()
+    if len(configured_secret) < 32:
+        raise HTTPException(503, 'ML service authentication is not configured; set ML_SERVICE_SECRET to at least 32 characters.')
+    if not received_secret or not hmac.compare_digest(received_secret, configured_secret):
+        raise HTTPException(401, 'Invalid ML service secret')
+
+
 def _validate_candles(candles: list[Candle]) -> None:
     previous = None
     for index, candle in enumerate(candles):
@@ -65,11 +75,12 @@ def health():
     count = 0
     if os.path.isdir(MODEL_ROOT):
         count = sum(os.path.isfile(os.path.join(MODEL_ROOT, directory, 'metadata.json')) for directory in os.listdir(MODEL_ROOT))
-    return {'status': 'ok', 'service': 'TradingCoreOS ML', 'version': SERVICE_VERSION, 'installed_artifacts': count}
+    return {'status': 'ok', 'service': 'TradingCoreOS ML', 'version': SERVICE_VERSION, 'installed_artifacts': count, 'inference_auth_configured': len(os.getenv('ML_SERVICE_SECRET', '').strip()) >= 32}
 
 
 @app.get('/models')
-def models():
+def models(x_tradingcore_ml_secret: str | None = Header(default=None)):
+    require_ml_service_auth(x_tradingcore_ml_secret)
     out = []
     if os.path.isdir(MODEL_ROOT):
         for directory in sorted(os.listdir(MODEL_ROOT)):
@@ -85,9 +96,7 @@ def models():
 
 @app.post('/predict')
 def predict(req: PredictionRequest, x_tradingcore_ml_secret: str | None = Header(default=None)):
-    secret = os.getenv('ML_SERVICE_SECRET', '')
-    if secret and x_tradingcore_ml_secret != secret:
-        raise HTTPException(401, 'Invalid ML service secret')
+    require_ml_service_auth(x_tradingcore_ml_secret)
     if not req.symbol.strip() or not req.timeframe.strip():
         raise HTTPException(422, 'symbol and timeframe are required')
     _validate_candles(req.candles)
