@@ -83,7 +83,7 @@ const LAYER_CAPABILITY_MAP: Readonly<Record<CoreSpiritProgramLayer, readonly Cor
   script: ['series','visuals','interactive-ui','signals','market-data','compute-cpu','compute-wasm','compute-gpu'],
   model: ['series','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
   strategy: ['series','visuals','interactive-ui','signals','models','strategy-events','order-intents','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu','ai-invoke'],
+  automation: ['series','models','market-data','signals','automation','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu','ai-invoke'],
 };
 
 export class CoreSpiritCapabilityDeniedError extends Error {
