@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { createCoreSpiritOutputSemantics } from './services/coreSpirit/executionSemantics.ts';
+import { CoreEventBus } from './services/core/event/eventBus.ts';
 
 const bar = {
   timestamp: '2026-10-01T09:15:00.000Z',
@@ -11,19 +12,20 @@ const outputs = [];
 const collector = { push: value => outputs.push(value) };
 const diagnostics = [];
 
-function observeExternalEvents(runtime) {
+function observeExternalEvents(bus) {
   let calls = 0;
-  for (const method of ['executionIntent', 'scriptAlert', 'scriptWebhook', 'scriptEvent', 'scriptSignal']) {
-    runtime.eventRouter[method] = () => { calls += 1; };
+  for (const event of ['execution.intent', 'script.alert', 'script.webhook', 'script.event', 'script.signal']) {
+    bus.on(event, () => { calls += 1; });
   }
   return () => calls;
 }
 
+const viewportBus = new CoreEventBus();
 const viewportRuntime = new CoreSpiritRuntime({
   sourceId: 'viewport-side-effect-contract',
   suppressExternalEffects: true,
-});
-const externalCalls = observeExternalEvents(viewportRuntime);
+}, viewportBus);
+const externalCalls = observeExternalEvents(viewportBus);
 for (const kind of ['orderIntent', 'buy', 'sell', 'entry', 'exit', 'alert', 'webhook']) {
   viewportRuntime.emitIntent(kind, ['long', 'quantity', 1, null, null], bar, 0, collector, diagnostics, kind);
 }
@@ -43,16 +45,18 @@ const confirmedHistorySemantics = createCoreSpiritOutputSemantics({
   isConfirmed: true,
 });
 
-const normalRuntime = new CoreSpiritRuntime({ sourceId: 'normal-execution-contract' });
+const normalBus = new CoreEventBus();
+const normalRuntime = new CoreSpiritRuntime({ sourceId: 'normal-execution-contract' }, normalBus);
 normalRuntime.currentOutputSemantics = confirmedHistorySemantics;
-const normalExternalCalls = observeExternalEvents(normalRuntime);
+const normalExternalCalls = observeExternalEvents(normalBus);
 const normalOutputs = [];
 normalRuntime.emitIntent('orderIntent', ['long', 'quantity', 1, null, null], bar, 0, { push: value => normalOutputs.push(value) }, [], 'order');
 assert.equal(normalOutputs[0]?.kind, 'orderIntent', 'normal strategy evaluation must continue producing order intents');
 assert.equal(normalExternalCalls(), 1, 'normal strategy evaluation must retain host-owned order-intent routing');
 
-const replayRuntime = new CoreSpiritRuntime({ sourceId: 'historical-replay-scope' });
-const replayEvents = observeExternalEvents(replayRuntime);
+const replayBus = new CoreEventBus();
+const replayRuntime = new CoreSpiritRuntime({ sourceId: 'historical-replay-scope' }, replayBus);
+const replayEvents = observeExternalEvents(replayBus);
 const executeIrStub = function () {
   // Mirror the confirmed-bar metadata installed by a real executeIr() pass.
   this.currentOutputSemantics = confirmedHistorySemantics;
