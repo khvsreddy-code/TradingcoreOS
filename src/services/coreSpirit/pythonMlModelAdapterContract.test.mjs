@@ -4,8 +4,11 @@ const {
   createCoreSpiritPythonMlManifest,
   CoreSpiritPythonMlServiceAdapter,
   registerCoreSpiritPythonMlModel,
+  registerCoreSpiritPythonMlRuntimeModel,
 } = await import('./pythonMlModelAdapter.ts');
 const { CoreSpiritExternalModelRegistry } = await import('./modelOrchestration.ts');
+const { CoreSpiritModelRegistry } = await import('./modelAbi.ts');
+const { CoreSpiritModelRuntime } = await import('./modelRuntime.ts');
 
 const manifest = createCoreSpiritPythonMlManifest({
   modelId: 'xgb-direction',
@@ -121,6 +124,51 @@ assert.equal(result.metadata.release_status, 'candidate');
 assert.equal(result.metadata.production_eligible, false);
 assert.equal(result.metadata.predicted_price, null);
 assert.ok(result.outputChecksum && result.stateChecksum, 'adapter emits deterministic checksums');
+
+const runtimeRegistry = new CoreSpiritModelRegistry();
+const runtimeManifest = registerCoreSpiritPythonMlRuntimeModel(runtimeRegistry, {
+  modelId: 'xgb-direction',
+  version: 'nifty-5m-v4',
+  forecastHorizonBars: 3,
+}, {
+  baseUrl: 'https://ml.example.test',
+  serviceSecret: 's'.repeat(48),
+  fetchImpl: async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({
+      models: {
+        'xgb-direction': {
+          trained: true,
+          status: 'paper',
+          model_version: 'nifty-5m-v4',
+          bullish_probability: 0.62,
+          neutral_probability: 0.18,
+          bearish_probability: 0.20,
+          confidence: 0.62,
+          release_status: 'candidate',
+          probability_calibration: 'not_calibrated',
+          production_eligible: false,
+        },
+      },
+    }),
+  }),
+});
+assert.equal(runtimeManifest.backend, 'host');
+assert.deepEqual(runtimeManifest.inputNames, ['ohlcv', 'timestamps_ms', 'confirmed']);
+const coreSpiritRuntime = new CoreSpiritModelRuntime(runtimeRegistry, {
+  maxCallsPerBar: 4,
+  maxInputBytes: 512 * 1024,
+  maxOutputBytes: 4 * 1024,
+});
+const runtimeResult = await coreSpiritRuntime.execute({
+  modelId: 'xgb-direction',
+  version: 'nifty-5m-v4',
+  context: request.context,
+  inputs: request.features,
+});
+assert.deepEqual(runtimeResult.outputs.prediction, { dtype: 'f64', shape: [3], data: [0.62, 0.18, 0.20] });
+assert.deepEqual(runtimeResult.outputs.confidence, { dtype: 'f64', shape: [], data: [0.62] });
 
 await assert.rejects(
   () => adapter.execute(manifest, { ...request, context: { ...request.context, confirmed: false } }),
