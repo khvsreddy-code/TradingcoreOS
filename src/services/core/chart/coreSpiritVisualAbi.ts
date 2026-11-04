@@ -1,6 +1,6 @@
 import type { CoreSpiritObject, CoreSpiritVisualStyle } from '../../coreSpirit/types';
 import type { CoreSpiritVelaOutputRevision } from '../../coreSpirit/velaOutputAdapter';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, BoxTextSize, Background, PriceLine, LineStyle } from './velaNativeChartKernel';
+import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, BoxTextSize, Background, PriceLine, VelaLineStyle } from './velaNativeChartKernel';
 
 export const CORE_SPIRIT_VISUAL_ABI_VERSION = 1 as const;
 export const CORE_SPIRIT_VELA_COORDINATE_SYSTEM = 'vela-epoch-milliseconds-price+tagged-visual-space' as const;
@@ -482,7 +482,7 @@ function cssWithOpacity(value: unknown, opacityValue: unknown, fallback: string)
   return input;
 }
 
-function velaLineStyle(value: unknown): LineStyle {
+function velaLineStyle(value: unknown): VelaLineStyle {
   const numeric = finiteNumber(value);
   if (value === 'dashed' || numeric === 1) return 'dashed';
   if (value === 'dotted' || numeric === 2) return 'dotted';
