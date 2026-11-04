@@ -89,7 +89,7 @@ Supported loop forms:
 
 ```corescript
 let values = [1, 2, 3, 4]
-let total = 0
+let total: state<number> = 0
 
 for (let value in values) {
   if (value == 2) {
