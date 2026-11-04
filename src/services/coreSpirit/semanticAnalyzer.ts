@@ -356,30 +356,72 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         }
         if(targetType.startsWith('array<')) {
           const elementType=targetType.slice(6,-1) as CoreSpiritType;
-          n.args.forEach(arg=>infer(arg,scope));
-          if(['push','unshift'].includes(n.member)) return 'number';
-          if(['pop','shift','get','set'].includes(n.member)) return elementType;
-          if(n.member==='includes') return 'boolean';
-          if(n.member==='indexOf') return 'number';
-          if(n.member==='slice') return targetType;
+          const argTypes=n.args.map(arg=>infer(arg,scope));
+          const requireCount=(minimum:number,maximum=minimum)=> {
+            if(n.args.length<minimum || n.args.length>maximum) report(n,`Array method '${n.member}' expects ${minimum===maximum?minimum:`${minimum}..${maximum}`} arguments`,'ARG_COUNT');
+          };
+          if(['push','unshift'].includes(n.member)) {
+            if(argTypes.some(type=>!compatible(elementType,type))) report(n,`Array method '${n.member}' values must match element type '${elementType}'`,'TYPE_ARRAY_ELEMENT');
+            return 'number';
+          }
+          if(['pop','shift'].includes(n.member)) { requireCount(0); return elementType; }
+          if(n.member==='get') { requireCount(1); if(argTypes[0] && !isNumericScalarType(argTypes[0])) report(n.args[0]!, 'Array index must be numeric','TYPE_ARRAY_INDEX'); return elementType; }
+          if(n.member==='set') {
+            requireCount(2);
+            if(argTypes[0] && !isNumericScalarType(argTypes[0])) report(n.args[0]!, 'Array index must be numeric','TYPE_ARRAY_INDEX');
+            if(argTypes[1] && !compatible(elementType,argTypes[1])) report(n.args[1]!,`Array value must match element type '${elementType}'`,'TYPE_ARRAY_ELEMENT');
+            return elementType;
+          }
+          if(n.member==='includes') { requireCount(1); if(argTypes[0]&&!compatible(elementType,argTypes[0])) report(n.args[0]!,`Array value must match element type '${elementType}'`,'TYPE_ARRAY_ELEMENT'); return 'boolean'; }
+          if(n.member==='indexOf') { requireCount(1); if(argTypes[0]&&!compatible(elementType,argTypes[0])) report(n.args[0]!,`Array value must match element type '${elementType}'`,'TYPE_ARRAY_ELEMENT'); return 'number'; }
+          if(n.member==='slice') { requireCount(1,2); if(argTypes.some(type=>!isNumericScalarType(type))) report(n,'Array slice indexes must be numeric','TYPE_ARRAY_INDEX'); return targetType; }
           report(n,`Array method '${n.member}' is not supported`,'UNKNOWN_ARRAY_METHOD'); return 'unknown';
         }
         if(targetType.startsWith('map<')) {
           const valueType=targetType.slice(targetType.indexOf(',')+1,-1) as CoreSpiritType;
-          n.args.forEach(arg=>infer(arg,scope));
-          if(['get','set'].includes(n.member)) return valueType;
-          if(n.member==='has'||n.member==='delete') return 'boolean';
-          if(['keys','values','entries'].includes(n.member)) return 'array<unknown>';
+          const argTypes=n.args.map(arg=>infer(arg,scope));
+          const requireCount=(expected:number)=>{if(n.args.length!==expected)report(n,`Map method '${n.member}' expects ${expected} arguments`,'ARG_COUNT');};
+          if(['get','has','delete'].includes(n.member)) {
+            requireCount(1);
+            if(argTypes[0] && argTypes[0]!=='string' && argTypes[0]!=='unknown') report(n.args[0]!, 'Map key must be a string','TYPE_MAP_KEY');
+            if(n.member==='get') return valueType;
+            return 'boolean';
+          }
+          if(n.member==='set') {
+            requireCount(2);
+            if(argTypes[0] && argTypes[0]!=='string' && argTypes[0]!=='unknown') report(n.args[0]!, 'Map key must be a string','TYPE_MAP_KEY');
+            if(argTypes[1] && !compatible(valueType,argTypes[1])) report(n.args[1]!,`Map value must match value type '${valueType}'`,'TYPE_MAP_VALUE');
+            return valueType;
+          }
+          if(['keys','values','entries'].includes(n.member)) {
+            requireCount(0);
+            if(n.member==='keys') return 'array<string>';
+            if(n.member==='values') return `array<${valueType}>` as CoreSpiritType;
+            return 'array<array<unknown>>';
+          }
           report(n,`Map method '${n.member}' is not supported`,'UNKNOWN_MAP_METHOD'); return 'unknown';
         }
         if(targetType.startsWith('matrix<')) {
-          n.args.forEach(arg=>infer(arg,scope));
-          if(n.member==='get') return 'number';
-          if(['transpose','scale','add','multiply'].includes(n.member)) return 'matrix<float>';
+          const argTypes=n.args.map(arg=>infer(arg,scope));
+          if(n.member==='get') {
+            if(n.args.length!==2) report(n,'Matrix get expects row and column indexes','ARG_COUNT');
+            if(argTypes.some(type=>!isNumericScalarType(type))) report(n,'Matrix indexes must be numeric','TYPE_MATRIX_INDEX');
+            return 'number';
+          }
+          if(n.member==='transpose') { if(n.args.length!==0) report(n,'Matrix transpose expects no arguments','ARG_COUNT'); return 'matrix<float>'; }
+          if(n.member==='scale') { if(n.args.length!==1) report(n,'Matrix scale expects one scalar','ARG_COUNT'); if(argTypes[0]&&!isNumericScalarType(argTypes[0])) report(n.args[0]!, 'Matrix scale factor must be numeric','TYPE_MATRIX_SCALE'); return 'matrix<float>'; }
+          if(n.member==='add'||n.member==='multiply') {
+            if(n.args.length!==1) report(n,`Matrix ${n.member} expects one matrix`,'ARG_COUNT');
+            if(argTypes[0] && !String(argTypes[0]).startsWith('matrix<')) report(n.args[0]!,`Matrix ${n.member} expects a matrix operand`,'TYPE_MATRIX_OPERAND');
+            return 'matrix<float>';
+          }
           report(n,`Matrix method '${n.member}' is not supported`,'UNKNOWN_MATRIX_METHOD'); return 'unknown';
         }
         if(targetType.startsWith('vector<') && n.member==='dot') {
-          n.args.forEach(arg=>infer(arg,scope)); return 'number';
+          const argTypes=n.args.map(arg=>infer(arg,scope));
+          if(n.args.length!==1) report(n,'Vector dot expects one vector','ARG_COUNT');
+          if(argTypes[0] && !String(argTypes[0]).startsWith('vector<')) report(n.args[0]!, 'Vector dot expects a vector operand','TYPE_VECTOR_OPERAND');
+          return 'number';
         }
         if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
           const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
