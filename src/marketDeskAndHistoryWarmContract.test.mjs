@@ -24,9 +24,12 @@ assert.ok(dashboard.includes("scriptKind: 'strategy'"), 'homepage should feature
 assert.ok(dashboard.includes('void loadTradingCoreRuntime()') && dashboard.includes('runtime.subscribeMarketData(') && dashboard.includes("runtime.on('TICK_UPDATE', refreshMarket)"), 'dashboard must subscribe to the shared runtime quote feed and refresh without opening the live chart');
 assert.ok(dashboard.includes("fetch('/api/news?symbol=financial%20markets'"), 'dashboard must fetch headlines through the server-side feed proxy');
 
-assert.ok(news.includes('https://feeds.finance.yahoo.com/rss/2.0/headline'), 'Yahoo Finance RSS should be the primary news source');
-assert.ok(news.includes("provider: 'Yahoo Finance RSS'"), 'news response should identify Yahoo as the primary source');
-assert.ok(news.includes('fetchGdelt(key)'), 'existing GDELT news should remain a fallback');
+assert.ok(news.includes("url: 'https://in.investing.com/rss/news_25.rss'"), 'India Investing.com RSS must be an approved market-news source');
+assert.ok(news.includes("url: 'https://www.moneycontrol.com/rss/marketreports.xml'"), 'Moneycontrol market reports must be an approved news source');
+assert.ok(news.includes("url: 'https://www.moneycontrol.com/rss/latestnews.xml'"), 'Moneycontrol latest headlines must remain available');
+assert.ok(news.includes("region: 'IN'"), 'news responses must identify the India market region');
+assert.ok(news.includes('INDIA_RELEVANCE'), 'market-news results must pass the India relevance filter');
+assert.ok(news.includes('Promise.allSettled(FEEDS.map(feed => fetchFeed(feed, topic)))'), 'the India RSS sources must degrade independently when one feed fails');
 assert.ok(news.includes('const NEWS_CACHE_TTL_MS = 90_000'), 'news should be cached to avoid refreshing on every render');
 
 assert.ok(provider.includes('const HISTORY_WARM_SUCCESS_TTL_MS = 12 * 60 * 60 * 1000'), 'successful history warming must be throttled');
