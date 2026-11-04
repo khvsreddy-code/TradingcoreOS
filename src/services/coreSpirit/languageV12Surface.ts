@@ -199,6 +199,19 @@ function normalizeCoreScriptV12Enums(source: string): string {
   return rewriteCoreScriptEnumMembers(output.join('\n'), members);
 }
 
+function normalizeCoreScriptV12LoopKeywords(source: string): string {
+  return source.split('\n').map(line => {
+    const trimmed=line.trimStart();
+    if(!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*')) return line;
+    let output=line.replace(/^(\s*)while(?=\s*\()/,'$1__core_while');
+    output=output.replace(/^(\s*)for(?=\s*\()/,'$1__core_for');
+    output=output.replace(/^(\s*__core_for\s*\(\s*(?:let\s+)?[A-Za-z_][A-Za-z0-9_]*)\s+in(?=\s)/,'$1 __core_in');
+    output=output.replace(/^(\s*)break(?=\s*(?:;|\/\/|$))/,'$1__core_break');
+    output=output.replace(/^(\s*)continue(?=\s*(?:;|\/\/|$))/,'$1__core_continue');
+    return output;
+  }).join('\n');
+}
+
 export function normalizeCoreScriptV12LanguageSurface(source: string): string {
-  return normalizeCoreScriptV12Enums(normalizeCoreScriptV12Imports(source));
+  return normalizeCoreScriptV12LoopKeywords(normalizeCoreScriptV12Enums(normalizeCoreScriptV12Imports(source)));
 }
