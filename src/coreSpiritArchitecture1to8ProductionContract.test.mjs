@@ -71,7 +71,7 @@ for (const [type, expected] of [
 
 assert.equal(detectCoreSpiritAuthoringLevel('order("long", 1)'), 'trader');
 assert.equal(detectCoreSpiritAuthoringLevel('model alpha: XGBoost<float> {\n    inputs: close\n    target: forward_return(close, 3)\n}'), 'quant');
-assert.equal(detectCoreSpiritAuthoringLevel('on market.tick: signal "TICK"'), 'system');
+assert.equal(detectCoreSpiritAuthoringLevel(`requires market.tick, automation\non market.tick:\n    signal "TICK"\nautomate "notify":\n    automation.notify("tick")`), 'system');
 
 const beginner = compileCoreSpirit(`
 indicator "EMA Cross"
