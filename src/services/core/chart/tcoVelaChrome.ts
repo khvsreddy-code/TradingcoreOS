@@ -43,10 +43,10 @@ import {
   type TcoSavedWorkspace,
 } from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
-import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
+import { registerIcon, svg16 } from './velaNativeChartKernel';
 import { versionedStorageKey } from '../../coreSpirit/storageSchema';
-import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
-import { themeTokens } from '../../../../vendor/vela/src/core/tokens';
+import type { VelaTheme } from './velaNativeChartKernel';
+import { themeTokens } from './velaNativeChartKernel';
 
 // TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
 // render blank spans inside clickable icon-only controls.
