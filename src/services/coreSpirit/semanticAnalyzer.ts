@@ -122,7 +122,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         }
         const target=infer(n.target,scope);
         if(target.startsWith('array<') && n.member==='length') return 'number';
-        if(target.startsWith('map<') && n.member==='size') return 'number';
+        if(target.startsWith('map<')) return n.member==='size' ? 'number' : target.slice(target.indexOf(',')+1,-1) as CoreSpiritType;
         if(target.startsWith('matrix<') && ['rows','columns','cols'].includes(n.member)) return 'number';
         if(target.startsWith('vector<') && n.member==='length') return 'number';
         if(target==='string' && n.member==='length') return 'number';
