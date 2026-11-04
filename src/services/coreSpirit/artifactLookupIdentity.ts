@@ -3,6 +3,7 @@ import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import { sha256HexSync } from './artifactIdentity';
 import { normalizeCoreSpiritSource } from './syntax';
+import { readCoreScriptEdition } from './languageEdition.js';
 import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI } from './VERSION';
 
 type FingerprintOptions = { components?: CoreSpiritComponentRegistryLike; layer?: string };
@@ -72,6 +73,7 @@ export function coreSpiritComponentFingerprint(options: FingerprintOptions, sour
 export function buildCoreSpiritSemanticFingerprint(options: FingerprintOptions = {}, source?: string): string {
   return stableJson({
     compilerPipeline: 'semantic-v5',
+    edition: source === undefined ? '1.0' : readCoreScriptEdition(source).edition,
     layer: options.layer || 'script',
     components: contractsForSource(options, source),
   });
