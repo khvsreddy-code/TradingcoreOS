@@ -1586,7 +1586,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       if (!value) return Number.MAX_SAFE_INTEGER;
       const parsed = Date.parse(value);
       if (Number.isFinite(parsed)) return parsed;
-      const digits = value.match(/(\\d{1,2})[- /]?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[- /]?(\\d{2,4})/i);
+      const digits = value.match(/(\d{1,2})[- /]?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[- /]?(\d{2,4})/i);
       if (!digits) return Number.MAX_SAFE_INTEGER;
       const months: Record<string, number> = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
       const year = Number(digits[3]) + (Number(digits[3]) < 100 ? 2000 : 0);
@@ -1642,9 +1642,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       const requestId = ++suggestionRequest;
       if (query.length < 2) { hideSuggestions(); return; }
       const upper = query.toUpperCase();
-      const strikeMatch = query.match(/\\b(\\d{4,6})\\b/);
+      const strikeMatch = query.match(/\b(\d{4,6})\b/);
       const requestedStrike = strikeMatch ? Number(strikeMatch[1]) : undefined;
-      const underlyingQuery = upper.replace(/\\d{4,6}/g, '').replace(/\\b(CE|PE|CALL|PUT)\\b/g, '').trim();
+      const underlyingQuery = upper.replace(/\d{4,6}/g, '').replace(/\b(CE|PE|CALL|PUT)\b/g, '').trim();
       const indexMatches = INDEX_SEARCH_UNIVERSE
         .map(item => {
           const quote = quoteView(item.symbol);
@@ -1659,7 +1659,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         .sort((a,b) => requestedStrike ? a.distance - b.distance : a.item.short.localeCompare(b.item.short))
         .slice(0, 5)
         .map(entry => ({ item: entry.item, caption: `INDEX · ${entry.quote.ltp === undefined ? 'quote pending' : entry.quote.ltp.toLocaleString('en-IN',{maximumFractionDigits:2})}`, rank: entry.distance }));
-      const shouldSearchOptions = Boolean(requestedStrike || /\\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\\b/i.test(query));
+      const shouldSearchOptions = Boolean(requestedStrike || /\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b/i.test(query));
       let instruments: SearchInstrument[] = [];
       if (shouldSearchOptions && hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
         try {
@@ -1678,7 +1678,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         const key = String(instrument.key || instrument.symbol).toUpperCase();
         if (!key || unique.has(key)) continue;
         const text = `${instrument.symbol} ${instrument.label} ${instrument.description || ''}`.toUpperCase();
-        if (underlyingQuery && !text.includes(underlyingQuery.replace(/\\s+/g, ' ')) && !text.replace(/[^A-Z0-9]/g, '').includes(underlyingQuery.replace(/[^A-Z0-9]/g, ''))) continue;
+        if (underlyingQuery && !text.includes(underlyingQuery.replace(/\s+/g, ' ')) && !text.replace(/[^A-Z0-9]/g, '').includes(underlyingQuery.replace(/[^A-Z0-9]/g, ''))) continue;
         unique.set(key, instrument);
       }
       const optionEntries = [...unique.values()]
@@ -1694,14 +1694,14 @@ const bookmarksPanel: SidePanelDescriptor = {
         .map(instrument => {
           const ticker = String(instrument.label || instrument.symbol).trim();
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
-          const item = { symbol, label: ticker, short: ticker.split(/\\s+/)[0] || symbol };
+          const item = { symbol, label: ticker, short: ticker.split(/\s+/)[0] || symbol };
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
       renderSuggestions([...indexSuggestions, ...optionEntries].sort((a,b) => {
         const aIsIndex = a.caption.startsWith('INDEX ·');
         const bIsIndex = b.caption.startsWith('INDEX ·');
-        if (/\\d/.test(query) && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
+        if (/\d/.test(query) && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
         return a.rank - b.rank;
       }));
     };
