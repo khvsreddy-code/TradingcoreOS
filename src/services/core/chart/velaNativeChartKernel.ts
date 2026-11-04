@@ -32,6 +32,27 @@ export type LineStyleValue = 0 | 1 | 2;
 export const LineStyle = Object.freeze({ Solid: 0 as LineStyleValue, Dashed: 1 as LineStyleValue, Dotted: 2 as LineStyleValue });
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
 export { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
+export {
+  registerNativeIndicator,
+} from '../../../../vendor/vela/src/core/native-indicators';
+export type {
+  NativeIndicator,
+  NativeIndicatorContext,
+  NativeIndicatorDescriptor,
+  NativeIndicatorInfo,
+  NativeIndicatorOutput,
+} from '../../../../vendor/vela/src/core/native-indicators';
+export {
+  registerRendererLayer,
+  unregisterRendererLayer,
+  rendererLayers,
+} from '../../../../vendor/vela/src/renderers/native/layers';
+export type {
+  RendererLayerDefinition,
+  RendererLayerArgs,
+  RendererLayerInstance,
+  BasePaintingModulation,
+} from '../../../../vendor/vela/src/renderers/native/layers';
 export type { VelaTheme } from '../../../../vendor/vela/src/core/options';
 export { themeTokens } from '../../../../vendor/vela/src/core/tokens';
 export type { IndicatorHandle, IndicatorEventMap } from '../../../../vendor/vela/src/core/IndicatorHandle';
