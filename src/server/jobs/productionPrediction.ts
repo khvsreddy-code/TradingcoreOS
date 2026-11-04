@@ -84,6 +84,18 @@ export async function runProductionPrediction(
   if (!serviceUrl) {
     throw new Error('Production ML service is not configured. Set ML_SERVICE_URL on the server.');
   }
+  const serviceSecret = String(process.env.ML_SERVICE_SECRET || '').trim();
+  if (serviceSecret.length < 32) {
+    throw new Error('Production ML service authentication is not configured. Set ML_SERVICE_SECRET to at least 32 characters.');
+  }
+  let serviceOrigin: URL;
+  try { serviceOrigin = new URL(serviceUrl); }
+  catch { throw new Error('ML_SERVICE_URL must be a valid absolute HTTP(S) URL.'); }
+  const localDevelopmentHost = ['localhost', '127.0.0.1', '[::1]'].includes(serviceOrigin.hostname);
+  if (serviceOrigin.protocol !== 'https:' && !(serviceOrigin.protocol === 'http:' && localDevelopmentHost)) {
+    throw new Error('ML_SERVICE_URL must use HTTPS outside localhost development.');
+  }
+  if (serviceOrigin.username || serviceOrigin.password) throw new Error('ML_SERVICE_URL must not embed credentials.');
 
   const signal = timeoutSignal(timeoutMs);
   try {
@@ -92,7 +104,7 @@ export async function runProductionPrediction(
       signal,
       headers: {
         'Content-Type': 'application/json',
-        ...(process.env.ML_SERVICE_SECRET ? { 'X-TradingCore-ML-Secret': process.env.ML_SERVICE_SECRET } : {}),
+        'X-TradingCore-ML-Secret': serviceSecret,
       },
       body: JSON.stringify(input),
     });
