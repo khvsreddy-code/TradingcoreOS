@@ -10,15 +10,16 @@ const { CoreSpiritExternalModelRegistry } = await import('./modelOrchestration.t
 const { CoreSpiritModelRegistry } = await import('./modelAbi.ts');
 const { CoreSpiritModelRuntime } = await import('./modelRuntime.ts');
 
+const modelVersion = 'c'.repeat(64);
 const manifest = createCoreSpiritPythonMlManifest({
   modelId: 'xgb-direction',
-  version: 'nifty-5m-v4',
+  version: modelVersion,
   forecastHorizonBars: 3,
 });
 const registry = new CoreSpiritExternalModelRegistry();
 registerCoreSpiritPythonMlModel(registry, {
   modelId: 'rf-direction',
-  version: 'banknifty-5m-v2',
+  version: 'd'.repeat(64),
   forecastHorizonBars: 2,
 }, {
   baseUrl: 'https://ml.example.test',
@@ -56,7 +57,7 @@ const adapter = new CoreSpiritPythonMlServiceAdapter({
           'xgb-direction': {
             trained: true,
             status: 'paper',
-            model_version: 'nifty-5m-v4',
+            model_version: modelVersion,
             artifact_hash: 'a'.repeat(64),
             algorithm: 'xgboost',
             direction: 'BULLISH',
@@ -128,7 +129,7 @@ assert.ok(result.outputChecksum && result.stateChecksum, 'adapter emits determin
 const runtimeRegistry = new CoreSpiritModelRegistry();
 const runtimeManifest = registerCoreSpiritPythonMlRuntimeModel(runtimeRegistry, {
   modelId: 'xgb-direction',
-  version: 'nifty-5m-v4',
+  version: modelVersion,
   forecastHorizonBars: 3,
 }, {
   baseUrl: 'https://ml.example.test',
@@ -141,7 +142,9 @@ const runtimeManifest = registerCoreSpiritPythonMlRuntimeModel(runtimeRegistry, 
         'xgb-direction': {
           trained: true,
           status: 'paper',
-          model_version: 'nifty-5m-v4',
+          model_version: modelVersion,
+          artifact_hash: 'a'.repeat(64),
+          forecast_horizon_bars: 3,
           bullish_probability: 0.62,
           neutral_probability: 0.18,
           bearish_probability: 0.20,
@@ -163,7 +166,7 @@ const coreSpiritRuntime = new CoreSpiritModelRuntime(runtimeRegistry, {
 });
 const runtimeResult = await coreSpiritRuntime.execute({
   modelId: 'xgb-direction',
-  version: 'nifty-5m-v4',
+  version: modelVersion,
   context: request.context,
   inputs: request.features,
 });
@@ -186,7 +189,7 @@ const badVersionAdapter = new CoreSpiritPythonMlServiceAdapter({
       models: {
         'xgb-direction': {
           trained: true,
-          model_version: 'different-version',
+          model_version: 'e'.repeat(64),
           bullish_probability: 0.5,
           neutral_probability: 0.25,
           bearish_probability: 0.25,
@@ -211,7 +214,11 @@ assert.throws(
   /must use HTTPS/,
 );
 assert.throws(
-  () => createCoreSpiritPythonMlManifest({ modelId: 'xgb-direction', version: 'v1', forecastHorizonBars: 0 }),
+  () => createCoreSpiritPythonMlManifest({ modelId: 'xgb-direction', version: 'v1', forecastHorizonBars: 1 }),
+  /SHA-256 artifact identity/,
+);
+assert.throws(
+  () => createCoreSpiritPythonMlManifest({ modelId: 'xgb-direction', version: 'f'.repeat(64), forecastHorizonBars: 0 }),
   /forecast horizon/,
 );
 
