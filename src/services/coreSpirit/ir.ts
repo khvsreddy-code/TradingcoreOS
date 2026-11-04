@@ -13,6 +13,7 @@ import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisual
 import type { CoreSpiritResearchPlan } from './researchSurface';
 import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import type { CoreSpiritSemanticType } from './semanticTypeSystem';
+import type { CoreScriptEdition } from './languageEdition.js';
 import type { CoreScriptLanguageFeature, CoreScriptRequiredCapability, CoreScriptCapabilityRequirement, CoreScriptLanguagePolicy } from './coreScriptLanguagePolicy';
 
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
@@ -96,6 +97,8 @@ export type CoreSpiritIrProgram = {
   languagePolicy?: CoreScriptLanguagePolicy;
   language?: 'CoreScript';
   languageVersion?: 1;
+  /** Source grammar edition; distinct from the stable language/IR ABI version. */
+  languageEdition?: CoreScriptEdition;
   /** Inferred semantic facts retained on the executable artifact for advanced inspection. */
   semanticEnvironment?: Readonly<Record<string, CoreSpiritSemanticType>>;
   compilerPipeline?:CoreSpiritCompilerPipelineTrace;
