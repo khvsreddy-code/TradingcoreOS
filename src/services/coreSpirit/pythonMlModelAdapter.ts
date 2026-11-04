@@ -240,6 +240,7 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
         timeframe,
         horizon: manifest.forecastHorizonBars ?? 1,
         models: [manifest.modelId],
+        model_versions: { [manifest.modelId]: manifest.version },
         candles,
       }),
     });
