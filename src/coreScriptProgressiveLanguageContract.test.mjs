@@ -212,6 +212,15 @@ plot vwap() color=white width=1 style=line`;
 const expandedV12 = `edition@1.2
 plot(vwap(), "white", 1, 0, null);`;
 assert.equal(readCoreScriptEdition(compactV12).edition, '1.2');
+const compactV12Default = `edition@1.2
+plot vwap()`;
+const expandedV12Default = `edition@1.2
+plot(vwap(), null, 2, 0, null);`;
+assert.equal(normalizeCoreSpiritSource(compactV12Default), normalizeCoreSpiritSource(expandedV12Default));
+assert.deepEqual(parseCoreSpirit(compactV12Default), parseCoreSpirit(expandedV12Default));
+const compactV12DefaultResult = compileCoreSpirit(compactV12Default, 'corescript-v12-default');
+assert.deepEqual(compactV12DefaultResult.diagnostics.filter(d => d.severity === 'error'), []);
+assert.ok(compactV12DefaultResult.ir);
 const v10CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.0\nplot(vwap());', 'corescript-edition-cache');
 const v12CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.2\nplot(vwap());', 'corescript-edition-cache');
 assert.notEqual(v10CacheIdentity.key, v12CacheIdentity.key,
