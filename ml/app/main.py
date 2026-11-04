@@ -74,6 +74,16 @@ def _validate_candles(candles: list[Candle]) -> None:
         if previous is not None and stamp <= previous:
             raise HTTPException(422, 'Prediction candles must be strictly chronological with unique timestamps.')
         previous = stamp
+        if candle.availableAt is not None:
+            try:
+                available_at = datetime.fromisoformat(str(candle.availableAt).replace('Z', '+00:00'))
+                if available_at.tzinfo is None:
+                    available_at = available_at.replace(tzinfo=timezone.utc)
+                available_at = available_at.astimezone(timezone.utc)
+            except (ValueError, AttributeError):
+                raise HTTPException(422, f'Invalid availableAt on candle {index}.') from None
+            if available_at > stamp:
+                raise HTTPException(422, f'Candle {index} was not available at its event timestamp.')
         values = (candle.open, candle.high, candle.low, candle.close, candle.volume)
         if not all(map(lambda value: isinstance(value, (int, float)) and value == value and abs(value) != float('inf'), values)):
             raise HTTPException(422, f'Candle {index} contains a non-finite OHLCV value.')
