@@ -88,6 +88,10 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'crossunder', minArgs:2, maxArgs:2, returnType:'boolean', pure:false, category:'condition' },
   { name:'rising', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
   { name:'falling', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
+  // First-class bounded collections.
+  { name:'array', minArgs:0, maxArgs:16_384, returnType:'array<unknown>', pure:true, category:'collection' },
+  { name:'map', minArgs:0, maxArgs:16_384, returnType:'map<string,unknown>', pure:true, category:'collection' },
+  { name:'len', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'collection' },
   // Market
   { name:'vwap', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'market', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
   { name:'market', minArgs:1, maxArgs:1, returnType:'market:ref', pure:false, category:'market', capability:'market' },
