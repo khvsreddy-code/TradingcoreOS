@@ -80,7 +80,7 @@ export type { Background, PriceLine } from '../../../../vendor/vela/src/core/mod
 export type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, TableCell, TablePosition } from '../../../../vendor/vela/src/core/model/drawings';
 export type { LabelStyle, BoxTextSize } from '../../../../vendor/vela/src/core/model/drawings';
 export type { HighCardinalityRectBatch, HighCardinalityRectDelta, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
-export type { CollectionValueDelta, SchemaPatch, ScenePatch, SeriesValueDelta, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
+export type { CollectionPatchName, CollectionValueDelta, SchemaPatch, ScenePatch, SeriesValueDelta, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
 export { registerSidePanel, unregisterSidePanel, registerWidgetAction, unregisterWidgetAction } from '../../../../vendor/vela/src/widget/contributions';
 export type { SidePanelDescriptor, SidePanelHandle, SidePanelHeader, WidgetActionDescriptor, WidgetContext } from '../../../../vendor/vela/src/widget/contributions';
 export type { VelaStorage } from '../../../../vendor/vela/src/widget/persist';
