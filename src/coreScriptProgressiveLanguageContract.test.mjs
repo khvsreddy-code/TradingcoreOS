@@ -212,8 +212,8 @@ plot vwap() color=white width=1 style=line`;
 const expandedV12 = `edition@1.2
 plot(vwap(), "white", 1, 0, null);`;
 assert.equal(readCoreScriptEdition(compactV12).edition, '1.2');
-const v10CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.0\\nplot(vwap());', 'corescript-edition-cache');
-const v12CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.2\\nplot(vwap());', 'corescript-edition-cache');
+const v10CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.0\nplot(vwap());', 'corescript-edition-cache');
+const v12CacheIdentity = buildCoreSpiritArtifactLookupIdentity('edition@1.2\nplot(vwap());', 'corescript-edition-cache');
 assert.notEqual(v10CacheIdentity.key, v12CacheIdentity.key,
   'source editions must not collide in the normalized-source artifact lookup cache');
 assert.equal(readCoreScriptEdition('plot(vwap());').edition, '1.0');
