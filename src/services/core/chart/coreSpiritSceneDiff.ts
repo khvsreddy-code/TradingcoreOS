@@ -16,10 +16,19 @@ import type {
     SchemaPatch,
     ScenePatch,
     SeriesValueDelta,
-} from '../../../../vendor/vela/src/core/model/patch';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, TableCell, TablePosition } from '../../../../vendor/vela/src/core/model/drawings';
-import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
-import type { HighCardinalityRectBatch, HighCardinalityRectDelta, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
+    DrawingBox,
+    DrawingLabel,
+    DrawingLine,
+    DrawingPolyline,
+    DrawingTable,
+    TableCell,
+    TablePosition,
+    Background,
+    PriceLine,
+    HighCardinalityRectBatch,
+    HighCardinalityRectDelta,
+    HighCardinalityRectInstance,
+} from './velaNativeChartKernel';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 import type { VelaTimeRange } from '../../../architecture/crossPlaneContracts';
 
