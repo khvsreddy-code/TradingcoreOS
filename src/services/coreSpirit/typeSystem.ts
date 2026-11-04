@@ -22,6 +22,7 @@ export type CoreSpiritType =
   | `developing<${string}>`
   | `forecast<${string}>`
   | `array<${string}>`
+  | `map<${string}>`
   | `vector<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
