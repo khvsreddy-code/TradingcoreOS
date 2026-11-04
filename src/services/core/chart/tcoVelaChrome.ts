@@ -1694,7 +1694,10 @@ const bookmarksPanel: SidePanelDescriptor = {
         .map(instrument => {
           const ticker = String(instrument.label || instrument.symbol).trim();
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
-          const item = { symbol, label: ticker, short: ticker.split(/\s+/)[0] || symbol };
+          const contractShort = instrument.optionType
+            ? `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${instrument.optionType}`.trim()
+            : ticker.split(/\s+/)[0] || symbol;
+          const item = { symbol, label: ticker, short: contractShort };
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
