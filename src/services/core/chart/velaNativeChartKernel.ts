@@ -31,6 +31,9 @@ export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
 export const LineStyle = Object.freeze({ Solid: 0 as LineStyleValue, Dashed: 1 as LineStyleValue, Dotted: 2 as LineStyleValue });
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
+export { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
+export type { VelaTheme } from '../../../../vendor/vela/src/core/options';
+export { themeTokens } from '../../../../vendor/vela/src/core/tokens';
 export type { IndicatorHandle, IndicatorEventMap } from '../../../../vendor/vela/src/core/IndicatorHandle';
 export type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
 
