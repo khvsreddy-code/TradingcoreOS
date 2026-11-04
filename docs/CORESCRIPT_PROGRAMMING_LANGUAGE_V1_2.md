@@ -68,7 +68,7 @@ Map iteration with `for (let key in settings)` iterates keys.
 
 ## Enums
 
-Enums are currently value-only declarations lowered to scalar constants:
+Enums are currently value-only declarations lowered to generated scalar bindings:
 
 ```corescript
 enum Direction {
@@ -79,7 +79,7 @@ enum Direction {
 let side = Direction.Long
 ```
 
-Members default to their names as string values. Explicit string and integer literal values are supported. Enum member access is resolved at compile time.
+Members default to their names as string values. Explicit string and integer literal values are supported. Enum member access is resolved at compile time. The generated binding uses ordinary CoreScript local/state semantics; this is not a runtime-enforced immutable enum object.
 
 **Current limit:** this is not yet a nominal enum type system; no pattern matching, exhaustive switch, associated values or enum methods are provided.
 
