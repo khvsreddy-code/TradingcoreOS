@@ -55,6 +55,10 @@ export class CoreSpiritParser {
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
+    else if(this.match('while')) node=this.whileStatement();
+    else if(this.match('for')) node=this.forEachStatement();
+    else if(this.match('break')) { const token=this.previous(); this.match('semicolon'); node={type:'break',span:this.tokenSpan(token)}; }
+    else if(this.match('continue')) { const token=this.previous(); this.match('semicolon'); node={type:'continue',span:this.tokenSpan(token)}; }
     else if(this.check('identifier') && this.peek(1).type === 'colonEqual') node=this.assignmentStatement();
     else {
       const expression=this.expression();
@@ -181,6 +185,27 @@ export class CoreSpiritParser {
     return `${base}<${args.join(',')}>`;
   }
 
+  private whileStatement():CoreSpiritAstNode {
+    const start=this.previous();
+    this.consume('leftParen','Expected ( after while');
+    const condition=this.expression();
+    this.consume('rightParen','Expected ) after while condition');
+    const body=this.block();
+    return {type:'while',condition,body,span:this.makeSpan(start,this.previous())};
+  }
+
+  private forEachStatement():CoreSpiritAstNode {
+    const start=this.previous();
+    this.consume('leftParen','Expected ( after for');
+    this.match('let');
+    const name=this.consume('identifier','Expected loop variable after for');
+    this.consume('in','Expected in after loop variable');
+    const iterable=this.expression();
+    this.consume('rightParen','Expected ) after for iterable');
+    const body=this.block();
+    return {type:'forEach',name:name.lexeme,iterable,body,span:this.makeSpan(start,this.previous())};
+  }
+
   private ifStatement():CoreSpiritAstNode {
     const start=this.previous();
     this.consume('leftParen','Expected ( after if');
@@ -245,6 +270,28 @@ export class CoreSpiritParser {
   }
 
   private primary():CoreSpiritAstNode {
+    if(this.match('leftBracket')) {
+      const start=this.previous();
+      const elements:CoreSpiritAstNode[]=[];
+      if(!this.check('rightBracket')) { do { elements.push(this.expression()); } while(this.match('comma')); }
+      const end=this.consume('rightBracket','Expected ] after array literal');
+      return {type:'arrayLiteral',elements,span:this.makeSpan(start,end)};
+    }
+    if(this.match('leftBrace')) {
+      const start=this.previous();
+      const entries:Array<{key:string;value:CoreSpiritAstNode}> = [];
+      if(!this.check('rightBrace')) {
+        do {
+          const keyToken=this.peek();
+          if(!this.match('identifier','string')) throw this.error('Map literal keys must be identifiers or strings');
+          const key=String(this.previous().value ?? this.previous().lexeme);
+          this.consume('colon','Expected : after map key');
+          entries.push({key,value:this.expression()});
+        } while(this.match('comma'));
+      }
+      const end=this.consume('rightBrace','Expected } after map literal');
+      return {type:'mapLiteral',entries,span:this.makeSpan(start,end)};
+    }
     if(this.match('number')) return {type:'number',value:this.previous().value as number,span:this.tokenSpan(this.previous())};
     if(this.match('string')) return {type:'string',value:this.previous().value as string,span:this.tokenSpan(this.previous())};
     if(this.match('true','false')) return {type:'boolean',value:this.previous().value as boolean,span:this.tokenSpan(this.previous())};
