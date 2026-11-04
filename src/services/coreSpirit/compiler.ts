@@ -488,9 +488,11 @@ export class CoreSpiritCompiler {
           if (isModelRef) modelRefRegisters.set(n.name, source);
           const component = n.expression.type === 'call' ? resolveCoreSpiritComponent(componentSource,n.expression.name) : undefined;
           if (component && component.outputs.length > 1) componentRefRegisters.set(n.name, component.id);
+          const declaredValueType=String(semantic.symbols.get(n.name) ?? '');
+          const isCollectionValue=/^(?:array|map|matrix|vector|tensor)</.test(declaredValueType);
           const isState=isStateType(semantic.symbols.get(n.name) as any);
           if(isState) emitInstruction(n,{op:'setState',name:n.name,source,initialize:true});
-          else emitInstruction(n,{op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef});
+          else emitInstruction(n,{op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef && !isCollectionValue});
           if(!locals.includes(n.name))locals.push(n.name);
           break;
         }
