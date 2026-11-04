@@ -12,7 +12,7 @@ A file opts in with:
 edition@1.2
 ```
 
-Unversioned files continue to use edition 1.0. Edition 1.0 does not gain v1.2-only syntax implicitly.
+Unversioned files continue to use edition 1.0. Edition 1.0 does not gain v1.2-only syntax implicitly. Loop words (`while`, `for`, `in`, `break`, and `continue`) are lowered to internal tokens only in v1.2, so they remain ordinary identifier spellings in v1.0.
 
 ## Typed pure functions
 
