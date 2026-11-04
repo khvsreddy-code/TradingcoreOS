@@ -164,16 +164,23 @@ function featureGraphOf(artifact: ResearchArtifact): {
   modelType: string;
   states: number;
   covariance: 'full' | 'diagonal';
+  target?: string;
+  binding?: { kind?: string; locator?: string };
 } {
   const graph = artifact.featureGraph as Record<string, unknown>;
   if (!graph || !Array.isArray(graph.featureNames) || typeof graph.modelType !== 'string') {
     throw new Error('Research artifact does not contain a valid compiled feature graph.');
   }
+  const binding = graph.binding && typeof graph.binding === 'object' && !Array.isArray(graph.binding)
+    ? graph.binding as { kind?: string; locator?: string }
+    : undefined;
   return {
     featureNames: graph.featureNames as string[],
     modelType: graph.modelType,
     states: Number(graph.states ?? 3),
     covariance: graph.covariance === 'diagonal' ? 'diagonal' : 'full',
+    ...(typeof graph.target === 'string' ? { target: graph.target } : {}),
+    ...(binding ? { binding } : {}),
   };
 }
 
@@ -211,14 +218,41 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
 
   const surface = extractCoreSpiritSurfaceMetadata(source);
   const declaration = surface.declarations.find(item => item.kind === 'model');
-  if (!declaration || declaration.kind !== 'model' || !['hmm<float>', 'hmm'].includes((declaration.modelType ?? '').toLowerCase())) {
-    return fail(res, 422, 'The first production training backend supports typed Gaussian HMM models. Other model families need their own registered trainer.');
+  if (!declaration || declaration.kind !== 'model') {
+    return fail(res, 422, 'Declare a typed CoreSpirit model before creating a research artifact.');
   }
-  if (declaration.unsupportedEmission || declaration.unsupportedCovariance) {
-    return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance));
+  const normalizedModelType = String(declaration.modelType ?? '').toLowerCase();
+  const isHmmModel = normalizedModelType === 'hmm<float>' || normalizedModelType === 'hmm';
+  const isPythonXgboostModel = normalizedModelType === 'xgboost<float>' || normalizedModelType === 'xgboost';
+  if (!isHmmModel && !isPythonXgboostModel) {
+    return fail(res, 422, 'Supported CoreSpirit research trainers are Gaussian HMM and the registered Python XGBoost direction model.');
   }
-  const states = Number(declaration.states ?? 3);
-  if (!Number.isInteger(states) || states < 2 || states > 12) return fail(res, 422, 'HMM states must be between 2 and 12.');
+  let states: number | undefined;
+  let target: string | undefined;
+  let binding: { kind: string; locator: string } | undefined;
+  if (isHmmModel) {
+    if (declaration.unsupportedEmission || declaration.unsupportedCovariance) {
+      return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance));
+    }
+    states = Number(declaration.states ?? 3);
+    if (!Number.isInteger(states) || states < 2 || states > 12) return fail(res, 422, 'HMM states must be between 2 and 12.');
+  } else {
+    const rawBinding = declaration.binding;
+    if (rawBinding?.kind !== 'python' || rawBinding.locator !== 'xgb-direction') {
+      return fail(res, 422, 'XGBoost currently requires the registered Python binding: use python "xgb-direction".');
+    }
+    const canonical = ['open', 'high', 'low', 'close', 'volume'];
+    const declaredTarget = String(declaration.target ?? '').trim();
+    const targetMatch = declaredTarget.match(/^forward_return\\(\\s*close\\s*,\\s*(\\d+)\\s*\\)$/i);
+    if (!targetMatch || Number(targetMatch[1]) < 1 || Number(targetMatch[1]) > 100) {
+      return fail(res, 422, 'XGBoost target must be forward_return(close, H), with H from 1 to 100 bars.');
+    }
+    if (featureNames.length !== canonical.length || featureNames.some((name, index) => name !== canonical[index])) {
+      return fail(res, 422, 'XGBoost currently requires the ordered OHLCV feature schema: open, high, low, close, volume.');
+    }
+    target = declaredTarget;
+    binding = { kind: 'python', locator: 'xgb-direction' };
+  }
 
   const declaredFeatureNames = extractDeclaredFeatureNames(source, declaration.features);
   if (!declaredFeatureNames.length) {
@@ -253,9 +287,11 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     featureNames,
     declaredFeatureNames,
     modelName: declaration.name,
-    modelType: (declaration.modelType ?? '').toLowerCase() === 'hmm' ? 'HMM' : 'HMM<float>',
-    states,
-    covariance: declaration.covariance ?? 'full',
+    modelType: isHmmModel ? (normalizedModelType === 'hmm' ? 'HMM' : 'HMM<float>') : 'XGBOOST<float>',
+    ...(states === undefined ? {} : { states }),
+    ...(isHmmModel ? { covariance: declaration.covariance ?? 'full' } : {}),
+    ...(target ? { target } : {}),
+    ...(binding ? { binding } : {}),
     researchSafety,
   };
   try {
@@ -279,7 +315,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
         featureGraphHash: stored.artifact.featureGraphHash,
         compilerVersion: stored.artifact.compilerVersion,
         irVersion: stored.artifact.irVersion,
-        supportedTrainer: 'corespirit-gaussian-hmm-v1',
+        supportedTrainer: isHmmModel ? 'corespirit-gaussian-hmm-v1' : 'python-xgboost-direction-v1',
         warnings: compiled.diagnostics.filter(item => item.severity === 'warning').map(item => item.message),
       },
     });
