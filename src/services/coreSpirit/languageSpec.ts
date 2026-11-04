@@ -90,6 +90,14 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   ] as const),
 });
 
+export const CORE_SPIRIT_V1_2_SURFACE = Object.freeze({
+  edition: '1.2' as const,
+  header: 'edition@1.2' as const,
+  compactPlot: 'plot <expression> [color=<color>] [width=<1..5>] [style=line|dashed|dotted] [title=<text>]' as const,
+  lowering: 'compact plot declarations lower to the existing plot call AST and output ABI' as const,
+  compatibility: 'unversioned and edition@1.0 sources retain the legacy v1 surface grammar' as const,
+} as const);
+
 export type CoreSpiritV1ScalarType = typeof CORE_SPIRIT_V1_SURFACE.scalarTypes[number];
 export type CoreSpiritV1SeriesType = typeof CORE_SPIRIT_V1_SURFACE.seriesTypes[number];
 
