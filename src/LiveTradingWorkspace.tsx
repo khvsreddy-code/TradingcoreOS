@@ -13,7 +13,7 @@ import { createTcoVelaSupabaseStorage, loadTcoVelaActiveWorkspaceId, loadTcoVela
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact';
-import type { IndicatorHandle } from '../vendor/vela/src/core/IndicatorHandle';
+import type { IndicatorHandle } from './services/core/chart/velaNativeChartKernel';
 import { stageCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff';
 import {
   coreSpiritLifecycleDiagnostic, coreSpiritLifecycleStageForError, publishCoreSpiritLifecycle,
