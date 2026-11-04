@@ -201,6 +201,14 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       break;
     }
 
+    case 'arrayLiteral': {
+      inferred=node.elements.map(child=>inferNode(child,annotations)).reduce<Safety>((acc,next)=>merge(acc,next,node,'array element dependency'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]});
+      break;
+    }
+    case 'mapLiteral': {
+      inferred=node.entries.map(entry=>inferNode(entry.value,annotations)).reduce<Safety>((acc,next)=>merge(acc,next,node,'map value dependency'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]});
+      break;
+    }
     case 'member':
       inferred = merge(inferNode(node.target,annotations), {causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}, node, `member access '${node.member}'`);
       break;
@@ -262,6 +270,13 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       inferred = inferNode(node.expression,annotations);
       break;
 
+    case 'while':
+      inferred=merge(inferNode(node.condition,annotations),node.body.map(child=>inferNode(child,[...annotations])).reduce<Safety>((acc,next)=>merge(acc,next,node,'loop body'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}),node,'while loop');
+      break;
+    case 'forEach':
+      inferred=merge(inferNode(node.iterable,annotations),node.body.map(child=>inferNode(child,[...annotations])).reduce<Safety>((acc,next)=>merge(acc,next,node,'loop body'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}),node,'for-in loop');
+      break;
+    case 'break': case 'continue': break;
     case 'if':
       inferred = merge(inferNode(node.condition,annotations),node.thenBranch.map(child=>inferNode(child,[...annotations])).reduce<Safety>((acc,next)=>merge(acc,next,node,'then branch'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}),node,'conditional branch');
       if (node.elseBranch?.length) inferred = merge(inferred,node.elseBranch.map(child=>inferNode(child,[...annotations])).reduce<Safety>((acc,next)=>merge(acc,next,node,'else branch'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}),node,'else branch');
@@ -348,6 +363,10 @@ export function analyzeCoreSpiritRepaintSafety(ast: CoreSpiritAst): CoreSpiritRe
       case 'call': node.args.forEach(child=>visit(child,effectiveAnnotations)); break;
       case 'memberCall': visit(node.target,effectiveAnnotations); node.args.forEach(child=>visit(child,effectiveAnnotations)); break;
       case 'index': visit(node.target,effectiveAnnotations); visit(node.index,effectiveAnnotations); break;
+      case 'arrayLiteral': node.elements.forEach(child=>visit(child,effectiveAnnotations)); break;
+      case 'mapLiteral': node.entries.forEach(entry=>visit(entry.value,effectiveAnnotations)); break;
+      case 'while': visit(node.condition,effectiveAnnotations); node.body.forEach(child=>visit(child,effectiveAnnotations)); break;
+      case 'forEach': visit(node.iterable,effectiveAnnotations); node.body.forEach(child=>visit(child,effectiveAnnotations)); break;
       case 'member': visit(node.target,effectiveAnnotations); break;
       case 'typeDeclaration': break;
       default: break;
