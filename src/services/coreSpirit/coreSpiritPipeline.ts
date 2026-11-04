@@ -9,6 +9,7 @@ import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
 import type { CoreSpiritRuntimeOptions } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
+import { readCoreScriptEdition } from './languageEdition.js';
 import { describeCoreSpiritSurface } from './surfaceForms';
 
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
@@ -20,7 +21,9 @@ export function normalizeCoreSpirit(source: string) { return normalizeCoreSpirit
 export function parseCoreSpirit(source: string) { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse(); }
 export function parseCoreSpiritDetailed(source: string) {
   try {
-    return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+    const edition = readCoreScriptEdition(source);
+    const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+    return { ...parsed, diagnostics:[...edition.diagnostics, ...parsed.diagnostics] };
   } catch (error) {
     const e = error as any;
     return {
