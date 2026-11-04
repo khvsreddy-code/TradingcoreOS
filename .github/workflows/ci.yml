@@ -29,6 +29,8 @@ jobs:
           sudo apt-get install -y clang lld
       - name: Rebuild numerical kernels from source
         run: npm run build:corespirit:wasm
+      - name: Validate Python ML service and CoreSpirit trainer syntax
+        run: python -m py_compile ml/app/main.py ml/app/runtime.py ml/app/corespirit_training.py ml/test_corespirit_training.py
       - name: Run contract suite (VM differential + backend parity)
         run: npm run test:contracts
       - name: Typecheck
