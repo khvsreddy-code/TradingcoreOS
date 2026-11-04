@@ -69,13 +69,12 @@ assert.equal(replayEvents(), 0, 'read-only history replay must suppress historic
 replayRuntime.executeIr({}, []);
 assert.equal(replayEvents(), 1, 'read-only suppression must be restored before the next forming-bar execution');
 
+const velaSource = fs.readFileSync('src/CoreSpiritVelaEngine.ts', 'utf8');
 assert.equal(
   (velaSource.match(/executeIrReadOnly\(token\.ir,/g) ?? []).length,
   6,
   'initial, update, viewport and backfill history-only passes must all use scoped read-only replay',
 );
-
-const velaSource = fs.readFileSync('src/CoreSpiritVelaEngine.ts', 'utf8');
 assert.equal(
   (velaSource.match(/createRuntime\(\{\s*suppressExternalEffects\s*:\s*true\s*\}\)/g) ?? []).length,
   2,
