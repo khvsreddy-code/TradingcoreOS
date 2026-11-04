@@ -1653,7 +1653,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           return { item, quote, textual, distance };
         })
         .filter(entry => requestedStrike
-          ? entry.quote.ltp !== undefined && entry.distance <= 0.09 && (!underlyingQuery || entry.textual)
+          ? !underlyingQuery && entry.quote.ltp !== undefined && entry.distance <= 0.09
           : entry.textual && (itemMatchesQuery(entry.item, upper)));
       const indexSuggestions = indexMatches
         .sort((a,b) => requestedStrike ? a.distance - b.distance : a.item.short.localeCompare(b.item.short))
