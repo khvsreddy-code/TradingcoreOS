@@ -347,4 +347,25 @@ plot(transposed.get(0, 1))
 `, 'corescript-v12-matrix-methods');
 assert.deepEqual(matrixOutputs, [3, 3], 'matrix access and transformation methods should execute through quant kernels');
 
+
+const invalidArrayWrite = compileCoreSpirit(`edition@1.2
+let values = [1, 2]
+values.push("not a number")
+`, 'corescript-v12-invalid-array-write');
+assert.ok(invalidArrayWrite.diagnostics.some(d => d.code === 'TYPE_ARRAY_ELEMENT'));
+assert.equal(invalidArrayWrite.ir, undefined);
+
+const invalidMapWrite = compileCoreSpirit(`edition@1.2
+let settings = {period: 20}
+settings.set("period", "not a number")
+`, 'corescript-v12-invalid-map-write');
+assert.ok(invalidMapWrite.diagnostics.some(d => d.code === 'TYPE_MAP_VALUE'));
+assert.equal(invalidMapWrite.ir, undefined);
+
+const duplicateMapKey = compileCoreSpirit(`edition@1.2
+let settings = {period: 20, period: 30}
+`, 'corescript-v12-duplicate-map-key');
+assert.ok(duplicateMapKey.diagnostics.some(d => d.code === 'SYNTAX_ERROR'));
+assert.equal(duplicateMapKey.ir, undefined);
+
 console.log('CORESCRIPT_V12_PROGRAMMING_CONSTRUCTS_OK');
