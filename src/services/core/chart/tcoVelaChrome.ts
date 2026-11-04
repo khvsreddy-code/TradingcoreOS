@@ -1679,13 +1679,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       let instruments: SearchInstrument[] = [];
       if (hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
         try {
-          const searches: Promise<SearchInstrument[]>[] = [
-            searchFyersInstruments(query, 'all', 100),
-          ];
-          if (shouldSearchOptions) searches.push(searchFyersInstruments(query, 'options', 100));
-          if (requestedStrike && underlyingQuery) searches.push(searchFyersInstruments(String(requestedStrike), 'options', 100));
-          const results = await Promise.all(searches);
-          instruments = results.flat();
+          // One full-master query is enough: the server applies exact strike/CE/PE
+          // intent, and this panel orders returned option contracts by expiry locally.
+          instruments = await searchFyersInstruments(query, 'all', 100);
         } catch { /* immediate index matches remain useful while broker search recovers */ }
       }
       if (requestId !== suggestionRequest) return;
