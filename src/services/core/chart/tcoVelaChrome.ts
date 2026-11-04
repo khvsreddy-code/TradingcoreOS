@@ -22,6 +22,7 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../marketData/watchlistTechnicals';
+import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { historyStore } from '../../marketData/HistoryStore';
@@ -389,7 +390,12 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-watch-search:focus { border-color:var(--tco-frame-accent,#8b7cff); }
     .tco-watch-filter { border:1px solid var(--vela-border);border-radius:6px;background:transparent;color:var(--vela-fg-muted);padding:5px 9px;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
     .tco-watch-filter[aria-pressed="true"] { color:var(--vela-fg-bright);border-color:var(--tco-frame-accent,#8b7cff);background:var(--tco-frame-accent-soft,rgba(139,124,255,.18)); }
-    .tco-watch-detail { flex:0 0 auto;margin-top:auto;padding:12px;border:1px solid var(--vela-border);border-radius:9px;background:var(--vela-surface); }
+    .tco-watch-suggestions { position:relative;z-index:12;display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto;border:1px solid var(--vela-border);border-radius:8px;background:var(--vela-surface);box-shadow:0 12px 28px rgba(0,0,0,.34); }
+    .tco-watch-suggestion { display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:8px 9px;border:0;border-bottom:1px solid var(--vela-border-soft);background:transparent;color:var(--vela-fg);text-align:left;cursor:pointer;font:11px Inter,ui-sans-serif,system-ui,sans-serif; }
+    .tco-watch-suggestion:hover,.tco-watch-suggestion[aria-selected="true"] { background:var(--tco-frame-accent-soft,rgba(139,124,255,.14)); }
+    .tco-watch-resize { flex:0 0 8px;height:8px;display:flex;align-items:center;justify-content:center;margin:2px 0;cursor:row-resize;touch-action:none;user-select:none; }
+    .tco-watch-resize::after { content:"";width:38px;height:3px;border-radius:3px;background:var(--vela-border); }
+    .tco-watch-detail { flex:0 0 320px;min-height:150px;max-height:72%;overflow:auto;padding:10px;border:1px solid var(--vela-border);border-radius:9px;background:var(--vela-surface); }
     .tco-watch-metric { min-width:0;padding:8px 9px;border:1px solid var(--vela-border-soft);border-radius:7px;background:var(--vela-surface-sunken); }
     .tco-watch-metric-label { color:var(--vela-fg-muted);font-size:9px;margin-bottom:4px; }
     .tco-watch-metric-value { color:var(--vela-fg-bright);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere; }
@@ -1100,6 +1106,15 @@ const bookmarksPanel: SidePanelDescriptor = {
     filterInput.placeholder = 'Search this watchlist…';
     filterInput.setAttribute('aria-label', 'Filter watchlist by symbol');
     root.appendChild(filterInput);
+    const suggestionList = document.createElement('div');
+    suggestionList.className = 'tco-watch-suggestions';
+    suggestionList.hidden = true;
+    suggestionList.setAttribute('role', 'listbox');
+    root.appendChild(suggestionList);
+    let suggestionItems: Array<{ item: WatchlistItem; caption: string; rank: number }> = [];
+    let activeSuggestionIndex = -1;
+    let suggestionRequest = 0;
+    let suggestionTimer: number | undefined;
 
     let filterMode: 'all' | 'gainers' | 'losers' = 'all';
     let sortMode: 'default' | 'symbol' | 'change' | 'price' = 'default';
@@ -1137,6 +1152,14 @@ const bookmarksPanel: SidePanelDescriptor = {
     const rows = document.createElement('div');
     rows.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
     rows.style.flex = '1 1 auto';
+    rows.style.minHeight = '72px';
+
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'tco-watch-resize';
+    resizeHandle.setAttribute('role', 'separator');
+    resizeHandle.setAttribute('aria-orientation', 'horizontal');
+    resizeHandle.setAttribute('aria-label', 'Resize watchlist details');
+    resizeHandle.tabIndex = 0;
 
     const detailCard = document.createElement('section');
     detailCard.className = 'tco-watch-detail';
@@ -1197,8 +1220,42 @@ const bookmarksPanel: SidePanelDescriptor = {
     newsSection.append(newsHeading, newsList);
 
     detailCard.append(detailHead, metrics, detailHint, technicalSection, newsSection);
-    root.appendChild(rows);
-    root.appendChild(detailCard);
+    root.append(rows, resizeHandle, detailCard);
+    const DETAIL_HEIGHT_KEY = 'tradingcore:vela:watchlist-detail-height:v1';
+    const clampDetailHeight = (height: number) => Math.max(150, Math.min(Math.round(body.clientHeight * 0.72), height));
+    let detailHeight = 320;
+    try { detailHeight = clampDetailHeight(Number(localStorage.getItem(DETAIL_HEIGHT_KEY)) || 320); } catch {}
+    const applyDetailHeight = () => {
+      detailCard.style.flex = `0 0 ${detailHeight}px`;
+      detailCard.style.maxHeight = '72%';
+      resizeHandle.setAttribute('aria-valuenow', String(detailHeight));
+    };
+    applyDetailHeight();
+    let resizePointer: number | null = null;
+    resizeHandle.addEventListener('pointerdown', (event) => {
+      resizePointer = event.pointerId;
+      resizeHandle.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+    resizeHandle.addEventListener('pointermove', (event) => {
+      if (resizePointer !== event.pointerId) return;
+      detailHeight = clampDetailHeight(body.getBoundingClientRect().bottom - event.clientY);
+      applyDetailHeight();
+    });
+    const finishResize = (event: PointerEvent) => {
+      if (resizePointer !== event.pointerId) return;
+      resizePointer = null;
+      try { localStorage.setItem(DETAIL_HEIGHT_KEY, String(detailHeight)); } catch {}
+    };
+    resizeHandle.addEventListener('pointerup', finishResize);
+    resizeHandle.addEventListener('pointercancel', finishResize);
+    resizeHandle.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      detailHeight = clampDetailHeight(detailHeight + (event.key === 'ArrowUp' ? 24 : -24));
+      applyDetailHeight();
+      try { localStorage.setItem(DETAIL_HEIGHT_KEY, String(detailHeight)); } catch {}
+    });
 
     const STALE_AFTER_MS = 15_000;
     type Quote = {
@@ -1518,7 +1575,153 @@ const bookmarksPanel: SidePanelDescriptor = {
       updateDetails();
     };
 
-    filterInput.addEventListener('input', () => updateRows());
+    const INDEX_SEARCH_UNIVERSE: readonly WatchlistItem[] = [
+      { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', short: 'NIFTY' },
+      { symbol: 'NSE:NIFTYBANK-INDEX', label: 'NIFTY BANK', short: 'BANKNIFTY' },
+      { symbol: 'NSE:FINNIFTY-INDEX', label: 'NIFTY FIN SERVICE', short: 'FINNIFTY' },
+      { symbol: 'NSE:MIDCPNIFTY-INDEX', label: 'NIFTY MIDCAP SELECT', short: 'MIDCPNIFTY' },
+      { symbol: 'BSE:SENSEX-INDEX', label: 'S&P BSE SENSEX', short: 'SENSEX' },
+    ];
+    const optionExpiryTime = (value?: string) => {
+      if (!value) return Number.MAX_SAFE_INTEGER;
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return parsed;
+      const digits = value.match(/(\\d{1,2})[- /]?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[- /]?(\\d{2,4})/i);
+      if (!digits) return Number.MAX_SAFE_INTEGER;
+      const months: Record<string, number> = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
+      const year = Number(digits[3]) + (Number(digits[3]) < 100 ? 2000 : 0);
+      return new Date(year, months[digits[2]!.toUpperCase()]!, Number(digits[1])).getTime();
+    };
+    const hideSuggestions = () => {
+      suggestionList.hidden = true;
+      suggestionList.textContent = '';
+      suggestionItems = [];
+      activeSuggestionIndex = -1;
+    };
+    const chooseSuggestion = (entry: { item: WatchlistItem; caption: string; rank: number }) => {
+      const item = entry.item;
+      const alreadyPresent = watchlist.some(candidate => candidate.symbol === item.symbol);
+      if (!alreadyPresent) applyWatchlist([...watchlist, item], ctx);
+      quoteSubscribe();
+      ctx.setSymbol(item.symbol);
+      filterInput.value = '';
+      hideSuggestions();
+      updateRows();
+      if (!alreadyPresent) ctx.toast(`${item.short} added to watchlist`, 'success');
+    };
+    const renderSuggestions = (entries: Array<{ item: WatchlistItem; caption: string; rank: number }>) => {
+      suggestionItems = entries.slice(0, 12);
+      activeSuggestionIndex = suggestionItems.length ? 0 : -1;
+      suggestionList.textContent = '';
+      suggestionList.hidden = suggestionItems.length === 0;
+      for (const [index, entry] of suggestionItems.entries()) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tco-watch-suggestion';
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', index === activeSuggestionIndex ? 'true' : 'false');
+        const title = document.createElement('span');
+        title.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:3px;';
+        const name = document.createElement('strong');
+        name.textContent = entry.item.short;
+        const description = document.createElement('span');
+        description.style.cssText = 'font-size:9px;color:var(--vela-fg-muted);overflow-wrap:anywhere;';
+        description.textContent = entry.caption;
+        title.append(name, description);
+        const add = document.createElement('span');
+        add.textContent = watchlist.some(candidate => candidate.symbol === entry.item.symbol) ? 'OPEN' : '+ ADD';
+        add.style.cssText = 'flex:none;font-size:9px;font-weight:750;color:var(--tco-frame-accent,#a99cff);';
+        button.append(title, add);
+        button.addEventListener('pointerdown', event => event.preventDefault());
+        button.addEventListener('click', () => chooseSuggestion(entry));
+        suggestionList.appendChild(button);
+      }
+    };
+    const searchSuggestions = async (rawQuery: string) => {
+      const query = rawQuery.trim();
+      const requestId = ++suggestionRequest;
+      if (query.length < 2) { hideSuggestions(); return; }
+      const upper = query.toUpperCase();
+      const strikeMatch = query.match(/\\b(\\d{4,6})\\b/);
+      const requestedStrike = strikeMatch ? Number(strikeMatch[1]) : undefined;
+      const underlyingQuery = upper.replace(/\\d{4,6}/g, '').replace(/\\b(CE|PE|CALL|PUT)\\b/g, '').trim();
+      const indexMatches = INDEX_SEARCH_UNIVERSE
+        .map(item => {
+          const quote = quoteView(item.symbol);
+          const textual = !underlyingQuery || item.short.includes(underlyingQuery.replace(/[^A-Z]/g, '')) || item.label.includes(underlyingQuery);
+          const distance = requestedStrike && quote.ltp !== undefined ? Math.abs(quote.ltp - requestedStrike) / Math.max(1, requestedStrike) : 0;
+          return { item, quote, textual, distance };
+        })
+        .filter(entry => requestedStrike
+          ? entry.quote.ltp !== undefined && entry.distance <= 0.09 && (!underlyingQuery || entry.textual)
+          : entry.textual && (itemMatchesQuery(entry.item, upper)));
+      const indexSuggestions = indexMatches
+        .sort((a,b) => requestedStrike ? a.distance - b.distance : a.item.short.localeCompare(b.item.short))
+        .slice(0, 5)
+        .map(entry => ({ item: entry.item, caption: `INDEX · ${entry.quote.ltp === undefined ? 'quote pending' : entry.quote.ltp.toLocaleString('en-IN',{maximumFractionDigits:2})}`, rank: entry.distance }));
+      const shouldSearchOptions = Boolean(requestedStrike || /\\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\\b/i.test(query));
+      let instruments: SearchInstrument[] = [];
+      if (shouldSearchOptions && hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+        try {
+          const queries = requestedStrike && underlyingQuery
+            ? await Promise.all([
+                searchFyersInstruments(query, 'options', 100),
+                searchFyersInstruments(String(requestedStrike), 'options', 100),
+              ])
+            : [await searchFyersInstruments(query, 'options', 100)];
+          instruments = queries.flat();
+        } catch { /* index matches remain useful while broker search recovers */ }
+      }
+      if (requestId !== suggestionRequest) return;
+      const unique = new Map<string, SearchInstrument>();
+      for (const instrument of instruments) {
+        const key = String(instrument.key || instrument.symbol).toUpperCase();
+        if (!key || unique.has(key)) continue;
+        const text = `${instrument.symbol} ${instrument.label} ${instrument.description || ''}`.toUpperCase();
+        if (underlyingQuery && !text.includes(underlyingQuery.replace(/\\s+/g, ' ')) && !text.replace(/[^A-Z0-9]/g, '').includes(underlyingQuery.replace(/[^A-Z0-9]/g, ''))) continue;
+        unique.set(key, instrument);
+      }
+      const optionEntries = [...unique.values()]
+        .sort((a,b) => {
+          const expiryDiff = optionExpiryTime(a.expiry) - optionExpiryTime(b.expiry);
+          if (expiryDiff) return expiryDiff;
+          const strikeDiff = requestedStrike ? Math.abs(Number(a.strike || 0) - requestedStrike) - Math.abs(Number(b.strike || 0) - requestedStrike) : 0;
+          if (strikeDiff) return strikeDiff;
+          const typeRank = (value?: string) => /^(CE|CALL)$/i.test(String(value || '')) ? 0 : /^(PE|PUT)$/i.test(String(value || '')) ? 1 : 2;
+          return typeRank(a.optionType) - typeRank(b.optionType);
+        })
+        .slice(0, 10)
+        .map(instrument => {
+          const ticker = String(instrument.label || instrument.symbol).trim();
+          const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
+          const item = { symbol, label: ticker, short: ticker.split(/\\s+/)[0] || symbol };
+          const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
+          return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
+        });
+      renderSuggestions([...indexSuggestions, ...optionEntries].sort((a,b) => {
+        if (/\\d/.test(query) && a.item.label.includes('INDEX') !== b.item.label.includes('INDEX')) return a.item.label.includes('INDEX') ? -1 : 1;
+        return a.rank - b.rank;
+      }));
+    };
+    const itemMatchesQuery = (item: WatchlistItem, query: string) =>
+      `${item.symbol} ${item.short} ${item.label}`.toUpperCase().includes(query);
+    filterInput.addEventListener('input', () => {
+      updateRows();
+      if (suggestionTimer !== undefined) window.clearTimeout(suggestionTimer);
+      suggestionTimer = window.setTimeout(() => void searchSuggestions(filterInput.value), 180);
+    });
+    filterInput.addEventListener('keydown', event => {
+      if (suggestionList.hidden || !suggestionItems.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        activeSuggestionIndex = (activeSuggestionIndex + (event.key === 'ArrowDown' ? 1 : -1) + suggestionItems.length) % suggestionItems.length;
+        [...suggestionList.children].forEach((node, index) => (node as HTMLButtonElement).setAttribute('aria-selected', index === activeSuggestionIndex ? 'true' : 'false'));
+      } else if (event.key === 'Enter' && activeSuggestionIndex >= 0) {
+        event.preventDefault();
+        chooseSuggestion(suggestionItems[activeSuggestionIndex]!);
+      } else if (event.key === 'Escape') hideSuggestions();
+    });
+    filterInput.addEventListener('blur', () => window.setTimeout(hideSuggestions, 140));
 
     const buildRows = (): void => {
       const current = String(ctx.symbol || '').toUpperCase();
@@ -1552,13 +1755,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const detail = document.createElement('span');
           detail.textContent = item.label;
           detail.style.cssText = 'font:400 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-          const technicals = document.createElement('span');
-          technicals.style.cssText = 'display:block;max-width:190px;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-          technicals.textContent = 'TECHNICALS · calculating…';
-          const news = document.createElement('span');
-          news.style.cssText = 'display:block;max-width:190px;font:400 9px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-          news.textContent = 'NEWS · loading…';
-          left.append(label, detail, technicals, news);
+          left.append(label, detail);
 
           const right = document.createElement('span');
           right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
@@ -1591,7 +1788,7 @@ const bookmarksPanel: SidePanelDescriptor = {
 
           row.append(button, remove);
           rows.appendChild(row);
-          ref = { row, button, value, change, technicals: left.children[2] as HTMLSpanElement, news: left.children[3] as HTMLSpanElement };
+          ref = { row, button, value, change, technicals: document.createElement('span'), news: document.createElement('span') };
           rowRefs.set(item.symbol, ref);
         }
         rows.appendChild(ref.row);
@@ -1724,6 +1921,9 @@ const bookmarksPanel: SidePanelDescriptor = {
         window.clearInterval(freshnessTimer);
         window.clearInterval(enrichmentTimer);
         watchlistRefreshers.delete(refresh);
+        if (suggestionTimer !== undefined) window.clearTimeout(suggestionTimer);
+        suggestionRequest += 1;
+        resizeHandle.removeAttribute('aria-valuenow');
         quoteStop?.();
         quoteStop = undefined;
       },
