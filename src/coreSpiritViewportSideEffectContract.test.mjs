@@ -70,15 +70,17 @@ replayRuntime.executeIr({}, []);
 assert.equal(replayEvents(), 1, 'read-only suppression must be restored before the next forming-bar execution');
 
 const velaSource = fs.readFileSync('src/CoreSpiritVelaEngine.ts', 'utf8');
-assert.equal(
-  (velaSource.match(/executeIrReadOnly\(token\.ir,/g) ?? []).length,
-  6,
-  'initial, update, viewport and backfill history-only passes must all use scoped read-only replay',
-);
-assert.equal(
-  (velaSource.match(/createRuntime\(\{\s*suppressExternalEffects\s*:\s*true\s*\}\)/g) ?? []).length,
-  2,
-  'both viewport-range and backfill-range recomputations must use the side-effect-free runtime',
-);
+assert.match(velaSource,/runCoreSpiritArtifactInWorker\(token\.artifact,currentBars,token\.sourceId/,'Vela routes chart execution through the persistent worker boundary');
+assert.match(velaSource,/readOnly,\s*suppressExternalEffectsForRun:\s*suppressExternalEffectsForRun\s*\|\|\s*secondaryDegraded/,'Vela forwards read-only and external-effect suppression as separate worker controls');
+assert.match(velaSource,/baseline=await executeInWorker\(historical,mainContextKey,true,/,'confirmed history warm-up is read-only');
+assert.match(velaSource,/const result=await executeInWorker\(currentBars,mainContextKey,true,/,'static history initialization is read-only');
+assert.match(velaSource,/executeInWorker\(rangeBars,rangeContextKey,true,/,'viewport recomputation is read-only');
+assert.match(velaSource,/tail=await executeInWorker\(tailBars,mainContextKey,false,/,'only the live tail uses incremental execution');
+const runnerSource=fs.readFileSync('src/services/coreSpirit/chartRunner.ts','utf8');
+const workerPoolSource=fs.readFileSync('src/services/coreSpirit/coreSpiritWorkerPool.ts','utf8');
+assert.match(runnerSource,/readOnly:options\.readOnly/,'chart runner forwards the read-only flag to the worker pool');
+assert.match(runnerSource,/suppressExternalEffectsForRun:options\.suppressExternalEffectsForRun/,'chart runner forwards explicit side-effect suppression');
+assert.match(workerPoolSource,/warmReadOnly\?context\.runtime\.executeIrReadOnly\(artifact\.ir,bars\):context\.runtime\.executeIr\(artifact\.ir,bars\)/,'worker pool uses a scoped read-only history pass');
+assert.match(workerPoolSource,/suppressExternalEffectsForRun\s*\?\s*context\.runtime\.executeBarReadOnly\(latest,'realtime'\)/,'worker pool suppresses side effects for a forming-tail recovery run');
 
 console.log('CORESPIRIT_VIEWPORT_SIDE_EFFECT_SUPPRESSION_CONTRACT_OK');
