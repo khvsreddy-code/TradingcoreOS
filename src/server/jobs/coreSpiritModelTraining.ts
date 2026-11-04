@@ -233,6 +233,10 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         external_dataset_hash: trained.dataset_hash,
         release_status: trained.release_status,
         calibration_status: trained.calibration_status,
+        model_horizon_bars: horizon,
+        model_symbol: symbol,
+        model_timeframe: timeframe,
+        program_checksum: research.sourceHash,
       };
       await repository.updateTrainingRun(payload.trainingRunId, {
         status: 'succeeded',
