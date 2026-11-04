@@ -87,6 +87,7 @@ export * from './visualApp';
 export * from './multiSymbolTimeframe';
 
 export * from './modelOrchestration';
+export * from './pythonMlModelAdapter';
 export * from './researchApiContract';
 
 export * from './aiModel';
