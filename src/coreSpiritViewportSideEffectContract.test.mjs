@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
+import { createCoreSpiritOutputSemantics } from './services/coreSpirit/executionSemantics.ts';
 
 const bar = {
   timestamp: '2026-10-01T09:15:00.000Z',
@@ -35,7 +36,15 @@ assert.ok(outputs.some(value => value.kind === 'event'), 'visual/event output ca
 assert.ok(outputs.some(value => value.kind === 'signal'), 'signal output must remain available to read-only rendering');
 assert.equal(externalCalls(), 0, 'read-only events/signals must not escape into the host event bus');
 
+const confirmedHistorySemantics = createCoreSpiritOutputSemantics({
+  barPhase: 'historical',
+  executionMode: 'historical',
+  isRealtime: false,
+  isConfirmed: true,
+});
+
 const normalRuntime = new CoreSpiritRuntime({ sourceId: 'normal-execution-contract' });
+normalRuntime.currentOutputSemantics = confirmedHistorySemantics;
 const normalExternalCalls = observeExternalEvents(normalRuntime);
 const normalOutputs = [];
 normalRuntime.emitIntent('orderIntent', ['long', 'quantity', 1, null, null], bar, 0, { push: value => normalOutputs.push(value) }, [], 'order');
@@ -45,6 +54,8 @@ assert.equal(normalExternalCalls(), 1, 'normal strategy evaluation must retain h
 const replayRuntime = new CoreSpiritRuntime({ sourceId: 'historical-replay-scope' });
 const replayEvents = observeExternalEvents(replayRuntime);
 const executeIrStub = function () {
+  // Mirror the confirmed-bar metadata installed by a real executeIr() pass.
+  this.currentOutputSemantics = confirmedHistorySemantics;
   this.emitIntent('orderIntent', ['long', 'quantity', 1, null, null], bar, 0, collector, diagnostics, 'history');
   return { outputs: [], state: {}, diagnostics: [] };
 };
