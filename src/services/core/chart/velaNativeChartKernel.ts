@@ -32,6 +32,7 @@ export type LineStyleValue = 0 | 1 | 2;
 export const LineStyle = Object.freeze({ Solid: 0 as LineStyleValue, Dashed: 1 as LineStyleValue, Dotted: 2 as LineStyleValue });
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
 export type { IndicatorHandle, IndicatorEventMap } from '../../../../vendor/vela/src/core/IndicatorHandle';
+export type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
 
 export type { DataProvider, ProviderInfo, SymbolDescriptor } from '../../../../vendor/vela/src/core/ports/DataProvider';
 export type { BarRange, MarketDataFeed, SymbolInfo } from '../../../../vendor/vela/src/core/ports/MarketDataFeed';
@@ -47,7 +48,7 @@ export type {
 export type { InputValue, InputSchema } from '../../../../vendor/vela/src/core/model/inputs';
 export type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 export type { SeriesPoint, SeriesSpec, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
-export type { LineStyle } from '../../../../vendor/vela/src/core/model/series';
+export type { LineStyle as VelaLineStyle } from '../../../../vendor/vela/src/core/model/series';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export type { SerializedDrawing } from '../../../../vendor/vela/src/core/drawings/Drawing';
 export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
