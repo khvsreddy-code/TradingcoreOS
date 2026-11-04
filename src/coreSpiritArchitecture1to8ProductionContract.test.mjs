@@ -118,8 +118,9 @@ const runtime = new CoreSpiritRuntime({
   timeframe:'5m',
   sourceId:'architecture-runtime',
 });
-runtime.loadIr(beginner.ir!);
-runtime.executeIr(beginner.ir!, [
+if (!beginner.ir) throw new Error('Beginner CoreScript did not produce executable IR.');
+runtime.loadIr(beginner.ir);
+runtime.executeIr(beginner.ir, [
   {timestamp:'2026-10-08T09:15:00Z',open:100,high:101,low:99,close:100,volume:1000},
   {timestamp:'2026-10-08T09:20:00Z',open:100,high:102,low:99,close:101,volume:1100},
 ]);
@@ -132,6 +133,7 @@ const runtimeSystem = new CoreSpiritRuntime({
   layer:'automation',
   executionTarget:'automation',
 });
-runtimeSystem.loadIr(system.ir!);
+if (!system.ir) throw new Error('System automation CoreScript did not produce executable IR.');
+runtimeSystem.loadIr(system.ir);
 
 console.log('CORESPIRIT_ARCHITECTURE_1_TO_8_PRODUCTION_CONTRACT_OK');
