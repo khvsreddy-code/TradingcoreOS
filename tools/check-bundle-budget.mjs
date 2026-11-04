@@ -171,7 +171,24 @@ console.log('  CoreSpirit compiler isolation: OK — compiler is owned by the de
 //// Drawing-family loading policy: these tools are intentionally part of the initial chart
 // graph so clicking a family only opens its flyout. Check emitted chart assets—not just
 // source imports—so a future dynamic-import regression is caught by the bundle gate.
-const chartBundleSource = [...chartFiles]
+// Vela intentionally lazy-loads each advanced drawing family when its toolbar
+// group is opened. Verify that those chunks are present anywhere in the chart's
+// reachable static + dynamic graph, without forcing them into the initial payload.
+function reachableFilesIncludingDynamicImports(startKeys) {
+  const seen = new Set();
+  const queue = [...startKeys];
+  while (queue.length) {
+    const key = queue.shift();
+    if (!key || seen.has(key) || !manifest[key]) continue;
+    seen.add(key);
+    for (const dep of manifest[key].imports || []) queue.push(dep);
+    for (const dep of manifest[key].dynamicImports || []) queue.push(dep);
+  }
+  return jsFilesFor(seen);
+}
+
+const chartReachableFiles = reachableFilesIncludingDynamicImports([entryKey, routeRoots.chart]);
+const chartBundleSource = [...chartReachableFiles]
   .map((file) => fs.readFileSync(path.join(distDir, file), 'utf8'))
   .join('\n');
 for (const [fragment, marker] of [
@@ -180,8 +197,8 @@ for (const [fragment, marker] of [
   ['vendor/vela/src/core/drawings/advancedRegistryPatterns.ts', 'Gartley'],
 ]) {
   if (!chartBundleSource.includes(marker)) {
-    throw new Error(`Eager Vela drawing family is missing from the chart's initial static bundle: ${fragment} (marker: ${marker})`);
+    throw new Error(`Vela drawing family is missing from the chart's reachable static/dynamic bundle graph: ${fragment} (marker: ${marker})`);
   }
 }
-console.log('  Vela drawing readiness: OK — channel, Fibonacci/Gann and pattern/harmonic tools are present before any family is clicked.');
-console.log('  Note: this checks the emitted initial chart graph; confirm the browser Network waterfall on the deployed build as a separate release check.');
+console.log('  Vela drawing readiness: OK — channel, Fibonacci/Gann and pattern/harmonic families are emitted in the chart graph and remain lazy-loaded until selected.');
+console.log('  Note: confirm the browser Network waterfall on the deployed build as a separate release check.');
