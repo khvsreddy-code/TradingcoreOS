@@ -368,4 +368,16 @@ let settings = {period: 20, period: 30}
 assert.ok(duplicateMapKey.diagnostics.some(d => d.code === 'SYNTAX_ERROR'));
 assert.equal(duplicateMapKey.ir, undefined);
 
+
+const legacyLoopWords = compileCoreSpirit(`let while = 1
+let for = 2
+let in = 3
+let break = 4
+let continue = 5
+plot(while + for + in + break + continue)
+`, 'corescript-v10-loop-word-identifiers');
+assert.deepEqual(legacyLoopWords.diagnostics.filter(d => d.severity === 'error'), [],
+  'v1.0 must keep the pre-v1.2 loop words available as ordinary identifiers');
+assert.ok(legacyLoopWords.ir);
+
 console.log('CORESCRIPT_V12_PROGRAMMING_CONSTRUCTS_OK');
