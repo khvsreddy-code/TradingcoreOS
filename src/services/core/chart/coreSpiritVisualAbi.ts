@@ -1,8 +1,6 @@
 import type { CoreSpiritObject, CoreSpiritVisualStyle } from '../../coreSpirit/types';
 import type { CoreSpiritVelaOutputRevision } from '../../coreSpirit/velaOutputAdapter';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, BoxTextSize } from '../../../../vendor/vela/src/core/model/drawings';
-import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
-import type { LineStyle } from '../../../../vendor/vela/src/core/model/series';
+import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, LabelStyle, BoxTextSize, Background, PriceLine, LineStyle } from './velaNativeChartKernel';
 
 export const CORE_SPIRIT_VISUAL_ABI_VERSION = 1 as const;
 export const CORE_SPIRIT_VELA_COORDINATE_SYSTEM = 'vela-epoch-milliseconds-price+tagged-visual-space' as const;
