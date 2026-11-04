@@ -39,6 +39,8 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
         break;
       case 'index':
         expression(n.target,scope);expression(n.index,scope);break;
+      case 'arrayLiteral': n.elements.forEach(item=>expression(item,scope)); break;
+      case 'mapLiteral': n.entries.forEach(entry=>expression(entry.value,scope)); break;
       case 'member':
         expression(n.target,scope);break;
       case 'memberCall':
@@ -92,6 +94,19 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
         n.thenBranch.forEach(x=>statement(x,new Map(scope)));
         n.elseBranch?.forEach(x=>statement(x,new Map(scope)));
         break;
+      case 'while': {
+        expression(n.condition,scope);
+        const loopScope=new Map(scope);
+        n.body.forEach(x=>statement(x,loopScope));
+        break;
+      }
+      case 'forEach': {
+        expression(n.iterable,scope);
+        const loopScope=new Map(scope); loopScope.set(n.name,'unknown');
+        n.body.forEach(x=>statement(x,loopScope));
+        break;
+      }
+      case 'break': case 'continue': break;
     }
   };
 
