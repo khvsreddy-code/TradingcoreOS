@@ -41,7 +41,10 @@ assert.ok(provider.includes('void Promise.all([worker(), worker()])'), 'backgrou
 assert.ok(dataPlane.includes('prewarmHistory(limitOverride?: number): Promise<number>'), 'history warming must report returned bar counts');
 assert.ok(dataPlane.includes('const requestKey = `${this.key}:initial:${requestedLimit}`;'), 'history backfill must share the existing per-symbol/timeframe request gate');
 assert.ok(dataPlane.includes('historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit)'), 'older candles must be retained in the canonical history store');
-assert.ok(history.includes("fyers-three-sessions+tvdatafeed-older-5000/v1"), 'older candles must keep using the configured TV-datafeed/FYERS source policy');
+assert.ok(history.includes("HISTORICAL_SOURCE_POLICY = 'fyers-primary-7d+investiny-2to5y-historical-backfill/v6'"), 'canonical history must enforce the current FYERS plus Investiny source policy');
+assert.ok(history.includes("recentHistorySource: 'fyers', olderHistorySource: 'investiny'"), 'FYERS must own recent candles while Investiny supplies older history');
+assert.ok(history.includes('FYERS_HISTORY_WINDOW_DAYS'), 'FYERS historical requests must remain bounded to the provider history window');
+assert.ok(history.includes('Older-page navigation is Investiny-only'), 'older history pagination must never extend FYERS requests past the recent-data boundary');
 assert.ok(history.includes("'NSE:NIFTY50-INDEX': { tvSymbol: 'NIFTY', tvExchange: 'NSE', exchange: 'NSE' }"), 'the default NIFTY 50 chart must have an exact TV history mapping');
 assert.ok(history.includes("'BSE:SENSEX-INDEX': { tvSymbol: 'SENSEX', tvExchange: 'BSE', exchange: 'BSE' }"), 'SENSEX must have an exact TV history mapping');
 assert.ok(history.includes('HISTORICAL_MAX_BARS = 5_000'), 'history backfill must remain bounded');
