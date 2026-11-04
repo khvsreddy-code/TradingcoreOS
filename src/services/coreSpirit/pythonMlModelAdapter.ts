@@ -9,7 +9,15 @@ import {
   type CoreSpiritStrictModelPrediction,
   type CoreSpiritStrictModelRequest,
 } from './modelOrchestration';
-import type { CoreSpiritModelTensor } from './modelAbi';
+import {
+  CoreSpiritModelRegistry,
+  type CoreSpiritModelExecutionRequest,
+  type CoreSpiritModelExecutionResult,
+  type CoreSpiritModelHost,
+  type CoreSpiritModelManifest,
+  type CoreSpiritModelTensor,
+} from './modelAbi';
+import { coreSpiritStrictManifestToTransportManifest } from './modelOrchestration';
 
 const MAX_CANDLES = 5_000;
 const MIN_CANDLES = 80;
@@ -70,7 +78,7 @@ export function createCoreSpiritPythonMlManifest(spec: CoreSpiritPythonMlModelSp
     ],
     outputSchema: [
       { name: 'prediction', dtype: 'f64', shape: [3], required: true, semantic: 'prediction' },
-      { name: 'confidence', dtype: 'f64', shape: [], required: false, semantic: 'confidence', representation: 'scalar' },
+      { name: 'confidence', dtype: 'f64', shape: [], required: true, semantic: 'confidence', representation: 'scalar' },
     ],
     primaryPredictionField: 'prediction',
     confidenceField: 'confidence',
@@ -258,6 +266,7 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
     const probabilityTotal = (probabilities as number[]).reduce((total, value) => total + value, 0);
     if (Math.abs(probabilityTotal - 1) > 0.03) throw new Error('Python ML direction probabilities do not sum to one.');
     const confidence = finiteProbability(result.confidence);
+    if (confidence === null) throw new Error('Python ML service did not return a valid confidence value.');
     const prediction = tensor('f64', [3], probabilities as number[]);
     const metadata: Record<string, string | number | boolean | null> = {
       direction: safeMetadataValue(result.direction),
@@ -279,7 +288,7 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
     const stateChecksum = coreSpiritChecksum({ modelId: manifest.modelId, version: manifest.version, stateToken: request.stateToken ?? null, context: request.context });
     return {
       prediction,
-      ...(confidence !== null ? { confidence } : {}),
+      confidence,
       metadata,
       outputChecksum,
       stateChecksum,
@@ -296,4 +305,80 @@ export function registerCoreSpiritPythonMlModel(
   const manifest = createCoreSpiritPythonMlManifest(spec);
   registry.register(manifest, new CoreSpiritPythonMlServiceAdapter(config));
   return manifest;
+}
+
+
+/**
+ * Adapts the strict Python service model to CoreSpirit's stable low-level Model
+ * ABI. This makes it consumable by CoreSpiritModelRuntime while keeping HTTP,
+ * credentials and transport details outside the VM.
+ */
+export class CoreSpiritPythonMlModelHost implements CoreSpiritModelHost {
+  readonly backend = 'host' as const;
+
+  constructor(
+    private readonly strictManifest: CoreSpiritStrictModelManifest,
+    private readonly adapter: CoreSpiritPythonMlServiceAdapter,
+  ) {}
+
+  async execute(
+    manifest: CoreSpiritModelManifest,
+    request: CoreSpiritModelExecutionRequest,
+  ): Promise<CoreSpiritModelExecutionResult> {
+    if (
+      manifest.backend !== this.backend ||
+      manifest.modelId !== this.strictManifest.modelId ||
+      manifest.version !== this.strictManifest.version
+    ) {
+      throw new Error('CoreSpirit Python ML host received an incompatible transport manifest.');
+    }
+    const context = { ...request.context };
+    const strictRequest: CoreSpiritStrictModelRequest = {
+      requestId: coreSpiritChecksum({
+        modelId: manifest.modelId,
+        version: manifest.version,
+        context,
+        features: request.inputs,
+        stateToken: request.stateToken ?? null,
+      }),
+      modelId: manifest.modelId,
+      version: manifest.version,
+      context,
+      features: request.inputs,
+      marketState: {
+        timestamp: context.timestamp,
+        instrument: { instrumentId: context.symbol, symbol: context.symbol },
+        timeframe: context.timeframe,
+      },
+      ...(request.stateToken ? { stateToken: request.stateToken } : {}),
+    };
+    const result = await this.adapter.execute(this.strictManifest, strictRequest);
+    if (result.confidence === undefined) {
+      throw new Error('CoreSpirit Python ML output is missing its required confidence tensor.');
+    }
+    return {
+      outputs: {
+        prediction: result.prediction,
+        confidence: tensor('f64', [], [result.confidence]),
+      },
+      outputChecksum: result.outputChecksum,
+      stateChecksum: result.stateChecksum,
+      ...(result.nextStateToken ? { nextStateToken: result.nextStateToken } : {}),
+    };
+  }
+}
+
+/** Register Python inference in the existing CoreSpirit ModelRuntime registry. */
+export function registerCoreSpiritPythonMlRuntimeModel(
+  registry: CoreSpiritModelRegistry,
+  spec: CoreSpiritPythonMlModelSpec,
+  config: CoreSpiritPythonMlServiceConfig,
+): CoreSpiritModelManifest {
+  const strictManifest = createCoreSpiritPythonMlManifest(spec);
+  const transportManifest = coreSpiritStrictManifestToTransportManifest(strictManifest);
+  registry.register({
+    manifest: transportManifest,
+    host: new CoreSpiritPythonMlModelHost(strictManifest, new CoreSpiritPythonMlServiceAdapter(config)),
+  });
+  return transportManifest;
 }
