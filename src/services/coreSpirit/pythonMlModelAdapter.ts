@@ -218,6 +218,7 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
       ) throw new Error(`Python ML candle ${index} has invalid OHLCV values.`);
       candles.push({
         timestamp: new Date(timestamp).toISOString(),
+        availableAt: new Date(timestamp).toISOString(),
         open, high, low, close, volume,
         phase: 'confirmed',
         confirmed: true,
