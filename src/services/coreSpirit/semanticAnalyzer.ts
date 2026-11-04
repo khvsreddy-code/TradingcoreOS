@@ -606,8 +606,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         else if(iterableType.startsWith('vector<')) itemType='number';
         else report(n.iterable,'for-in expects an array, map, string or vector','TYPE_FOR_ITERABLE');
         const loopScope=new Map(scope); loopScope.set(n.name,itemType);
+        const previousSymbol=symbols.get(n.name);
         symbols.set(n.name,itemType);
         loopDepth += 1; n.body.forEach(item=>visit(item,loopScope)); loopDepth -= 1;
+        if(previousSymbol===undefined) symbols.delete(n.name); else symbols.set(n.name,previousSymbol);
         break;
       }
       case 'break': case 'continue':
