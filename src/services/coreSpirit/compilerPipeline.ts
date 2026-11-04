@@ -36,7 +36,7 @@ export function createCoreSpiritCompilationUnit(
   const edition = readCoreScriptEdition(original);
   const normalizedSource = normalizeCoreSpiritSource(original);
   const parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
-  const syntaxDiagnostics = [
+  const syntaxDiagnostics: CoreSpiritCompilationUnit['syntaxDiagnostics'] = [
     ...edition.diagnostics.map(item => ({ code:item.code, message:item.message, line:item.line, column:item.column, start:item.start, end:item.end })), 
     ...parsed.diagnostics,
   ];
