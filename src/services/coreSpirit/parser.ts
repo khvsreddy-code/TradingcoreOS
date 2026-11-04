@@ -282,7 +282,6 @@ export class CoreSpiritParser {
       const entries:Array<{key:string;value:CoreSpiritAstNode}> = [];
       if(!this.check('rightBrace')) {
         do {
-          const keyToken=this.peek();
           if(!this.match('identifier','string')) throw this.error('Map literal keys must be identifiers or strings');
           const key=String(this.previous().value ?? this.previous().lexeme);
           this.consume('colon','Expected : after map key');
