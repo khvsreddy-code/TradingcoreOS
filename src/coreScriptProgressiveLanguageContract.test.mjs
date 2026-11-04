@@ -291,7 +291,7 @@ plot(config.get("period") + config["extra"])
 assert.deepEqual(collectionOutputs, [28, 25], 'array/map literals, indexing, methods and for-in should execute');
 
 const loopOutputs = executeV12(`
-let counter: state<int> = 0
+let counter: state<number> = 0
 while (counter < 3) {
   counter := counter + 1
 }
