@@ -1,6 +1,6 @@
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 import { CORE_SPIRIT_VISUAL_ABI_VERSION, CORE_SPIRIT_VELA_COORDINATE_SYSTEM } from './coreSpiritVisualAbi';
-import { registerRendererLayer, type RendererLayerArgs } from '../../../../vendor/vela/src/renderers/native/layers';
+import { registerRendererLayer, type RendererLayerArgs } from './velaChartFacade';
 
 export const CORE_SPIRIT_VELA_OUTPUT_LAYER_ID = 'tco-corespirit-output';
 export const CORE_SPIRIT_VELA_OUTPUT_UNDERLAY_LAYER_ID = 'tco-corespirit-output-underlay';
