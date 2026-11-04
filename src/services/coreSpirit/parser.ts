@@ -280,10 +280,13 @@ export class CoreSpiritParser {
     if(this.match('leftBrace')) {
       const start=this.previous();
       const entries:Array<{key:string;value:CoreSpiritAstNode}> = [];
+      const keys=new Set<string>();
       if(!this.check('rightBrace')) {
         do {
           if(!this.match('identifier','string')) throw this.error('Map literal keys must be identifiers or strings');
           const key=String(this.previous().value ?? this.previous().lexeme);
+          if(keys.has(key)) throw this.error(`Duplicate map key '${key}'`);
+          keys.add(key);
           this.consume('colon','Expected : after map key');
           entries.push({key,value:this.expression()});
         } while(this.match('comma'));
