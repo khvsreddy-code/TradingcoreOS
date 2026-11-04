@@ -10,6 +10,7 @@ import { parseCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { readCoreScriptEdition } from './services/coreSpirit/languageEdition.ts';
 import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
 import { buildCoreSpiritArtifactLookupIdentity } from './services/coreSpirit/artifactLookupIdentity.ts';
+import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 
 const beginner = `
 indicator "EMA Cross"
@@ -260,3 +261,90 @@ const noV12SugarInV10 = compileCoreSpirit(
 );
 assert.ok(!noV12SugarInV10.artifact);
 console.log('CORESCRIPT_EDITION_V12_FOUNDATION_OK');
+
+
+// CoreScript v1.2 first-class programming constructs: compile AND execute.
+function executeV12(source, sourceId) {
+  const compiled = compileCoreSpirit('edition@1.2\\n' + source, sourceId);
+  assert.deepEqual(compiled.diagnostics.filter(d => d.severity === 'error'), [], compiled.diagnostics.map(d => d.message).join('\\n'));
+  assert.ok(compiled.ir, 'expected executable IR for ' + sourceId);
+  const runtime = new CoreSpiritRuntime({ symbol:'NSE:NIFTY50-INDEX', timeframe:'5m', sourceId });
+  const execution = runtime.executeIr(compiled.ir, [{
+    timestamp:'2026-10-08T09:15:00Z', open:100, high:102, low:99, close:101, volume:1000,
+  }]);
+  assert.deepEqual(execution.diagnostics, [], 'runtime diagnostics for ' + sourceId);
+  return execution.outputs.filter(item => item.kind === 'series').map(item => item.value);
+}
+
+const collectionOutputs = executeV12(`
+let values = [10, 20, 30]
+values.push(40)
+let seen = []
+for (let value in values) {
+  seen.push(value)
+}
+let config = {"period": 20}
+config.set("extra", 5)
+plot(values[1] + seen.length + len(seen))
+plot(config.get("period") + config["extra"])
+`, 'corescript-v12-collections');
+assert.deepEqual(collectionOutputs, [28, 25], 'array/map literals, indexing, methods and for-in should execute');
+
+const loopOutputs = executeV12(`
+state<int> counter = 0
+while (counter < 3) {
+  counter := counter + 1
+}
+let values = [1, 2, 3, 4, 5]
+let kept = []
+for (let value in values) {
+  if (value == 2) {
+    continue
+  }
+  if (value == 5) {
+    break
+  }
+  kept.push(value)
+}
+plot(counter)
+plot(kept.length)
+`, 'corescript-v12-loops');
+assert.deepEqual(loopOutputs, [3, 3], 'while, for-in, break and continue should execute within the VM');
+
+const functionOutputs = executeV12(`
+fn doubled(value: number) -> number {
+  let result = value * 2
+  return result
+}
+plot(doubled(6))
+`, 'corescript-v12-functions');
+assert.deepEqual(functionOutputs, [12], 'typed pure function lowering should execute');
+
+const enumOutputs = executeV12(`
+enum Direction { Long, Short }
+let side = Direction.Long
+if (side == "Long") {
+  plot(1)
+} else {
+  plot(0)
+}
+`, 'corescript-v12-enums');
+assert.deepEqual(enumOutputs, [1], 'enum declarations and member references should lower to constants');
+
+const importOutputs = executeV12(`
+import { abs as magnitude, sqrt } from "math"
+import * as statistics from "stats"
+plot(magnitude(-5) + sqrt(16))
+plot(statistics.mean(10, 20))
+`, 'corescript-v12-module-imports');
+assert.deepEqual(importOutputs, [7, 15], 'built-in named and namespace imports should resolve');
+
+const matrixOutputs = executeV12(`
+let values = matrix(2, 2, 1, 2, 3, 4)
+plot(values.get(1, 0))
+let transposed = values.transpose()
+plot(transposed.get(0, 1))
+`, 'corescript-v12-matrix-methods');
+assert.deepEqual(matrixOutputs, [3, 3], 'matrix access and transformation methods should execute through quant kernels');
+
+console.log('CORESCRIPT_V12_PROGRAMMING_CONSTRUCTS_OK');
