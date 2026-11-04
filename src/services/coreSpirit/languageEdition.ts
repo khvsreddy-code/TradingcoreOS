@@ -122,7 +122,7 @@ function normalizeAttributeValue(key: string, value: string): string | undefined
   }
   if (key === 'width') {
     const width = Number(raw);
-    return Number.isFinite(width) && width >= 1 && width <= 5 ? String(width) : undefined;
+    return Number.isInteger(width) && width >= 1 && width <= 5 ? String(width) : undefined;
   }
   if (key === 'style') {
     if (quoted) return undefined;
@@ -152,7 +152,6 @@ export function normalizeCoreScriptV12PlotShorthand(source: string): string {
 
     let expressionAndOptions = header[1]!.replace(/;\s*$/, '').trim();
     const attributes: Record<string, string> = {};
-    let found = false;
     while (true) {
       const match = expressionAndOptions.match(/\s+(color|width|style|title)\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#[0-9a-f]{3,8}|[-+]?(?:\d+\.?\d*|\.\d+)|[A-Za-z_][A-Za-z0-9_-]*)\s*$/i);
       if (!match || match.index === undefined) break;
@@ -160,9 +159,8 @@ export function normalizeCoreScriptV12PlotShorthand(source: string): string {
       if (attributes[key] !== undefined) return line;
       attributes[key] = match[2]!;
       expressionAndOptions = expressionAndOptions.slice(0, match.index).trim();
-      found = true;
     }
-    if (!found || !expressionAndOptions) return line;
+    if (!expressionAndOptions) return line;
 
     const normalized: Record<string, string> = {};
     for (const [key, value] of Object.entries(attributes)) {
