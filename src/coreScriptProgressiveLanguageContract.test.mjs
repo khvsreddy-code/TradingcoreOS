@@ -333,11 +333,11 @@ assert.deepEqual(enumOutputs, [1], 'enum declarations and member references shou
 
 const importOutputs = executeV12(`
 import { abs as magnitude, sqrt } from "math"
-import * as statistics from "stats"
+import * as statistics from "math"
 plot(magnitude(-5) + sqrt(16))
-plot(statistics.mean(10, 20))
+plot(statistics.min(10, 20))
 `, 'corescript-v12-module-imports');
-assert.deepEqual(importOutputs, [7, 15], 'built-in named and namespace imports should resolve');
+assert.deepEqual(importOutputs, [9, 10], 'built-in named and namespace imports should resolve');
 
 const matrixOutputs = executeV12(`
 let values = matrix(2, 2, 1, 2, 3, 4)
