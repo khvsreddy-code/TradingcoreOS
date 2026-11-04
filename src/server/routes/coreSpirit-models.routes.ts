@@ -614,14 +614,50 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         graph.featureNames.some((name, index) => name !== featureNames[index])) {
       return fail(res, 422, 'Training feature names must exactly match the compiled research artifact feature schema.');
     }
-    if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
-      return fail(res, 422, 'No training backend is registered for this model family.');
+    const isHmmModel = graph.modelType === 'HMM<float>' || graph.modelType === 'HMM';
+    const isPythonXgboostModel = graph.modelType.toLowerCase() === 'xgboost<float>' || graph.modelType.toLowerCase() === 'xgboost';
+    if (!isHmmModel && !isPythonXgboostModel) {
+      return fail(res, 422, 'No CoreSpirit training backend is registered for model family "' + graph.modelType + '".');
     }
-    const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
+
+    let forecastHorizon = 1;
+    if (isPythonXgboostModel) {
+      if (rows.length < 240 || rows.length > 5_000) {
+        return fail(res, 422, 'CoreSpirit Python XGBoost requires 240–5000 confirmed OHLCV rows.');
+      }
+      const canonical = ['open', 'high', 'low', 'close', 'volume'];
+      if (featureNames.length !== canonical.length || featureNames.some((name, index) => name !== canonical[index])) {
+        return fail(res, 422, 'XGBoost currently requires the ordered OHLCV feature schema: open, high, low, close, volume.');
+      }
+      if (graph.binding?.kind !== 'python' || graph.binding.locator !== 'xgb-direction') {
+        return fail(res, 422, 'XGBoost requires the registered Python binding "xgb-direction".');
+      }
+      const targetMatch = String(graph.target ?? '').trim().match(/^forward_return\\(\\s*close\\s*,\\s*(\\d+)\\s*\\)$/i);
+      if (!targetMatch) return fail(res, 422, 'XGBoost target must be forward_return(close, H) with H from 1 to 100.');
+      forecastHorizon = Number(targetMatch[1]);
+      if (!Number.isSafeInteger(forecastHorizon) || forecastHorizon < 1 || forecastHorizon > 100) {
+        return fail(res, 422, 'XGBoost target horizon must be an integer from 1 to 100 bars.');
+      }
+      const suppliedHorizon = trainingParameters.forecastHorizonBars ?? trainingParameters.horizon;
+      if (suppliedHorizon !== undefined && Number(suppliedHorizon) !== forecastHorizon) {
+        return fail(res, 422, 'Training horizon must match the CoreScript forward_return target.');
+      }
+      const symbol = String(trainingParameters.symbol ?? '').trim();
+      const timeframe = String(trainingParameters.timeframe ?? '').trim();
+      if (!symbol || symbol.length > 128 || !timeframe || timeframe.length > 32) {
+        return fail(res, 400, 'XGBoost trainingParameters must include symbol and timeframe.');
+      }
+      trainingParameters.forecastHorizonBars = forecastHorizon;
+      trainingParameters.horizon = forecastHorizon;
+    } else if (!Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12) {
+      return fail(res, 422, 'HMM states must be an integer from 2 to 12.');
+    }
+
+    const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? forecastHorizon;
     const purgeBars = Number(rawPurge);
     const embargoBars = Number(trainingParameters.embargoBars ?? 0);
-    if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
-      return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
+    if (!Number.isInteger(purgeBars) || purgeBars < forecastHorizon || purgeBars > 500) {
+      return fail(res, 400, 'purgeBars must be an integer at least as large as the model horizon and no greater than 500.');
     }
     if (!Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
       return fail(res, 400, 'embargoBars must be an integer from 0 to 500.');
@@ -630,10 +666,11 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     const evaluableRows = rows.length - boundaryGap;
     const validationCount = Math.floor(evaluableRows * validationFraction);
     const trainingCount = evaluableRows - validationCount;
-    if (boundaryGap >= rows.length || !Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12 ||
+    const minimumTrainingRows = isPythonXgboostModel ? 24 : Math.max(12, graph.states * 4);
+    if (boundaryGap >= rows.length ||
         validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
-        trainingCount < Math.max(12, graph.states * 4)) {
-      return fail(res, 422, 'Chronological holdout requires at least 12 validation rows and max(12, states × 4) earlier training rows at this validationFraction.');
+        trainingCount < minimumTrainingRows) {
+      return fail(res, 422, 'Purged chronological holdout does not contain enough training and validation rows for this model.');
     }
     const datasetVersion = await coreSpiritSha256({ featureNames, rows, trainingRange: range });
     const snapshot = await repository.putDatasetSnapshot({
