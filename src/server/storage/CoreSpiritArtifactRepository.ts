@@ -301,7 +301,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     status: 'running' | 'succeeded' | 'failed';
     progress?: number;
     modelArtifactId?: string;
-    metrics?: Readonly<Record<string, number>>;
+    metrics?: Readonly<Record<string, unknown>>;
     error?: string | null;
   }): Promise<void> {
     const now = new Date().toISOString();
