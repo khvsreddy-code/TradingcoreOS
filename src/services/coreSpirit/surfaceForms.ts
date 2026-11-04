@@ -793,7 +793,12 @@ export function normalizeCoreSpiritSource(source: string): string {
     let currentLines: string[] = [raw];
     for (const transform of CORE_SPIRIT_SURFACE_TRANSFORMS) {
       currentLines = currentLines.flatMap(line => {
-        const result = withProtectedCoreSpiritSurfaceText(line, protectedLine => transform.apply(protectedLine));
+        // Structured inputs must inspect their literal metadata attributes (notably
+        // quoted title/options strings). Other transforms still receive protected
+        // source so embedded strings/comments cannot be rewritten as syntax.
+        const result = transform.id === 'structured-input'
+          ? transform.apply(line)
+          : withProtectedCoreSpiritSurfaceText(line, protectedLine => transform.apply(protectedLine));
         return typeof result === 'string' ? [result] : (result.lines || [result.line]);
       });
     }
