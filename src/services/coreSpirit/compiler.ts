@@ -189,12 +189,26 @@ export class CoreSpiritCompiler {
          (node.target.type === 'identifier' && dataRefRegisters.has(node.target.name)) ||
          (node.target.type === 'memberCall' && ['timeframe','tf','confirmed','developing','historical','realtime'].includes(node.target.member))));
     let temp = 0;
+    type LoopContext = { breakJumps:number[]; continueJumps:number[]; continueTarget:number };
+    const loopStack:LoopContext[]=[];
 
     const expr = (n: CoreSpiritAstNode): string => {
       switch (n.type) {
         case 'number': case 'string': case 'boolean': case 'null': {
           const dest = `t${temp++}`;
           emitInstruction(n, { op: 'const', dest, value: n.value as number | string | boolean | null }); return dest;
+        }
+        case 'arrayLiteral': {
+          const args=n.elements.map(expr); const dest=`t${temp++}`;
+          emitInstruction(n,{op:'call',dest,name:'__array',args,callId:`array.literal:${n.span?.start ?? temp}`});
+          return dest;
+        }
+        case 'mapLiteral': {
+          const args:string[]=[];
+          for(const entry of n.entries){const key=`t${temp++}`;emitInstruction(n,{op:'const',dest:key,value:entry.key});args.push(key,expr(entry.value));}
+          const dest=`t${temp++}`;
+          emitInstruction(n,{op:'call',dest,name:'__map',args,callId:`map.literal:${n.span?.start ?? temp}`});
+          return dest;
         }
         case 'identifier': {
           const dest = `t${temp++}`;
@@ -251,6 +265,13 @@ export class CoreSpiritCompiler {
             return dest;
           }
           const targetSemanticType = n.target.type === 'identifier' ? semantic.symbols.get(n.target.name) : undefined;
+          if(targetSemanticType && /^(array|map|matrix|vector)</.test(String(targetSemanticType))){
+            const target=expr(n.target); const method=`t${temp++}`;
+            emitInstruction(n,{op:'const',dest:method,value:n.member});
+            const args=[target,method,...n.args.map(expr)]; const dest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest,name:'__collection_method',args,callId:`collection.method:${n.member}:${n.span?.start ?? temp}`});
+            return dest;
+          }
           const isModelTarget = targetSemanticType === 'model:ref' || targetSemanticType?.startsWith('model<') || (n.target.type === 'call' && n.target.name === 'model');
           if (isModelTarget && ['predict','prediction','probability','confidence'].includes(n.member)) {
             const target = expr(n.target);
@@ -366,6 +387,13 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'member': {
+          const memberTargetType=n.target.type==='identifier'?semantic.symbols.get(n.target.name):undefined;
+          if(memberTargetType && /^(array|map|matrix|vector)</.test(String(memberTargetType))){
+            const target=expr(n.target); const member=`t${temp++}`;
+            emitInstruction(n,{op:'const',dest:member,value:n.member}); const dest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest,name:'__collection_member',args:[target,member],callId:`collection.member:${n.member}:${n.span?.start ?? temp}`});
+            return dest;
+          }
           if (n.target.type === 'identifier' && n.target.name === 'bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) {
             const phaseDest=`t${temp++}`;
             emitInstruction(n,{op:'const',dest:phaseDest,value:n.member});
@@ -414,7 +442,12 @@ export class CoreSpiritCompiler {
         }
         case 'typeDeclaration': return '';
         case 'index': {
+          const targetType=n.target.type==='identifier'?semantic.symbols.get(n.target.name):n.target.type==='arrayLiteral'?'array<unknown>':n.target.type==='mapLiteral'?'map<string,unknown>':undefined;
           const target=expr(n.target), index=expr(n.index), dest=`t${temp++}`;
+          if(targetType && /^(array|map|matrix|vector)</.test(String(targetType))){
+            emitInstruction(n,{op:'call',dest,name:'__collection_index',args:[target,index],callId:`collection.index:${n.span?.start ?? temp}`});
+            return dest;
+          }
           const marketSeriesNames=['open','high','low','close','volume','time'];
           // Literal offsets on canonical OHLCV columns use the direct market-data ABI.
           // Local CoreSpirit series must instead be read from the series registry; routing
@@ -467,6 +500,81 @@ export class CoreSpiritCompiler {
           n.thenBranch.forEach(stmt);
           if(n.elseBranch?.length){const jumpEnd=instructions.length;emitInstruction(n, {op:'jump',target:-1});(instructions[jumpFalse] as any).target=instructions.length;n.elseBranch.forEach(stmt);(instructions[jumpEnd] as any).target=instructions.length;}
           else (instructions[jumpFalse] as any).target=instructions.length;
+          break;
+        }
+        case 'while': {
+          const loopStart=instructions.length;
+          const condition=expr(n.condition);
+          const jumpFalse=instructions.length;
+          emitInstruction(n,{op:'jumpIfFalse',condition,target:-1});
+          const context:LoopContext={breakJumps:[],continueJumps:[],continueTarget:loopStart};
+          loopStack.push(context);
+          n.body.forEach(stmt);
+          emitInstruction(n,{op:'jump',target:loopStart});
+          const loopEnd=instructions.length;
+          (instructions[jumpFalse] as Extract<CoreSpiritIrInstruction,{op:'jumpIfFalse'}>).target=loopEnd;
+          context.breakJumps.forEach(index=>(instructions[index] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=loopEnd);
+          context.continueJumps.forEach(index=>(instructions[index] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=loopStart);
+          loopStack.pop();
+          break;
+        }
+        case 'forEach': {
+          const iterable=expr(n.iterable);
+          const iterableType=n.iterable.type==='identifier'?semantic.symbols.get(n.iterable.name):undefined;
+          let source=iterable;
+          if(String(iterableType).startsWith('map<')) {
+            const method=`t${temp++}`; emitInstruction(n,{op:'const',dest:method,value:'keys'});
+            const keys=`t${temp++}`; emitInstruction(n,{op:'call',dest:keys,name:'__collection_method',args:[iterable,method],callId:`for.keys:${n.span?.start ?? temp}`});
+            source=keys;
+          }
+          const suffix=n.span?.start ?? temp;
+          const sourceName=`__for_source_${suffix}`;
+          const indexName=`__for_index_${suffix}`;
+          emitInstruction(n,{op:'setLocal',name:sourceName,source,series:false});
+          const zero=`t${temp++}`; emitInstruction(n,{op:'const',dest:zero,value:0});
+          emitInstruction(n,{op:'setLocal',name:indexName,source:zero,series:false});
+          if(!locals.includes(sourceName))locals.push(sourceName);
+          if(!locals.includes(indexName))locals.push(indexName);
+          const loopStart=instructions.length;
+          const src=`t${temp++}`; emitInstruction(n,{op:'move',dest:src,source:sourceName,sourceKind:'local'});
+          const lengthName=`t${temp++}`; const property=`t${temp++}`;
+          emitInstruction(n,{op:'const',dest:property,value:'length'});
+          emitInstruction(n,{op:'call',dest:lengthName,name:'__collection_member',args:[src,property],callId:`for.length:${suffix}`});
+          const idx=`t${temp++}`; emitInstruction(n,{op:'move',dest:idx,source:indexName,sourceKind:'local'});
+          const condition=`t${temp++}`; emitInstruction(n,{op:'binary',dest:condition,operator:'<',left:idx,right:lengthName});
+          const jumpFalse=instructions.length; emitInstruction(n,{op:'jumpIfFalse',condition,target:-1});
+          const sourceForItem=`t${temp++}`; emitInstruction(n,{op:'move',dest:sourceForItem,source:sourceName,sourceKind:'local'});
+          const indexForItem=`t${temp++}`; emitInstruction(n,{op:'move',dest:indexForItem,source:indexName,sourceKind:'local'});
+          const item=`t${temp++}`; emitInstruction(n,{op:'call',dest:item,name:'__collection_index',args:[sourceForItem,indexForItem],callId:`for.item:${suffix}`});
+          emitInstruction(n,{op:'setLocal',name:n.name,source:item,series:false});
+          if(!locals.includes(n.name))locals.push(n.name);
+          const context:LoopContext={breakJumps:[],continueJumps:[],continueTarget:-1};
+          loopStack.push(context);
+          n.body.forEach(stmt);
+          const incrementTarget=instructions.length;
+          context.continueJumps.forEach(index=>(instructions[index] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=incrementTarget);
+          const oldIndex=`t${temp++}`; emitInstruction(n,{op:'move',dest:oldIndex,source:indexName,sourceKind:'local'});
+          const one=`t${temp++}`; emitInstruction(n,{op:'const',dest:one,value:1});
+          const nextIndex=`t${temp++}`; emitInstruction(n,{op:'binary',dest:nextIndex,operator:'+',left:oldIndex,right:one});
+          emitInstruction(n,{op:'setLocal',name:indexName,source:nextIndex,series:false});
+          emitInstruction(n,{op:'jump',target:loopStart});
+          const loopEnd=instructions.length;
+          (instructions[jumpFalse] as Extract<CoreSpiritIrInstruction,{op:'jumpIfFalse'}>).target=loopEnd;
+          context.breakJumps.forEach(index=>(instructions[index] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=loopEnd);
+          loopStack.pop();
+          break;
+        }
+        case 'break': {
+          const loop=loopStack[loopStack.length-1];
+          if(!loop) throw new Error('break is only valid inside a loop');
+          const jump=instructions.length; emitInstruction(n,{op:'jump',target:-1}); loop.breakJumps.push(jump);
+          break;
+        }
+        case 'continue': {
+          const loop=loopStack[loopStack.length-1];
+          if(!loop) throw new Error('continue is only valid inside a loop');
+          const jump=instructions.length; emitInstruction(n,{op:'jump',target:loop.continueTarget});
+          if(loop.continueTarget<0) loop.continueJumps.push(jump);
           break;
         }
         default: throw new Error(`Unsupported statement node ${n.type}`);
