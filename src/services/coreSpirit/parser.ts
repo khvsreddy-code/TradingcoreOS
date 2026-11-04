@@ -55,10 +55,10 @@ export class CoreSpiritParser {
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
-    else if(this.match('while')) node=this.whileStatement();
-    else if(this.match('for')) node=this.forEachStatement();
-    else if(this.match('break')) { const token=this.previous(); this.match('semicolon'); node={type:'break',span:this.tokenSpan(token)}; }
-    else if(this.match('continue')) { const token=this.previous(); this.match('semicolon'); node={type:'continue',span:this.tokenSpan(token)}; }
+    else if(this.match('coreWhile')) node=this.whileStatement();
+    else if(this.match('coreFor')) node=this.forEachStatement();
+    else if(this.match('coreBreak')) { const token=this.previous(); this.match('semicolon'); node={type:'break',span:this.tokenSpan(token)}; }
+    else if(this.match('coreContinue')) { const token=this.previous(); this.match('semicolon'); node={type:'continue',span:this.tokenSpan(token)}; }
     else if(this.check('identifier') && this.peek(1).type === 'colonEqual') node=this.assignmentStatement();
     else {
       const expression=this.expression();
@@ -199,7 +199,7 @@ export class CoreSpiritParser {
     this.consume('leftParen','Expected ( after for');
     this.match('let');
     const name=this.consume('identifier','Expected loop variable after for');
-    this.consume('in','Expected in after loop variable');
+    this.consume('coreIn','Expected in after loop variable');
     const iterable=this.expression();
     this.consume('rightParen','Expected ) after for iterable');
     const body=this.block();
