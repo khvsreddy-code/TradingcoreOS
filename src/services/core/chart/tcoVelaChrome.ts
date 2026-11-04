@@ -1598,6 +1598,16 @@ const bookmarksPanel: SidePanelDescriptor = {
       suggestionItems = [];
       activeSuggestionIndex = -1;
     };
+    const showSuggestionStatus = (message: string) => {
+      suggestionItems = [];
+      activeSuggestionIndex = -1;
+      suggestionList.textContent = '';
+      const status = document.createElement('div');
+      status.textContent = message;
+      status.style.cssText = 'padding:9px 10px;color:var(--vela-fg-muted);font:10px Inter,ui-sans-serif,system-ui,sans-serif;';
+      suggestionList.appendChild(status);
+      suggestionList.hidden = false;
+    };
     const chooseSuggestion = (entry: { item: WatchlistItem; caption: string; rank: number }) => {
       const item = entry.item;
       const alreadyPresent = watchlist.some(candidate => candidate.symbol === item.symbol);
@@ -1660,6 +1670,12 @@ const bookmarksPanel: SidePanelDescriptor = {
         .slice(0, 5)
         .map(entry => ({ item: entry.item, caption: `INDEX · ${entry.quote.ltp === undefined ? 'quote pending' : entry.quote.ltp.toLocaleString('en-IN',{maximumFractionDigits:2})}`, rank: entry.distance }));
       const shouldSearchOptions = Boolean(requestedStrike || /\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b/i.test(query));
+      // Render index matches immediately; symbol-master lookup can be a cold request
+      // on the first search, so never leave the suggestion surface blank while it warms.
+      if (indexSuggestions.length) renderSuggestions(indexSuggestions);
+      else if (shouldSearchOptions) showSuggestionStatus(hasValidFyersSession(tradingCoreRuntime.getAllConnections())
+        ? 'Searching nearest-expiry contracts…'
+        : 'Connect FYERS to discover CE/PE contracts.');
       let instruments: SearchInstrument[] = [];
       if (shouldSearchOptions && hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
         try {
@@ -1701,12 +1717,18 @@ const bookmarksPanel: SidePanelDescriptor = {
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
-      renderSuggestions([...indexSuggestions, ...optionEntries].sort((a,b) => {
+      const combined = [...indexSuggestions, ...optionEntries].sort((a,b) => {
         const aIsIndex = a.caption.startsWith('INDEX ·');
         const bIsIndex = b.caption.startsWith('INDEX ·');
-        if (/\d/.test(query) && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
+        if (/\d/.test(query) && !underlyingQuery && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
         return a.rank - b.rank;
-      }));
+      });
+      if (combined.length) renderSuggestions(combined);
+      else if (shouldSearchOptions && !hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+        showSuggestionStatus('Connect FYERS to discover option contracts.');
+      } else {
+        showSuggestionStatus('No matching instruments found.');
+      }
     };
     const itemMatchesQuery = (item: WatchlistItem, query: string) =>
       `${item.symbol} ${item.short} ${item.label}`.toUpperCase().includes(query);
