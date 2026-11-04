@@ -80,6 +80,7 @@ export function coreScriptCollectionMember(target: unknown, member: string): unk
   }
   if (target instanceof Map) {
     if (member === 'size' || member === 'length') return target.size;
+    return target.get(member) ?? null;
   }
   if (typeof target === 'string' && member === 'length') return target.length;
   if (isMatrix(target)) {
