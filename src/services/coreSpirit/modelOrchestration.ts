@@ -106,6 +106,8 @@ export interface CoreSpiritStrictModelManifest {
   maxInputBytes: number;
   maxOutputBytes: number;
   maxLatencyMs?: number;
+  /** Expected Python ML target horizon, in candles; must match the trained artifact. */
+  forecastHorizonBars?: number;
   capabilities: readonly ('read-features' | 'read-market-state' | 'write-output' | 'persistent-state')[];
 }
 
@@ -233,7 +235,7 @@ function validateSpecShape(name: string, tensor: CoreSpiritModelTensor, spec: Co
   if ((spec.representation ?? 'tensor') !== 'tensor') throw new Error(`model field '${name}' expects scalar representation`);
   validateTensor(name, tensor);
   if (tensor.dtype !== spec.dtype) throw new Error(`model field '${name}' dtype mismatch`);
-  if (tensor.shape.length !== spec.shape.length || tensor.shape.some((value, index) => value !== spec.shape[index])) {
+  if (tensor.shape.length !== spec.shape.length || tensor.shape.some((value, index) => spec.shape[index] !== -1 && value !== spec.shape[index])) {
     throw new Error(`model field '${name}' shape mismatch`);
   }
 }
@@ -260,6 +262,14 @@ export function validateCoreSpiritStrictModelManifest(manifest: CoreSpiritStrict
   if (!Number.isInteger(manifest.maxSteps) || manifest.maxSteps < 1) throw new Error('maxSteps must be positive');
   if (!Number.isInteger(manifest.maxInputBytes) || manifest.maxInputBytes <= 0) throw new Error('maxInputBytes must be positive');
   if (!Number.isInteger(manifest.maxOutputBytes) || manifest.maxOutputBytes <= 0) throw new Error('maxOutputBytes must be positive');
+  for (const field of [...manifest.inputSchema, ...manifest.outputSchema]) {
+    if (!field.name.trim() || !field.shape.every(dimension => Number.isInteger(dimension) && (dimension >= 0 || dimension === -1))) {
+      throw new Error('external model field schemas must use non-negative dimensions or -1 for a bounded dynamic dimension');
+    }
+  }
+  if (manifest.forecastHorizonBars !== undefined && (!Number.isInteger(manifest.forecastHorizonBars) || manifest.forecastHorizonBars < 1 || manifest.forecastHorizonBars > 100)) {
+    throw new Error('forecastHorizonBars must be an integer from 1 to 100');
+  }
   if (!manifest.capabilities.includes('write-output')) throw new Error('external model must declare write-output capability');
   if (manifest.state === 'stateful' && !manifest.rollbackSafe) throw new Error('stateful external models must declare rollbackSafe=true');
 }
