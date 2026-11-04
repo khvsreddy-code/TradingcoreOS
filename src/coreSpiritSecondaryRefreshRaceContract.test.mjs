@@ -29,11 +29,12 @@ function secondaryBar(close, time) {
 const engine = new CoreSpiritVelaEngine();
 const prepared = await engine.prepare(`
 indicator "Secondary Refresh Race"
-input scale: int = 1 min=1 max=5
-let banknifty = market("BANKNIFTY")
-plot(banknifty.close)
+    input scale: int = 1 min=1 max=5
+    let banknifty = market("BANKNIFTY")
+    plot(banknifty.close)
 `, 'secondary-refresh-race-contract');
 
+assert.ok(prepared.inputs.some(input => input.key === 'scale'), 'the fixture exposes the scale input that drives forced refreshes');
 const bars = makeBars(20);
 const mutableBars = bars.map((bar) => ({ ...bar }));
 const pending = [];
