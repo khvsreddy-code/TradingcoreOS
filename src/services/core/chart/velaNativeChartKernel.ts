@@ -47,11 +47,13 @@ export type {
 export type { InputValue, InputSchema } from '../../../../vendor/vela/src/core/model/inputs';
 export type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 export type { SeriesPoint, SeriesSpec, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
+export type { LineStyle } from '../../../../vendor/vela/src/core/model/series';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export type { SerializedDrawing } from '../../../../vendor/vela/src/core/drawings/Drawing';
 export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
 export type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
 export type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline, DrawingTable, TableCell, TablePosition } from '../../../../vendor/vela/src/core/model/drawings';
+export type { LabelStyle, BoxTextSize } from '../../../../vendor/vela/src/core/model/drawings';
 export type { HighCardinalityRectBatch, HighCardinalityRectDelta, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
 export type { CollectionValueDelta, SchemaPatch, ScenePatch, SeriesValueDelta, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
 export { registerSidePanel, unregisterSidePanel, registerWidgetAction, unregisterWidgetAction } from '../../../../vendor/vela/src/widget/contributions';
