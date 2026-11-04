@@ -1699,7 +1699,9 @@ const bookmarksPanel: SidePanelDescriptor = {
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
       renderSuggestions([...indexSuggestions, ...optionEntries].sort((a,b) => {
-        if (/\\d/.test(query) && a.item.label.includes('INDEX') !== b.item.label.includes('INDEX')) return a.item.label.includes('INDEX') ? -1 : 1;
+        const aIsIndex = a.caption.startsWith('INDEX ·');
+        const bIsIndex = b.caption.startsWith('INDEX ·');
+        if (/\\d/.test(query) && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
         return a.rank - b.rank;
       }));
     };
