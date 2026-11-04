@@ -27,7 +27,7 @@ const walk = (dir) => {
     const p = path.join(dir, ent.name);
     if (ent.name === 'node_modules' || ent.name === 'vendor') continue;
     if (ent.isDirectory()) walk(p);
-    else if (/\.(ts|tsx|mjs|js|json)$/.test(ent.name)) sourceFiles.push(p);
+    else if (/\.(ts|tsx|mjs|js|json)$/.test(ent.name) && !/\.(test|spec)\.(ts|tsx|mjs|js)$/.test(ent.name)) sourceFiles.push(p);
   }
 };
 walk(path.join(root, 'src'));
