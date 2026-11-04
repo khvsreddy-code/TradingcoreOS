@@ -29,6 +29,12 @@ import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepos
 import { CoreSpiritDatasetBatchRepository } from '../storage/CoreSpiritDatasetBatchRepository.js';
 import { getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
+import {
+  CoreSpiritExternalModelRegistry,
+  CoreSpiritModelOrchestrator,
+  type CoreSpiritStrictModelRequest,
+} from '../../services/coreSpirit/modelOrchestration.js';
+import { registerCoreSpiritPythonMlModel } from '../../services/coreSpirit/pythonMlModelAdapter.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
@@ -731,6 +737,157 @@ coreSpiritModelRoutes.get('/training-runs/:runId', async (req: AuthenticatedRequ
     res.json({ success: true, data: run });
   } catch (error) {
     fail(res, 503, error instanceof Error ? error.message : 'Unable to load training run.');
+  }
+});
+
+
+/**
+ * Runs a version-pinned Python model through the strict CoreSpirit external-model
+ * ABI. The model identity is read from the caller-owned completed training run;
+ * callers cannot substitute a different model version or symbol.
+ */
+coreSpiritModelRoutes.post('/training-runs/:runId/infer', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const runId = String(req.params.runId ?? '').trim();
+    if (!runId || runId.length > 128) return fail(res, 400, 'A valid training run ID is required.');
+    const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
+    const run = await repository.getTrainingRun(runId);
+    if (!run) return fail(res, 404, 'Training run not found for this account.');
+    if (run.status !== 'succeeded') return fail(res, 409, 'The model training run has not completed successfully.');
+
+    const metrics = run.metrics && typeof run.metrics === 'object' && !Array.isArray(run.metrics)
+      ? run.metrics as Record<string, unknown>
+      : {};
+    const modelId = String(metrics.external_model_id ?? '');
+    const modelVersion = String(metrics.external_model_version ?? '');
+    const artifactHash = String(metrics.external_artifact_hash ?? '');
+    const horizon = Number(metrics.model_horizon_bars);
+    const symbol = String(metrics.model_symbol ?? '');
+    const timeframe = String(metrics.model_timeframe ?? '');
+    const programChecksum = String(metrics.program_checksum ?? '');
+    if (metrics.external_backend !== 'python' || modelId !== 'xgb-direction' ||
+        !/^[a-f0-9]{64}$/.test(modelVersion) || !/^[a-f0-9]{64}$/.test(artifactHash) ||
+        !Number.isSafeInteger(horizon) || horizon < 1 || horizon > 100 ||
+        !symbol || !timeframe || !/^[a-f0-9]{64}$/.test(programChecksum)) {
+      return fail(res, 409, 'Training run does not contain a complete registered Python model identity.');
+    }
+
+    const rawCandles = req.body?.candles;
+    if (!Array.isArray(rawCandles) || rawCandles.length < 80 || rawCandles.length > 5_000) {
+      return fail(res, 422, 'Model inference requires 80–5000 confirmed candles.');
+    }
+    const candles: Array<{ timestamp: number; open: number; high: number; low: number; close: number; volume: number }> = [];
+    let previousTimestamp = 0;
+    for (let index = 0; index < rawCandles.length; index += 1) {
+      const raw = rawCandles[index];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+          raw.confirmed !== true ||
+          (raw.phase !== undefined && !['historical', 'confirmed'].includes(String(raw.phase).toLowerCase()))) {
+        return fail(res, 422, 'Every model input candle must be explicitly confirmed historical data.');
+      }
+      const timestamp = typeof raw.timestamp === 'number' ? raw.timestamp : Date.parse(String(raw.timestamp ?? ''));
+      const values = ['open', 'high', 'low', 'close', 'volume'].map(key => raw[key]);
+      if (!Number.isSafeInteger(timestamp) || timestamp <= previousTimestamp ||
+          values.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+        return fail(res, 422, 'Model candles must have strictly increasing timestamps and finite OHLCV values.');
+      }
+      const [open, high, low, close, volume] = values as number[];
+      if (open! <= 0 || high! <= 0 || low! <= 0 || close! <= 0 || volume! < 0 ||
+          high! < Math.max(open!, close!, low!) || low! > Math.min(open!, close!, high!)) {
+        return fail(res, 422, 'Model input candle ' + index + ' contains invalid OHLCV values.');
+      }
+      previousTimestamp = timestamp;
+      candles.push({ timestamp, open: open!, high: high!, low: low!, close: close!, volume: volume! });
+    }
+
+    const mode = String(req.body?.mode ?? 'historical');
+    if (!['historical', 'realtime', 'replay', 'backtest'].includes(mode)) {
+      return fail(res, 400, 'Model inference mode must be historical, realtime, replay or backtest.');
+    }
+    const last = candles[candles.length - 1]!;
+    const ohlcvData: number[] = [];
+    const timestamps: number[] = [];
+    for (const candle of candles) {
+      ohlcvData.push(candle.open, candle.high, candle.low, candle.close, candle.volume);
+      timestamps.push(candle.timestamp);
+    }
+
+    const registry = new CoreSpiritExternalModelRegistry();
+    registerCoreSpiritPythonMlModel(registry, {
+      modelId,
+      version: modelVersion,
+      forecastHorizonBars: horizon,
+      maxLatencyMs: 20_000,
+    }, {
+      baseUrl: String(process.env.ML_SERVICE_URL || ''),
+      serviceSecret: String(process.env.ML_SERVICE_SECRET || ''),
+      timeoutMs: 20_000,
+    });
+    const orchestrator = new CoreSpiritModelOrchestrator(registry, {
+      maxCallsPerBar: 1,
+      maxInputBytes: 512 * 1024,
+      maxOutputBytes: 4 * 1024,
+    });
+    const barIndex = Number.isSafeInteger(req.body?.barIndex) && req.body.barIndex >= 0
+      ? Math.min(10_000_000, Number(req.body.barIndex))
+      : candles.length - 1;
+    const revision = Number.isSafeInteger(req.body?.revision) && req.body.revision >= 0
+      ? Math.min(1_000_000, Number(req.body.revision))
+      : 0;
+    const context = {
+      runId,
+      programChecksum,
+      modelVersion,
+      barIndex,
+      timestamp: last.timestamp,
+      symbol,
+      timeframe,
+      mode: mode as CoreSpiritStrictModelRequest['context']['mode'],
+      revision,
+      confirmed: true,
+      deterministicSeed: modelVersion,
+    };
+    const modelRequest: CoreSpiritStrictModelRequest = {
+      requestId: await coreSpiritSha256({ runId, modelVersion, symbol, timeframe, timestamp: last.timestamp, revision }),
+      modelId,
+      version: modelVersion,
+      context,
+      features: {
+        ohlcv: { dtype: 'f64', shape: [candles.length, 5], data: ohlcvData },
+        timestamps_ms: { dtype: 'f64', shape: [candles.length], data: timestamps },
+        confirmed: { dtype: 'bool', shape: [candles.length], data: candles.map(() => 1) },
+      },
+      marketState: {
+        timestamp: last.timestamp,
+        instrument: { instrumentId: symbol, symbol },
+        timeframe,
+        bar: { open: last.open, high: last.high, low: last.low, close: last.close, volume: last.volume },
+      },
+    };
+    const prediction = await orchestrator.infer(modelRequest);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({
+      success: true,
+      data: {
+        modelId: prediction.modelId,
+        modelVersion: prediction.version,
+        artifactHash,
+        prediction: Array.from(prediction.prediction.data),
+        confidence: prediction.confidence ?? null,
+        metadata: prediction.metadata,
+        releaseStatus: metrics.release_status ?? 'candidate',
+        calibrationStatus: metrics.calibration_status ?? 'not_calibrated',
+        productionEligible: false,
+        requestChecksum: prediction.requestChecksum,
+        outputChecksum: prediction.outputChecksum,
+        stateChecksum: prediction.stateChecksum,
+        asOf: new Date(last.timestamp).toISOString(),
+        horizonBars: horizon,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to execute Python model through CoreSpirit ABI.';
+    fail(res, /not found/i.test(message) ? 404 : 503, message.slice(0, 500));
   }
 });
 
