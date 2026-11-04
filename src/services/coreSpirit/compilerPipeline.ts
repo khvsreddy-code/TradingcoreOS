@@ -16,7 +16,7 @@ export type CoreSpiritCompilationUnit = {
   normalizedSource: string;
   ast: CoreSpiritAst;
   semantic: CoreSpiritSemanticResult | null;
-  syntaxDiagnostics: Array<{message:string; line:number; column:number; start:number; end:number}>;
+  syntaxDiagnostics: Array<{message:string; line:number; column:number; start:number; end:number; code?:string}>;
   diagnostics: Array<{
     severity:'error'|'warning';
     message:string;
@@ -37,12 +37,12 @@ export function createCoreSpiritCompilationUnit(
   const normalizedSource = normalizeCoreSpiritSource(original);
   const parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
   const syntaxDiagnostics = [
-    ...edition.diagnostics.map(item => ({ message:item.message, line:item.line, column:item.column, start:item.start, end:item.end })),
+    ...edition.diagnostics.map(item => ({ code:item.code, message:item.message, line:item.line, column:item.column, start:item.start, end:item.end })), 
     ...parsed.diagnostics,
   ];
   const semantic = syntaxDiagnostics.length ? null : analyzeCoreSpirit(parsed.ast, options);
   const diagnostics = [
-    ...syntaxDiagnostics.map(d => ({ severity:'error' as const, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
+    ...syntaxDiagnostics.map(d => ({ severity:'error' as const, code:d.code, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })), 
     ...(semantic?.diagnostics ?? []),
   ];
   return { kind: 'partial-diagnostics', executable: false, source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
