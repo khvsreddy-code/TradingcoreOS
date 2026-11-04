@@ -12,7 +12,7 @@ const CORE_SCRIPT_BUILTIN_MODULES = new Set([
 
 function replaceCoreScriptCodeIdentifiers(source: string, replacements: ReadonlyMap<string,string>): string {
   let output = '';
-  let quote: '"' | "'" | '\`' | null = null;
+  let quote: '"' | "'" | '\x60' | null = null;
   let escaped = false;
   for (let index = 0; index < source.length;) {
     const character = source[index]!;
@@ -24,7 +24,7 @@ function replaceCoreScriptCodeIdentifiers(source: string, replacements: Readonly
       if (character === quote) quote = null;
       continue;
     }
-    if (character === '"' || character === "'" || character === '\`') {
+    if (character === '"' || character === "'" || character === '\x60') {
       quote = character;
       output += character;
       index += 1;
@@ -96,7 +96,7 @@ function normalizeCoreScriptV12Imports(source: string): string {
 
 function rewriteCoreScriptEnumMembers(source: string, replacements: ReadonlyMap<string,string>): string {
   let output = '';
-  let quote: '"' | "'" | '\`' | null = null;
+  let quote: '"' | "'" | '\x60' | null = null;
   let escaped = false;
   for (let index = 0; index < source.length;) {
     const character = source[index]!;
@@ -107,7 +107,7 @@ function rewriteCoreScriptEnumMembers(source: string, replacements: ReadonlyMap<
       if (character === quote) quote = null;
       continue;
     }
-    if (character === '"' || character === "'" || character === '\`') { quote = character; output += character; index += 1; continue; }
+    if (character === '"' || character === "'" || character === '\x60') { quote = character; output += character; index += 1; continue; }
     if (character === '/' && source[index + 1] === '/') {
       const end = source.indexOf('\n', index + 2);
       if (end < 0) { output += source.slice(index); break; }
@@ -174,7 +174,7 @@ function normalizeCoreScriptV12Enums(source: string): string {
 
     const declarations: string[] = [];
     let valid = true;
-    const rawMembers = body.split(',').map(part => part.trim()).filter(Boolean);
+    const rawMembers = body.split(/[\n,]/).map(part => part.trim()).filter(Boolean);
     if (!rawMembers.length) valid = false;
     const seen = new Set<string>();
     for (let memberIndex = 0; memberIndex < rawMembers.length; memberIndex += 1) {
