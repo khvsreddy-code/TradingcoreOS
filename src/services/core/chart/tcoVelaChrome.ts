@@ -26,7 +26,7 @@ import { searchFyersInstruments, type SearchInstrument } from '../../marketData/
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { historyStore } from '../../marketData/HistoryStore';
-import type { TimelineMark } from '../../../../vendor/vela/src/core/marks/types';
+import type { TimelineMark } from './velaNativeChartKernel';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import {
   deleteTcoVelaSavedWorkspace,
