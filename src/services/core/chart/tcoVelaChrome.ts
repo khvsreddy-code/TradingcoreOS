@@ -1670,23 +1670,23 @@ const bookmarksPanel: SidePanelDescriptor = {
         .slice(0, 5)
         .map(entry => ({ item: entry.item, caption: `INDEX · ${entry.quote.ltp === undefined ? 'quote pending' : entry.quote.ltp.toLocaleString('en-IN',{maximumFractionDigits:2})}`, rank: entry.distance }));
       const shouldSearchOptions = Boolean(requestedStrike || /\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b/i.test(query));
-      // Render index matches immediately; symbol-master lookup can be a cold request
-      // on the first search, so never leave the suggestion surface blank while it warms.
+      // Search the full instrument master for every query, not just option contracts.
+      // The dedicated options pass preserves exact-strike/nearest-expiry behavior.
       if (indexSuggestions.length) renderSuggestions(indexSuggestions);
-      else if (shouldSearchOptions) showSuggestionStatus(hasValidFyersSession(tradingCoreRuntime.getAllConnections())
-        ? 'Searching nearest-expiry contracts…'
-        : 'Connect FYERS to discover CE/PE contracts.');
+      else showSuggestionStatus(hasValidFyersSession(tradingCoreRuntime.getAllConnections())
+        ? 'Searching instruments…'
+        : 'Connect FYERS to search the instrument master.');
       let instruments: SearchInstrument[] = [];
-      if (shouldSearchOptions && hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+      if (hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
         try {
-          const queries = requestedStrike && underlyingQuery
-            ? await Promise.all([
-                searchFyersInstruments(query, 'options', 100),
-                searchFyersInstruments(String(requestedStrike), 'options', 100),
-              ])
-            : [await searchFyersInstruments(query, 'options', 100)];
-          instruments = queries.flat();
-        } catch { /* index matches remain useful while broker search recovers */ }
+          const searches: Promise<SearchInstrument[]>[] = [
+            searchFyersInstruments(query, 'all', 100),
+          ];
+          if (shouldSearchOptions) searches.push(searchFyersInstruments(query, 'options', 100));
+          if (requestedStrike && underlyingQuery) searches.push(searchFyersInstruments(String(requestedStrike), 'options', 100));
+          const results = await Promise.all(searches);
+          instruments = results.flat();
+        } catch { /* immediate index matches remain useful while broker search recovers */ }
       }
       if (requestId !== suggestionRequest) return;
       const unique = new Map<string, SearchInstrument>();
@@ -1697,7 +1697,11 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (underlyingQuery && !text.includes(underlyingQuery.replace(/\s+/g, ' ')) && !text.replace(/[^A-Z0-9]/g, '').includes(underlyingQuery.replace(/[^A-Z0-9]/g, ''))) continue;
         unique.set(key, instrument);
       }
+      const isOption = (instrument: SearchInstrument) =>
+        /option/i.test(String(instrument.type || '')) || Boolean(instrument.optionType)
+        || (instrument.strike !== undefined && Boolean(instrument.expiry));
       const optionEntries = [...unique.values()]
+        .filter(isOption)
         .sort((a,b) => {
           const expiryDiff = optionExpiryTime(a.expiry) - optionExpiryTime(b.expiry);
           if (expiryDiff) return expiryDiff;
@@ -1717,12 +1721,20 @@ const bookmarksPanel: SidePanelDescriptor = {
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
-      const combined = [...indexSuggestions, ...optionEntries].sort((a,b) => {
-        const aIsIndex = a.caption.startsWith('INDEX ·');
-        const bIsIndex = b.caption.startsWith('INDEX ·');
-        if (/\d/.test(query) && !underlyingQuery && aIsIndex !== bIsIndex) return aIsIndex ? -1 : 1;
-        return a.rank - b.rank;
-      });
+      const instrumentEntries = [...unique.values()]
+        .filter(instrument => !isOption(instrument))
+        .slice(0, 10)
+        .map(instrument => {
+          const ticker = String(instrument.symbol || instrument.key).split(':').pop() || String(instrument.symbol || instrument.key);
+          const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
+          const item = { symbol, label: String(instrument.label || instrument.description || ticker), short: ticker };
+          return { item, caption: `${instrument.type || 'INSTRUMENT'} · ${instrument.exchange || 'FYERS'}`, rank: 0 };
+        });
+      const combined = requestedStrike && underlyingQuery
+        ? [...optionEntries, ...instrumentEntries]
+        : requestedStrike
+          ? [...indexSuggestions, ...optionEntries, ...instrumentEntries]
+          : [...indexSuggestions, ...optionEntries, ...instrumentEntries];
       if (combined.length) renderSuggestions(combined);
       else if (shouldSearchOptions && !hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
         showSuggestionStatus('Connect FYERS to discover option contracts.');
