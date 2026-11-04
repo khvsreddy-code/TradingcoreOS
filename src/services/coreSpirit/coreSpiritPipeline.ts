@@ -18,7 +18,14 @@ import type { CoreSpiritExecutableArtifact } from './artifact';
 export type { CoreSpiritCompileResult };
 
 export function normalizeCoreSpirit(source: string) { return normalizeCoreSpiritSource(source); }
-export function parseCoreSpirit(source: string) { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse(); }
+export function parseCoreSpirit(source: string) {
+  const edition = readCoreScriptEdition(source);
+  if (edition.diagnostics.length) {
+    const first = edition.diagnostics[0]!;
+    throw new Error(first.message + ' at ' + first.line + ':' + first.column);
+  }
+  return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse();
+}
 export function parseCoreSpiritDetailed(source: string) {
   try {
     const edition = readCoreScriptEdition(source);
