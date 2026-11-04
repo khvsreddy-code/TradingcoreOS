@@ -6,6 +6,9 @@ import { CORE_SCRIPT_LANGUAGE, CORE_SCRIPT_LANGUAGE_VERSION } from './services/c
 import { canUseCapability } from './services/coreSpirit/layeredPlatformContract.ts';
 import { createCoreSpiritSandbox } from './services/coreSpirit/capabilitySandbox.ts';
 import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurface.ts';
+import { parseCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
+import { readCoreScriptEdition } from './services/coreSpirit/languageEdition.ts';
+import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
 
 const beginner = `
 indicator "EMA Cross"
@@ -200,3 +203,46 @@ const invalidExperience = buildCoreSpiritAuthoringExperience('on market.tick: ??
 assert.equal(invalidExperience.sourceAnalysisValid, false);
 assert.ok(invalidExperience.diagnostics.length > 0);
 console.log('CORESCRIPT_PROGRESSIVE_AUTHORING_EXPERIENCE_OK');
+
+
+// CoreScript v1.2 edition and concise-surface compatibility.
+const compactV12 = `edition@1.2
+plot vwap() color=white width=1 style=line`;
+const expandedV12 = `edition@1.2
+plot(vwap(), "white", 1, 0, null);`;
+assert.equal(readCoreScriptEdition(compactV12).edition, '1.2');
+assert.equal(readCoreScriptEdition('plot(vwap());').edition, '1.0');
+assert.equal(normalizeCoreSpiritSource(compactV12), normalizeCoreSpiritSource(expandedV12));
+assert.deepEqual(parseCoreSpirit(compactV12), parseCoreSpirit(expandedV12));
+const compactV12Result = compileCoreSpirit(compactV12, 'corescript-v12-compact');
+const expandedV12Result = compileCoreSpirit(expandedV12, 'corescript-v12-expanded');
+assert.deepEqual(compactV12Result.diagnostics.filter(d => d.severity === 'error'), []);
+assert.deepEqual(expandedV12Result.diagnostics.filter(d => d.severity === 'error'), []);
+assert.ok(compactV12Result.ir && expandedV12Result.ir);
+assert.equal(compactV12Result.ir.languageVersion, 1);
+assert.equal(compactV12Result.ir.languageEdition, '1.2');
+assert.equal(expandedV12Result.ir.languageEdition, '1.2');
+assert.deepEqual(compactV12Result.ir.entry.instructions, expandedV12Result.ir.entry.instructions);
+assert.ok(validateCoreSpiritIr(compactV12Result.ir));
+
+const legacyV10Result = compileCoreSpirit('plot(vwap());', 'corescript-v10-legacy');
+const explicitV10Result = compileCoreSpirit('edition@1.0\\nplot(vwap());', 'corescript-v10-explicit');
+assert.ok(legacyV10Result.ir && explicitV10Result.ir);
+assert.equal(legacyV10Result.ir.languageEdition, '1.0');
+assert.equal(explicitV10Result.ir.languageEdition, '1.0');
+for (const [invalidSource, expectedCode] of [
+  ['edition@1.3\\nplot(vwap());', 'EDITION_UNSUPPORTED'],
+  ['plot(vwap());\\nedition@1.2', 'EDITION_HEADER_POSITION'],
+  ['edition@1.2\\nedition@1.0\\nplot(vwap());', 'EDITION_DUPLICATE'],
+  ['edition@one.two\\nplot(vwap());', 'EDITION_HEADER_SYNTAX'],
+]) {
+  const invalid = compileCoreSpirit(invalidSource, 'corescript-invalid-' + expectedCode);
+  assert.ok(invalid.diagnostics.some(d => d.code === expectedCode));
+  assert.equal(invalid.artifact, undefined);
+}
+const noV12SugarInV10 = compileCoreSpirit(
+  'edition@1.0\\nplot vwap() color=white width=1 style=line',
+  'corescript-v10-no-v12-sugar',
+);
+assert.ok(!noV12SugarInV10.artifact);
+console.log('CORESCRIPT_EDITION_V12_FOUNDATION_OK');
