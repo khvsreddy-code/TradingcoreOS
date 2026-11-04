@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Header
@@ -38,6 +39,7 @@ class PredictionRequest(BaseModel):
     candles: list[Candle] = Field(min_length=80, max_length=MAX_CANDLES)
     models: list[str] = Field(min_length=1, max_length=MAX_MODELS)
     horizon: int = Field(default=1, ge=1, le=100)
+    model_versions: dict[str, str] = Field(default_factory=dict)
 
 class CoreSpiritTrainingRequest(BaseModel):
     symbol: str
@@ -142,7 +144,7 @@ def predict(req: PredictionRequest, x_tradingcore_ml_secret: str | None = Header
     ids = list(dict.fromkeys(model_id.strip() for model_id in req.models if model_id.strip()))[:MAX_MODELS]
     if not ids:
         raise HTTPException(422, 'At least one non-empty model id is required.')
-    if any(model_id not in ids or not __import__('re').fullmatch(r'[a-f0-9]{64}', version) for model_id, version in req.model_versions.items()):
+    if any(model_id not in ids or not re.fullmatch(r'[a-f0-9]{64}', version) for model_id, version in req.model_versions.items()):
         raise HTTPException(422, 'model_versions must contain SHA-256 versions for requested model IDs only.')
     rows = [candle.model_dump(exclude_none=True) for candle in req.candles]
     result = predict_many(MODEL_ROOT, req.symbol.strip(), req.timeframe.strip(), ids, rows, horizon=req.horizon, model_versions=req.model_versions)
