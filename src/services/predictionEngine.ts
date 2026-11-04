@@ -53,6 +53,9 @@ export function savePredictionModelIds(ids:string[]){try{if(typeof window==='und
 
 export interface PredictionFeature { name:string; value:number; weight:number; contribution:number; direction:'bullish'|'bearish'|'neutral'; }
 export interface PredictionResult {
+  /** These local calculators are explicitly heuristic and are never trained artifacts. */
+  trained: false;
+  provenance: 'research-heuristic';
   algorithm:PredictionAlgorithm;
   modelName:string;
   modelType:PredictionModelType; symbol:string; timeframe:string; timestamp:string; direction:'BULLISH'|'BEARISH'|'NEUTRAL';
@@ -94,8 +97,8 @@ export function predict(candles:HistoricalCandle[], symbol:string, timeframe:str
   {name:'Breakout pressure',value:Math.max(breakoutUp,breakoutDown),weight:.24,contribution:(breakoutUp-breakoutDown)*.24,direction:breakoutUp>breakoutDown&&breakoutUp>0?'bullish':breakoutDown>breakoutUp&&breakoutDown>0?'bearish':'neutral'},
  ];
  const explanation=features.filter(f=>f.direction!=='neutral').sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution)).slice(0,3).map(f=>`${f.name}: ${f.direction} (${f.value.toFixed(2)})`);
- const algorithm:PredictionAlgorithm=type==='breakout'?'xgboost':type==='volatility'?'gradient_boosting':type==='trend'?'random_forest':'logistic_regression'; const modelName=type==='breakout'?'XGBoost Breakout':type==='volatility'?'Gradient Boosting Volatility':type==='trend'?'Random Forest Direction':'Logistic Regression';
- return {algorithm,modelName,modelType:type,symbol,timeframe,timestamp:new Date().toISOString(),direction:direction,bullishProbability:bp,neutralProbability:np,bearishProbability:rp,confidence,predictedPrice:last*(1+(bp-rp)*expectedMove/last),lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,regime,features,explanation:explanation.length?explanation:['Mixed signals; model remains neutral.'],score};
+ const algorithm:PredictionAlgorithm='logistic_regression'; const modelName='Local research heuristic';
+ return {trained:false,provenance:'research-heuristic',algorithm,modelName,modelType:type,symbol,timeframe,timestamp:new Date().toISOString(),direction:direction,bullishProbability:bp,neutralProbability:np,bearishProbability:rp,confidence,predictedPrice:last*(1+(bp-rp)*expectedMove/last),lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,regime,features,explanation:explanation.length?explanation:['Mixed signals; model remains neutral.'],score};
 }
 export function predictWithModel(candles:HistoricalCandle[],symbol:string,timeframe:string,modelId:string):PredictionResult|null{
  const base=predict(candles,symbol,timeframe,'direction'); if(!base)return null;
@@ -148,11 +151,11 @@ export function predictWithModel(candles:HistoricalCandle[],symbol:string,timefr
  const expectedMove=base.expectedMove*moveMultiplier;
  const direction=bull>bear+.08?'BULLISH':bear>bull+.08?'BEARISH':'NEUTRAL';
  const confidence=Math.max(.5,Math.min(.99,.5+Math.abs(bull-bear)*.95));
- return {...base,modelName:getPredictionModel(modelId).name,algorithm:getPredictionModel(modelId).algorithm,modelType:modelId==='gb-volatility'||modelId==='volatility-regime'?'volatility':modelId==='xgb-breakout'||modelId==='range-breakout'?'breakout':modelId==='trend-strength'||modelId==='momentum-regime'?'trend':'direction',bullishProbability:bull,neutralProbability:neutral,bearishProbability:bear,confidence,predictedPrice:last+(bull-bear)*expectedMove,lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,direction,score:bull-bear,explanation:[`${getPredictionModel(modelId).name}: ${direction.toLowerCase()} bias at ${(confidence*100).toFixed(1)}% confidence.`,...base.explanation]};
+ return {...base,modelName:`Research heuristic · ${getPredictionModel(modelId).name}`,algorithm:base.algorithm,modelType:modelId==='gb-volatility'||modelId==='volatility-regime'?'volatility':modelId==='xgb-breakout'||modelId==='range-breakout'?'breakout':modelId==='trend-strength'||modelId==='momentum-regime'?'trend':'direction',bullishProbability:bull,neutralProbability:neutral,bearishProbability:bear,confidence,predictedPrice:last+(bull-bear)*expectedMove,lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,direction,score:bull-bear,explanation:[`${getPredictionModel(modelId).name}: ${direction.toLowerCase()} bias at ${(confidence*100).toFixed(1)}% confidence.`,...base.explanation]};
 }
 export function runPredictionSuite(candles:HistoricalCandle[],symbol:string,timeframe:string){return (['direction','trend','breakout','volatility'] as PredictionModelType[]).map(t=>predict(candles,symbol,timeframe,t)).filter(Boolean) as PredictionResult[];}
 export function runAlgorithmEnsemble(candles:HistoricalCandle[],symbol:string,timeframe:string){
  const base=predict(candles,symbol,timeframe,'direction'); if(!base)return [];
  const v=base.features.map(f=>f.contribution); const logisticP=logistic([v[0]||0,v[1]||0,(v[2]||0)*10,v[3]||0,0,(v[4]||0)*10]); const forestP=forest([v[0]||0,v[1]||0,(v[2]||0)*10,v[3]||0,0,(v[4]||0)*10]); const xgbP=boosted([v[0]||0,v[1]||0,(v[2]||0)*10,v[3]||0,0,(v[4]||0)*10]);
- return [{name:'XGBoost',algorithm:'xgboost' as const,probability:xgbP},{name:'Random Forest',algorithm:'random_forest' as const,probability:forestP},{name:'Logistic Regression',algorithm:'logistic_regression' as const,probability:logisticP}];
+ return [{name:'Boosted heuristic score',algorithm:'gradient_boosting' as const,probability:xgbP},{name:'Rule-ensemble heuristic',algorithm:'random_forest' as const,probability:forestP},{name:'Logistic heuristic score',algorithm:'logistic_regression' as const,probability:logisticP}];
 }
