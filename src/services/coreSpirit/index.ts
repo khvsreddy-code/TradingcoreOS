@@ -62,6 +62,7 @@ export * from './visualCoordinates';
 
 export * from './runtimeKernel';
 export * from './modelAbi';
+export * from './modelRuntime';
 export * from './modelSurface';
 
 export * from './executionAuthority';
