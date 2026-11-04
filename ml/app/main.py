@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
 from .runtime import predict_many
+from .corespirit_training import train_core_spirit_xgboost
 
 MODEL_ROOT = os.getenv('MODEL_ROOT', './models')
 SERVICE_VERSION = os.getenv('ML_SERVICE_VERSION', '3.0.0-versioned-contract')
@@ -37,6 +38,16 @@ class PredictionRequest(BaseModel):
     candles: list[Candle] = Field(min_length=80, max_length=MAX_CANDLES)
     models: list[str] = Field(min_length=1, max_length=MAX_MODELS)
     horizon: int = Field(default=1, ge=1, le=100)
+
+class CoreSpiritTrainingRequest(BaseModel):
+    symbol: str
+    timeframe: str
+    model_id: str
+    model_version: str
+    dataset_version: str
+    feature_names: list[str] = Field(min_length=1, max_length=16)
+    candles: list[Candle] = Field(min_length=240, max_length=MAX_CANDLES)
+    horizon: int = Field(ge=1, le=100)
 
 
 def require_ml_service_auth(received_secret: str | None) -> None:
@@ -94,6 +105,34 @@ def models(x_tradingcore_ml_secret: str | None = Header(default=None)):
     return {'models': out}
 
 
+
+@app.post('/corespirit/train')
+def corespirit_train(req: CoreSpiritTrainingRequest, x_tradingcore_ml_secret: str | None = Header(default=None)):
+    require_ml_service_auth(x_tradingcore_ml_secret)
+    if not req.symbol.strip() or not req.timeframe.strip():
+        raise HTTPException(422, 'symbol and timeframe are required')
+    if req.model_id != 'xgb-direction':
+        raise HTTPException(422, 'The CoreSpirit Python trainer currently supports the registered xgb-direction model only.')
+    if tuple(req.feature_names) != ('open', 'high', 'low', 'close', 'volume'):
+        raise HTTPException(422, 'CoreSpirit XGBoost requires the canonical ordered OHLCV input schema.')
+    _validate_candles(req.candles)
+    rows = [candle.model_dump(exclude_none=True) for candle in req.candles]
+    try:
+        return train_core_spirit_xgboost(
+            MODEL_ROOT,
+            symbol=req.symbol,
+            timeframe=req.timeframe,
+            horizon=req.horizon,
+            model_version=req.model_version,
+            dataset_version=req.dataset_version,
+            candles=rows,
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    except Exception as error:
+        raise HTTPException(500, 'CoreSpirit XGBoost training failed: ' + str(error)[:240]) from None
+
+
 @app.post('/predict')
 def predict(req: PredictionRequest, x_tradingcore_ml_secret: str | None = Header(default=None)):
     require_ml_service_auth(x_tradingcore_ml_secret)
@@ -103,8 +142,10 @@ def predict(req: PredictionRequest, x_tradingcore_ml_secret: str | None = Header
     ids = list(dict.fromkeys(model_id.strip() for model_id in req.models if model_id.strip()))[:MAX_MODELS]
     if not ids:
         raise HTTPException(422, 'At least one non-empty model id is required.')
+    if any(model_id not in ids or not __import__('re').fullmatch(r'[a-f0-9]{64}', version) for model_id, version in req.model_versions.items()):
+        raise HTTPException(422, 'model_versions must contain SHA-256 versions for requested model IDs only.')
     rows = [candle.model_dump(exclude_none=True) for candle in req.candles]
-    result = predict_many(MODEL_ROOT, req.symbol.strip(), req.timeframe.strip(), ids, rows, horizon=req.horizon)
+    result = predict_many(MODEL_ROOT, req.symbol.strip(), req.timeframe.strip(), ids, rows, horizon=req.horizon, model_versions=req.model_versions)
     available = {key: value for key, value in result.items() if value.get('trained')}
     unavailable = {key: value for key, value in result.items() if not value.get('trained')}
     if not available:
