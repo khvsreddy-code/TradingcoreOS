@@ -96,6 +96,18 @@ export const CORE_SPIRIT_V1_2_SURFACE = Object.freeze({
   compactPlot: 'plot <expression> [color=<color>] [width=<1..5>] [style=line|dashed|dotted] [title=<text>]' as const,
   lowering: 'compact plot declarations lower to the existing plot call AST and output ABI' as const,
   compatibility: 'unversioned and edition@1.0 sources retain the legacy v1 surface grammar' as const,
+  programming: Object.freeze([
+    'array literals, bounded indexing, and array methods push/pop/shift/unshift/get/set/includes/indexOf/slice',
+    'map literals with string keys, bounded indexing, and map methods get/set/has/delete/keys/values/entries',
+    'while and for-in loops with break/continue, bounded by the VM instruction budget',
+    'value-only enums lowered to immutable-style scalar constants',
+    'built-in module imports from registered CoreScript standard-library namespaces only',
+    'typed pure expression functions lowered through the existing inliner',
+    'matrix and vector methods routed through the existing bounded quant kernels',
+  ] as const),
+  collectionLimits: Object.freeze({ maxElements: 16_384, maxMatrixCells: 65_536 } as const),
+  modulePolicy: 'built-in standard-library namespaces only; no filesystem, network or arbitrary module loading' as const,
+  functionPolicy: 'pure typed expression functions only; recursion and effectful/control-flow function bodies are not yet supported' as const,
 } as const);
 
 export type CoreSpiritV1ScalarType = typeof CORE_SPIRIT_V1_SURFACE.scalarTypes[number];
