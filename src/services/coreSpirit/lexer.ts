@@ -1,6 +1,6 @@
 export type CoreSpiritTokenType =
   | 'identifier' | 'number' | 'string' | 'true' | 'false' | 'null'
-  | 'let' | 'if' | 'else' | 'type' | 'on' | 'and' | 'or'
+  | 'let' | 'if' | 'else' | 'type' | 'on' | 'and' | 'or' | 'while' | 'for' | 'in' | 'break' | 'continue'
   | 'plus' | 'minus' | 'star' | 'slash' | 'percent' | 'bang'
   | 'equal' | 'equalEqual' | 'bangEqual' | 'less' | 'lessEqual' | 'greater' | 'greaterEqual'
   | 'leftParen' | 'rightParen' | 'leftBracket' | 'rightBracket' | 'leftBrace' | 'rightBrace'
@@ -8,7 +8,7 @@ export type CoreSpiritTokenType =
 
 export type CoreSpiritToken = { type: CoreSpiritTokenType; lexeme: string; value?: string | number | boolean | null; offset: number; line: number; column: number };
 
-const keywords: Record<string, CoreSpiritTokenType> = { let: 'let', if: 'if', else: 'else', type: 'type', on: 'on', true: 'true', false: 'false', null: 'null', and: 'and', or: 'or' };
+const keywords: Record<string, CoreSpiritTokenType> = { let: 'let', if: 'if', else: 'else', type: 'type', on: 'on', while:'while', for:'for', in:'in', break:'break', continue:'continue', true: 'true', false: 'false', null: 'null', and: 'and', or: 'or' };
 
 export class CoreSpiritLexer {
   private i = 0; private line = 1; private column = 1;
