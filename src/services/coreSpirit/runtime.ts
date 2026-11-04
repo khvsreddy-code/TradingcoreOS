@@ -1536,8 +1536,9 @@ export class CoreSpiritRuntime {
   private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
     const series = seriesArgs[0] || 'close'; const length = Math.max(1,Math.floor(Number(args[1] ?? 14)));
     const memoKey = `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(',')}`;
-    if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
-    const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
+    const memoizable = !['__array','__map','__collection_index','__collection_member','__collection_method','array','map','len'].includes(name);
+    if (memoizable && this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
+    const finish = (value: unknown) => { if(memoizable) this.indicatorMemo.set(memoKey, value); return value; };
     if(name==='__array') return finish(createCoreScriptArray(args));
     if(name==='__map') return finish(createCoreScriptMap(args));
     if(name==='__collection_index') return finish(coreScriptCollectionIndex(args[0],args[1]));
