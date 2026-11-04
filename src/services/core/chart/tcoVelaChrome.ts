@@ -1103,8 +1103,8 @@ const bookmarksPanel: SidePanelDescriptor = {
     const filterInput = document.createElement('input');
     filterInput.className = 'tco-watch-search';
     filterInput.type = 'search';
-    filterInput.placeholder = 'Search this watchlist…';
-    filterInput.setAttribute('aria-label', 'Filter watchlist by symbol');
+    filterInput.placeholder = 'Search symbols, indices, strikes, options…';
+    filterInput.setAttribute('aria-label', 'Search instruments and filter watchlist');
     root.appendChild(filterInput);
     const suggestionList = document.createElement('div');
     suggestionList.className = 'tco-watch-suggestions';
@@ -1721,8 +1721,9 @@ const bookmarksPanel: SidePanelDescriptor = {
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
+      const indexSuggestionSymbols = new Set(indexSuggestions.map(entry => entry.item.symbol.toUpperCase()));
       const instrumentEntries = [...unique.values()]
-        .filter(instrument => !isOption(instrument))
+        .filter(instrument => !isOption(instrument) && !indexSuggestionSymbols.has(String(instrument.symbol || instrument.key).toUpperCase()))
         .slice(0, 10)
         .map(instrument => {
           const ticker = String(instrument.symbol || instrument.key).split(':').pop() || String(instrument.symbol || instrument.key);
