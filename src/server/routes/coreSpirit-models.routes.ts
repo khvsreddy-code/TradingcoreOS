@@ -243,7 +243,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     }
     const canonical = ['open', 'high', 'low', 'close', 'volume'];
     const declaredTarget = String(declaration.target ?? '').trim();
-    const targetMatch = declaredTarget.match(/^forward_return\\(\\s*close\\s*,\\s*(\\d+)\\s*\\)$/i);
+    const targetMatch = declaredTarget.match(/^forward_return\(\s*close\s*,\s*(\d+)\s*\)$/i);
     if (!targetMatch || Number(targetMatch[1]) < 1 || Number(targetMatch[1]) > 100) {
       return fail(res, 422, 'XGBoost target must be forward_return(close, H), with H from 1 to 100 bars.');
     }
@@ -632,7 +632,7 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
       if (graph.binding?.kind !== 'python' || graph.binding.locator !== 'xgb-direction') {
         return fail(res, 422, 'XGBoost requires the registered Python binding "xgb-direction".');
       }
-      const targetMatch = String(graph.target ?? '').trim().match(/^forward_return\\(\\s*close\\s*,\\s*(\\d+)\\s*\\)$/i);
+      const targetMatch = String(graph.target ?? '').trim().match(/^forward_return\(\s*close\s*,\s*(\d+)\s*\)$/i);
       if (!targetMatch) return fail(res, 422, 'XGBoost target must be forward_return(close, H) with H from 1 to 100.');
       forecastHorizon = Number(targetMatch[1]);
       if (!Number.isSafeInteger(forecastHorizon) || forecastHorizon < 1 || forecastHorizon > 100) {
