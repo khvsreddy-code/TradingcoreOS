@@ -265,8 +265,8 @@ console.log('CORESCRIPT_EDITION_V12_FOUNDATION_OK');
 
 // CoreScript v1.2 first-class programming constructs: compile AND execute.
 function executeV12(source, sourceId) {
-  const compiled = compileCoreSpirit('edition@1.2\\n' + source, sourceId);
-  assert.deepEqual(compiled.diagnostics.filter(d => d.severity === 'error'), [], compiled.diagnostics.map(d => d.message).join('\\n'));
+  const compiled = compileCoreSpirit('edition@1.2\n' + source, sourceId);
+  assert.deepEqual(compiled.diagnostics.filter(d => d.severity === 'error'), [], compiled.diagnostics.map(d => d.message).join('\n'));
   assert.ok(compiled.ir, 'expected executable IR for ' + sourceId);
   const runtime = new CoreSpiritRuntime({ symbol:'NSE:NIFTY50-INDEX', timeframe:'5m', sourceId });
   const execution = runtime.executeIr(compiled.ir, [{
