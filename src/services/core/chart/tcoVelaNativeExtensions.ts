@@ -6,7 +6,7 @@ import {
   registerRendererLayer,
   type RendererLayerDefinition,
   type RendererLayerArgs,
-} from './velaChartFacade';
+} from './velaNativeChartKernel';
 import type { InputSchema, InputValue } from './velaNativeChartKernel';
 
 type RegimeLayerData = {
