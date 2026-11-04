@@ -29,6 +29,7 @@ import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritRequiredLevel } from './coreSpiritExecutionModel';
 import { validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 import { buildCoreSpiritArtifactSemanticFingerprint } from './artifactLookupIdentity';
+import { readCoreScriptEdition, type CoreScriptEdition } from './languageEdition.js';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
@@ -54,6 +55,7 @@ export type CoreSpiritCompilerOptions = {
   artifactContext?: { source:string; normalizedSource:string; semanticFingerprint?:string };
   /** Original authoring source used for declarative research/model metadata. */
   researchSource?: string;
+  languageEdition?: CoreScriptEdition;
 };
 
 export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
@@ -98,6 +100,21 @@ export class CoreSpiritCompiler {
   ): CoreSpiritCompileResult {
     const original = String(source ?? '');
     traceSmcCompilerStage(sourceId, 'compileSource:start');
+    const edition = readCoreScriptEdition(original);
+    if (edition.diagnostics.length) {
+      return {
+        diagnostics: edition.diagnostics.map(item => ({
+          severity: 'error' as const,
+          code: item.code,
+          message: item.message,
+          line: item.line,
+          column: item.column,
+          start: item.start,
+          end: item.end,
+        })),
+        symbols: [],
+      };
+    }
     const normalizedSource = normalizeCoreSpiritSource(original);
     traceSmcCompilerStage(sourceId, 'compileSource:normalized');
     let parsed: ReturnType<CoreSpiritParser['parseDetailed']>;
@@ -122,6 +139,7 @@ export class CoreSpiritCompiler {
     const result = this.compile(parsed.ast, sourceId, {
       ...options,
       surface,
+      languageEdition: edition.edition,
       researchSource: original,
       artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options, original) },
     });
@@ -576,7 +594,7 @@ export class CoreSpiritCompiler {
         requiredCapabilities,
         capabilityRequirements,
       });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, languageEdition:options.languageEdition ?? '1.0', repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}], symbols };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext),symbols};
     } catch(error) {
