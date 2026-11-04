@@ -33,7 +33,15 @@ assert.ok(chrome.includes('liveWorkspace.setTheme(chartTheme)'), 'user colors ap
 assert.match(chrome, /appliedTcoVelaThemeSignatures/, 'theme deduplication must not retain destroyed workspace instances');
 assert.match(chrome, /forceChartTheme = false/, 'full palette selections can reapply chart theme while UI-only changes avoid unnecessary redraws');
 assert.match(chrome, /pendingTcoChartThemeTimer/, 'custom color drag must debounce chart-wide repaints');
-assert.match(chrome, /Search this watchlist/, 'watchlist contains its own ticker filter');
+assert.match(chrome, /filterInput\\.type = 'search'/, 'watchlist search is a real search input');
+assert.match(chrome, /filterInput\\.setAttribute\\('aria-label', 'Search instruments and filter watchlist'\\)/, 'watchlist search has a stable accessible name independent of placeholder copy');
+assert.match(chrome, /filterInput\\.addEventListener\\('input'/, 'typing filters watchlist rows and starts instrument search');
+assert.match(chrome, /suggestionList\\.setAttribute\\('role', 'listbox'\\)/, 'instrument suggestions expose a listbox role');
+assert.match(chrome, /filterInput\\.addEventListener\\('keydown'/, 'watchlist suggestions support keyboard navigation and selection');
+assert.match(chrome, /requestedStrike = strikeMatch \\? Number\\(strikeMatch\\[1\\]\\) : undefined/, 'numeric searches extract the requested strike');
+assert.match(chrome, /const indexMatches = INDEX_SEARCH_UNIVERSE/, 'numeric and text queries can surface index candidates');
+assert.match(chrome, /searchFyersInstruments\\(query, 'all', 100\\)/, 'suggestions search the complete FYERS instrument master');
+assert.match(chrome, /chooseSuggestion\\(suggestionItems\\[activeSuggestionIndex\\]!\\)/, 'keyboard Enter selects the active instrument suggestion');
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
 assert.match(chrome, /Sort watchlist/);
