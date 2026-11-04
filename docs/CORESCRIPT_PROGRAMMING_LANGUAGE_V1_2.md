@@ -45,7 +45,7 @@ plot(second + count)
 
 Supported array methods: `push`, `pop`, `shift`, `unshift`, `get`, `set`, `includes`, `indexOf`, and `slice`. Arrays expose `length`, `first`, and `last`.
 
-Array operations reject out-of-range indexes and collections larger than 16,384 elements.
+Array operations reject out-of-range indexes and collections larger than 16,384 elements. Collection locals are per-bar evaluation values; they are not persistent state objects and cannot currently be declared as `state<array<...>>` or `state<map<...>>`.
 
 ## Maps
 
