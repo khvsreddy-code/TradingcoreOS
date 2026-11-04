@@ -21,7 +21,7 @@ assert.ok(dashboard.includes('Market sentiment'), 'homepage must present measure
 assert.ok(dashboard.includes('Market news'), 'homepage must show sourced market headlines');
 assert.ok(dashboard.includes('listPublicIndicatorPublications'), 'homepage must surface the public CoreSpirit script library');
 assert.ok(dashboard.includes("scriptKind: 'strategy'"), 'homepage should feature both indicators and strategies');
-assert.ok(dashboard.includes('tradingCoreRuntime.subscribeMarketData'), 'dashboard must receive market quotes even before the live chart is opened');
+assert.ok(dashboard.includes('void loadTradingCoreRuntime()') && dashboard.includes('runtime.subscribeMarketData(') && dashboard.includes("runtime.on('TICK_UPDATE', refreshMarket)"), 'dashboard must subscribe to the shared runtime quote feed and refresh without opening the live chart');
 assert.ok(dashboard.includes("fetch('/api/news?symbol=financial%20markets'"), 'dashboard must fetch headlines through the server-side feed proxy');
 
 assert.ok(news.includes('https://feeds.finance.yahoo.com/rss/2.0/headline'), 'Yahoo Finance RSS should be the primary news source');
