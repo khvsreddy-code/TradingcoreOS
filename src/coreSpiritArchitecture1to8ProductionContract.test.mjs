@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { classifyCoreSpiritValueKind } from './services/coreSpirit/coreSpiritExecutionModel.ts';
-import { detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
+import { analyzeCoreSpiritAuthoringSource, detectCoreSpiritAuthoringLevel } from './services/coreSpirit/coreSpiritAuthoring.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritColumnarHistory } from './services/coreSpirit/columnarMarketData.ts';
 import { createTcoVelaTerminalOptions, TCO_VELA_TERMINAL_TOPOLOGY } from './services/core/chart/tcoVelaTerminal.ts';
@@ -71,7 +71,7 @@ for (const [type, expected] of [
 
 assert.equal(detectCoreSpiritAuthoringLevel('order("long", 1)'), 'trader');
 assert.equal(detectCoreSpiritAuthoringLevel('model alpha: XGBoost<float> {\n    inputs: close\n    target: forward_return(close, 3)\n}'), 'quant');
-assert.equal(detectCoreSpiritAuthoringLevel(`requires market.tick, automation\non market.tick:\n    signal "TICK"\nautomate "notify":\n    automation.notify("tick")`), 'system');
+assert.equal(analyzeCoreSpiritAuthoringSource(`requires market.tick, automation\non market.tick:\n    signal "TICK"\nautomate "notify":\n    automation.notify("tick")`, 'automation').level, 'system');
 
 const beginner = compileCoreSpirit(`
 indicator "EMA Cross"
