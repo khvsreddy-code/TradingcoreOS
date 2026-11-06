@@ -17,7 +17,7 @@ export class CoreSpiritIsolatedPolyglotServiceHost implements CoreSpiritPolyglot
     if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new Error('Polyglot service must use HTTPS outside localhost.');
     if(url.username||url.password||url.search||url.hash)throw new Error('Polyglot service URL cannot contain credentials, query or fragment.');
     if(!config.serviceSecret||config.serviceSecret.length<16)throw new Error('Polyglot service secret is missing or too short.');
-    this.baseUrl=url;this.secret=config.serviceSecret;this.fetcher=config.fetchImpl??fetch;this.transport=transportFor(language);
+    url.pathname=url.pathname.replace(/\\/+$/,'')+'/';\n    this.baseUrl=url;this.secret=config.serviceSecret;this.fetcher=config.fetchImpl??fetch;this.transport=transportFor(language);
     this.timeoutMs=config.timeoutMs??8000;if(!Number.isSafeInteger(this.timeoutMs)||this.timeoutMs<100||this.timeoutMs>30_000)throw new Error('Polyglot timeout must be between 100 and 30000 ms.');
     this.maxArtifactBytes=config.maxArtifactBytes??256*1024*1024;
     if(!Number.isSafeInteger(this.maxArtifactBytes)||this.maxArtifactBytes<1||this.maxArtifactBytes>512*1024*1024)throw new Error('Polyglot artifact limit must be between 1 byte and 512 MiB.');
