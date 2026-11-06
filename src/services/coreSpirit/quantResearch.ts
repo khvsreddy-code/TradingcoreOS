@@ -28,7 +28,7 @@ export type CoreSpiritResearchFoldResult = Readonly<{
   fold:CoreSpiritWalkForwardFold; model:CoreSpiritRegressionModel;
   validation:CoreSpiritResearchMetrics; test:CoreSpiritResearchMetrics;
 }>;
-const MAX_ROWS=2_000_000, MAX_FEATURES=64, MAX_FOLDS=256;
+const MAX_ROWS=2_000_000, MAX_FEATURES=64, MAX_TRAINING_ROWS=100_000, MAX_TRAINING_FEATURES=32, MAX_FOLDS=256;
 function assertDataset(d:CoreSpiritResearchDataset):void {
   const n=d.timestampsMs.length, names=Object.keys(d.features);
   if(!d.datasetId||!d.symbol||!d.timeframe||n<3||n>MAX_ROWS) throw new Error('Research dataset identity or row count is invalid.');
@@ -84,11 +84,11 @@ function hashNumbers(values:readonly number[]):string{
   for(const value of values){const s=String(value);for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);}
   return (h>>>0).toString(16).padStart(8,'0').repeat(8);
 }
-export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3):CoreSpiritRegressionModel{
+export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3,checkBudget?:()=>void):CoreSpiritRegressionModel{
   assertDataset(dataset);
   const names=Object.keys(dataset.features);
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end>dataset.target.length||end-start<names.length+2) throw new Error('Training window is too small or invalid.');
-  if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
+  if(end-start>MAX_TRAINING_ROWS||names.length>MAX_TRAINING_FEATURES) throw new Error('Synchronous ridge training is capped at 100,000 rows and 32 features; dispatch larger jobs to the research worker service.');\n  if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
   const means=names.map(name=>{let s=0;for(let i=start;i<end;i++)s+=dataset.features[name]![i]!;return s/(end-start);});
   const scales=names.map((name,j)=>{let s=0;for(let i=start;i<end;i++){const d=dataset.features[name]![i]!-means[j]!;s+=d*d;}return Math.sqrt(s/(end-start))||1;});
   const p=names.length+1, xtx=Array.from({length:p},()=>new Array<number>(p).fill(0)),xty=new Array<number>(p).fill(0);
@@ -123,10 +123,10 @@ export function evaluateCoreSpiritResearch(dataset:CoreSpiritResearchDataset,sta
   return Object.freeze({observations:n,mse,rmse:Math.sqrt(mse),mae:absolute/n,directionalAccuracy:n>1?directional/(n-1):0,
     meanActual,meanPrediction,rSquared:variance>0?1-squared/variance:null});
 }
-export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDataset,config:CoreSpiritWalkForwardConfig,ridge=1e-3):CoreSpiritResearchFoldResult[]{
+export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDataset,config:CoreSpiritWalkForwardConfig,ridge=1e-3,checkBudget?:()=>void):CoreSpiritResearchFoldResult[]{
   const folds=planCoreSpiritWalkForward(dataset,config);
   return folds.map(fold=>{
-    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge);
+    checkBudget?.();\n    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
     const predict=(index:number)=>predictCoreSpiritRidge(model,dataset,index);
     return Object.freeze({fold,model,
       validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict),
