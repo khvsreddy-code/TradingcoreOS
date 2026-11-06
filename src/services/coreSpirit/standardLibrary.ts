@@ -168,7 +168,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'toDuration', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
   { name:'toCurrency', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
   // request(symbol, timeframe, field, offset?, alignment?) — alignment is confirmed|historical|developing|realtime.
-  { name:'request', minArgs:3, maxArgs:5, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'request', minArgs:3, maxArgs:5, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },\n  { name:'request.security', minArgs:3, maxArgs:5, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },\n  { name:'request.security_lower_tf', minArgs:3, maxArgs:3, returnType:'array<float>', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'requestBatch', minArgs:3, maxArgs:15, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'bid', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
   { name:'ask', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
