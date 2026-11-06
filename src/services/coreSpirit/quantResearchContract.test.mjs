@@ -12,7 +12,8 @@ assert.ok(results.every(r=>/^[a-f0-9]{64}$/.test(r.model.checksum)),'model ident
 let budgetChecks=0;runCoreSpiritWalkForwardResearch(data,{trainBars:60,validationBars:20,testBars:20,stepBars:20},1e-3,()=>{budgetChecks++;});
 assert.ok(budgetChecks>0,'long research loops must periodically yield to cancellation/budget checks');
 assert.equal(coreSpiritResearchDeploymentGate(results,3).eligible,true);
-assert.throws(()=>predictCoreSpiritRidge(results[0]!.model,data,results[0]!.fold.trainEnd-1),/strictly after/);
+const firstResult=results[0];assert.ok(firstResult,'walk-forward research must produce a fold result');
+assert.throws(()=>predictCoreSpiritRidge(firstResult.model,data,firstResult.fold.trainEnd-1),/strictly after/);
 
 let published=null;const store={async publish(artifact){published=artifact;}};
 await assert.rejects(()=>promoteCoreSpiritResearchModel(data,results,{minimumFolds:3,maximumMeanTestRmse:1,minimumMeanDirectionalAccuracy:0,maximumMeanTestMae:1},store,timestampsMs[n-1]),/strictly after/);
