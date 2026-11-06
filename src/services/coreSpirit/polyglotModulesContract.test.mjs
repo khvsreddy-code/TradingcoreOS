@@ -23,7 +23,7 @@ const scalarRequest={...request,moduleId:'scalar-output',inputs:{values:{dtype:'
 const scalarOutputs={score:{dtype:'f64',shape:[],data:[0.5]}};
 const scalarRegistry=new CoreSpiritPolyglotRegistry();scalarRegistry.register(scalarManifest,new CoreSpiritPythonModuleAdapter(async()=>({outputs:scalarOutputs,checksum:coreSpiritPolyglotResponseChecksum(scalarManifest,scalarRequest,scalarOutputs)})));
 assert.deepEqual((await scalarRegistry.execute(scalarRequest)).outputs,scalarOutputs);
-await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'i64',shape:[2],data:[1.2,2]}}}),/dtype\\/shape/);
+await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'i64',shape:[2],data:[1.2,2]}}}),/dtype\/shape/);
 const intManifest={...manifest(),moduleId:'int64-input',inputs:{values:{dtype:'i64',shape:[2]}}};
 const intRegistry=new CoreSpiritPolyglotRegistry();intRegistry.register(intManifest,new CoreSpiritPythonModuleAdapter(async()=>output));
 await assert.rejects(()=>intRegistry.execute({...request,moduleId:'int64-input',inputs:{values:{dtype:'i64',shape:[2],data:[1.5,2]}}}),/safe integers/);
