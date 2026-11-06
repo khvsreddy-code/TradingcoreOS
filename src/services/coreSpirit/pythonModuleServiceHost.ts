@@ -17,7 +17,7 @@ export class CoreSpiritPythonModuleServiceHost implements CoreSpiritPolyglotHost
   readonly language='python' as const;readonly transport='host' as const;
   private readonly fetcher:typeof fetch;private readonly timeoutMs:number;private readonly baseUrl:URL;private readonly secret:string;
   constructor(config:CoreSpiritPythonModuleServiceConfig){
-    const url=new URL(config.baseUrl);
+    if (typeof window !== 'undefined') throw new Error('Python module service credentials are server-only; do not instantiate this host in a browser.');\n    const url=new URL(config.baseUrl);
     if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new Error('Python module service must use HTTPS outside localhost.');
     if(!config.serviceSecret||config.serviceSecret.length<16)throw new Error('Python module service secret is missing or too short.');
     if(url.username||url.password||url.search||url.hash)throw new Error('Python module service URL cannot contain credentials, query or fragment.');
