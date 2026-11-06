@@ -82,8 +82,7 @@ function solve(a:number[][],b:number[]):number[]{
   return m.map(row=>row[n]!);
 }
 function hashNumbers(values:readonly number[]):string{return sha256HexSync(values.map(value=>String(value)).join('|'));}
-export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3,checkBudget?:()=>void):CoreSpiritRegressionModel{
-  assertDataset(dataset,checkBudget);
+function trainCoreSpiritRidgeValidated(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3,checkBudget?:()=>void):CoreSpiritRegressionModel{
   const names=Object.keys(dataset.features);
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end>dataset.target.length||end-start<names.length+2) throw new Error('Training window is too small or invalid.');
   if(end-start>MAX_TRAINING_ROWS||names.length>MAX_TRAINING_FEATURES) throw new Error('Synchronous ridge training is capped at 100,000 rows and 32 features; dispatch larger jobs to the research worker service.');
@@ -101,6 +100,11 @@ export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:num
   const identity=[...means,...scales,...coefficients,intercept,ridge,dataset.timestampsMs[end-1]!];
   return Object.freeze({kind:'ridge-regression',featureNames:Object.freeze(names),means:Object.freeze(means),scales:Object.freeze(scales),
     coefficients:Object.freeze(coefficients),intercept,ridge,trainedThroughTimestampMs:dataset.timestampsMs[end-1]!,checksum:hashNumbers(identity)});
+}
+/** Validates the dataset once, then trains the bounded synchronous reference model. */
+export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3,checkBudget?:()=>void):CoreSpiritRegressionModel{
+  assertDataset(dataset,checkBudget);
+  return trainCoreSpiritRidgeValidated(dataset,start,end,ridge,checkBudget);
 }
 export function predictCoreSpiritRidge(model:CoreSpiritRegressionModel,dataset:CoreSpiritResearchDataset,index:number):number{
   if(index<0||index>=dataset.target.length||dataset.timestampsMs[index]!<=model.trainedThroughTimestampMs) throw new Error('Prediction must be strictly after the model training boundary.');
@@ -128,7 +132,7 @@ export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDatas
   const folds=planCoreSpiritWalkForward(dataset,config,checkBudget);
   return folds.map(fold=>{
     checkBudget?.();
-    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
+    const model=trainCoreSpiritRidgeValidated(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
     const predict=(index:number)=>predictCoreSpiritRidge(model,dataset,index);
     return Object.freeze({fold,model,
       validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict,checkBudget),
