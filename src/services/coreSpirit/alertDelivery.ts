@@ -40,3 +40,22 @@ export class CoreSpiritAlertRuntime{
     return Object.freeze({delivered,retried,failed});
   }
 }
+
+export type CoreSpiritRuntimeAlertEvent=Readonly<{scriptId:string;time:number;payload:Readonly<Record<string,unknown>>;sequence?:number}>;
+export type CoreSpiritAlertHostContext=Readonly<{scriptRevision:string;symbol:string;timeframe:string;executionMode:'historical'|'realtime'|'replay'|'backtest'|'historicalTick';createdAt:number}>;
+/** Convert the VM's buffered script.alert event into a durable outbox envelope. */
+export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEvent,context:CoreSpiritAlertHostContext):CoreSpiritAlertEvent{
+  const payload=event.payload??{},execution=(payload.execution&&typeof payload.execution==='object'?payload.execution:{}) as Record<string,unknown>;
+  const barIndex=Number(payload.barIndex);
+  if(!Number.isSafeInteger(barIndex)||barIndex<0)throw new Error('Runtime alert is missing its canonical bar index.');
+  const rawFrequency=String(payload.frequency??'once-per-bar').toLowerCase();
+  const frequency:CoreSpiritAlertFrequency=rawFrequency.includes('all')?'all'
+    :rawFrequency.includes('bar_close')||rawFrequency.includes('bar-close')?'once-per-bar-close'
+    :rawFrequency.includes('once')?'once-per-bar':'once-per-bar';
+  const args=Array.isArray(payload.args)?payload.args:[];
+  const message=String(payload.message??payload.title??args[0]??'');
+  const id=[event.scriptId,context.scriptRevision,context.symbol,context.timeframe,barIndex,event.sequence??message].join(':');
+  return Object.freeze({id,scriptId:event.scriptId,scriptRevision:context.scriptRevision,symbol:context.symbol,timeframe:context.timeframe,
+    barIndex,barTimestamp:event.time,confirmed:execution.isConfirmed===true||execution.barPhase==='confirmed'||execution.barPhase==='historical',
+    replay:context.executionMode!=='realtime',message,frequency,createdAt:context.createdAt});
+}
