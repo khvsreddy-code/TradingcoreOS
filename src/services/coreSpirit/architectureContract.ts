@@ -50,7 +50,7 @@ export const CORE_SPIRIT_ARCHITECTURE_NODES: readonly CoreSpiritArchitectureNode
   // Vela alone owns chart scene lifecycle, coordinate transforms and pixels.
   { id: 'chart-rendering', owner: 'vela', responsibilities: ['chart scene lifecycle', 'pane/scale/coordinate transforms', 'canvas/webgl painting', 'hit testing and render scheduling'] },
   // External languages compute bounded values in isolated hosts; they do not own semantics or execution.
-  { id: 'external-compute', owner: 'isolated-host', responsibilities: ['execute declared numerical exports', 'isolated runtime/process boundary', 'bounded typed tensor inputs and outputs', 'no language/IR/VM/chart/broker authority'] },
+  { id: 'external-compute', owner: 'isolated-host', responsibilities: ['compute declared numerical exports only', 'isolated runtime/process boundary', 'bounded typed tensor inputs and outputs', 'return values only; no language/IR/VM state/chart/broker authority'] },
   { id: 'model', owner: 'corespirit', responsibilities: ['typed model ABI', 'feature inputs', 'output contracts'] },
   { id: 'ir', owner: 'corespirit', responsibilities: ['stable executable representation', 'source maps', 'artifact identity'] },
   { id: 'vm', owner: 'corespirit', responsibilities: ['canonical IR instruction execution', 'deterministic state', 'series evaluation', 'instruction quotas'] },
@@ -67,8 +67,10 @@ export const CORE_SPIRIT_ARCHITECTURE_NODES: readonly CoreSpiritArchitectureNode
 ];
 
 export const CORE_SPIRIT_FORBIDDEN_DEPENDENCIES: readonly [CoreSpiritArchitecturePlane, CoreSpiritArchitecturePlane][] = [
-  // CoreScript semantics cannot call foreign runtimes directly; the VM host ABI is the only seam.
+  // CoreScript owns semantics and lowering. It emits IR; it never drives a VM, host process or renderer.
   ['language', 'external-compute'],
+  ['language', 'vm'],
+  ['language', 'chart-rendering'],
   // A foreign runtime may return typed values only. It cannot compile, execute, draw or trade.
   ['external-compute', 'language'],
   ['external-compute', 'ir'],
@@ -76,10 +78,23 @@ export const CORE_SPIRIT_FORBIDDEN_DEPENDENCIES: readonly [CoreSpiritArchitectur
   ['external-compute', 'visual'],
   ['external-compute', 'vela-output-adapter'],
   ['external-compute', 'chart-rendering'],
+  ['external-compute', 'data-host'],
+  ['external-compute', 'canonical-model'],
+  ['external-compute', 'model'],
+  ['external-compute', 'signal'],
+  ['external-compute', 'automation'],
+  ['external-compute', 'risk'],
+  ['external-compute', 'order-intent'],
+  ['external-compute', 'execution-authority'],
+  ['external-compute', 'execution'],
+  ['external-compute', 'research'],
   ['external-compute', 'broker'],
   // CoreSpirit's semantic visual model cannot paint chart pixels or schedule Vela frames.
   ['visual', 'chart-rendering'],
   ['vm', 'chart-rendering'],
+  // The VM may request bounded compute through the typed host ABI, never authorize or submit trades.
+  ['vm', 'execution-authority'],
+  ['vm', 'execution'],
   // The output adapter is a one-way conversion boundary, not a compiler or execution host.
   ['vela-output-adapter', 'language'],
   ['vela-output-adapter', 'ir'],
@@ -90,6 +105,7 @@ export const CORE_SPIRIT_FORBIDDEN_DEPENDENCIES: readonly [CoreSpiritArchitectur
   ['chart-rendering', 'ir'],
   ['chart-rendering', 'vm'],
   ['chart-rendering', 'external-compute'],
+  ['chart-rendering', 'visual'],
   ['chart-rendering', 'broker'],
   // No CoreSpirit semantic/execution plane can reach a broker directly.
   ['language', 'broker'],
@@ -142,8 +158,8 @@ export const CORE_SPIRIT_PLATFORM_PHILOSOPHY = Object.freeze({
   canonicalModel: 'CoreSpiritTradingSnapshot',
   compatibilityRule: 'legacy-chart-outputs-adapt-into-scene-graph',
   languageRule: 'CoreScript owns parsing, name resolution, typing, capability semantics and lowering',
-  executionRule: 'the validated canonical CoreSpirit IR is the only executable representation; the CoreSpirit VM owns instruction ordering, control flow and state',
-  polyglotRule: 'Python/Rust/C++/Julia/R/ONNX/WASM are isolated compute hosts behind a typed, bounded request/response ABI; they return values and never own language semantics, IR, VM state or side effects',
+  executionRule: 'the validated canonical CoreSpirit IR is the only executable representation; CoreSpirit VM implementations own instruction ordering, control flow and state; compatibility AST entrypoints must lower to IR before execution',
+  polyglotRule: 'Python/Rust/C++/Julia/R/ONNX/WASM are isolated compute hosts behind a typed, bounded request/response ABI; they receive declared tensors and return validated values only, never source semantics, IR, VM state, data access, chart output, broker access or side effects',
   visualRule: 'CoreSpirit owns renderer-neutral visual meaning and stable output identity; it does not paint chart pixels or schedule chart frames',
   velaRule: 'Vela owns chart scene lifecycle, panes, scales, coordinate transforms, hit testing, render scheduling and pixel painting; the Vela output adapter is the only CoreSpirit-to-Vela visual boundary and Vela never authorizes broker execution',
   brokerRule: 'CoreSpirit emits broker-neutral order intents; TradingCoreOS execution authority alone may reach broker adapters',

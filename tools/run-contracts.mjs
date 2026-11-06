@@ -197,6 +197,7 @@ const contracts = [
   ['market-data-graph', ['src/services/core/data/marketDataGraphContract.test.ts', true]],
   ['frontend-performance', ['src/frontendPerformanceContract.test.mjs', false]],
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],
+  ['corespirit-non-negotiable-ownership', ['src/coreSpiritNonNegotiableArchitectureContract.test.mjs', true]],
   ['vela-tco-semantic-boundary', ['src/velaTcoSemanticBoundaryContract.test.mjs', false]],
   ['tco-p0-roadmap', ['src/tcoP0RoadmapContract.test.mjs', false]],
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
