@@ -7,7 +7,7 @@ function validateDependencyLock(lock:CoreSpiritPythonDependencyLock):void{
   const names=new Set<string>();
   for(const item of lock.packages){
     if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(item.name)||names.has(item.name))throw new Error('Python dependency names must be unique and normalized.');
-    if(!/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(item.version))throw new Error('Python dependencies must use exact pinned versions.');
+    if(!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(item.version))throw new Error('Python dependencies must use exact pinned versions.');
     if(!/^[a-f0-9]{64}$/.test(item.artifactHash))throw new Error('Python dependency artifacts require SHA-256 hashes.');
     names.add(item.name);
   }
