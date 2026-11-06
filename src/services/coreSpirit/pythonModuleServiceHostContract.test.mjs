@@ -9,7 +9,7 @@ const manifest={abiVersion:1,moduleId:'python-features',version:hash,language:'p
  dependencies:[{name:'numpy',version:'2.1.0',artifactHash:'a'.repeat(64)}],
  inputs:{x:{dtype:'f64',shape:[1]}},outputs:{y:{dtype:'f64',shape:[1]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:10000,maxLatencyMs:1000};
 const calls=[];
-const host=new CoreSpiritPythonModuleServiceHost({baseUrl:'https://python.example/api',serviceSecret:'s'.repeat(32),fetchImpl:async(url,init)=>{calls.push({url:String(url),init});return new Response('',{status:204});}});
+const host=new CoreSpiritPythonModuleServiceHost({baseUrl:'https://python.example/api',serviceSecret:'s'.repeat(32),fetchImpl:async(url,init)=>{calls.push({url:String(url),init});return new Response(null,{status:204});}});
 await host.loadModule(manifest,bytes,{schemaVersion:1,packages:manifest.dependencies});
 assert.match(calls[0].url,/python-features/);
 assert.equal(calls[0].init.method,'PUT');
@@ -17,7 +17,7 @@ assert.equal(calls[0].init.headers['x-dependency-lock']!==undefined,true);
 await assert.rejects(()=>host.loadModule({...manifest,version:'f'.repeat(64)},bytes,{schemaVersion:1,packages:manifest.dependencies}),/artifact hash/);
 assert.throws(()=>new CoreSpiritPythonModuleServiceHost({baseUrl:'http://python.example',serviceSecret:'s'.repeat(32)}),/HTTPS/);
 let signalSeen;
-const cancellable=new CoreSpiritPythonModuleServiceHost({baseUrl:'https://python.example',serviceSecret:'s'.repeat(32),fetchImpl:(_url,init)=>new Promise((_resolve,reject)=>{signalSeen=init.signal;init.signal.addEventListener('abort',()=>reject(new Error('aborted')));})});
+const cancellable=new CoreSpiritPythonModuleServiceHost({baseUrl:'https://python.example',serviceSecret:'s'.repeat(32),fetchImpl:(_url,init)=>new Promise((_resolve,reject)=>{signalSeen=init.signal;if(init.signal.aborted)reject(new Error('aborted'));else init.signal.addEventListener('abort',()=>reject(new Error('aborted')));})});
 const controller=new AbortController();
 const pending=cancellable.invoke(manifest,{requestId:'r',moduleId:manifest.moduleId,version:manifest.version,exportName:'predict',context:{runId:'run',symbol:'NIFTY',timeframe:'5m',barIndex:1,timestamp:1,confirmed:true,deterministicSeed:'seed'},inputs:{x:{dtype:'f64',shape:[1],data:[1]}}},controller.signal);
 controller.abort();
