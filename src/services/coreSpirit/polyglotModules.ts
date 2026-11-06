@@ -51,16 +51,30 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   for(const [name,spec] of Object.entries(manifest.outputs)) validateTensorSpec(name,spec.shape);
 }
 function validateTensorSpec(name:string,shape:readonly number[]):void {
-  if(!name||!shape.length||shape.some(size=>!Number.isSafeInteger(size)||size<0)) throw new Error("Polyglot tensor '"+name+"' has an invalid shape.");
+  if(!name||shape.length>8||shape.some(size=>!Number.isSafeInteger(size)||size<0)) throw new Error("Polyglot tensor '"+name+"' has an invalid shape.");
+  const elements=shape.reduce((count,size)=>count*size,1);
+  if(!Number.isSafeInteger(elements)||elements>1_000_000) throw new Error("Polyglot tensor '"+name+"' exceeds the one-million-element ABI limit.");
 }
 function tensorBytes(tensor:CoreSpiritPolyglotTensor):number{return tensor.data.length*(tensor.dtype==='bool'?1:8);}
 function validateTensor(name:string,tensor:CoreSpiritPolyglotTensor|undefined,spec:{dtype:CoreSpiritPolyglotTensor['dtype'];shape:readonly number[]}):void {
   if(!tensor||tensor.dtype!==spec.dtype||tensor.shape.length!==spec.shape.length||tensor.shape.some((size,index)=>size!==spec.shape[index])) throw new Error("Polyglot tensor '"+name+"' does not match declared dtype/shape.");
+  if(!Array.isArray(tensor.data)) throw new Error("Polyglot tensor '"+name+"' data must be a numeric array.");
   const count=tensor.shape.reduce((product,size)=>product*size,1);
   if(count!==tensor.data.length||tensor.data.some(value=>!Number.isFinite(value))) throw new Error("Polyglot tensor '"+name+"' has invalid data or shape length.");
+  if(tensor.dtype==='i64'&&tensor.data.some(value=>!Number.isSafeInteger(value))) throw new Error("Polyglot int64 tensor '"+name+"' must contain safe integers.");
   if(tensor.dtype==='bool'&&tensor.data.some(value=>value!==0&&value!==1)) throw new Error("Polyglot boolean tensor '"+name+"' must contain only 0 or 1.");
 }
 function payloadBytes(values:Readonly<Record<string,CoreSpiritPolyglotTensor>>):number{return Object.values(values).reduce((total,tensor)=>total+tensorBytes(tensor),0);}
+function canonical(value:unknown):string {
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+  const object=value as Record<string,unknown>;
+  return '{'+Object.keys(object).sort().map(key=>JSON.stringify(key)+':'+canonical(object[key])).join(',')+'}';
+}
+/** SHA-256 binds a response to the exact module artifact, request and output tensors. */
+export function coreSpiritPolyglotResponseChecksum(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,outputs:Readonly<Record<string,CoreSpiritPolyglotTensor>>):string {
+  return sha256HexSync(canonical({moduleId:manifest.moduleId,version:manifest.version,requestId:request.requestId,exportName:request.exportName,outputs}));
+}
 export class CoreSpiritPolyglotRegistry {
   private readonly entries=new Map<string,{manifest:CoreSpiritPolyglotModuleManifest;host:CoreSpiritPolyglotHost}>();
   register(manifest:CoreSpiritPolyglotModuleManifest,host:CoreSpiritPolyglotHost):void {
@@ -81,15 +95,28 @@ export class CoreSpiritPolyglotRegistry {
     for(const [name,spec] of Object.entries(manifest.inputs)) validateTensor(name,request.inputs[name],spec);
     if(Object.keys(request.inputs).some(name=>!(name in manifest.inputs))) throw new Error('Polyglot request contains undeclared inputs.');
     if(payloadBytes(request.inputs)>manifest.maxInputBytes) throw new Error('Polyglot input byte quota exceeded.');
-    const started=Date.now();
     if(options.signal?.aborted) throw new Error('Polyglot execution was cancelled.');
-    const response=await host.invoke(manifest,request,options.signal);
-    if(Date.now()-started>manifest.maxLatencyMs) throw new Error('Polyglot execution exceeded its latency budget.');
-    for(const [name,spec] of Object.entries(manifest.outputs)) validateTensor(name,response.outputs[name],spec);
-    if(Object.keys(response.outputs).some(name=>!(name in manifest.outputs))) throw new Error('Polyglot response contains undeclared outputs.');
-    if(payloadBytes(response.outputs)>manifest.maxOutputBytes) throw new Error('Polyglot output byte quota exceeded.');
-    if(!/^[a-f0-9]{64}$/.test(response.checksum)) throw new Error('Polyglot response checksum must be a SHA-256 identity.');
-    return response;
+    const controller=new AbortController();
+    const abort=()=>controller.abort(options.signal?.reason??new Error('Polyglot execution was cancelled.'));
+    options.signal?.addEventListener('abort',abort,{once:true});
+    const timer=setTimeout(()=>controller.abort(new Error('Polyglot execution exceeded its latency budget.')),manifest.maxLatencyMs);
+    let timeoutHandle:ReturnType<typeof setTimeout>|undefined;
+    try {
+      const timeout=new Promise<never>((_,reject)=>{timeoutHandle=setTimeout(()=>reject(new Error('Polyglot execution exceeded its latency budget.')),manifest.maxLatencyMs);});
+      const cancelled=options.signal?new Promise<never>((_,reject)=>options.signal!.addEventListener('abort',()=>reject(new Error('Polyglot execution was cancelled.')),{once:true})):new Promise<never>(()=>{});
+      const response=await Promise.race([host.invoke(manifest,request,controller.signal),timeout,cancelled]);
+      if(controller.signal.aborted) throw new Error('Polyglot execution was cancelled or exceeded its latency budget.');
+      for(const [name,spec] of Object.entries(manifest.outputs)) validateTensor(name,response.outputs[name],spec);
+      if(Object.keys(response.outputs).some(name=>!(name in manifest.outputs))) throw new Error('Polyglot response contains undeclared outputs.');
+      if(payloadBytes(response.outputs)>manifest.maxOutputBytes) throw new Error('Polyglot output byte quota exceeded.');
+      const expected=coreSpiritPolyglotResponseChecksum(manifest,request,response.outputs);
+      if(response.checksum!==expected) throw new Error('Polyglot response checksum does not match its module/request/output payload.');
+      return response;
+    } finally {
+      clearTimeout(timer);
+      if(timeoutHandle!==undefined)clearTimeout(timeoutHandle);
+      options.signal?.removeEventListener('abort',abort);
+    }
   }
 }
 abstract class CoreSpiritPolyglotAdapter implements CoreSpiritPolyglotHost {
