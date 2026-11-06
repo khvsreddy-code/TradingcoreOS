@@ -29,7 +29,8 @@ export class CoreSpiritResearchServiceHost{
     for(const name of d.featureNames)if(!name.trim())throw new Error('Research feature names cannot be empty.');
     const w=input.walkForward;
     for(const key of ['trainBars','validationBars','testBars','stepBars'] as const)if(!Number.isSafeInteger(w[key])||w[key]<=0)throw new Error('Walk-forward '+key+' must be a positive integer.');
-    if(!Number.isSafeInteger(w.purgeBars??0)||(w.purgeBars??0)<0||!Number.isSafeInteger(w.embargoBars??0)||(w.embargoBars??0)<0||!Number.isSafeInteger(w.maxFolds??256)||(w.maxFolds??256)<1||(w.maxFolds??256)>256)throw new Error('Research purge, embargo or fold cap is invalid.');\n    if(w.trainBars+w.validationBars+w.testBars+(w.purgeBars??0)*2+(w.embargoBars??0)*2>d.rows)throw new Error('Research dataset is too short for the requested fold window.');
+    if(!Number.isSafeInteger(w.purgeBars??0)||(w.purgeBars??0)<0||!Number.isSafeInteger(w.embargoBars??0)||(w.embargoBars??0)<0||!Number.isSafeInteger(w.maxFolds??256)||(w.maxFolds??256)<1||(w.maxFolds??256)>256)throw new Error('Research purge, embargo or fold cap is invalid.');
+    if(w.trainBars+w.validationBars+w.testBars+(w.purgeBars??0)*2+(w.embargoBars??0)*2>d.rows)throw new Error('Research dataset is too short for the requested fold window.');
   }
   async submit(input:CoreSpiritResearchJobRequest,signal?:AbortSignal):Promise<CoreSpiritResearchJob>{
     this.validateRequest(input);
