@@ -88,7 +88,8 @@ export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:num
   assertDataset(dataset);
   const names=Object.keys(dataset.features);
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end>dataset.target.length||end-start<names.length+2) throw new Error('Training window is too small or invalid.');
-  if(end-start>MAX_TRAINING_ROWS||names.length>MAX_TRAINING_FEATURES) throw new Error('Synchronous ridge training is capped at 100,000 rows and 32 features; dispatch larger jobs to the research worker service.');\n  if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
+  if(end-start>MAX_TRAINING_ROWS||names.length>MAX_TRAINING_FEATURES) throw new Error('Synchronous ridge training is capped at 100,000 rows and 32 features; dispatch larger jobs to the research worker service.');
+  if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
   const means=names.map(name=>{let s=0;for(let i=start;i<end;i++)s+=dataset.features[name]![i]!;return s/(end-start);});
   const scales=names.map((name,j)=>{let s=0;for(let i=start;i<end;i++){const d=dataset.features[name]![i]!-means[j]!;s+=d*d;}return Math.sqrt(s/(end-start))||1;});
   const p=names.length+1, xtx=Array.from({length:p},()=>new Array<number>(p).fill(0)),xty=new Array<number>(p).fill(0);
@@ -126,7 +127,8 @@ export function evaluateCoreSpiritResearch(dataset:CoreSpiritResearchDataset,sta
 export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDataset,config:CoreSpiritWalkForwardConfig,ridge=1e-3,checkBudget?:()=>void):CoreSpiritResearchFoldResult[]{
   const folds=planCoreSpiritWalkForward(dataset,config);
   return folds.map(fold=>{
-    checkBudget?.();\n    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
+    checkBudget?.();
+    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
     const predict=(index:number)=>predictCoreSpiritRidge(model,dataset,index);
     return Object.freeze({fold,model,
       validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict),
