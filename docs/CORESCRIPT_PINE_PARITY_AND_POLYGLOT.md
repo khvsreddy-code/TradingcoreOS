@@ -22,8 +22,8 @@ Remaining parity work: full Pine plot style matrix, plot references as fill inpu
 
 ### Strategies and backtesting
 - The existing simulator remains the execution engine. It has a simulation-only authority boundary, deterministic ledger, order types, lot/risk controls, fees/slippage and intrabar ambiguity policy.
-- `backtestMetrics.ts` adds return, drawdown, Sharpe/Sortino, win rate, profit factor, trade expectancy, fee and exposure summaries, plus exact-timestamp benchmark comparison.
-- `quantResearch.ts` adds chronological walk-forward planning with purge/embargo, deterministic bounded ridge regression, validation/test metrics and an evidence gate.
+- `backtestMetrics.ts` adds return, drawdown, Sharpe/Sortino, win rate, profit factor, trade expectancy, fee and exposure summaries, plus exact-timestamp benchmark comparison and a direct adapter for the canonical strategy simulator result.
+- `quantResearch.ts` adds chronological walk-forward planning with purge/embargo, deterministic bounded ridge regression, validation/test metrics, lineage validation and gated artifact promotion. Research-approved artifacts remain production-ineligible until separate risk approval.\n- `quantResearchServiceHost.ts` adds an asynchronous job control plane for large columnar datasets referenced by opaque storage keys, with checksum/schema validation, progress lookup and cancellation.
 
 Remaining parity work: complete Pine strategy configuration and command semantics (pyramiding, OCA, partial fills, currency/margin, bar magnifier and order sequencing), full trade list/equity reconciliation and independent fill-model differential tests. Research eligibility is not broker or production risk approval.
 
@@ -43,7 +43,7 @@ The outbox store is an explicit host persistence contract. A production deployme
 The Python service endpoint must be provisioned as an isolated host service. The repository adapter does not claim that a Python interpreter or package sandbox has been deployed by a Vercel browser bundle.
 
 ### Rust, C++, Julia, R, ONNX and WASM
-The ABI reserves explicit transport identities for native RPC, ONNX Runtime and WASM. Existing callback adapters are host boundaries, not bundled language engines. Each runtime still needs a separately deployed sandbox/worker, content-addressed loader, pinned dependency/runtime image, cancellation/resource enforcement and differential ABI tests before it is marked production-ready.
+`polyglotServiceHost.ts` provides content-addressed remote host adapters for Rust, C++, Julia, R, ONNX Runtime and WASM, with explicit transport identity, HTTPS, cancellation, artifact hashing and bounded responses. These are executable client adapters, not bundled language engines: each corresponding service/worker still needs to be deployed with its own sandbox, runtime image, fuel/memory enforcement and differential ABI tests before it is marked production-ready.
 
 ## Quantitative research and performance
 
