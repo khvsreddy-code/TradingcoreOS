@@ -54,7 +54,7 @@ export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEven
     :rawFrequency==='once-per-bar-close'?'once-per-bar-close'
     :rawFrequency==='once-per-bar'?'once-per-bar'
     :(()=>{throw new Error("Unsupported alert frequency '"+rawFrequency+"'.");})();
-  if(!Number.isFinite(event.time)||!context.scriptId&&!event.scriptId)throw new Error('Runtime alert identity and timestamp are required.');
+  if(!event.scriptId||!context.scriptRevision||!context.symbol||!context.timeframe||!Number.isFinite(event.time)||!Number.isFinite(context.createdAt))throw new Error('Runtime alert identity and timestamp are required.');
   if(frequency==='all'&&(!Number.isSafeInteger(event.sequence)||Number(event.sequence)<0))throw new Error('alert.freq_all requires a unique host-stamped event sequence.');
   const args=Array.isArray(payload.args)?payload.args:[];
   const message=String(payload.message??payload.title??args[0]??'');
