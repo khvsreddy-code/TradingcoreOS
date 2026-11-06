@@ -43,7 +43,7 @@ export type CoreSpiritSemanticDependencyGraph = {
 };
 
 const SERIES_NAMES = new Set(['open','high','low','close','volume','time']);
-const SHOW_CALLS = new Set(['show','plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','text','polygon','customVisual']);
+const SHOW_CALLS = new Set(['show','plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','plotshape','plotchar','text','polygon','customVisual']);
 const EVENT_CALLS = new Set(['emit','signal','alert','alertcondition','webhook']);
 const ORDER_CALLS = new Set(['order','entry','exit','buy','sell']);
 const NAMESPACE_NAMES = new Set(['ui','visual','app','scan','chart']);
