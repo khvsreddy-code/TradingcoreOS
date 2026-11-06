@@ -426,6 +426,7 @@ export class CoreSpiritRuntime {
     // retaining it makes corrected history diverge from a fresh chronological run.
     this.stateStore.clear();
     this.stateStore.bind(this.crossState);
+    this.uniqueRequestContexts.clear();
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.hmmModels.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.commitRealtimeTransaction();
     this.committedSeriesState=this.seriesRegistry.snapshotNumericObject();
