@@ -248,7 +248,9 @@ export class CoreSpiritRuntime {
   private plotOrdinal = 0;
   private indicatorMemo = new Map<string, unknown>();
   private outputCount = 0;
-  private dataMemo = new Map<string, unknown>();\n  private readonly uniqueRequestContexts = new Set<string>();\n  private readonly maxUniqueRequestContexts = 40;
+  private dataMemo = new Map<string, unknown>();
+  private readonly uniqueRequestContexts = new Set<string>();
+  private readonly maxUniqueRequestContexts = 40;
   private readonly uiRuntime = new CoreSpiritUiRuntime();
   private readonly appRuntime = new CoreSpiritVisualAppRuntime();
   private declarativeVisualState: CoreSpiritDeclarativeVisualState = { version:1, revision:0, specs:[] };
@@ -1907,7 +1909,8 @@ export class CoreSpiritRuntime {
       const offset=Math.max(0,Math.floor(Number(args[3] ?? 0)));
       const phase=String(args[4] ?? 'confirmed').toLowerCase();
       if(!['confirmed','historical','developing','realtime'].includes(phase)) return finish(null);
-      const alignment:CoreSpiritDataAlignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';\n      if(!this.admitUniqueRequestContext(symbol,timeframe,field,alignment)) return finish(null);
+      const alignment:CoreSpiritDataAlignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';
+      if(!this.admitUniqueRequestContext(symbol,timeframe,field,alignment)) return finish(null);
       // Completed historical higher-TF candles cannot stand in for a developing snapshot.
       if(alignment==='developing' && this.executionContext.mode!=='realtime') return finish(null);
       const requestAt=this.dataResolver?.requestAt;
@@ -1938,7 +1941,8 @@ export class CoreSpiritRuntime {
       const symbol=String(args[0]??this.executionContext.symbol);
       const timeframe=String(args[1]??'');
       const field=String(args[2]??'close') as CoreSpiritDataRequest['field'];
-      if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));\n      if(!this.admitUniqueRequestContext(symbol,timeframe,field,'last-confirmed')) return finish(null);
+      if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));
+      if(!this.admitUniqueRequestContext(symbol,timeframe,field,'last-confirmed')) return finish(null);
       const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}`;
       if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
       const resolver=this.dataResolver?.lowerTimeframe;
