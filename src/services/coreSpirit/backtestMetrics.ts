@@ -38,3 +38,9 @@ export function compareCoreSpiritBenchmark(strategy:readonly CoreSpiritBacktestE
   const sr=s1/s0-1,br=b1/b0-1;
   return Object.freeze({observations:aligned.length,strategyReturn:sr,benchmarkReturn:br,excessReturn:sr-br});
 }
+
+import type {StrategySimulationResult} from '../core/replay/strategySimulator';
+/** Direct adapter for the canonical simulation ledger; no duplicate backtest engine is created. */
+export function calculateCoreSpiritSimulationMetrics(result:Pick<StrategySimulationResult,'equityCurve'|'closedTrades'|'summary'>,periodsPerYear=252):CoreSpiritBacktestMetrics{
+  return calculateCoreSpiritBacktestMetrics(result.equityCurve,result.closedTrades,result.summary.initialCash,periodsPerYear);
+}
