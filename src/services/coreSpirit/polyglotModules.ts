@@ -43,7 +43,7 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   const dependencyNames=new Set<string>();
   for(const dependency of manifest.dependencies??[]){
     if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(dependency.name)||dependencyNames.has(dependency.name)) throw new Error('Polyglot dependencies must have unique normalized names.');
-    if(!/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
+    if(!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
     if(!/^[a-f0-9]{64}$/.test(dependency.artifactHash)) throw new Error('Polyglot dependency artifacts require SHA-256 identities.');
     dependencyNames.add(dependency.name);
   }
