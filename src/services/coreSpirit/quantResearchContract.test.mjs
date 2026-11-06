@@ -8,6 +8,9 @@ const folds=planCoreSpiritWalkForward(data,{trainBars:60,validationBars:20,testB
 assert.ok(folds.length>=3);assert.ok(folds.every(f=>f.trainEnd<=f.validationStart&&f.validationEnd<=f.testStart));
 const results=runCoreSpiritWalkForwardResearch(data,{trainBars:60,validationBars:20,testBars:20,stepBars:20,purgeBars:2,embargoBars:1});
 assert.ok(results.every(r=>r.model.trainedThroughTimestampMs<r.fold.inferenceStartTimestampMs));
+assert.ok(results.every(r=>/^[a-f0-9]{64}$/.test(r.model.checksum)),'model identity uses SHA-256, not a repeated short hash');
+let budgetChecks=0;runCoreSpiritWalkForwardResearch(data,{trainBars:60,validationBars:20,testBars:20,stepBars:20},1e-3,()=>{budgetChecks++;});
+assert.ok(budgetChecks>0,'long research loops must periodically yield to cancellation/budget checks');
 assert.equal(coreSpiritResearchDeploymentGate(results,3).eligible,true);
 assert.throws(()=>predictCoreSpiritRidge(results[0]!.model,data,results[0]!.fold.trainEnd-1),/strictly after/);
 
