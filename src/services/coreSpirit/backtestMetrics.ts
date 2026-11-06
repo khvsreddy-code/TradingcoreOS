@@ -12,7 +12,7 @@ export function calculateCoreSpiritBacktestMetrics(equity:readonly CoreSpiritBac
   if(initialCapital<=0||periodsPerYear<=0||equity.length<2)throw new Error('Backtest metrics require positive capital, periodsPerYear and at least two equity observations.');
   for(let i=0;i<equity.length;i++){const p=equity[i]!;finite(p.timestampMs,'equity timestamp');finite(p.equity,'equity');finite(p.cash,'cash');finite(p.grossExposure,'gross exposure');if(p.grossExposure<0||(i>0&&p.timestampMs<=equity[i-1]!.timestampMs))throw new Error('Equity observations must be chronological with non-negative exposure.');}
   const returns:number[]=[];let peak=equity[0]!.equity,maxDrawdown=0,maxDrawdownPct=0,exposure=0,maxExposure=0;
-  for(let i=0;i<equity.length;i++){const p=equity[i]!;peak=Math.max(peak,p.equity);const dd=peak-p.equity;maxDrawdown=Math.max(maxDrawdown,dd);maxDrawdownPct=Math.max(maxDrawdown,0);if(peak>0)maxDrawdownPct=Math.max(maxDrawdownPct,dd/peak);exposure+=p.grossExposure;maxExposure=Math.max(maxExposure,p.grossExposure);if(i>0){const previous=equity[i-1]!.equity;if(previous>0)returns.push(p.equity/previous-1);}}
+  for(let i=0;i<equity.length;i++){const p=equity[i]!;peak=Math.max(peak,p.equity);const dd=peak-p.equity;maxDrawdown=Math.max(maxDrawdown,dd);if(peak>0)maxDrawdownPct=Math.max(maxDrawdownPct,dd/peak);exposure+=p.grossExposure;maxExposure=Math.max(maxExposure,p.grossExposure);if(i>0){const previous=equity[i-1]!.equity;if(previous>0)returns.push(p.equity/previous-1);}}
   const mean=returns.length?returns.reduce((a,b)=>a+b,0)/returns.length:0;
   const variance=returns.length>1?returns.reduce((s,r)=>s+(r-mean)**2,0)/(returns.length-1):0;
   const downside=returns.length?returns.filter(r=>r<0):[];
