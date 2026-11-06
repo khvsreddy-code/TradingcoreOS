@@ -34,7 +34,8 @@ export class CoreSpiritIsolatedPolyglotServiceHost implements CoreSpiritPolyglot
     validateCoreSpiritPolyglotManifest(manifest);
     if(manifest.language!==this.language||manifest.transport!==this.transport)throw new Error('Polyglot artifact manifest does not match this host.');
     if(!artifact.length||artifact.byteLength>this.maxArtifactBytes)throw new Error('Polyglot artifact exceeds the configured host limit.');
-    const digest=await crypto.subtle.digest('SHA-256',artifact);
+    const artifactBuffer=artifact.buffer.slice(artifact.byteOffset,artifact.byteOffset+artifact.byteLength) as ArrayBuffer;
+    const digest=await crypto.subtle.digest('SHA-256',artifactBuffer);
     const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     if(hash!==manifest.version)throw new Error('Polyglot artifact bytes do not match the declared SHA-256 identity.');
     const response=await this.request('v1/modules/'+encodeURIComponent(manifest.moduleId)+'/'+encodeURIComponent(manifest.version),{
