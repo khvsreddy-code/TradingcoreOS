@@ -2151,7 +2151,7 @@ export class CoreSpiritRuntime {
           if(targetBar){
             const targetTime=this.toEpoch(targetBar.timestamp);
             const location=String(args[3]??'abovebar').toLowerCase().replace(/^location\\./,'');
-            const price=location==='absolute'&&kind==='plotshape'?Number(args[0])
+            const price=location==='absolute'?Number(args[0])
               :location==='belowbar'||location==='bottom'?Number(targetBar.low)
               :location==='abovebar'||location==='top'?Number(targetBar.high):Number(targetBar.close);
             const rawSize=String(args[9]??'normal').toLowerCase().replace(/^size\\./,'');
