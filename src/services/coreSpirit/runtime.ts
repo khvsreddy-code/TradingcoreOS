@@ -2107,6 +2107,39 @@ export class CoreSpiritRuntime {
         const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
         if([a.time,a.price,b.time,b.price].every(Number.isFinite)) outputs.push({kind:'arrow',id:`${this.options.sourceId}:arrow:${outputId||'arrow'}:${a.time}`,start:a,end:b,style:{color:color(args[4],'#f59e0b'),lineWidth:Number.isFinite(Number(args[5]))?Math.max(1,Math.min(8,num(args[5]))):2}});
       }
+      else if(kind==='plotshape'||kind==='plotchar'){
+        const condition=this.truthy(args[0]);
+        const showLast=Number(args[10]);
+        if(condition&&(!Number.isFinite(showLast)||showLast<=0||barIndex>=this.history.length-showLast)){
+          const offset=Number.isFinite(Number(args[5]))?Math.trunc(Number(args[5])):0;
+          const targetIndex=barIndex+offset;
+          const targetBar=this.history[targetIndex];
+          if(targetBar){
+            const targetTime=this.toEpoch(targetBar.timestamp);
+            const location=String(args[3]??'abovebar').toLowerCase().replace(/^location\\./,'');
+            const price=location==='absolute'&&kind==='plotshape'?Number(args[0])
+              :location==='belowbar'||location==='bottom'?Number(targetBar.low)
+              :location==='abovebar'||location==='top'?Number(targetBar.high):Number(targetBar.close);
+            const rawSize=String(args[9]??'normal').toLowerCase().replace(/^size\\./,'');
+            const size=rawSize==='tiny'?5:rawSize==='small'?7:rawSize==='large'?13:rawSize==='huge'?17:10;
+            if(Number.isFinite(price)){
+              if(kind==='plotshape'){
+                const rawShape=String(args[2]??'circle').toLowerCase().replace(/^shape\\./,'');
+                const shapes:Record<string,string>={triangleup:'triangleUp',triangledown:'triangleDown',arrowup:'arrowUp',arrowdown:'arrowDown',circle:'circle',square:'square',diamond:'diamond',cross:'cross',star:'star'};
+                const shape=(shapes[rawShape]??'circle') as any;
+                outputs.push({kind:'shape',id:`${this.options.sourceId}:plotshape:${outputId||'plotshape'}:${targetIndex}`,
+                  time:targetTime,price,shape,style:{color:color(args[4],'#f59e0b'),fillColor:color(args[4],'#f59e0b'),size,
+                    text:typeof args[6]==='string'?args[6]:undefined,textColor:typeof args[7]==='string'?args[7]:undefined}});
+              }else{
+                const char=String(args[2]??'•');
+                outputs.push({kind:'label',id:`${this.options.sourceId}:plotchar:${outputId||'plotchar'}:${targetIndex}`,
+                  time:targetTime,price,text:char,position:'price',style:{background:'transparent',
+                    color:color(args[4],'#f59e0b'),fontSize:size,textAlign:'center',shape:'box'}});
+              }
+            }
+          }
+        }
+      }
       else if(kind==='shape'||kind==='heatmap'){
         const price=num(args[0]),shape=kind==='heatmap'?'square':String(args[1]||'circle') as any;
         if(finite(price)){ const intensity=kind==='heatmap'?Math.max(0,Math.min(1,Math.abs(num(args[1])))):1; outputs.push({kind:'shape',id:`${this.options.sourceId}:shape:${outputId||'shape'}:${barIndex}`,time,price,shape,style:{color:color(kind==='heatmap'?args[2]:args[2],'#f59e0b'),fillColor:color(args[2],'#f59e0b'),opacity:kind==='heatmap'?Math.max(.08,intensity):1,size:Number.isFinite(Number(kind==='heatmap'?args[3]:args[3]))?Math.max(4,Math.min(40,num(args[3])||10)):10,text:typeof args[4]==='string'?args[4]:undefined}}); }
@@ -2188,7 +2221,8 @@ export class CoreSpiritRuntime {
         outputs.push(intent);
         if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
-      else if(kind==='alert' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex,execution:this.currentOutputSemantics}});
+      else if(kind==='alert' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,message:typeof args[0]==='string'?args[0]:undefined,frequency:args[1]??'once-per-bar',barIndex,execution:this.currentOutputSemantics}});
+      else if(kind==='alertcondition' && this.truthy(args[0]) && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{condition:true,title:typeof args[1]==='string'?args[1]:undefined,message:typeof args[2]==='string'?args[2]:undefined,frequency:'once-per-bar-close',barIndex,execution:this.currentOutputSemantics}});
       else if(kind==='webhook' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex,execution:this.currentOutputSemantics}});
     } catch(error) { if (error instanceof CoreSpiritResourceLimitError) throw error; diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }
