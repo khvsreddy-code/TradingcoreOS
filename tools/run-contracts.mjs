@@ -131,7 +131,7 @@ const contracts = [
   ['corespirit-data-request-temporal-budget', ['src/services/coreSpirit/dataResolverTemporalBudgetContract.test.mjs', true]],
   ['corespirit-python-module-host', ['src/services/coreSpirit/pythonModuleServiceHostContract.test.mjs', true]],
   ['corespirit-backtest-metrics', ['src/services/coreSpirit/backtestMetricsContract.test.mjs', true]],
-  ['corespirit-native-visual-primitives', ['src/services/coreSpirit/visualPrimitivesContract.test.mjs', true]],
+  ['corespirit-native-visual-primitives', ['src/services/coreSpirit/visualPrimitivesContract.test.mjs', true]],\n  ['corespirit-plot-shape-char-alertcondition-runtime', ['src/services/coreSpirit/plotShapeCharAlertconditionRuntimeContract.test.mjs', true]],
   ['vela-workspace-autosave', ['src/velaWorkspaceAutosaveContract.test.mjs', false]],
   ['market-desk-news-history-warm', ['src/marketDeskAndHistoryWarmContract.test.mjs', false]],
   ['vela-active-preview-drawing-tool', ['src/velaActivePreviewDrawingToolContract.test.mjs', false]],
