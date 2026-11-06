@@ -22,7 +22,7 @@ export class CoreSpiritPythonModuleServiceHost implements CoreSpiritPolyglotHost
     if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new Error('Python module service must use HTTPS outside localhost.');
     if(!config.serviceSecret||config.serviceSecret.length<16)throw new Error('Python module service secret is missing or too short.');
     if(url.username||url.password||url.search||url.hash)throw new Error('Python module service URL cannot contain credentials, query or fragment.');
-    this.baseUrl=url;this.fetcher=config.fetchImpl??fetch;this.secret=config.serviceSecret;
+    url.pathname=url.pathname.replace(/\\/+$/,'')+'/';\n    this.baseUrl=url;this.fetcher=config.fetchImpl??fetch;this.secret=config.serviceSecret;
     this.timeoutMs=config.timeoutMs??8000;if(!Number.isSafeInteger(this.timeoutMs)||this.timeoutMs<100||this.timeoutMs>30_000)throw new Error('Python module service timeout must be between 100 and 30000 ms.');
   }
   private endpoint(path:string):string{return new URL(path,this.baseUrl).toString();}
