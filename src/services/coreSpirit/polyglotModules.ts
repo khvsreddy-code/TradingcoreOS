@@ -97,13 +97,15 @@ export class CoreSpiritPolyglotRegistry {
     if(payloadBytes(request.inputs)>manifest.maxInputBytes) throw new Error('Polyglot input byte quota exceeded.');
     if(options.signal?.aborted) throw new Error('Polyglot execution was cancelled.');
     const controller=new AbortController();
-    const abort=()=>controller.abort(options.signal?.reason??new Error('Polyglot execution was cancelled.'));
+    let rejectCancellation:(reason:Error)=>void=()=>undefined;
+    const cancelled=new Promise<never>((_,reject)=>{rejectCancellation=reject;});
+    const abort=()=>{const reason=new Error('Polyglot execution was cancelled.');controller.abort(reason);rejectCancellation(reason);};
     options.signal?.addEventListener('abort',abort,{once:true});
-    const timer=setTimeout(()=>controller.abort(new Error('Polyglot execution exceeded its latency budget.')),manifest.maxLatencyMs);
-    let timeoutHandle:ReturnType<typeof setTimeout>|undefined;
+    let rejectTimeout:(reason:Error)=>void=()=>undefined;
+    const timeout=new Promise<never>((_,reject)=>{rejectTimeout=reject;});
+    const timer=setTimeout(()=>{const reason=new Error('Polyglot execution exceeded its latency budget.');controller.abort(reason);rejectTimeout(reason);},manifest.maxLatencyMs);
     try {
-      const timeout=new Promise<never>((_,reject)=>{timeoutHandle=setTimeout(()=>reject(new Error('Polyglot execution exceeded its latency budget.')),manifest.maxLatencyMs);});
-      const cancelled=options.signal?new Promise<never>((_,reject)=>options.signal!.addEventListener('abort',()=>reject(new Error('Polyglot execution was cancelled.')),{once:true})):new Promise<never>(()=>{});
+      if(options.signal?.aborted)abort();
       const response=await Promise.race([host.invoke(manifest,request,controller.signal),timeout,cancelled]);
       if(controller.signal.aborted) throw new Error('Polyglot execution was cancelled or exceeded its latency budget.');
       for(const [name,spec] of Object.entries(manifest.outputs)) validateTensor(name,response.outputs[name],spec);
@@ -114,7 +116,6 @@ export class CoreSpiritPolyglotRegistry {
       return response;
     } finally {
       clearTimeout(timer);
-      if(timeoutHandle!==undefined)clearTimeout(timeoutHandle);
       options.signal?.removeEventListener('abort',abort);
     }
   }
