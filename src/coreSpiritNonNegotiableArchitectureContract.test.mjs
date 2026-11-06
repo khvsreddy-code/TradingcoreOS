@@ -14,7 +14,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const owners = new Map(CORE_SPIRIT_ARCHITECTURE_NODES.map((node) => [node.id, node.owner]));
 for (const [plane, owner] of [
-  ['language', 'corespirit'],
+  ['language', 'corescript'],
   ['ir', 'corespirit'],
   ['vm', 'corespirit'],
   ['external-compute', 'isolated-host'],
@@ -34,6 +34,10 @@ assert.ok(positions.every((position, index) => index === 0 || position > positio
 for (const edge of [
   ['language', 'external-compute'],
   ['language', 'vm'],
+  ['ir', 'external-compute'],
+  ['ir', 'vela-output-adapter'],
+  ['ir', 'chart-rendering'],
+  ['vm', 'vela-output-adapter'],
   ['external-compute', 'language'],
   ['external-compute', 'ir'],
   ['external-compute', 'vm'],

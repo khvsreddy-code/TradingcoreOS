@@ -37,12 +37,13 @@ export type CoreSpiritArchitecturePlane =
 
 export interface CoreSpiritArchitectureNode {
   id: CoreSpiritArchitecturePlane;
-  owner: 'corespirit' | 'tradingcoreos-host' | 'adapter' | 'isolated-host' | 'vela';
+  owner: 'corescript' | 'corespirit' | 'tradingcoreos-host' | 'adapter' | 'isolated-host' | 'vela';
   responsibilities: readonly string[];
 }
 
 export const CORE_SPIRIT_ARCHITECTURE_NODES: readonly CoreSpiritArchitectureNode[] = [
-  { id: 'language', owner: 'corespirit', responsibilities: ['parse', 'resolve', 'type-check', 'capability-check', 'lower'] },
+  // CoreScript is the sole language authority: it defines syntax and semantics, then lowers to canonical IR.
+  { id: 'language', owner: 'corescript', responsibilities: ['lex', 'parse', 'resolve', 'type-check', 'capability-check', 'lower-to-canonical-ir'] },
   // CoreSpirit owns the meaning and identity of visual outputs, never chart painting.
   { id: 'visual', owner: 'corespirit', responsibilities: ['plot/fill/shape/drawing semantics', 'stable semantic object identity', 'renderer-neutral output events', 'visual output lifecycle metadata'] },
   // This adapter translates semantic outputs into Vela's native ABI; it is not a renderer.
@@ -92,6 +93,12 @@ export const CORE_SPIRIT_FORBIDDEN_DEPENDENCIES: readonly [CoreSpiritArchitectur
   // CoreSpirit's semantic visual model cannot paint chart pixels or schedule Vela frames.
   ['visual', 'chart-rendering'],
   ['vm', 'chart-rendering'],
+  // IR is inert executable data: only the CoreSpirit VM may interpret it; no host or renderer consumes IR directly.
+  ['ir', 'external-compute'],
+  ['ir', 'vela-output-adapter'],
+  ['ir', 'chart-rendering'],
+  // The VM emits renderer-neutral semantic outputs; the adapter and Vela consume them after execution.
+  ['vm', 'vela-output-adapter'],
   // The VM may request bounded compute through the typed host ABI, never authorize or submit trades.
   ['vm', 'execution-authority'],
   ['vm', 'execution'],
@@ -157,7 +164,7 @@ export const CORE_SPIRIT_PLATFORM_PHILOSOPHY = Object.freeze({
   chartCentricity: false,
   canonicalModel: 'CoreSpiritTradingSnapshot',
   compatibilityRule: 'legacy-chart-outputs-adapt-into-scene-graph',
-  languageRule: 'CoreScript owns parsing, name resolution, typing, capability semantics and lowering',
+  languageRule: 'CoreScript alone owns lexical, syntactic, name-resolution, typing, capability and lowering semantics; it lowers into canonical CoreSpirit IR and never delegates language meaning to foreign runtimes or the renderer',
   executionRule: 'the validated canonical CoreSpirit IR is the only executable representation; CoreSpirit VM implementations own instruction ordering, control flow and state; compatibility AST entrypoints must lower to IR before execution',
   polyglotRule: 'Python/Rust/C++/Julia/R/ONNX/WASM are isolated compute hosts behind a typed, bounded request/response ABI; they receive declared tensors and return validated values only, never source semantics, IR, VM state, data access, chart output, broker access or side effects',
   visualRule: 'CoreSpirit owns renderer-neutral visual meaning and stable output identity; it does not paint chart pixels or schedule chart frames',

@@ -97,7 +97,7 @@ console.log('CORESPIRIT_INCREMENTAL_COMPILER_CACHE_CONTRACT_OK');
 
 // Architectural ownership is an executable contract, not a guideline in a document.
 const owners = new Map(CORE_SPIRIT_ARCHITECTURE_NODES.map(node => [node.id, node.owner]));
-assert.equal(owners.get('language'), 'corespirit', 'CoreScript semantics belong to CoreSpirit');
+assert.equal(owners.get('language'), 'corescript', 'CoreScript alone owns language syntax and semantics');
 assert.equal(owners.get('ir'), 'corespirit', 'the canonical IR belongs to CoreSpirit');
 assert.equal(owners.get('vm'), 'corespirit', 'the canonical VM owns instruction execution');
 assert.equal(owners.get('external-compute'), 'isolated-host', 'foreign languages are isolated compute hosts');
@@ -109,6 +109,10 @@ assert.deepEqual(
   validateCoreSpiritArchitectureEdges([
     ['external-compute', 'vm'],
     ['external-compute', 'ir'],
+    ['ir', 'external-compute'],
+    ['ir', 'vela-output-adapter'],
+    ['ir', 'chart-rendering'],
+    ['vm', 'vela-output-adapter'],
     ['chart-rendering', 'language'],
     ['chart-rendering', 'vm'],
     ['vm', 'chart-rendering'],
@@ -117,6 +121,10 @@ assert.deepEqual(
   [
     'forbidden direct dependency: external-compute -> vm',
     'forbidden direct dependency: external-compute -> ir',
+    'forbidden direct dependency: ir -> external-compute',
+    'forbidden direct dependency: ir -> vela-output-adapter',
+    'forbidden direct dependency: ir -> chart-rendering',
+    'forbidden direct dependency: vm -> vela-output-adapter',
     'forbidden direct dependency: chart-rendering -> language',
     'forbidden direct dependency: chart-rendering -> vm',
     'forbidden direct dependency: vm -> chart-rendering',
