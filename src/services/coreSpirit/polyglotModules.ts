@@ -1,3 +1,4 @@
+import { sha256HexSync } from './artifactIdentity';
 /**
  * CoreSpirit Polyglot Module ABI.
  * Language runtimes are host capabilities; the VM never receives process,
