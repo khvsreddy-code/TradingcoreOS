@@ -148,13 +148,13 @@ const velaAdapterSource = readFileSync('src/services/coreSpirit/velaOutputAdapte
 const velaRendererSource = readFileSync('src/services/core/chart/coreSpiritVelaOutputLayer.ts', 'utf8');
 const chartOutputControllerSource = readFileSync('src/services/coreSpirit/chartOutputController.ts', 'utf8');
 const runtimeSource = readFileSync('src/services/coreSpirit/runtime.ts', 'utf8');
-const externalHostSources = [pythonHostSource, nativeHostSource].join('\\n');
+const externalHostSources = [pythonHostSource, nativeHostSource].join(' ');
 
-assert.match(executionVmSource, /instructions: CoreSpiritIrInstruction\\[\\]/,
+assert.match(executionVmSource, /instructions: CoreSpiritIrInstruction\[\]/,
   'the execution VM consumes canonical IR instructions rather than AST/source text');
 assert.doesNotMatch(executionVmSource, /CoreSpiritAst|CoreSpiritCompiler|CanvasRenderingContext2D|registerRendererLayer/,
   'the VM must not parse CoreScript or perform chart rendering');
-assert.match(runtimeSource, /this\\.assertCanonicalExecutableIr\\(ir\\)/,
+assert.match(runtimeSource, /this\.assertCanonicalExecutableIr\(ir\)/,
   'both IR load and execution must cross the canonical validator');
 assert.doesNotMatch(runtimeSource, /CoreSpiritPolyglotRegistry|CoreSpiritPythonModuleServiceHost|CoreSpiritIsolatedPolyglotServiceHost/,
   'external runtimes are supplied through isolated host capabilities, not imported into VM execution internals');
@@ -166,13 +166,13 @@ assert.doesNotMatch(externalHostSources, /from ['"][^'"]*(?:compiler|runtime|ir|
   'isolated language services cannot import CoreScript semantics, the VM or Vela rendering');
 assert.doesNotMatch(velaAdapterSource, /CoreSpiritRuntime|CoreSpiritCompiler|CoreSpiritExecutionVM|CoreSpiritIrProgram|CanvasRenderingContext2D/,
   'the CoreSpirit-to-Vela adapter converts outputs but cannot execute or paint them');
-assert.match(velaRendererSource, /registerRendererLayer\\(/,
+assert.match(velaRendererSource, /registerRendererLayer\(/,
   'Vela registers and owns the actual renderer layer');
-assert.match(velaRendererSource, /args\\.coords\\.timeToX\\(/,
+assert.match(velaRendererSource, /args\.coords\.timeToX\(/,
   'Vela supplies the authoritative time-to-pixel transform');
-assert.match(velaRendererSource, /args\\.coords\\.priceToY\\(/,
+assert.match(velaRendererSource, /args\.coords\.priceToY\(/,
   'Vela supplies the authoritative price-to-pixel transform');
-assert.match(velaRendererSource, /args\\.coords\\.logicalToX\\(/,
+assert.match(velaRendererSource, /args\.coords\.logicalToX\(/,
   'Vela supplies the authoritative logical-index transform');
 assert.doesNotMatch(velaRendererSource, /CoreSpiritRuntime|CoreSpiritCompiler|CoreSpiritExecutionVM|compileCoreSpirit|executeCoreSpirit/,
   'Vela renders committed semantic output and never compiles or executes CoreScript');
