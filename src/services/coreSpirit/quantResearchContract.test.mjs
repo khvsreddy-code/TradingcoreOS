@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {planCoreSpiritWalkForward,runCoreSpiritWalkForwardResearch,coreSpiritResearchDeploymentGate,predictCoreSpiritRidge} from './quantResearch.ts';
+import {planCoreSpiritWalkForward,runCoreSpiritWalkForwardResearch,coreSpiritResearchDeploymentGate,predictCoreSpiritRidge,promoteCoreSpiritResearchModel} from './quantResearch.ts';
 const n=360,timestampsMs=Float64Array.from({length:n},(_,i)=>1700000000000+i*60000);
 const x=Float64Array.from({length:n},(_,i)=>i/10),z=Float64Array.from({length:n},(_,i)=>Math.sin(i/7));
 const target=Float64Array.from({length:n},(_,i)=>2*x[i]!-.5*z[i]!+3);
@@ -10,6 +10,11 @@ const results=runCoreSpiritWalkForwardResearch(data,{trainBars:60,validationBars
 assert.ok(results.every(r=>r.model.trainedThroughTimestampMs<r.fold.inferenceStartTimestampMs));
 assert.equal(coreSpiritResearchDeploymentGate(results,3).eligible,true);
 assert.throws(()=>predictCoreSpiritRidge(results[0]!.model,data,results[0]!.fold.trainEnd-1),/strictly after/);
+
+let published=null;const store={async publish(artifact){published=artifact;}};
+await assert.rejects(()=>promoteCoreSpiritResearchModel(data,results,{minimumFolds:3,maximumMeanTestRmse:1,minimumMeanDirectionalAccuracy:0,maximumMeanTestMae:1},store,timestampsMs[n-1]),/strictly after/);
+const artifact=await promoteCoreSpiritResearchModel(data,results,{minimumFolds:3,maximumMeanTestRmse:1,minimumMeanDirectionalAccuracy:0,maximumMeanTestMae:1},store,timestampsMs[n-1]+60000);
+assert.equal(published,artifact);assert.equal(artifact.productionEligible,false);assert.ok(artifact.artifactHash.length===64);
 const leaked={...data,timestampsMs:Float64Array.from({length:n},(_,i)=>n-i)};
 assert.throws(()=>planCoreSpiritWalkForward(leaked,{trainBars:10,validationBars:5,testBars:5,stepBars:5}),/strictly increasing/);
 console.log('CORESPIRIT_QUANT_RESEARCH_CONTRACT_OK');
