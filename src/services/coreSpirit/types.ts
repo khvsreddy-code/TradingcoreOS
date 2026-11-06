@@ -253,8 +253,8 @@ export type CoreSpiritDataResolver = {
   requestAt?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
   series?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => number[] | Promise<number[]>;
   /** Lower-TF data is now structured instead of being reduced to only the last value. */
-  lowerTimeframe?: (timeframe: string, field: CoreSpiritDataRequest['field']) => number[] | Promise<number[]>;
-  intrabars?: (timeframe: string) => CoreSpiritIntrabar[] | Promise<CoreSpiritIntrabar[]>;
+  lowerTimeframe?: (timeframe: string, field: CoreSpiritDataRequest['field'], symbol?: string) => number[] | Promise<number[]>;
+  intrabars?: (timeframe: string, symbol?: string) => CoreSpiritIntrabar[] | Promise<CoreSpiritIntrabar[]>;
   market?: () => CoreSpiritMarketSnapshot | null;
   depthImbalance?: () => number | null;
   footprint?: (symbol?: string, timeframe?: string) => CoreSpiritFootprint | null;
