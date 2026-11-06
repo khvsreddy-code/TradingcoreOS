@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
-import {CoreSpiritPolyglotRegistry,CoreSpiritPythonModuleAdapter,CoreSpiritNativeModuleAdapter,CoreSpiritOnnxModuleAdapter,CoreSpiritWasmModuleAdapter} from './polyglotModules.ts';
+import {CoreSpiritPolyglotRegistry,CoreSpiritPythonModuleAdapter,CoreSpiritNativeModuleAdapter,CoreSpiritOnnxModuleAdapter,CoreSpiritWasmModuleAdapter,coreSpiritPolyglotResponseChecksum} from './polyglotModules.ts';
 const version='a'.repeat(64);
 const manifest=(language='python',transport='host')=>({abiVersion:1,moduleId:'numpy-features',version,language,transport,deterministic:true,stateless:true,exports:['features.transform'],inputs:{values:{dtype:'f64',shape:[2]}},outputs:{normalized:{dtype:'f64',shape:[2]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:100000,maxLatencyMs:1000});
 const request={requestId:'polyglot-1',moduleId:'numpy-features',version,exportName:'features.transform',context:{runId:'run-1',symbol:'NSE:NIFTY50-INDEX',timeframe:'5m',barIndex:80,timestamp:1767000000000,confirmed:true,deterministicSeed:'seed-1'},inputs:{values:{dtype:'f64',shape:[2],data:[1,2]}}};
-const output={outputs:{normalized:{dtype:'f64',shape:[2],data:[-1,1]}},checksum:'b'.repeat(64)};
+const outputs={normalized:{dtype:'f64',shape:[2],data:[-1,1]}};
+const output={outputs,checksum:coreSpiritPolyglotResponseChecksum(manifest(),request,outputs)};
 const registry=new CoreSpiritPolyglotRegistry();
 registry.register(manifest(),new CoreSpiritPythonModuleAdapter(async()=>output));
 assert.deepEqual(await registry.execute(request),output);
 assert.equal(registry.list().length,1);
+await assert.rejects(()=>registry.execute({...request,requestId:'tampered'},{}),/checksum/);
 await assert.rejects(()=>registry.execute({...request,exportName:'os.system'}),/not declared/);
 await assert.rejects(()=>registry.execute({...request,context:{...request.context,confirmed:false}}),/confirmed-bar/);
 await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'f64',shape:[3],data:[1,2,3]}}}),/dtype\/shape/);
@@ -16,4 +18,10 @@ assert.throws(()=>registry.register(manifest(),new CoreSpiritNativeModuleAdapter
 const native=new CoreSpiritPolyglotRegistry(); native.register(manifest('rust','native-rpc'),new CoreSpiritNativeModuleAdapter('rust',async()=>output));
 const onnx=new CoreSpiritPolyglotRegistry(); onnx.register(manifest('onnx','onnx-runtime'),new CoreSpiritOnnxModuleAdapter(async()=>output));
 const wasm=new CoreSpiritPolyglotRegistry(); wasm.register(manifest('wasm','wasm'),new CoreSpiritWasmModuleAdapter(async()=>output));
+const scalarManifest={...manifest(),moduleId:'scalar-output',outputs:{score:{dtype:'f64',shape:[]}}};
+const scalarRequest={...request,moduleId:'scalar-output',inputs:{values:{dtype:'f64',shape:[2],data:[1,2]}}};
+const scalarOutputs={score:{dtype:'f64',shape:[],data:[0.5]}};
+const scalarRegistry=new CoreSpiritPolyglotRegistry();scalarRegistry.register(scalarManifest,new CoreSpiritPythonModuleAdapter(async()=>({outputs:scalarOutputs,checksum:coreSpiritPolyglotResponseChecksum(scalarManifest,scalarRequest,scalarOutputs)})));
+assert.deepEqual((await scalarRegistry.execute(scalarRequest)).outputs,scalarOutputs);
+await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'i64',shape:[2],data:[1.2,2]}}}),/dtype\\/shape/);
 console.log('CORESPIRIT_POLYGLOT_MODULE_ABI_OK');
