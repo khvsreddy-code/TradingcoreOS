@@ -152,10 +152,10 @@ export type CoreSpiritResearchDeploymentArtifact=Readonly<{
   releaseStatus:'research-approved';productionEligible:false;
 }>;
 export interface CoreSpiritResearchArtifactStore{publish(artifact:CoreSpiritResearchDeploymentArtifact):Promise<void>;}
-function hashText(value:string):string{
-  let h=2166136261;
-  for(let i=0;i<value.length;i++)h=Math.imul(h^value.charCodeAt(i),16777619);
-  return (h>>>0).toString(16).padStart(8,'0').repeat(8);
+async function hashText(value:string):Promise<string>{
+  const bytes=new TextEncoder().encode(value);
+  const digest=await crypto.subtle.digest('SHA-256',bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer);
+  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
 }
 /** Promote only after OOS gates; production eligibility remains a separate risk approval. */
 export async function promoteCoreSpiritResearchModel(
