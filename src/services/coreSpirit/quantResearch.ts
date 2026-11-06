@@ -3,6 +3,7 @@
  * All splits are chronological; validation/test observations are never passed
  * to the trainer. Deployment eligibility is explicit and requires OOS evidence.
  */
+import {sha256HexSync} from './artifactIdentity';
 export type CoreSpiritResearchDataset = Readonly<{
   datasetId:string; timestampsMs:Float64Array; features:Readonly<Record<string,Float64Array>>;
   target:Float64Array; symbol:string; timeframe:string;
@@ -29,20 +30,21 @@ export type CoreSpiritResearchFoldResult = Readonly<{
   validation:CoreSpiritResearchMetrics; test:CoreSpiritResearchMetrics;
 }>;
 const MAX_ROWS=2_000_000, MAX_FEATURES=64, MAX_TRAINING_ROWS=100_000, MAX_TRAINING_FEATURES=32, MAX_FOLDS=256;
-function assertDataset(d:CoreSpiritResearchDataset):void {
+function assertDataset(d:CoreSpiritResearchDataset,checkBudget?:()=>void):void {
   const n=d.timestampsMs.length, names=Object.keys(d.features);
   if(!d.datasetId||!d.symbol||!d.timeframe||n<3||n>MAX_ROWS) throw new Error('Research dataset identity or row count is invalid.');
   if(!names.length||names.length>MAX_FEATURES||d.target.length!==n) throw new Error('Research feature/target dimensions are invalid.');
   for(const name of names) if(!name||d.features[name]!.length!==n) throw new Error('Research feature column length mismatch: '+name);
   for(let i=0;i<n;i++){
+    if((i&4095)===0)checkBudget?.();
     const t=d.timestampsMs[i]!;
     if(!Number.isFinite(t)||(i>0&&t<=d.timestampsMs[i-1]!)) throw new Error('Research timestamps must be finite and strictly increasing.');
     if(!Number.isFinite(d.target[i]!)) throw new Error('Research target contains a non-finite value at row '+i);
     for(const name of names) if(!Number.isFinite(d.features[name]![i]!)) throw new Error('Research feature '+name+' contains a non-finite value at row '+i);
   }
 }
-export function planCoreSpiritWalkForward(dataset:CoreSpiritResearchDataset,c:CoreSpiritWalkForwardConfig):CoreSpiritWalkForwardFold[]{
-  assertDataset(dataset);
+export function planCoreSpiritWalkForward(dataset:CoreSpiritResearchDataset,c:CoreSpiritWalkForwardConfig,checkBudget?:()=>void):CoreSpiritWalkForwardFold[]{
+  assertDataset(dataset,checkBudget);
   const positive=['trainBars','validationBars','testBars','stepBars'] as const;
   for(const k of positive) if(!Number.isSafeInteger(c[k])||c[k]<=0) throw new Error(k+' must be a positive integer.');
   const purge=c.purgeBars??0, embargo=c.embargoBars??0, max=c.maxFolds??MAX_FOLDS;
@@ -79,21 +81,18 @@ function solve(a:number[][],b:number[]):number[]{
   }
   return m.map(row=>row[n]!);
 }
-function hashNumbers(values:readonly number[]):string{
-  let h=2166136261;
-  for(const value of values){const s=String(value);for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);}
-  return (h>>>0).toString(16).padStart(8,'0').repeat(8);
-}
+function hashNumbers(values:readonly number[]):string{return sha256HexSync(values.map(value=>String(value)).join('|'));}
 export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3,checkBudget?:()=>void):CoreSpiritRegressionModel{
-  assertDataset(dataset);
+  assertDataset(dataset,checkBudget);
   const names=Object.keys(dataset.features);
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end>dataset.target.length||end-start<names.length+2) throw new Error('Training window is too small or invalid.');
   if(end-start>MAX_TRAINING_ROWS||names.length>MAX_TRAINING_FEATURES) throw new Error('Synchronous ridge training is capped at 100,000 rows and 32 features; dispatch larger jobs to the research worker service.');
   if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
-  const means=names.map(name=>{let s=0;for(let i=start;i<end;i++)s+=dataset.features[name]![i]!;return s/(end-start);});
-  const scales=names.map((name,j)=>{let s=0;for(let i=start;i<end;i++){const d=dataset.features[name]![i]!-means[j]!;s+=d*d;}return Math.sqrt(s/(end-start))||1;});
+  const means=names.map(name=>{let s=0;for(let i=start;i<end;i++){if(((i-start)&4095)===0)checkBudget?.();s+=dataset.features[name]![i]!;}return s/(end-start);});
+  const scales=names.map((name,j)=>{let s=0;for(let i=start;i<end;i++){if(((i-start)&4095)===0)checkBudget?.();const d=dataset.features[name]![i]!-means[j]!;s+=d*d;}return Math.sqrt(s/(end-start))||1;});
   const p=names.length+1, xtx=Array.from({length:p},()=>new Array<number>(p).fill(0)),xty=new Array<number>(p).fill(0);
   for(let i=start;i<end;i++){
+    if(((i-start)&1023)===0)checkBudget?.();
     const row=[1,...names.map((name,j)=>(dataset.features[name]![i]!-means[j]!)/scales[j]!)], y=dataset.target[i]!;
     for(let a=0;a<p;a++){xty[a]+=row[a]!*y;for(let b=0;b<p;b++)xtx[a]![b]+=row[a]!*row[b]!;}
   }
@@ -110,29 +109,30 @@ export function predictCoreSpiritRidge(model:CoreSpiritRegressionModel,dataset:C
   if(!Number.isFinite(value)) throw new Error('Model produced a non-finite prediction.');
   return value;
 }
-export function evaluateCoreSpiritResearch(dataset:CoreSpiritResearchDataset,start:number,end:number,predict:(index:number)=>number):CoreSpiritResearchMetrics{
+export function evaluateCoreSpiritResearch(dataset:CoreSpiritResearchDataset,start:number,end:number,predict:(index:number)=>number,checkBudget?:()=>void):CoreSpiritResearchMetrics{
   if(start<0||end>dataset.target.length||end<=start) throw new Error('Evaluation range is invalid.');
   let squared=0,absolute=0,actual=0,forecast=0,directional=0,previousActual:number|null=null,previousForecast:number|null=null;
   for(let i=start;i<end;i++){
+    if(((i-start)&1023)===0)checkBudget?.();
     const y=dataset.target[i]!,p=predict(i),e=y-p;squared+=e*e;absolute+=Math.abs(e);actual+=y;forecast+=p;
     if(previousActual!==null&&previousForecast!==null&&Math.sign(y-previousActual)===Math.sign(p-previousForecast))directional++;
     previousActual=y;previousForecast=p;
   }
   const n=end-start,meanActual=actual/n,meanPrediction=forecast/n;
-  let variance=0;for(let i=start;i<end;i++)variance+=(dataset.target[i]!-meanActual)**2;
+  let variance=0;for(let i=start;i<end;i++){if(((i-start)&4095)===0)checkBudget?.();variance+=(dataset.target[i]!-meanActual)**2;}
   const mse=squared/n;
   return Object.freeze({observations:n,mse,rmse:Math.sqrt(mse),mae:absolute/n,directionalAccuracy:n>1?directional/(n-1):0,
     meanActual,meanPrediction,rSquared:variance>0?1-squared/variance:null});
 }
 export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDataset,config:CoreSpiritWalkForwardConfig,ridge=1e-3,checkBudget?:()=>void):CoreSpiritResearchFoldResult[]{
-  const folds=planCoreSpiritWalkForward(dataset,config);
+  const folds=planCoreSpiritWalkForward(dataset,config,checkBudget);
   return folds.map(fold=>{
     checkBudget?.();
     const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge,checkBudget);
     const predict=(index:number)=>predictCoreSpiritRidge(model,dataset,index);
     return Object.freeze({fold,model,
-      validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict),
-      test:evaluateCoreSpiritResearch(dataset,fold.testStart,fold.testEnd,predict)});
+      validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict,checkBudget),
+      test:evaluateCoreSpiritResearch(dataset,fold.testStart,fold.testEnd,predict,checkBudget)});
   });
 }
 export function coreSpiritResearchDeploymentGate(results:readonly CoreSpiritResearchFoldResult[],minimumFolds=3):Readonly<{eligible:boolean;reason:string;meanTestRmse:number|null}>{
@@ -163,7 +163,7 @@ export async function promoteCoreSpiritResearchModel(
   policy:CoreSpiritResearchPromotionPolicy,store:CoreSpiritResearchArtifactStore,
   inferenceBoundaryTimestampMs:number,ridge=1e-3,checkBudget?:()=>void,
 ):Promise<CoreSpiritResearchDeploymentArtifact>{
-  assertDataset(dataset);
+  assertDataset(dataset,checkBudget);
   if(!Number.isSafeInteger(policy.minimumFolds)||policy.minimumFolds<3||
      !Number.isFinite(policy.maximumMeanTestRmse)||policy.maximumMeanTestRmse<0||
      !Number.isFinite(policy.minimumMeanDirectionalAccuracy)||policy.minimumMeanDirectionalAccuracy<0||policy.minimumMeanDirectionalAccuracy>1||
