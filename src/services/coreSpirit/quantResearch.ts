@@ -168,6 +168,15 @@ export async function promoteCoreSpiritResearchModel(
      !Number.isFinite(policy.maximumMeanTestRmse)||policy.maximumMeanTestRmse<0||
      !Number.isFinite(policy.minimumMeanDirectionalAccuracy)||policy.minimumMeanDirectionalAccuracy<0||policy.minimumMeanDirectionalAccuracy>1||
      !Number.isFinite(policy.maximumMeanTestMae)||policy.maximumMeanTestMae<0)throw new Error('Research promotion policy is invalid.');
+  for(const [index,result] of results.entries()){
+    const fold=result.fold;
+    if(fold.index!==index||fold.trainStart<0||fold.trainEnd<=fold.trainStart||fold.trainEnd>fold.validationStart||
+       fold.validationEnd<=fold.validationStart||fold.validationEnd>fold.testStart||fold.testEnd<=fold.testStart||fold.testEnd>dataset.timestampsMs.length||
+       result.model.trainedThroughTimestampMs!==dataset.timestampsMs[fold.trainEnd-1]||
+       fold.inferenceStartTimestampMs!==dataset.timestampsMs[fold.testStart]||
+       result.validation.observations!==fold.validationEnd-fold.validationStart||
+       result.test.observations!==fold.testEnd-fold.testStart)throw new Error('Walk-forward evidence does not match the chronological dataset boundaries.');
+  }
   const gate=coreSpiritResearchDeploymentGate(results,policy.minimumFolds);
   if(!gate.eligible||gate.meanTestRmse==null)throw new Error(gate.reason);
   const meanMae=results.reduce((sum,result)=>sum+result.test.mae,0)/results.length;
