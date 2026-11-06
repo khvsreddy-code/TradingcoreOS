@@ -248,7 +248,7 @@ export class CoreSpiritRuntime {
   private plotOrdinal = 0;
   private indicatorMemo = new Map<string, unknown>();
   private outputCount = 0;
-  private dataMemo = new Map<string, unknown>();
+  private dataMemo = new Map<string, unknown>();\n  private readonly uniqueRequestContexts = new Set<string>();\n  private readonly maxUniqueRequestContexts = 40;
   private readonly uiRuntime = new CoreSpiritUiRuntime();
   private readonly appRuntime = new CoreSpiritVisualAppRuntime();
   private declarativeVisualState: CoreSpiritDeclarativeVisualState = { version:1, revision:0, specs:[] };
@@ -1906,7 +1906,7 @@ export class CoreSpiritRuntime {
       const offset=Math.max(0,Math.floor(Number(args[3] ?? 0)));
       const phase=String(args[4] ?? 'confirmed').toLowerCase();
       if(!['confirmed','historical','developing','realtime'].includes(phase)) return finish(null);
-      const alignment:CoreSpiritDataAlignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';
+      const alignment:CoreSpiritDataAlignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';\n      if(!this.admitUniqueRequestContext(symbol,timeframe,field,alignment)) return finish(null);
       // Completed historical higher-TF candles cannot stand in for a developing snapshot.
       if(alignment==='developing' && this.executionContext.mode!=='realtime') return finish(null);
       const requestAt=this.dataResolver?.requestAt;
@@ -1937,7 +1937,7 @@ export class CoreSpiritRuntime {
       const symbol=String(args[0]??this.executionContext.symbol);
       const timeframe=String(args[1]??'');
       const field=String(args[2]??'close') as CoreSpiritDataRequest['field'];
-      if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));
+      if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));\n      if(!this.admitUniqueRequestContext(symbol,timeframe,field,'last-confirmed')) return finish(null);
       const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}`;
       if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
       const resolver=this.dataResolver?.lowerTimeframe;
@@ -2254,6 +2254,13 @@ export class CoreSpiritRuntime {
       else if(kind==='alertcondition' && this.truthy(args[0]) && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{condition:true,title:typeof args[1]==='string'?args[1]:undefined,message:typeof args[2]==='string'?args[2]:undefined,frequency:'once-per-bar-close',barIndex,execution:this.currentOutputSemantics}});
       else if(kind==='webhook' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex,execution:this.currentOutputSemantics}});
     } catch(error) { if (error instanceof CoreSpiritResourceLimitError) throw error; diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
+  }
+  private admitUniqueRequestContext(symbol:string,timeframe:string,field:string,alignment:string):boolean {
+    const key=[symbol,timeframe,field,alignment].join('|');
+    if(this.uniqueRequestContexts.has(key))return true;
+    if(this.uniqueRequestContexts.size>=this.maxUniqueRequestContexts)return false;
+    this.uniqueRequestContexts.add(key);
+    return true;
   }
   private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(this.seriesRegistry.idFor(key),Number(value),this.stateHistoryLimit); }
   private pushLocalState(id:CoreSpiritSeriesId,value:CoreSpiritValue):void { this.stateStore.pushLocal(id,value,this.stateHistoryLimit); }
