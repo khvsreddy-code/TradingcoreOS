@@ -23,13 +23,13 @@ export class CoreSpiritResearchServiceHost{
   }
   private validateRequest(input:CoreSpiritResearchJobRequest):void{
     const d=input.dataset;
-    if(!d.datasetId||!d.objectKey||d.objectKey.startsWith('/')||d.objectKey.includes('..')||d.objectKey.includes('://'))throw new Error('Research dataset reference must be an opaque storage key.');
+    if(!d.datasetId||!d.objectKey||d.objectKey.length>512||d.objectKey.startsWith('/')||d.objectKey.includes('..')||d.objectKey.includes('://')||/[\\u0000-\\u001f]/.test(d.objectKey))throw new Error('Research dataset reference must be an opaque storage key.');
     if(!/^[a-f0-9]{64}$/.test(d.sha256)||!Number.isSafeInteger(d.rows)||d.rows<3||d.rows>2_000_000)throw new Error('Research dataset checksum or row count is invalid.');
-    if(!d.symbol||!d.timeframe||!d.targetName||!d.featureNames.length||d.featureNames.length>64||new Set(d.featureNames).size!==d.featureNames.length)throw new Error('Research dataset feature schema is invalid.');
+    if(!d.symbol||!d.timeframe||!d.targetName||!d.featureNames.length||d.featureNames.length>64||new Set(d.featureNames).size!==d.featureNames.length||d.featureNames.includes(d.targetName))throw new Error('Research dataset feature schema is invalid or leaks the target into its features.');
     for(const name of d.featureNames)if(!name.trim())throw new Error('Research feature names cannot be empty.');
     const w=input.walkForward;
     for(const key of ['trainBars','validationBars','testBars','stepBars'] as const)if(!Number.isSafeInteger(w[key])||w[key]<=0)throw new Error('Walk-forward '+key+' must be a positive integer.');
-    if(w.trainBars+w.validationBars+w.testBars+(w.purgeBars??0)*2+(w.embargoBars??0)*2>d.rows)throw new Error('Research dataset is too short for the requested fold window.');
+    if(!Number.isSafeInteger(w.purgeBars??0)||(w.purgeBars??0)<0||!Number.isSafeInteger(w.embargoBars??0)||(w.embargoBars??0)<0||!Number.isSafeInteger(w.maxFolds??256)||(w.maxFolds??256)<1||(w.maxFolds??256)>256)throw new Error('Research purge, embargo or fold cap is invalid.');\n    if(w.trainBars+w.validationBars+w.testBars+(w.purgeBars??0)*2+(w.embargoBars??0)*2>d.rows)throw new Error('Research dataset is too short for the requested fold window.');
   }
   async submit(input:CoreSpiritResearchJobRequest,signal?:AbortSignal):Promise<CoreSpiritResearchJob>{
     this.validateRequest(input);
