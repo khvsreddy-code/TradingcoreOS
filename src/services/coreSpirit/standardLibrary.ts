@@ -129,7 +129,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   // Visual/output compatibility and advanced surface contracts. These remain
   // executable through the shared registry but are intentionally outside the
   // 30-primitive semantic core. SHOW/EMIT are discoverability-first surfaces.
-  { name:'plot', minArgs:1, maxArgs:10, returnType:'event', pure:true, category:'extension', emitKind:'plot' },
+  { name:'plot', minArgs:1, maxArgs:10, returnType:'event', pure:true, category:'extension', emitKind:'plot' },\n  { name:'plotshape', minArgs:1, maxArgs:15, returnType:'event', pure:true, category:'extension', emitKind:'plotshape' },\n  { name:'plotchar', minArgs:1, maxArgs:15, returnType:'event', pure:true, category:'extension', emitKind:'plotchar' },
 { name:'vpvr', minArgs:0, maxArgs:1, returnType:'number', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'panel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
   { name:'sidePanel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
@@ -219,7 +219,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'buy', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'buy' },
   { name:'sell', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'sell' },
   { name:'order', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'orderIntent' },
-  { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alert' },
+  { name:'alert', minArgs:0, maxArgs:2, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alert' },\n  { name:'alertcondition', minArgs:2, maxArgs:4, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alertcondition' },
   { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook', emitKind:'webhook' },
   { name:'automation.notify', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
   { name:'automation.route', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
