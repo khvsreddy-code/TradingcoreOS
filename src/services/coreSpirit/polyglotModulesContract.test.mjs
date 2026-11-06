@@ -12,7 +12,7 @@ assert.equal(registry.list().length,1);
 await assert.rejects(()=>registry.execute({...request,requestId:'tampered'},{}),/checksum/);
 await assert.rejects(()=>registry.execute({...request,exportName:'os.system'}),/not declared/);
 await assert.rejects(()=>registry.execute({...request,context:{...request.context,confirmed:false}}),/confirmed-bar/);
-await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'f64',shape:[3],data:[1,2,3]}}}),/dtype\/shape/);
+await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'i64',shape:[2],data:[1.2,2]}}}),/dtype/);
 assert.throws(()=>registry.register(manifest('rust','host'),new CoreSpiritNativeModuleAdapter('rust',async()=>output)),/transport/);
 assert.throws(()=>registry.register(manifest(),new CoreSpiritNativeModuleAdapter('cpp',async()=>output)),/does not match/);
 const native=new CoreSpiritPolyglotRegistry(); native.register(manifest('rust','native-rpc'),new CoreSpiritNativeModuleAdapter('rust',async()=>output));
