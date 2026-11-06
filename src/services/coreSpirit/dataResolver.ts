@@ -18,6 +18,39 @@ export class CoreSpiritDataResolverService {
     private readonly revision: () => number,
   ) {}
 
+  private budgetRevision = -1;
+  private readonly requestedKeys = new Set<string>();
+
+  private requestKey(request: CoreSpiritDataRequest, alignment: CoreSpiritDataAlignment): string {
+    return [request.symbol, request.timeframe, request.field, request.offset ?? 0, alignment].join('|');
+  }
+
+  private admit(request: CoreSpiritDataRequest, alignment: CoreSpiritDataAlignment): boolean {
+    const revision = this.revision();
+    if (revision !== this.budgetRevision) {
+      this.budgetRevision = revision;
+      this.requestedKeys.clear();
+    }
+    const key = this.requestKey(request, alignment);
+    if (this.requestedKeys.has(key)) return true;
+    if (this.requestedKeys.size >= this.maxUniqueRequests) return false;
+    this.requestedKeys.add(key);
+    return true;
+  }
+
+  private eligible(snapshot: CoreSpiritDataSnapshot | undefined, context: CoreSpiritDataResolutionContext): boolean {
+    if (!snapshot) return false;
+    if (snapshot.confirmationPhase === 'developing' || snapshot.state === 'developing') return false;
+    if (context.alignment !== 'developing' && snapshot.timestamp != null && snapshot.timestamp > context.asOfTimestamp) return false;
+    if (context.alignment !== 'developing' && snapshot.closeTimestamp != null && snapshot.closeTimestamp > context.asOfTimestamp) return false;
+    if (context.alignment !== 'developing' && snapshot.state === 'realtime' && snapshot.confirmationPhase !== 'confirmed') return false;
+    if (context.maxStalenessMs != null && snapshot.timestamp != null &&
+        context.asOfTimestamp - snapshot.timestamp > context.maxStalenessMs) return false;
+    return true;
+  }
+
+  get uniqueRequestCount(): number { return this.requestedKeys.size; }
+
   resolutionContext(index: number, alignment: CoreSpiritDataAlignment = 'last-confirmed', maxStalenessMs?: number): CoreSpiritDataResolutionContext {
     const bar = this.currentBarAt(index);
     return {
@@ -43,18 +76,18 @@ export class CoreSpiritDataResolverService {
       if (values.some((value) => value == null)) return null;
       return values as CoreSpiritDataSnapshot[];
     }
-    const value = resolver.requestBatch(requests);
+    const value = resolver.requestBatch(requests, context);
     if (value && typeof (value as any).then === 'function') return null;
     const snapshots = value as CoreSpiritDataSnapshot[];
     if (snapshots.length !== requests.length) return null;
     return snapshots;
   }
 
-  resolveValue(symbol: string, timeframe: string, field: any, index: number, offset = 0): number | null {
+  resolveValue(symbol: string, timeframe: string, field: any, index: number, offset = 0, alignment: CoreSpiritDataAlignment = 'last-confirmed', maxStalenessMs?: number): number | null {
     const resolverAt = this.resolver?.requestAt;
     const resolver = this.resolver?.request;
     if (!resolverAt && !resolver) return null;
-    const key = `request:${index}:${symbol}:${timeframe}:${field}:${offset}`;
+    const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset };\n    if (!this.admit(request, alignment)) return null;\n    const context = this.resolutionContext(index, alignment, maxStalenessMs);\n    const key = `request:${context.revision}:${index}:${symbol}:${timeframe}:${field}:${offset}:${alignment}:${maxStalenessMs ?? ''}`;
     if (this.dataMemo.has(key)) return this.dataMemo.get(key) as number | null;
     const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset };
     const value = resolverAt ? resolverAt(request, this.resolutionContext(index, 'last-confirmed')) : resolver!(request);
@@ -72,11 +105,11 @@ export class CoreSpiritDataResolverService {
     const symbol = kind === 'market' ? String(ref.symbol ?? this.context().symbol) : this.context().symbol;
     const timeframe = String(ref?.timeframe ?? this.context().timeframe);
     const alignment:CoreSpiritDataAlignment = ref && typeof ref==='object' && ref.alignment==='developing' ? 'developing' : 'last-confirmed';
-    if(alignment==='developing' && this.context().mode!=='realtime') return null;
+    if(alignment==='developing' && this.context().mode!=='realtime') return null;\n    const requestContext = this.resolutionContext(index, alignment);\n    if (!this.admit({symbol,timeframe,field,offset:0}, alignment)) return null;
     const resolver = this.resolver?.series;
     if (resolver) {
       const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset: 0 };
-      const values = resolver(request, this.resolutionContext(index, alignment));
+      const values = resolver(request, requestContext);
       if (values && typeof (values as any).then === 'function') return null;
       const series = (values as number[]).filter(Number.isFinite);
       return series.length ? series : null;
@@ -93,7 +126,7 @@ export class CoreSpiritDataResolverService {
         : resolverCurrent!(request);
       if (snapshot && typeof (snapshot as any).then === 'function') return null;
       const resolved = snapshot as CoreSpiritDataSnapshot | undefined;
-      if (resolved?.timestamp != null && Number(resolved.timestamp) > this.resolutionContext(index).asOfTimestamp) return null;
+      if (!this.eligible(resolved, this.resolutionContext(index, alignment))) return null;
       const value = Number(resolved?.value);
       if (Number.isFinite(value)) values.push(value);
     }
