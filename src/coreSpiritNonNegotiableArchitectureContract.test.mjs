@@ -61,7 +61,7 @@ for (const edge of [
   ]);
 }
 
-assert.match(CORE_SPIRIT_PLATFORM_PHILOSOPHY.languageRule, /CoreScript owns parsing.*typing.*lowering/);
+assert.match(CORE_SPIRIT_PLATFORM_PHILOSOPHY.languageRule, /CoreScript alone owns lexical.*typing.*lowering semantics/);
 assert.match(CORE_SPIRIT_PLATFORM_PHILOSOPHY.executionRule, /canonical CoreSpirit IR is the only executable representation/);
 assert.match(CORE_SPIRIT_PLATFORM_PHILOSOPHY.polyglotRule, /isolated compute hosts.*typed, bounded request\/response ABI/);
 assert.match(CORE_SPIRIT_PLATFORM_PHILOSOPHY.velaRule, /Vela owns chart scene lifecycle/);
