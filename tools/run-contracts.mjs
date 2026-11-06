@@ -125,6 +125,7 @@ const contracts = [
   ['tco-custom-workspace-frame', ['src/velaCustomWorkspaceFrameContract.test.mjs', false]],
   ['chart-prediction-artifact-only', ['src/chartPredictionArtifactOnlyContract.test.mjs', false]],
   ['corespirit-python-ml-adapter', ['src/services/coreSpirit/pythonMlModelAdapterContract.test.mjs', true]],
+  ['corespirit-polyglot-module-abi', ['src/services/coreSpirit/polyglotModulesContract.test.mjs', true]],
   ['vela-workspace-autosave', ['src/velaWorkspaceAutosaveContract.test.mjs', false]],
   ['market-desk-news-history-warm', ['src/marketDeskAndHistoryWarmContract.test.mjs', false]],
   ['vela-active-preview-drawing-tool', ['src/velaActivePreviewDrawingToolContract.test.mjs', false]],
