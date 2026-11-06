@@ -1,34 +1,67 @@
-# CoreSpirit Pine-Class and Polyglot Runtime Milestone
+# CoreSpirit Pine-Class, Polyglot and Quantitative Runtime
 
-This milestone is split into independently verifiable execution contracts. A language feature is not complete until it parses, type-checks, lowers to canonical IR, executes under the VM, emits a stable output/event, and passes historical/realtime/replay equivalence tests.
+This milestone is delivered in small executable contracts. A feature is not complete merely because a builtin or type exists: it must parse, type-check, lower to canonical IR, execute under the VM, emit validated output/events and pass historical/realtime/replay parity tests.
 
-## Pine-class parity work
+## Pine-class execution
 
-The repository already contains host-owned multi-symbol/timeframe data resolution, alignment and confirmation metadata; a typed visual object model and retained scene ABI; strategy execution targets and broker-neutral order intents; and event/automation primitives. These are foundations, not proof of full Pine parity.
+### Data requests
+- The runtime exposes `request.security(symbol, timeframe, field, offset?, phase?)` as a confirmed-data request surface. The accepted fields are OHLCV/time; phase is confirmed/historical by default, with developing/realtime data permitted only in realtime mode.
+- A 40-context per-program request budget is enforced by symbol/timeframe/field/alignment identity. Repeated calls reuse the same context; a 41st unique context fails closed.
+- `request.security_lower_tf(symbol, timeframe, field)` returns a bounded array (maximum 16,384 values) through the host-owned lower-timeframe provider.
+- Snapshot validation rejects developing values and samples whose candle close is after the base bar's as-of timestamp. Host adapters remain responsible for supplying canonical exchange-calendar/session alignment.
+- The lower-timeframe provider can be symbol-scoped. Async providers must prefetch before VM evaluation; the VM does not await network calls.
 
-Remaining implementation and acceptance areas:
+Remaining parity work: complete Pine `gaps` and lookahead enum semantics (lookahead-on must remain denied), request-expression evaluation, full session/timezone/calendar behavior, invalid-symbol policy, and exact `request.security_lower_tf` semantics for missing/incomplete intrabars.
 
-1. Data requests: source-compatible request syntax, dynamic request budgets, deduplication, stable symbol/timeframe identity, confirmed/developing alignment, gaps/lookahead policies, lower-timeframe arrays, sessions/timezones, deterministic historical/realtime behavior. No implicit lookahead.
-2. Visual outputs: plot families (line/stepline/area/columns/circles/crosses), hline/fill/plotshape/plotchar/barcolor/bgcolor, boxes/lines/labels/polylines/tables, pane/scale/display controls, object limits, stable IDs and retained Vela updates/removals. No DOM or pixel rendering inside the VM.
-3. Strategies: declaration/configuration, entries/exits/close/cancel, pyramiding, sizing, commission/slippage, margin, order types, OCA, partial fills, stop/limit sequencing, intrabar simulation, currency conversion and broker-neutral fill ledger. Simulation never routes live broker orders.
-4. Alerts: alertcondition and runtime alert events, frequency policy, confirmed/realtime semantics, deduplication, replay suppression, delivery retries and host-owned webhook/notification routing. Delivery is never a VM side effect.
-5. Backtesting: walk-forward-safe windows, deterministic fills, equity/position/trade ledgers, fees/slippage, drawdown/exposure/return metrics, benchmark comparison, trade list, reproducible seeds and no future-data leakage.
+### Visual outputs
+- The standard library now exposes `plotshape` and `plotchar` with condition, location, offset, shape/character, color and size mapping into retained native scene objects.
+- `fill` and `band` remain native band outputs; helper `coreSpiritFillSeries` converts two aligned series into stable retained bands and preserves gaps instead of bridging them.
+- Existing Vela scene types and object lifecycle remain authoritative. The VM emits semantic objects, not pixels.
+
+Remaining parity work: full Pine plot style matrix, plot references as fill inputs, pane/scale/display/force-overlay options, show-last behavior across all plot families, object setter/deletion parity, and real Vela browser acceptance for each visual kind.
+
+### Strategies and backtesting
+- The existing simulator remains the execution engine. It has a simulation-only authority boundary, deterministic ledger, order types, lot/risk controls, fees/slippage and intrabar ambiguity policy.
+- `backtestMetrics.ts` adds return, drawdown, Sharpe/Sortino, win rate, profit factor, trade expectancy, fee and exposure summaries, plus exact-timestamp benchmark comparison.
+- `quantResearch.ts` adds chronological walk-forward planning with purge/embargo, deterministic bounded ridge regression, validation/test metrics and an evidence gate.
+
+Remaining parity work: complete Pine strategy configuration and command semantics (pyramiding, OCA, partial fills, currency/margin, bar magnifier and order sequencing), full trade list/equity reconciliation and independent fill-model differential tests. Research eligibility is not broker or production risk approval.
+
+### Alerts
+- `alertcondition` now emits a confirmed-bar alert event; `alert` events preserve message/frequency metadata.
+- `alertDelivery.ts` converts VM alert events into idempotent outbox envelopes, suppresses historical/replay delivery, and defines atomic lease claims, retry/backoff and terminal failure behavior.
+
+The outbox store is an explicit host persistence contract. A production deployment still needs a durable implementation (for example, a database-backed store with atomic `claimPending`/lease recovery) and a host delivery worker. The VM never performs webhooks or notification delivery.
 
 ## Polyglot execution
 
-The new polyglotModules.ts file introduces a versioned module ABI and registry. Python is the first host-service adapter. Rust/C++/Julia/R use native-RPC adapters; ONNX and WASM have dedicated transport contracts. All are host-owned and expose no process, filesystem, socket, credential or broker capability to the VM.
+### Python first
+- `polyglotModules.ts` defines a versioned ABI, exact artifact identity, declared exports, typed tensor contracts, quotas, confirmed-bar input policy and cancellation.
+- `pythonModuleServiceHost.ts` is server-only. It supports content-addressed package registration, SHA-256 verification, exact pinned dependency versions/hashes, HTTPS transport, timeout/cancellation and bounded response validation.
+- The existing `pythonMlModelAdapter.ts` remains the specialized inference path; the module service is the general callable module path.
 
-ABI v1 supports deterministic, stateless, confirmed-bar calls with typed bounded tensors and declared exports. Persistent state, training jobs, arbitrary callbacks, streaming side effects and untrusted package installation are outside this first ABI.
+The Python service endpoint must be provisioned as an isolated host service. The repository adapter does not claim that a Python interpreter or package sandbox has been deployed by a Vercel browser bundle.
 
-The existing pythonMlModelAdapter.ts remains the specialized Python model-inference integration; the module ABI complements it and does not replace it.
+### Rust, C++, Julia, R, ONNX and WASM
+The ABI reserves explicit transport identities for native RPC, ONNX Runtime and WASM. Existing callback adapters are host boundaries, not bundled language engines. Each runtime still needs a separately deployed sandbox/worker, content-addressed loader, pinned dependency/runtime image, cancellation/resource enforcement and differential ABI tests before it is marked production-ready.
+
+## Quantitative research and performance
+
+- Research datasets are columnar and bounded; timestamps must be strictly increasing. Walk-forward folds are chronological and keep training strictly before validation/test windows.
+- Synchronous ridge training is capped at 100,000 rows and 32 features and accepts a budget/cancellation callback. Larger jobs must run in the research worker/service, not on the chart thread.
+- The repository already has a dirty dependency graph, optimized VM/cache, hot/warm/cold lane scheduler, profiler, resource governor, scene quotas and real-browser benchmark scripts. These are the performance foundations; do not introduce a second graph/scheduler/profiler.
+- Resource governance already tracks instructions, data/model calls, retained output estimates and allocation budgets. Browser verification uses `tools/verify-chart-performance.mjs`; pipeline/VM workloads are covered by benchmark scripts.
+
+Remaining performance proof: connect the latest CoreSpirit hot-path measurements to the real browser harness, run 2k/5k/20k/50k-bar cases and multi-chart workloads on target browsers, measure heap growth/GC and worker transfer cost, and publish before/after p50/p95/p99 results. A Node benchmark alone is not real-browser proof.
 
 ## Release gates
 
-- Compile, type-check, IR validation, VM execution, output/event validation.
-- Historical/realtime/replay parity with explicit confirmed/developing inputs.
-- No-lookahead tests for every data-request policy.
-- Deterministic strategy fill ledger and fees/slippage tests.
-- Alert dedupe/retry/replay suppression tests.
-- Worker/server resource budgets and cancellation tests for each polyglot host.
-- Vela retained-scene update/removal and chart performance tests.
-- Production build and browser proof after contracts and typecheck pass.
+- Contract suite and `npm run typecheck`.
+- Production build and bundle-budget checks.
+- Confirmed/developing request tests and no-lookahead differential tests.
+- VM visual output tests plus Vela retained-scene browser tests.
+- Deterministic strategy ledger and fees/slippage/intrabar tests.
+- Durable alert-store atomic-claim, retry, crash-recovery and replay-suppression tests.
+- Python module registration, dependency-lock, cancellation, isolation and output-envelope tests.
+- Per-runtime ABI conformance tests for Rust/C++/Julia/R/ONNX/WASM.
+- Real-browser performance matrix with current telemetry, heap and long-task evidence.
