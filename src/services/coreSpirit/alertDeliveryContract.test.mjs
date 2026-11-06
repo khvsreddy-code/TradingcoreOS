@@ -15,6 +15,9 @@ const once=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:23,
 assert.equal(once.frequency,'once','Pine alert.freq_once must remain once, not once-per-bar');
 const everyBar=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:24,payload:{barIndex:10,message:'Every bar',frequency:'alert.freq_once_per_bar'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
 assert.equal(everyBar.frequency,'once-per-bar');
+const every=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:25,payload:{barIndex:10,message:'All',frequency:'alert.freq_all'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
+assert.equal(every.frequency,'all');
+assert.throws(()=>coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'All',frequency:'alert.freq_all'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000}),/unique host-stamped event sequence/);
 assert.throws(()=>coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'Unknown',frequency:'sometimes'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000}),/Unsupported alert frequency/);
 const historical=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'Historical',execution:{barPhase:'historical'}}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'historical',createdAt:1000});
 assert.equal(historical.replay,true,'historical backfill alerts must never reach external delivery');
