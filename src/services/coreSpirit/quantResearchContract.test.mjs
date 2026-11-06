@@ -16,8 +16,16 @@ const firstResult=results[0];assert.ok(firstResult,'walk-forward research must p
 assert.throws(()=>predictCoreSpiritRidge(firstResult.model,data,firstResult.fold.trainEnd-1),/strictly after/);
 
 let published=null;const store={async publish(artifact){published=artifact;}};
-await assert.rejects(()=>promoteCoreSpiritResearchModel(data,results,{minimumFolds:3,maximumMeanTestRmse:1,minimumMeanDirectionalAccuracy:0,maximumMeanTestMae:1},store,timestampsMs[n-1]),/strictly after/);
-const artifact=await promoteCoreSpiritResearchModel(data,results,{minimumFolds:3,maximumMeanTestRmse:1,minimumMeanDirectionalAccuracy:0,maximumMeanTestMae:1},store,timestampsMs[n-1]+60000);
+// Set policy just above the measured evidence so this fixture exercises the
+// chronology guard instead of depending on a brittle hard-coded RMSE/MAE scale.
+const promotionPolicy={
+  minimumFolds:3,
+  maximumMeanTestRmse:results.reduce((sum,result)=>sum+result.test.rmse,0)/results.length+1e-9,
+  minimumMeanDirectionalAccuracy:0,
+  maximumMeanTestMae:results.reduce((sum,result)=>sum+result.test.mae,0)/results.length+1e-9,
+};
+await assert.rejects(()=>promoteCoreSpiritResearchModel(data,results,promotionPolicy,store,timestampsMs[n-1]),/strictly after/);
+const artifact=await promoteCoreSpiritResearchModel(data,results,promotionPolicy,store,timestampsMs[n-1]+60000);
 assert.equal(published,artifact);assert.equal(artifact.productionEligible,false);assert.ok(artifact.artifactHash.length===64);
 const leaked={...data,timestampsMs:Float64Array.from({length:n},(_,i)=>n-i)};
 assert.throws(()=>planCoreSpiritWalkForward(leaked,{trainBars:10,validationBars:5,testBars:5,stepBars:5}),/strictly increasing/);
