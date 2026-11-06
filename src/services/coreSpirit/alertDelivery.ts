@@ -48,10 +48,12 @@ export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEven
   const payload=event.payload??{},execution=(payload.execution&&typeof payload.execution==='object'?payload.execution:{}) as Record<string,unknown>;
   const barIndex=Number(payload.barIndex);
   if(!Number.isSafeInteger(barIndex)||barIndex<0)throw new Error('Runtime alert is missing its canonical bar index.');
-  const rawFrequency=String(payload.frequency??'once-per-bar').toLowerCase();
-  const frequency:CoreSpiritAlertFrequency=rawFrequency.includes('all')?'all'
-    :rawFrequency.includes('bar_close')||rawFrequency.includes('bar-close')?'once-per-bar-close'
-    :rawFrequency.includes('once')?'once-per-bar':'once-per-bar';
+  const rawFrequency=String(payload.frequency??'once-per-bar').toLowerCase().replace(/^alert\\.freq_/,'').replaceAll('_','-');
+  const frequency:CoreSpiritAlertFrequency=rawFrequency==='all'?'all'
+    :rawFrequency==='once'?'once'
+    :rawFrequency==='once-per-bar-close'?'once-per-bar-close'
+    :rawFrequency==='once-per-bar'?'once-per-bar'
+    :(()=>{throw new Error("Unsupported alert frequency '"+rawFrequency+"'.");})();
   const args=Array.isArray(payload.args)?payload.args:[];
   const message=String(payload.message??payload.title??args[0]??'');
   const id=[event.scriptId,context.scriptRevision,context.symbol,context.timeframe,barIndex,event.sequence??message].join(':');
