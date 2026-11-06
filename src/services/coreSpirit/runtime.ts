@@ -1899,7 +1899,7 @@ export class CoreSpiritRuntime {
       }
       return finish(null);
     }
-    if(name==='request') {
+    if(name==='request'||name==='request.security') {
       const symbol=String(args[0] ?? this.executionContext.symbol);
       const timeframe=String(args[1] ?? this.executionContext.timeframe);
       const field=String(args[2] ?? 'close') as CoreSpiritDataRequest['field'];
@@ -1932,6 +1932,35 @@ export class CoreSpiritRuntime {
       const resolved=validated?.value ?? null;
       this.dataMemo.set(key,resolved);
       return finish(resolved);
+    }
+    if(name==='request.security_lower_tf') {
+      const symbol=String(args[0]??this.executionContext.symbol);
+      const timeframe=String(args[1]??'');
+      const field=String(args[2]??'close') as CoreSpiritDataRequest['field'];
+      if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));
+      const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}`;
+      if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
+      const resolver=this.dataResolver?.lowerTimeframe;
+      if(resolver){
+        this.resourceGovernor.recordDataRequest({symbol,timeframe,field,offset:0});
+        const values=resolver(timeframe,field,symbol);
+        if(values&&typeof (values as any).then==='function') return finish(null);
+        const bounded=(values as number[]).filter(Number.isFinite).slice(-16_384);
+        this.resourceGovernor.recordResolvedData(bounded);
+        const result=createCoreScriptArray(bounded);
+        this.dataMemo.set(key,result);
+        return finish(result);
+      }
+      const intrabarsResolver=this.dataResolver?.intrabars;
+      if(!intrabarsResolver) return finish(createCoreScriptArray([]));
+      this.resourceGovernor.recordDataRequest({symbol,timeframe,field:'time',offset:0});
+      const rows=intrabarsResolver(timeframe,symbol);
+      if(rows&&typeof (rows as any).then==='function') return finish(null);
+      const bounded=(rows as CoreSpiritIntrabar[]).slice(-16_384).map(row=>Number((row as any)[field])).filter(Number.isFinite);
+      this.resourceGovernor.recordResolvedData(bounded);
+      const result=createCoreScriptArray(bounded);
+      this.dataMemo.set(key,result);
+      return finish(result);
     }
     if(name==='lowerTf') {
       const timeframe=String(args[0] ?? ''), field=String(args[1] ?? 'close') as any;
