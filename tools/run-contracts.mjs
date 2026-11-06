@@ -131,6 +131,7 @@ const contracts = [
   ['corespirit-data-request-temporal-budget', ['src/services/coreSpirit/dataResolverTemporalBudgetContract.test.mjs', true]],
   ['corespirit-request-security-lower-tf-arrays', ['src/services/coreSpirit/requestSecurityCompatibilityContract.test.mjs', true]],
   ['corespirit-python-module-host', ['src/services/coreSpirit/pythonModuleServiceHostContract.test.mjs', true]],
+  ['corespirit-polyglot-remote-hosts', ['src/services/coreSpirit/polyglotServiceHostContract.test.mjs', true]],
   ['corespirit-backtest-metrics', ['src/services/coreSpirit/backtestMetricsContract.test.mjs', true]],
   ['corespirit-native-visual-primitives', ['src/services/coreSpirit/visualPrimitivesContract.test.mjs', true]],
   ['corespirit-plot-shape-char-alertcondition-runtime', ['src/services/coreSpirit/plotShapeCharAlertconditionRuntimeContract.test.mjs', true]],
