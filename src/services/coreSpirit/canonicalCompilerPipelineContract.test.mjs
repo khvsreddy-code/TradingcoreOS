@@ -5,6 +5,8 @@ import { CoreSpiritIncrementalCompiler } from './incrementalCompiler.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace, createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
 import { executeCoreSpirit } from './coreSpiritPipeline.ts';
+import { CoreSpiritRuntime } from './runtime.ts';
+import { CORE_SPIRIT_ARCHITECTURE_NODES, validateCoreSpiritArchitectureEdges } from './architectureContract.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { normalizeCoreSpiritSource } from './syntax.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
@@ -91,3 +93,90 @@ assert.notEqual(incrementalChanged.sourceHash, incrementalFirst.sourceHash);
 const incrementalDifferentSourceId = incrementalCompiler.compile(incrementalSource, 'warm-cache-contract-other-id');
 assert.equal(incrementalDifferentSourceId.cacheHit, false, 'different source identities must not share cache entries');
 console.log('CORESPIRIT_INCREMENTAL_COMPILER_CACHE_CONTRACT_OK');
+
+
+// Architectural ownership is an executable contract, not a guideline in a document.
+const owners = new Map(CORE_SPIRIT_ARCHITECTURE_NODES.map(node => [node.id, node.owner]));
+assert.equal(owners.get('language'), 'corespirit', 'CoreScript semantics belong to CoreSpirit');
+assert.equal(owners.get('ir'), 'corespirit', 'the canonical IR belongs to CoreSpirit');
+assert.equal(owners.get('vm'), 'corespirit', 'the canonical VM owns instruction execution');
+assert.equal(owners.get('external-compute'), 'isolated-host', 'foreign languages are isolated compute hosts');
+assert.equal(owners.get('visual'), 'corespirit', 'CoreSpirit owns visual meaning, not the renderer');
+assert.equal(owners.get('vela-output-adapter'), 'adapter', 'visual payload conversion has one explicit adapter seam');
+assert.equal(owners.get('chart-rendering'), 'vela', 'Vela owns chart rendering');
+
+assert.deepEqual(
+  validateCoreSpiritArchitectureEdges([
+    ['external-compute', 'vm'],
+    ['external-compute', 'ir'],
+    ['chart-rendering', 'language'],
+    ['chart-rendering', 'vm'],
+    ['vm', 'chart-rendering'],
+    ['visual', 'chart-rendering'],
+  ]),
+  [
+    'forbidden direct dependency: external-compute -> vm',
+    'forbidden direct dependency: external-compute -> ir',
+    'forbidden direct dependency: chart-rendering -> language',
+    'forbidden direct dependency: chart-rendering -> vm',
+    'forbidden direct dependency: vm -> chart-rendering',
+    'forbidden direct dependency: visual -> chart-rendering',
+  ],
+  'the architecture validator must reject foreign-runtime, VM and renderer ownership leaks',
+);
+
+// Runtime execution accepts only the canonical IR contract. A caller cannot
+// smuggle foreign instructions into the execution path through a TypeScript cast.
+const guardedRuntime = new CoreSpiritRuntime({ sourceId: 'canonical-ir-ownership-guard' });
+const invalidExecutableIr = {
+  ...result.ir,
+  entry: {
+    ...result.ir.entry,
+    instructions: [{ op: 'externalRuntimeInstruction', dest: 'escape' }],
+  },
+};
+assert.throws(() => guardedRuntime.loadIr(invalidExecutableIr), /non-canonical or invalid IR/);
+assert.throws(() => guardedRuntime.executeIr(invalidExecutableIr, []), /non-canonical or invalid IR/);
+
+// Foreign hosts may exchange only bounded ABI tensors. They are not allowed
+// to import the CoreScript compiler, canonical IR/VM or the Vela renderer.
+const polyglotModulesSource = readFileSync('src/services/coreSpirit/polyglotModules.ts', 'utf8');
+const pythonHostSource = readFileSync('src/services/coreSpirit/pythonModuleServiceHost.ts', 'utf8');
+const nativeHostSource = readFileSync('src/services/coreSpirit/polyglotServiceHost.ts', 'utf8');
+const executionVmSource = readFileSync('src/services/coreSpirit/executionVM.ts', 'utf8');
+const velaAdapterSource = readFileSync('src/services/coreSpirit/velaOutputAdapter.ts', 'utf8');
+const velaRendererSource = readFileSync('src/services/core/chart/coreSpiritVelaOutputLayer.ts', 'utf8');
+const chartOutputControllerSource = readFileSync('src/services/coreSpirit/chartOutputController.ts', 'utf8');
+const runtimeSource = readFileSync('src/services/coreSpirit/runtime.ts', 'utf8');
+const externalHostSources = [pythonHostSource, nativeHostSource].join('\\n');
+
+assert.match(executionVmSource, /instructions: CoreSpiritIrInstruction\\[\\]/,
+  'the execution VM consumes canonical IR instructions rather than AST/source text');
+assert.doesNotMatch(executionVmSource, /CoreSpiritAst|CoreSpiritCompiler|CanvasRenderingContext2D|registerRendererLayer/,
+  'the VM must not parse CoreScript or perform chart rendering');
+assert.match(runtimeSource, /this\\.assertCanonicalExecutableIr\\(ir\\)/,
+  'both IR load and execution must cross the canonical validator');
+assert.doesNotMatch(runtimeSource, /CoreSpiritPolyglotRegistry|CoreSpiritPythonModuleServiceHost|CoreSpiritIsolatedPolyglotServiceHost/,
+  'external runtimes are supplied through isolated host capabilities, not imported into VM execution internals');
+assert.match(polyglotModulesSource, /outputs:Readonly<Record<string,CoreSpiritPolyglotTensor>>/,
+  'foreign runtime responses are typed values, not executable programs');
+assert.doesNotMatch(polyglotModulesSource, /CoreSpiritIrProgram|CoreSpiritIrInstruction|CoreSpiritAst|CoreSpiritRuntime|CanvasRenderingContext2D|registerRendererLayer/,
+  'the polyglot ABI must not own compiler, VM or renderer capabilities');
+assert.doesNotMatch(externalHostSources, /from ['"][^'"]*(?:compiler|runtime|ir|executionVM|velaOutputAdapter|coreSpiritVelaOutputLayer)/i,
+  'isolated language services cannot import CoreScript semantics, the VM or Vela rendering');
+assert.doesNotMatch(velaAdapterSource, /CoreSpiritRuntime|CoreSpiritCompiler|CoreSpiritExecutionVM|CoreSpiritIrProgram|CanvasRenderingContext2D/,
+  'the CoreSpirit-to-Vela adapter converts outputs but cannot execute or paint them');
+assert.match(velaRendererSource, /registerRendererLayer\\(/,
+  'Vela registers and owns the actual renderer layer');
+assert.match(velaRendererSource, /args\\.coords\\.timeToX\\(/,
+  'Vela supplies the authoritative time-to-pixel transform');
+assert.match(velaRendererSource, /args\\.coords\\.priceToY\\(/,
+  'Vela supplies the authoritative price-to-pixel transform');
+assert.match(velaRendererSource, /args\\.coords\\.logicalToX\\(/,
+  'Vela supplies the authoritative logical-index transform');
+assert.doesNotMatch(velaRendererSource, /CoreSpiritRuntime|CoreSpiritCompiler|CoreSpiritExecutionVM|compileCoreSpirit|executeCoreSpirit/,
+  'Vela renders committed semantic output and never compiles or executes CoreScript');
+assert.doesNotMatch(chartOutputControllerSource, /runCoreSpiritArtifactInWorker|CoreSpiritRuntime|compileCoreSpirit/,
+  'the output controller only publishes immutable output to Vela; it is not an execution trigger');
+
+console.log('CORESPIRIT_ARCHITECTURAL_OWNERSHIP_BOUNDARIES_OK');

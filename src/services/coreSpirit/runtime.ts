@@ -11,6 +11,7 @@ import type { CoreSpiritScene, CoreSpiritSceneIdentity } from './visualScene';
 import { coreSpiritAboveBar, coreSpiritAtBar, coreSpiritBelowBar, coreSpiritChartArea, coreSpiritPanelArea, coreSpiritPlacement, coreSpiritPoint, coreSpiritTimePricePoint, type CoreSpiritVisualArea, type CoreSpiritCoordinateSpace, type CoreSpiritVisualPoint } from './visualCoordinates';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
+import { validateCoreSpiritIr } from './irContract';
 import { createCoreSpiritExecutionContext, createCoreSpiritExecutionFrame } from './executionContext';
 import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritDataResolutionContext, CoreSpiritDataAlignment } from './types';
 import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
@@ -535,18 +536,11 @@ export class CoreSpiritRuntime {
     const compiled = this.profiler.measureCompile(() => this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface }));
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
-    this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
-    this.updateOptimizedComponentDefinitionSignature(compiled.ir);
-    this.installSeriesFusion(compiled.ir);
-    // Enforce script lookback and graph fan-out before the program touches market data.
-    this.resourceGovernor.assertLookback(compiled.ir.maxLookback);
-    this.resourceGovernor.assertDependencies(compiled.ir.graphs?.semantic?.nodes?.map(node => node.id) ?? Object.keys(compiled.ir.semanticEnvironment ?? {}));
-    // State retention must always cover the program's declared lookback plus a safety margin.
-    if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
-    this.reset();
-    this.installDirtyGraph(compiled.ir);
-    this.prepareSeriesBindings(compiled.ir);
-    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry, compiled.ir.specializedPlan, this.optimizedExecutionCacheVersions());
+    this.loadedSurface = program.surface;
+    // Keep the compatibility AST entrypoint, but funnel its result through the
+    // same canonical-IR gate used by artifact/worker execution.
+    this.loadIr(compiled.ir);
+    this.loadedProgramId = program.id;
     return compiled.ir;
   }
 
@@ -1199,6 +1193,9 @@ export class CoreSpiritRuntime {
   }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
+    // This is the executable trust boundary. Never infer or execute semantics
+    // from AST/source or accept host-generated instructions here.
+    this.assertCanonicalExecutableIr(ir);
     this.resourceGovernor.beginExecution();
     const previousIr = this.compiledIr;
     const previousBars = this.history.map(bar => ({ ...bar }));
@@ -1257,6 +1254,12 @@ export class CoreSpiritRuntime {
     }
   }
 
+  private assertCanonicalExecutableIr(ir: CoreSpiritIrProgram): void {
+    if (!validateCoreSpiritIr(ir)) {
+      throw new Error('CoreSpirit runtime rejected non-canonical or invalid IR; compile CoreScript into the canonical IR contract before execution.');
+    }
+  }
+
   getProfilerSnapshot(): CoreSpiritProfilerSnapshot { return this.profiler.snapshot(); }
   resetProfiler(): void { this.profiler.reset(); }
   getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext }; }
@@ -1266,10 +1269,14 @@ export class CoreSpiritRuntime {
   getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
+    this.assertCanonicalExecutableIr(ir);
     if (ir.languagePolicy && ir.authoringLevel !== undefined &&
         ir.languagePolicy.level !== ir.authoringLevel) {
       throw new Error('CoreSpirit runtime rejected inconsistent authoring-level metadata in the compiled artifact.');
     }
+    // Enforce temporal and graph budgets at the same canonical artifact boundary.
+    this.resourceGovernor.assertLookback(ir.maxLookback);
+    this.resourceGovernor.assertDependencies(ir.graphs?.semantic?.nodes?.map(node => node.id) ?? Object.keys(ir.semanticEnvironment ?? {}));
     const requiredCapabilities = ir.requiredCapabilities ?? [];
     if (requiredCapabilities.length) {
       const sandbox = new CoreSpiritCapabilitySandbox({ layer:this.layer, target:this.executionTarget });

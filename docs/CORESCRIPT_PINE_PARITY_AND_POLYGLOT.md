@@ -2,6 +2,19 @@
 
 This milestone is delivered in small executable contracts. A feature is not complete merely because a builtin or type exists: it must parse, type-check, lower to canonical IR, execute under the VM, emit validated output/events and pass historical/realtime/replay parity tests.
 
+## Non-negotiable ownership boundaries
+
+These boundaries apply to every feature and every runtime adapter:
+
+- **CoreScript owns language semantics.** Parsing, name resolution, typing, capability checks, language editions and lowering are defined by CoreScript. Foreign-language modules do not redefine CoreScript syntax or semantics.
+- **Canonical CoreSpirit IR and the VM own execution.** Executable code must be a validated canonical IR artifact. The VM owns instruction order, control flow, deterministic state, series semantics and execution budgets. AST recovery, source text, foreign code or Vela callbacks are never alternate execution paths.
+- **External runtimes are isolated compute hosts.** Python, Rust, C++, Julia, R, ONNX and WASM receive bounded, versioned, typed inputs and return validated values. They do not generate or mutate CoreSpirit IR, VM state, chart objects, orders or alerts. Cancellation, memory, fuel/step and time budgets are enforced at the host boundary.
+- **Vela owns chart rendering.** CoreSpirit defines semantic visual intent and stable object identity. The output adapter validates and maps renderer-neutral outputs into Vela's native ABI. Vela owns chart scene lifecycle, panes, scales, coordinate transforms, hit testing, render scheduling and pixel painting.
+- **No reverse ownership calls.** Vela does not compile or execute scripts; renderer code does not invoke VM services. Isolated compute hosts do not call back into the compiler, VM or renderer. The VM never paints or acquires broker authority.
+
+The executable architecture contract and canonical compiler-pipeline contract enforce these rules, including rejecting invalid IR at both load and execution boundaries.
+
+
 ## Pine-class execution
 
 ### Data requests
