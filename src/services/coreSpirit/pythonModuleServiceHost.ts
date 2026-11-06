@@ -39,7 +39,8 @@ export class CoreSpiritPythonModuleServiceHost implements CoreSpiritPolyglotHost
     validateCoreSpiritPolyglotManifest(manifest);validateDependencyLock(dependencyLock);
     if(manifest.language!=='python'||manifest.transport!=='host')throw new Error('Python loader accepts Python host modules only.');
     if(!packageBytes.length||packageBytes.byteLength>64*1024*1024)throw new Error('Python module package must be between 1 byte and 64 MiB.');
-    const digest=await crypto.subtle.digest('SHA-256',packageBytes);
+    const artifactBuffer=packageBytes.buffer.slice(packageBytes.byteOffset,packageBytes.byteOffset+packageBytes.byteLength) as ArrayBuffer;
+    const digest=await crypto.subtle.digest('SHA-256',artifactBuffer);
     const actualHash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     if(actualHash!==manifest.version)throw new Error('Python package bytes do not match the declared module artifact hash.');
     if(JSON.stringify(dependencyLock.packages)!==JSON.stringify(manifest.dependencies??[]))throw new Error('Python dependency lock does not match the registered module manifest.');
