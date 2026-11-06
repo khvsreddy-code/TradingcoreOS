@@ -1,0 +1,141 @@
+/**
+ * Bounded quantitative research primitives.
+ * All splits are chronological; validation/test observations are never passed
+ * to the trainer. Deployment eligibility is explicit and requires OOS evidence.
+ */
+export type CoreSpiritResearchDataset = Readonly<{
+  datasetId:string; timestampsMs:Float64Array; features:Readonly<Record<string,Float64Array>>;
+  target:Float64Array; symbol:string; timeframe:string;
+}>;
+export type CoreSpiritWalkForwardConfig = Readonly<{
+  trainBars:number; validationBars:number; testBars:number; stepBars:number;
+  purgeBars?:number; embargoBars?:number; maxFolds?:number;
+}>;
+export type CoreSpiritWalkForwardFold = Readonly<{
+  index:number; trainStart:number; trainEnd:number; validationStart:number; validationEnd:number;
+  testStart:number; testEnd:number; inferenceStartTimestampMs:number; inferenceEndTimestampMs:number;
+}>;
+export type CoreSpiritRegressionModel = Readonly<{
+  kind:'ridge-regression'; featureNames:readonly string[]; means:readonly number[];
+  scales:readonly number[]; coefficients:readonly number[]; intercept:number; ridge:number;
+  trainedThroughTimestampMs:number; checksum:string;
+}>;
+export type CoreSpiritResearchMetrics = Readonly<{
+  observations:number; mse:number; rmse:number; mae:number; directionalAccuracy:number;
+  meanActual:number; meanPrediction:number; rSquared:number|null;
+}>;
+export type CoreSpiritResearchFoldResult = Readonly<{
+  fold:CoreSpiritWalkForwardFold; model:CoreSpiritRegressionModel;
+  validation:CoreSpiritResearchMetrics; test:CoreSpiritResearchMetrics;
+}>;
+const MAX_ROWS=2_000_000, MAX_FEATURES=64, MAX_FOLDS=256;
+function assertDataset(d:CoreSpiritResearchDataset):void {
+  const n=d.timestampsMs.length, names=Object.keys(d.features);
+  if(!d.datasetId||!d.symbol||!d.timeframe||n<3||n>MAX_ROWS) throw new Error('Research dataset identity or row count is invalid.');
+  if(!names.length||names.length>MAX_FEATURES||d.target.length!==n) throw new Error('Research feature/target dimensions are invalid.');
+  for(const name of names) if(!name||d.features[name]!.length!==n) throw new Error('Research feature column length mismatch: '+name);
+  for(let i=0;i<n;i++){
+    const t=d.timestampsMs[i]!;
+    if(!Number.isFinite(t)||(i>0&&t<=d.timestampsMs[i-1]!)) throw new Error('Research timestamps must be finite and strictly increasing.');
+    if(!Number.isFinite(d.target[i]!)) throw new Error('Research target contains a non-finite value at row '+i);
+    for(const name of names) if(!Number.isFinite(d.features[name]![i]!)) throw new Error('Research feature '+name+' contains a non-finite value at row '+i);
+  }
+}
+export function planCoreSpiritWalkForward(dataset:CoreSpiritResearchDataset,c:CoreSpiritWalkForwardConfig):CoreSpiritWalkForwardFold[]{
+  assertDataset(dataset);
+  const positive=['trainBars','validationBars','testBars','stepBars'] as const;
+  for(const k of positive) if(!Number.isSafeInteger(c[k])||c[k]<=0) throw new Error(k+' must be a positive integer.');
+  const purge=c.purgeBars??0, embargo=c.embargoBars??0, max=c.maxFolds??MAX_FOLDS;
+  if(!Number.isSafeInteger(purge)||purge<0||!Number.isSafeInteger(embargo)||embargo<0||!Number.isSafeInteger(max)||max<1||max>MAX_FOLDS) throw new Error('Walk-forward purge, embargo or fold limit is invalid.');
+  const folds:CoreSpiritWalkForwardFold[]=[];
+  let trainStart=0;
+  while(folds.length<max){
+    const trainEnd=trainStart+c.trainBars;
+    const validationStart=trainEnd+purge+embargo;
+    const validationEnd=validationStart+c.validationBars;
+    const testStart=validationEnd+purge+embargo;
+    const testEnd=testStart+c.testBars;
+    if(testEnd>dataset.timestampsMs.length) break;
+    folds.push(Object.freeze({index:folds.length,trainStart,trainEnd,validationStart,validationEnd,testStart,testEnd,
+      inferenceStartTimestampMs:dataset.timestampsMs[testStart]!,inferenceEndTimestampMs:dataset.timestampsMs[testEnd-1]!}));
+    trainStart+=c.stepBars;
+  }
+  if(!folds.length) throw new Error('Dataset is too short for one leakage-safe walk-forward fold.');
+  return folds;
+}
+function solve(a:number[][],b:number[]):number[]{
+  const n=b.length, m=a.map((row,i)=>[...row,b[i]!]);
+  for(let col=0;col<n;col++){
+    let pivot=col;
+    for(let row=col+1;row<n;row++) if(Math.abs(m[row]![col]!)>Math.abs(m[pivot]![col]!)) pivot=row;
+    if(Math.abs(m[pivot]![col]!)<1e-12) throw new Error('Ridge system is singular; increase regularization.');
+    [m[col],m[pivot]]=[m[pivot]!,m[col]!];
+    const divisor=m[col]![col]!;
+    for(let j=col;j<=n;j++) m[col]![j]=m[col]![j]!/divisor;
+    for(let row=0;row<n;row++) if(row!==col){
+      const factor=m[row]![col]!;
+      for(let j=col;j<=n;j++) m[row]![j]=m[row]![j]!-factor*m[col]![j]!;
+    }
+  }
+  return m.map(row=>row[n]!);
+}
+function hashNumbers(values:readonly number[]):string{
+  let h=2166136261;
+  for(const value of values){const s=String(value);for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);}
+  return (h>>>0).toString(16).padStart(8,'0').repeat(8);
+}
+export function trainCoreSpiritRidge(dataset:CoreSpiritResearchDataset,start:number,end:number,ridge=1e-3):CoreSpiritRegressionModel{
+  assertDataset(dataset);
+  const names=Object.keys(dataset.features);
+  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end>dataset.target.length||end-start<names.length+2) throw new Error('Training window is too small or invalid.');
+  if(!Number.isFinite(ridge)||ridge<=0||ridge>1e6) throw new Error('Ridge regularization must be in (0, 1e6].');
+  const means=names.map(name=>{let s=0;for(let i=start;i<end;i++)s+=dataset.features[name]![i]!;return s/(end-start);});
+  const scales=names.map((name,j)=>{let s=0;for(let i=start;i<end;i++){const d=dataset.features[name]![i]!-means[j]!;s+=d*d;}return Math.sqrt(s/(end-start))||1;});
+  const p=names.length+1, xtx=Array.from({length:p},()=>new Array<number>(p).fill(0)),xty=new Array<number>(p).fill(0);
+  for(let i=start;i<end;i++){
+    const row=[1,...names.map((name,j)=>(dataset.features[name]![i]!-means[j]!)/scales[j]!)], y=dataset.target[i]!;
+    for(let a=0;a<p;a++){xty[a]+=row[a]!*y;for(let b=0;b<p;b++)xtx[a]![b]+=row[a]!*row[b]!;}
+  }
+  for(let j=1;j<p;j++)xtx[j]![j]+=ridge;
+  const beta=solve(xtx,xty), coefficients=beta.slice(1), intercept=beta[0]!-coefficients.reduce((sum,c,j)=>sum+c*means[j]!/scales[j]!,0);
+  const identity=[...means,...scales,...coefficients,intercept,ridge,dataset.timestampsMs[end-1]!];
+  return Object.freeze({kind:'ridge-regression',featureNames:Object.freeze(names),means:Object.freeze(means),scales:Object.freeze(scales),
+    coefficients:Object.freeze(coefficients),intercept,ridge,trainedThroughTimestampMs:dataset.timestampsMs[end-1]!,checksum:hashNumbers(identity)});
+}
+export function predictCoreSpiritRidge(model:CoreSpiritRegressionModel,dataset:CoreSpiritResearchDataset,index:number):number{
+  if(index<0||index>=dataset.target.length||dataset.timestampsMs[index]!<=model.trainedThroughTimestampMs) throw new Error('Prediction must be strictly after the model training boundary.');
+  let value=model.intercept;
+  for(let j=0;j<model.featureNames.length;j++){const name=model.featureNames[j]!;value+=model.coefficients[j]!*(dataset.features[name]![index]!-model.means[j]!)/model.scales[j]!;}
+  if(!Number.isFinite(value)) throw new Error('Model produced a non-finite prediction.');
+  return value;
+}
+export function evaluateCoreSpiritResearch(dataset:CoreSpiritResearchDataset,start:number,end:number,predict:(index:number)=>number):CoreSpiritResearchMetrics{
+  if(start<0||end>dataset.target.length||end<=start) throw new Error('Evaluation range is invalid.');
+  let squared=0,absolute=0,actual=0,forecast=0,directional=0,previousActual:number|null=null,previousForecast:number|null=null;
+  for(let i=start;i<end;i++){
+    const y=dataset.target[i]!,p=predict(i),e=y-p;squared+=e*e;absolute+=Math.abs(e);actual+=y;forecast+=p;
+    if(previousActual!==null&&previousForecast!==null&&Math.sign(y-previousActual)===Math.sign(p-previousForecast))directional++;
+    previousActual=y;previousForecast=p;
+  }
+  const n=end-start,meanActual=actual/n,meanPrediction=forecast/n;
+  let variance=0;for(let i=start;i<end;i++)variance+=(dataset.target[i]!-meanActual)**2;
+  const mse=squared/n;
+  return Object.freeze({observations:n,mse,rmse:Math.sqrt(mse),mae:absolute/n,directionalAccuracy:n>1?directional/(n-1):0,
+    meanActual,meanPrediction,rSquared:variance>0?1-squared/variance:null});
+}
+export function runCoreSpiritWalkForwardResearch(dataset:CoreSpiritResearchDataset,config:CoreSpiritWalkForwardConfig,ridge=1e-3):CoreSpiritResearchFoldResult[]{
+  const folds=planCoreSpiritWalkForward(dataset,config);
+  return folds.map(fold=>{
+    const model=trainCoreSpiritRidge(dataset,fold.trainStart,fold.trainEnd,ridge);
+    const predict=(index:number)=>predictCoreSpiritRidge(model,dataset,index);
+    return Object.freeze({fold,model,
+      validation:evaluateCoreSpiritResearch(dataset,fold.validationStart,fold.validationEnd,predict),
+      test:evaluateCoreSpiritResearch(dataset,fold.testStart,fold.testEnd,predict)});
+  });
+}
+export function coreSpiritResearchDeploymentGate(results:readonly CoreSpiritResearchFoldResult[],minimumFolds=3):Readonly<{eligible:boolean;reason:string;meanTestRmse:number|null}>{
+  if(results.length<minimumFolds) return Object.freeze({eligible:false,reason:'Insufficient independent walk-forward folds.',meanTestRmse:null});
+  const values=results.map(r=>r.test.rmse);
+  if(values.some(v=>!Number.isFinite(v))) return Object.freeze({eligible:false,reason:'Out-of-sample metrics are invalid.',meanTestRmse:null});
+  return Object.freeze({eligible:true,reason:'Walk-forward out-of-sample evidence exists; production risk approval is still required.',meanTestRmse:values.reduce((a,b)=>a+b,0)/values.length});
+}
