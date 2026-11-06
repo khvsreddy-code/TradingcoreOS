@@ -141,3 +141,50 @@ export function coreSpiritResearchDeploymentGate(results:readonly CoreSpiritRese
   if(values.some(v=>!Number.isFinite(v))) return Object.freeze({eligible:false,reason:'Out-of-sample metrics are invalid.',meanTestRmse:null});
   return Object.freeze({eligible:true,reason:'Walk-forward out-of-sample evidence exists; production risk approval is still required.',meanTestRmse:values.reduce((a,b)=>a+b,0)/values.length});
 }
+
+export type CoreSpiritResearchPromotionPolicy=Readonly<{
+  minimumFolds:number;maximumMeanTestRmse:number;minimumMeanDirectionalAccuracy:number;maximumMeanTestMae:number;
+}>;
+export type CoreSpiritResearchDeploymentArtifact=Readonly<{
+  artifactHash:string;datasetId:string;symbol:string;timeframe:string;model:CoreSpiritRegressionModel;
+  trainingEndTimestampMs:number;inferenceBoundaryTimestampMs:number;walkForwardFoldCount:number;
+  meanTestRmse:number;meanTestMae:number;meanTestDirectionalAccuracy:number;
+  releaseStatus:'research-approved';productionEligible:false;
+}>;
+export interface CoreSpiritResearchArtifactStore{publish(artifact:CoreSpiritResearchDeploymentArtifact):Promise<void>;}
+function hashText(value:string):string{
+  let h=2166136261;
+  for(let i=0;i<value.length;i++)h=Math.imul(h^value.charCodeAt(i),16777619);
+  return (h>>>0).toString(16).padStart(8,'0').repeat(8);
+}
+/** Promote only after OOS gates; production eligibility remains a separate risk approval. */
+export async function promoteCoreSpiritResearchModel(
+  dataset:CoreSpiritResearchDataset,results:readonly CoreSpiritResearchFoldResult[],
+  policy:CoreSpiritResearchPromotionPolicy,store:CoreSpiritResearchArtifactStore,
+  inferenceBoundaryTimestampMs:number,ridge=1e-3,checkBudget?:()=>void,
+):Promise<CoreSpiritResearchDeploymentArtifact>{
+  assertDataset(dataset);
+  if(!Number.isSafeInteger(policy.minimumFolds)||policy.minimumFolds<3||
+     !Number.isFinite(policy.maximumMeanTestRmse)||policy.maximumMeanTestRmse<0||
+     !Number.isFinite(policy.minimumMeanDirectionalAccuracy)||policy.minimumMeanDirectionalAccuracy<0||policy.minimumMeanDirectionalAccuracy>1||
+     !Number.isFinite(policy.maximumMeanTestMae)||policy.maximumMeanTestMae<0)throw new Error('Research promotion policy is invalid.');
+  const gate=coreSpiritResearchDeploymentGate(results,policy.minimumFolds);
+  if(!gate.eligible||gate.meanTestRmse==null)throw new Error(gate.reason);
+  const meanMae=results.reduce((sum,result)=>sum+result.test.mae,0)/results.length;
+  const meanDirectional=results.reduce((sum,result)=>sum+result.test.directionalAccuracy,0)/results.length;
+  if(gate.meanTestRmse>policy.maximumMeanTestRmse)throw new Error('Research promotion rejected: mean out-of-sample RMSE exceeds policy.');
+  if(meanMae>policy.maximumMeanTestMae)throw new Error('Research promotion rejected: mean out-of-sample MAE exceeds policy.');
+  if(meanDirectional<policy.minimumMeanDirectionalAccuracy)throw new Error('Research promotion rejected: directional accuracy is below policy.');
+  const trainingEndTimestampMs=dataset.timestampsMs[dataset.timestampsMs.length-1]!;
+  if(!Number.isFinite(inferenceBoundaryTimestampMs)||inferenceBoundaryTimestampMs<=trainingEndTimestampMs)throw new Error('Deployment inference boundary must be strictly after the final training observation.');
+  checkBudget?.();
+  const model=trainCoreSpiritRidge(dataset,0,dataset.timestampsMs.length,ridge,checkBudget);
+  const artifactHash=hashText([dataset.datasetId,dataset.symbol,dataset.timeframe,model.checksum,
+    trainingEndTimestampMs,inferenceBoundaryTimestampMs,gate.meanTestRmse,meanMae,meanDirectional].join('|'));
+  const artifact=Object.freeze({artifactHash,datasetId:dataset.datasetId,symbol:dataset.symbol,timeframe:dataset.timeframe,model,
+    trainingEndTimestampMs,inferenceBoundaryTimestampMs,walkForwardFoldCount:results.length,
+    meanTestRmse:gate.meanTestRmse,meanTestMae:meanMae,meanTestDirectionalAccuracy:meanDirectional,
+    releaseStatus:'research-approved' as const,productionEligible:false as const});
+  await store.publish(artifact);
+  return artifact;
+}
