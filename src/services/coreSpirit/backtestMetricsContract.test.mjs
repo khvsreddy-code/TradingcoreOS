@@ -8,5 +8,5 @@ assert.deepEqual(compareCoreSpiritBenchmark(equity,[{timestampMs:1,equity:2000},
 assert.throws(()=>calculateCoreSpiritBacktestMetrics([...equity].reverse(),trades,1000),/chronological/);
 
 const simulationMetrics=calculateCoreSpiritSimulationMetrics({equityCurve:equity,closedTrades:trades,summary:{initialCash:1000}});
-assert.equal(simulationMetrics.netProfit,30);assert.equal(simulationMetrics.closedTradeCount,undefined);
+assert.equal(simulationMetrics.netProfit,30);assert.equal(simulationMetrics.feesPaid,9);
 console.log('CORESPIRIT_BACKTEST_METRICS_CONTRACT_OK');
