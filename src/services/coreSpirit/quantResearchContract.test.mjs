@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {planCoreSpiritWalkForward,runCoreSpiritWalkForwardResearch,coreSpiritResearchDeploymentGate,predictCoreSpiritRidge} from './quantResearch.ts';
-const n=180,timestampsMs=Float64Array.from({length:n},(_,i)=>1700000000000+i*60000);
+const n=360,timestampsMs=Float64Array.from({length:n},(_,i)=>1700000000000+i*60000);
 const x=Float64Array.from({length:n},(_,i)=>i/10),z=Float64Array.from({length:n},(_,i)=>Math.sin(i/7));
 const target=Float64Array.from({length:n},(_,i)=>2*x[i]!-.5*z[i]!+3);
 const data={datasetId:'fixture',timestampsMs,features:{trend:x,cycle:z},target,symbol:'NIFTY',timeframe:'5m'};
