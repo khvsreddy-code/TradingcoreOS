@@ -188,7 +188,7 @@ export async function promoteCoreSpiritResearchModel(
   if(!Number.isFinite(inferenceBoundaryTimestampMs)||inferenceBoundaryTimestampMs<=trainingEndTimestampMs)throw new Error('Deployment inference boundary must be strictly after the final training observation.');
   checkBudget?.();
   const model=trainCoreSpiritRidge(dataset,0,dataset.timestampsMs.length,ridge,checkBudget);
-  const artifactHash=await hashText([dataset.datasetId,dataset.symbol,dataset.timeframe,model.checksum,
+  const artifactHash=await hashText([dataset.datasetId,dataset.symbol,dataset.timeframe,JSON.stringify(model),
     trainingEndTimestampMs,inferenceBoundaryTimestampMs,gate.meanTestRmse,meanMae,meanDirectional].join('|'));
   const artifact=Object.freeze({artifactHash,datasetId:dataset.datasetId,symbol:dataset.symbol,timeframe:dataset.timeframe,model,
     trainingEndTimestampMs,inferenceBoundaryTimestampMs,walkForwardFoldCount:results.length,
