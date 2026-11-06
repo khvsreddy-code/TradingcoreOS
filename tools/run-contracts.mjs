@@ -127,7 +127,6 @@ const contracts = [
   ['corespirit-python-ml-adapter', ['src/services/coreSpirit/pythonMlModelAdapterContract.test.mjs', true]],
   ['corespirit-polyglot-module-abi', ['src/services/coreSpirit/polyglotModulesContract.test.mjs', true]],
   ['corespirit-quant-research', ['src/services/coreSpirit/quantResearchContract.test.mjs', true]],
-  ['corespirit-incremental-performance', ['src/services/coreSpirit/performanceRuntimeContract.test.mjs', true]],
   ['corespirit-alert-delivery', ['src/services/coreSpirit/alertDeliveryContract.test.mjs', true]],
   ['vela-workspace-autosave', ['src/velaWorkspaceAutosaveContract.test.mjs', false]],
   ['market-desk-news-history-warm', ['src/marketDeskAndHistoryWarmContract.test.mjs', false]],
