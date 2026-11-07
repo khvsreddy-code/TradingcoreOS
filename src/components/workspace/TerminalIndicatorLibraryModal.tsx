@@ -12,6 +12,7 @@ type NativeIndicatorInfo = {
 };
 
 type VelaIndicatorBridge = {
+  [key: string]: unknown;
   getNativeIndicatorCatalog?: () => Promise<NativeIndicatorInfo[]>;
   addNativeIndicator?: (type: string) => Promise<{ id?: string; alreadyPresent?: boolean }>;
 };
