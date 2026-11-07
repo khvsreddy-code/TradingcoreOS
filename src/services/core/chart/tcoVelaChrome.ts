@@ -23,6 +23,7 @@ import {
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
+// Advanced watchlist metrics extend buildWatchlistTechnicalSummary (RSI, EMA20/50 and MACD) with ATR, ADX, VWAP and relative volume.
 import { buildWatchlistAdvancedTechnicalSummary, type WatchlistAdvancedTechnicalSummary } from '../../marketData/watchlistAdvancedTechnicals';
 import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../terminal/terminalDataService';
 import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
