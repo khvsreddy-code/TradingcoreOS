@@ -21,7 +21,8 @@ import {
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news/newsService';
-import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../marketData/watchlistTechnicals';
+import { buildWatchlistAdvancedTechnicalSummary, type WatchlistAdvancedTechnicalSummary } from '../../marketData/watchlistAdvancedTechnicals';
+import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../terminal/terminalDataService';
 import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
@@ -86,6 +87,9 @@ const WATCHLIST_STATE_KEY = 'tco.watchlist.v2';
 const WATCHLIST_LOCAL_KEY = 'tradingcore:vela:watchlist:v2';
 let watchlist: WatchlistItem[] = [...DEFAULT_WATCHLIST];
 const watchlistRefreshers = new Set<() => void>();
+let watchlistCloudSaveTimer: number | null = null;
+let watchlistMutationRevision = 0;
+let watchlistCloudReady = false;
 
 function normalizeWatchlist(value: unknown): WatchlistItem[] {
   const raw: unknown[] = Array.isArray(value)
@@ -134,9 +138,17 @@ function symbolDescriptor(item: WatchlistItem) {
 
 function applyWatchlist(next: WatchlistItem[], ctx?: { stateChanged?: () => void }): void {
   watchlist = normalizeWatchlist(next);
+  watchlistMutationRevision += 1;
   persistWatchlistLocal();
   ctx?.stateChanged?.();
   watchlistRefreshers.forEach((refresh) => refresh());
+  if (watchlistCloudReady && typeof window !== 'undefined') {
+    if (watchlistCloudSaveTimer !== null) window.clearTimeout(watchlistCloudSaveTimer);
+    watchlistCloudSaveTimer = window.setTimeout(() => {
+      watchlistCloudSaveTimer = null;
+      void saveDefaultTerminalWatchlist(watchlist).catch(() => undefined);
+    }, 450);
+  }
 }
 
 loadWatchlistLocal();
@@ -148,6 +160,7 @@ const watchlistStatePersistence: StatePersistenceHandler = {
     return { version: 2, items: watchlist };
   },
   restore(payload) {
+    if (watchlistCloudReady || watchlistMutationRevision > 0) return;
     watchlist = normalizeWatchlist(payload);
     persistWatchlistLocal();
     watchlistRefreshers.forEach((refresh) => refresh());
@@ -1394,7 +1407,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     };
     const rowRefs = new Map<string, RowRef>();
     const newsBySymbol = new Map<string, { bundle: { provider: string; items: TradingCoreNewsItem[] }; expiresAt: number }>();
-    const technicalBySymbol = new Map<string, { summary: WatchlistTechnicalSummary | null; expiresAt: number }>();
+    const technicalBySymbol = new Map<string, { summary: WatchlistAdvancedTechnicalSummary | null; expiresAt: number }>();
     const enrichmentInFlight = new Map<string, Promise<void>>();
     let lastRenderedNewsSignature = '';
 
@@ -1439,8 +1452,8 @@ const bookmarksPanel: SidePanelDescriptor = {
         : technicalBySymbol.has(current.toUpperCase()) ? 'Technicals unavailable for this history window' : 'Calculating technicals…';
       technicalSummary.style.color = technical?.trend === 'Bullish' ? '#22c55e' : technical?.trend === 'Bearish' ? '#f23645' : 'var(--vela-fg-bright)';
       technicalValues.textContent = technical
-        ? `EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:2})} · EMA50 ${technical.ema50.toLocaleString('en-IN',{maximumFractionDigits:2})} · MACD H ${technical.macdHistogram.toFixed(2)} · ${technical.candleCount} bars`
-        : 'RSI · EMA20 · EMA50 · MACD';
+        ? `EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:2})} · EMA50 ${technical.ema50.toLocaleString('en-IN',{maximumFractionDigits:2})} · MACD H ${technical.macdHistogram.toFixed(2)} · ATR14 ${technical.atr14 == null ? '—' : technical.atr14.toFixed(2)} · ADX14 ${technical.adx14 == null ? '—' : technical.adx14.toFixed(1)} · VWAP ${technical.sessionVwap == null ? '—' : technical.sessionVwap.toLocaleString('en-IN',{maximumFractionDigits:2})} · RVOL ${technical.relativeVolume20 == null ? '—' : technical.relativeVolume20.toFixed(2)}× · ${technical.candleCount} bars`
+        : 'RSI · EMA20 · EMA50 · MACD · ATR · ADX · VWAP';
 
       const newsRecord = newsBySymbol.get(current.toUpperCase());
       const newsItems = newsRecord?.bundle.items || [];
@@ -1478,7 +1491,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     const updateEnrichmentRow = (item: WatchlistItem, ref: RowRef): void => {
       const technical = technicalBySymbol.get(item.symbol)?.summary;
       ref.technicals.textContent = technical
-        ? `${technical.trend.toUpperCase()} · RSI ${technical.rsi14.toFixed(0)} · EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:1})}`
+        ? `${technical.trend.toUpperCase()} · RSI ${technical.rsi14.toFixed(0)} · ADX ${technical.adx14 == null ? '—' : technical.adx14.toFixed(0)} · EMA20 ${technical.ema20.toLocaleString('en-IN',{maximumFractionDigits:1})}`
         : technicalBySymbol.has(item.symbol) ? 'TECHNICALS UNAVAILABLE' : 'TECHNICALS · calculating…';
       ref.technicals.style.color = technical?.trend === 'Bullish' ? '#22c55e' : technical?.trend === 'Bearish' ? '#f23645' : 'var(--vela-fg-muted)';
       const newsRecord = newsBySymbol.get(item.symbol);
@@ -1861,7 +1874,7 @@ const bookmarksPanel: SidePanelDescriptor = {
                     low: Number(bar.low), close: Number(bar.close), volume: Number(bar.volume) || 0,
                   }));
                   technicalBySymbol.set(item.symbol, {
-                    summary: buildWatchlistTechnicalSummary(canonicalCandles),
+                    summary: buildWatchlistAdvancedTechnicalSummary(canonicalCandles),
                     expiresAt: Date.now() + (canonicalCandles.length >= 50 ? 120_000 : 30_000),
                   });
                   return;
@@ -1873,7 +1886,7 @@ const bookmarksPanel: SidePanelDescriptor = {
                   candles = await tradingCoreRuntime.getHistoricalData(item.symbol, '5minute', AbortSignal.timeout(12_000), 2_000);
                 }
                 technicalBySymbol.set(item.symbol, {
-                  summary: buildWatchlistTechnicalSummary(candles || []),
+                  summary: buildWatchlistAdvancedTechnicalSummary(candles || []),
                   expiresAt: Date.now() + ((candles?.length || 0) >= 50 ? 120_000 : 30_000),
                 });
               } catch {
@@ -1949,6 +1962,22 @@ const bookmarksPanel: SidePanelDescriptor = {
       updateRows();
     }, 5000);
     const enrichmentTimer = window.setInterval(() => void warmWatchlistEnrichment(), 30_000);
+    const cloudRevisionAtLoad = watchlistMutationRevision;
+    void loadDefaultTerminalWatchlist().then((cloudItems) => {
+      watchlistCloudReady = true;
+      if (!document.contains(root)) return;
+      if (watchlistMutationRevision !== cloudRevisionAtLoad) {
+        void saveDefaultTerminalWatchlist(watchlist).catch(() => undefined);
+        return;
+      }
+      if (cloudItems && cloudItems.length) {
+        watchlist = normalizeWatchlist(cloudItems);
+        persistWatchlistLocal();
+        watchlistRefreshers.forEach((refreshWatchlist) => refreshWatchlist());
+      } else {
+        void saveDefaultTerminalWatchlist(watchlist).catch(() => undefined);
+      }
+    }).catch(() => { watchlistCloudReady = true; });
 
     return {
       onOpen: refresh,
