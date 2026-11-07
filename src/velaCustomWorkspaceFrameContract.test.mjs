@@ -13,8 +13,8 @@ const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts'
 const rendererPort = read('vendor/vela/src/core/ports/IChartRenderer.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
-assert.match(upstream, /Upstream source version:\s*\*\*0\.9\.0\*\*/i, 'TCO must continue to use the exact official Vela 0.9.0 foundation pinned by the vendor manifest');
-assert.match(upstream, /Previous source base: Vela 0\.8\.5/, 'the Vela 0.9.0 integration must retain its documented 0.8.5 ancestry');
+assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.1\*\*/i, 'TCO must continue to use the exact official Vela 0.10.1 foundation pinned by the vendor manifest');
+assert.match(upstream, /Previous source base: Vela 0\.9\.0/, 'the Vela 0.10.1 integration must retain its documented 0.9.0 three-way merge base');
 assert.match(terminal, /topbar:\s*\{/);
 assert.match(terminal, /'tco\.workspace-frame'/, 'workspace customization must be reachable from the existing top bar');
 assert.match(terminal, /bottombar:\s*false/, 'the terminal keeps its topbar-only command surface');
