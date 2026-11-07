@@ -20,7 +20,7 @@
       "purpose": "Persist validated per-pane height weights in the versioned chart document, restore once each pane exists, preserve pending pane weights during progressive loading, and mark workspace state dirty after separator or pane lifecycle changes.",
       "tests": [
         "src/velaPaneLayoutPersistence.test.ts",
-        "src/vela083FoundationContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs",
         "src/velaLiveUiCoreSpiritContract.test.mjs"
       ]
     },
@@ -32,7 +32,7 @@
       ],
       "purpose": "Retain columnar history, compact bar storage, versioned scene state and incremental patch semantics required by TradingCoreOS live data and CoreSpirit output.",
       "tests": [
-        "src/vela083FoundationContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs",
         "src/velaIncrementalPatchContract.test.mjs",
         "src/velaRevisionedScenePatchContract.test.mjs",
         "tools/velaColumnarLiveRendererContract.mjs",
@@ -53,7 +53,7 @@
         "src/velaNativeIndicatorLazyContract.test.mjs",
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "src/coreSpiritVelaCapabilityContract.test.mjs",
-        "src/vela083FoundationContract.test.mjs"
+        "src/vela101FoundationContract.test.mjs"
       ]
     },
     {
@@ -66,7 +66,7 @@
         "src/velaDrawingCapabilityInventoryContract.test.mjs",
         "src/velaAdvancedDrawingFamilyLazyContract.test.mjs",
         "src/velaDrawingPersistenceRoundTripContract.test.mjs",
-        "src/vela083FoundationContract.test.mjs"
+        "src/vela101FoundationContract.test.mjs"
       ]
     },
     {
@@ -84,7 +84,7 @@
       "purpose": "Preserve native chart rendering, pane-aware interaction and TCO visual/chrome integration, including local attribution-compatible branding, price-axis behavior and custom rendering layers.",
       "tests": [
         "src/vela085ConformanceContract.test.mjs",
-        "src/vela083FoundationContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs",
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "src/velaTcoWorkspaceUxContract.test.mjs",
         "src/velaIncrementalPatchContract.test.mjs"
@@ -107,7 +107,7 @@
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "tools/chartCandleDataPlaneFastSwitchContract.mjs",
         "tools/velaCandleTimeNormalizationContract.mjs",
-        "src/vela083FoundationContract.test.mjs"
+        "src/vela101FoundationContract.test.mjs"
       ]
     },
     {
@@ -122,7 +122,7 @@
         "src/velaWorkspaceAutosaveContract.test.mjs",
         "src/velaPaneLayoutPersistence.test.ts",
         "src/velaLiveUiCoreSpiritContract.test.mjs",
-        "src/vela083FoundationContract.test.mjs"
+        "src/vela101FoundationContract.test.mjs"
       ]
     }
   ]

@@ -34,7 +34,7 @@ const contracts = [
   ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
   ['live-candle-lifecycle', ['src/liveCandleLifecycleContract.test.mjs', false]],
   ['live-candle-timestamp-toolbar', ['src/liveCandleTimestampAndToolbarContract.test.mjs', false]],
-  ['vela-090-foundation', ['src/vela083FoundationContract.test.mjs', false]],
+  ['vela-101-foundation', ['src/vela101FoundationContract.test.mjs', false]],
   ['vela-pane-layout-persistence-runtime', ['src/velaPaneLayoutPersistence.test.ts', true]],
   ['vela-090-conformance', ['src/vela085ConformanceContract.test.mjs', false]],
   ['vela-live-ui-corespirit', ['src/velaLiveUiCoreSpiritContract.test.mjs', false]],

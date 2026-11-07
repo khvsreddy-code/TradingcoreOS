@@ -44,8 +44,8 @@ assert.equal(overlayDiff.upstream.commit, 'e77d22325e51c7a10edcc617e666ca1a5fd65
 assert.equal(releaseDiff.upstream.base.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'release diff must compare from the exact 0.9.0 source base');
 assert.equal(releaseDiff.upstream.release.commit, 'e77d22325e51c7a10edcc617e666ca1a5fd65e68', 'release diff must terminate at the exact 0.10.1 source commit');
 assert.equal(releaseDiff.counts.total, releaseDiff.files.length, 'release diff summary must match changed source entries');
-assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/i18n/registry.ts'), 'release diff must include the localization registry');
-assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/native-indicators/classics/averages.ts'), 'release diff must include the breaking regression-study migration');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/locales/catalog.d.ts'), 'release diff must include the generated localization catalogue types');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/widget/contributions.ts'), 'release diff must include the updated widget contribution contract');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/ui/chromeStyles.ts' && file.status === 'added'), '0.10.1 adds the UI-kit CSS isolation boundary');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/ui/renamed.ts' && file.status === 'added'), '0.10.1 adds compatibility aliases for renamed UI-kit exports');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/engine/EngineOrchestrator.ts'), 'release delta includes the updated indicator code-trial lifecycle');
