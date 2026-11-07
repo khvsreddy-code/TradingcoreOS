@@ -23,7 +23,7 @@ export class CoreSpiritResearchServiceHost{
   }
   private validateRequest(input:CoreSpiritResearchJobRequest):void{
     const d=input.dataset;
-    if(!d.datasetId||!d.objectKey||d.objectKey.length>512||d.objectKey.startsWith('/')||d.objectKey.includes('..')||d.objectKey.includes('://')||/[\\u0000-\\u001f]/.test(d.objectKey))throw new Error('Research dataset reference must be an opaque storage key.');
+    if(!d.datasetId||!d.objectKey||d.objectKey.length>512||d.objectKey.startsWith('/')||d.objectKey.includes('..')||d.objectKey.includes('://')||/[\u0000-\u001f]/.test(d.objectKey))throw new Error('Research dataset reference must be an opaque storage key.');
     if(!/^[a-f0-9]{64}$/.test(d.sha256)||!Number.isSafeInteger(d.rows)||d.rows<3||d.rows>2_000_000)throw new Error('Research dataset checksum or row count is invalid.');
     if(!d.symbol||!d.timeframe||!d.targetName||!d.featureNames.length||d.featureNames.length>64||new Set(d.featureNames).size!==d.featureNames.length||d.featureNames.includes(d.targetName))throw new Error('Research dataset feature schema is invalid or leaks the target into its features.');
     for(const name of d.featureNames)if(!name.trim())throw new Error('Research feature names cannot be empty.');
