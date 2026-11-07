@@ -3065,27 +3065,25 @@ const watchlistAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
 };
 
+// Override Vela's built-in Indicators slot so users get one consistent entry point.
 const indicatorLibraryAction: WidgetActionDescriptor = {
-  id: 'tco.indicator-library',
+  id: 'indicators',
   target: 'topbar',
   label: 'Indicator Library',
   icon: 'indicators',
   iconOnly: true,
-  align: 'right',
-  order: 7,
-  mobile: 'menu',
+  align: 'left',
+  mobile: 'bar',
   run() { window.dispatchEvent(new CustomEvent('tco:open-indicator-library')); },
 };
 
+// Quant is a right-sidebar action, not another topbar command.
 const quantAction: WidgetActionDescriptor = {
   id: 'tco.quant',
-  target: 'topbar',
+  target: 'sidebar',
   label: 'Quant',
   icon: 'activity',
-  iconOnly: true,
-  align: 'right',
   order: 8,
-  mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.quant'); },
 };
 
