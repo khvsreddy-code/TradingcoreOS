@@ -78,8 +78,6 @@ export function createTcoVelaTerminalOptions(
       left:['symbol','timeframes','style','layout','indicators'],
       right:[
         'tco.research',
-        'tco.indicator-library',
-        'tco.quant',
         'tco.automation',
         'tco.trading',
         'tco.journal',
