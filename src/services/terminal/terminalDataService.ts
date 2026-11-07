@@ -26,6 +26,7 @@ export type TerminalJournalTrade = {
   tags: string[];
   notes: string;
   source: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 };
 
