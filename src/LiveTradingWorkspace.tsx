@@ -4,6 +4,7 @@ import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
+import { TerminalIndicatorLibraryHost } from './components/workspace/TerminalIndicatorLibraryModal';
 import { FyersConnectionPrompt } from './components/brokers/FyersConnectionPrompt';
 import { hasValidFyersSession } from './services/marketData/yahooFallback';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -386,6 +387,24 @@ const browserRuntimeMetrics = useRef({
                 replay: cell.chart.replay.state,
               };
             });
+          },
+          getNativeIndicatorCatalog: async () => {
+            const cells = workspace?.cells?.() ?? [];
+            const active = workspace?.active ?? cells[0];
+            if (!active?.chart) return [];
+            await active.chart.ready().catch(() => undefined);
+            return active.chart.availableNativeIndicators();
+          },
+          addNativeIndicator: async (type: string) => {
+            const cells = workspace?.cells?.() ?? [];
+            const active = workspace?.active ?? cells[0];
+            if (!active?.chart) throw new Error('The active Vela chart is unavailable.');
+            const catalog = await active.chart.availableNativeIndicators();
+            const entry = catalog.find(item => item.type === type);
+            if (!entry || !entry.supported) throw new Error('This indicator is not supported by the active instrument.');
+            if (entry.present && !entry.multiInstance) return { alreadyPresent: true };
+            const handle = await active.chart.addNativeIndicatorAsync(type);
+            return { id: handle.id, alreadyPresent: false };
           },
         };
         if (host.current) applySavedTcoVelaAppearance(host.current);
@@ -1012,6 +1031,7 @@ const browserRuntimeMetrics = useRef({
             </svg>
           </button>
         </aside>
+        <TerminalIndicatorLibraryHost />
         <FyersConnectionPrompt floating onConnect={() => setBrokerStatusOpen(true)} />
         {brokerStatusOpen && (
           <BrokerSettingsModal
