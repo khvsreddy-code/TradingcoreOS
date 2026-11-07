@@ -9,7 +9,7 @@ Do not identify a TCO-local edit as an upstream change just because it lives und
 
 | Patch ID | Boundary | Purpose | Contract coverage |
 | --- | --- | --- | --- |
-| `pane-layout-persistence` | `src/state/document.ts`, `src/workspace/ChartCell.ts`, `src/workspace/VelaWorkspace.ts` | Persist validated pane weights, restore them without fighting live drags, and route pane changes through the debounced workspace save. | `src/velaPaneLayoutPersistence.test.ts`, `src/vela083FoundationContract.test.mjs`, `src/velaLiveUiCoreSpiritContract.test.mjs` |
+| `pane-layout-persistence` | `src/state/document.ts`, `src/workspace/ChartCell.ts`, `src/workspace/VelaWorkspace.ts` | Persist validated pane weights, restore them without fighting live drags, and route pane changes through the debounced workspace save. | `src/velaPaneLayoutPersistence.test.ts`, `src/vela101FoundationContract.test.mjs`, `src/velaLiveUiCoreSpiritContract.test.mjs` |
 | `columnar-history-and-scene-patches` | `src/core/model/**` and scene graph | Retain columnar OHLCV history, efficient patches and stable scene identity for high-frequency TCO updates. | Vela foundation, incremental patch, revisioned scene, and columnar-renderer contracts. |
 | `engine-and-indicator-lifecycle` | `src/Vela.ts`, engine, handles, native indicator catalog | Preserve the CoreSpirit engine lifecycle and lazy TCO native-indicator catalog around Vela's native runtime. | Native-indicator lazy, CoreSpirit capability, and live UI contracts. |
 | `drawing-registries-and-state` | `src/core/drawings/**` | Retain advanced channels, Fibonacci and pattern registries with TCO's drawing persistence adapter. | Drawing capability inventory, advanced-family lazy, and persistence-roundtrip contracts. |

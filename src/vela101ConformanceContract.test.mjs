@@ -20,11 +20,12 @@ const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 
-assert.match(provenance, /aecb13847dff3c1a50a2f3433e9804d26fc581ed/, 'conformance must target the pinned Vela source commit');
-assert.equal(sourceSnapshot.upstream.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'the machine-generated source diff must use the same upstream pin');
+assert.match(provenance, /Upstream source commit: `e77d22325e51c7a10edcc617e666ca1a5fd65e68`/, 'conformance must target the pinned Vela 0.10.1 source commit');
+assert.match(provenance, /Previous source base: Vela 0\.9\.0/, 'the overlay keeps Vela 0.9.0 as its three-way merge base');
+assert.equal(sourceSnapshot.upstream.commit, 'e77d22325e51c7a10edcc617e666ca1a5fd65e68', 'the machine-generated source diff must use the Vela 0.10.1 pin');
 assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
-assert.equal(releaseSnapshot.upstream.base.version, '0.8.5', 'upstream release delta starts at 0.8.5');
-assert.equal(releaseSnapshot.upstream.release.version, '0.9.0', 'upstream release delta ends at 0.9.0');
+assert.equal(releaseSnapshot.upstream.base.version, '0.9.0', 'upstream release delta starts at the three-way merge base');
+assert.equal(releaseSnapshot.upstream.release.version, '0.10.1', 'upstream release delta ends at the requested Vela release');
 assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
 
 assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
@@ -71,4 +72,4 @@ assert.match(localizationApi, /export function registerLocale\(/, 'locale packs 
 assert.match(hindiPack, /locale: 'hi'/, 'Hindi locale pack is vendored');
 assert.match(velaApi, /setLocale\(next: string \| LocalizationOptions\)/, 'locale can change at runtime without rerunning indicators');
 assert.ok(hindiPack.length > 0, 'Hindi locale source must be present');
-console.log('VELA_090_CONFORMANCE_CONTRACT_OK');
+console.log('VELA_101_CONFORMANCE_CONTRACT_OK');
