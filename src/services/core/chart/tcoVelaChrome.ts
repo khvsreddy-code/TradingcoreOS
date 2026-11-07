@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { CoreSpiritChartAssistant } from '../../../components/workspace/CoreSpiritChartAssistant';
 import { createRoot } from 'react-dom/client';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
 import type { CoreSpiritExecutableArtifact } from '../../coreSpirit/artifact';
@@ -1089,6 +1090,29 @@ const coreSpiritCodeAction: WidgetActionDescriptor = {
   order: 3.5,
   mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.corespirit-code'); },
+};
+
+const quantPanel: SidePanelDescriptor = {
+  id: 'tco.quant',
+  title: 'Quant',
+  icon: 'activity',
+  order: 17,
+  width: 390,
+  resizable: true,
+  minWidth: 320,
+  maxWidth: 560,
+  mount(ctx, body, header) {
+    header.setTitle('CoreSpirit Quant');
+    const root = panelRoot(body);
+    root.style.cssText = 'height:100%;min-height:0;display:flex;flex-direction:column;padding:0;gap:0;box-sizing:border-box;background:#0b1018;color:#e5edf7;';
+    const reactRoot = createRoot(root);
+    const render = () => reactRoot.render(createElement(CoreSpiritChartAssistant, {
+      context: { symbol: ctx.symbol, timeframe: ctx.timeframe },
+      embedded: true,
+    }));
+    render();
+    return { onOpen: render, onChart: render, destroy: () => reactRoot.unmount() };
+  },
 };
 
 const bookmarksPanel: SidePanelDescriptor = {
@@ -3090,6 +3114,30 @@ const watchlistAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
 };
 
+const indicatorLibraryAction: WidgetActionDescriptor = {
+  id: 'tco.indicator-library',
+  target: 'topbar',
+  label: 'Indicator Library',
+  icon: 'indicators',
+  iconOnly: true,
+  align: 'right',
+  order: 7,
+  mobile: 'menu',
+  run() { window.dispatchEvent(new CustomEvent('tco:open-indicator-library')); },
+};
+
+const quantAction: WidgetActionDescriptor = {
+  id: 'tco.quant',
+  target: 'topbar',
+  label: 'Quant',
+  icon: 'activity',
+  iconOnly: true,
+  align: 'right',
+  order: 8,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.quant'); },
+};
+
 const journalAction: WidgetActionDescriptor = {
   id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: false, align: 'right', order: 1, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.journal'); },
@@ -3097,6 +3145,7 @@ const journalAction: WidgetActionDescriptor = {
 
 registerSidePanel(workspaceFramePanel);
 registerSidePanel(coreSpiritCodePanel);
+registerSidePanel(quantPanel);
 registerSidePanel(bookmarksPanel);
 registerSidePanel(researchPanel);
 registerSidePanel(automationPanel);
@@ -3121,3 +3170,5 @@ registerWidgetAction(coreSpiritCodeAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(chartSettingsAction);
 registerWidgetAction(journalAction);
+registerWidgetAction(indicatorLibraryAction);
+registerWidgetAction(quantAction);
