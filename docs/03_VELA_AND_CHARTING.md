@@ -4,9 +4,12 @@ Vela is TradingCoreOS's sole charting/rendering engine. Application code crosses
 
 ## Vendor boundary
 
-## Vela capability architecture — v135
+The vendored source baseline is Vela **0.10.1** (`e77d22325e51c7a10edcc617e666ca1a5fd65e68`). The active UI component kit now comes from `@luxalgo/vela-ui` **0.2.0**; its styling is scoped to Vela hosts so chart controls do not restyle the surrounding React application.
 
-The vendored Vela fork currently contains **384 source files**. The bundle risk is not just file count; the renderer composition root can make optional chart capabilities part of the same JavaScript graph.
+
+## Vela capability architecture — v0.10.1
+
+The Vela 0.10.1 upstream source tree contains **390 files**. TradingCoreOS retains a separate local overlay for its columnar market-data, CoreSpirit, drawing, pane-persistence, India-market and compatibility patches; see `vendor/vela/UPSTREAM-DIFF.json` for exact file-level provenance. The bundle risk is not just file count; the renderer composition root can make optional chart capabilities part of the same JavaScript graph.
 
 The audited hotspots include:
 

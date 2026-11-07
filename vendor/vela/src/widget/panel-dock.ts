@@ -10,7 +10,7 @@ import type { Vela } from '../Vela';
 import { textOf } from '../core/i18n/text';
 import type { MessageLike, Translator } from '../core/i18n/types';
 import type { PanelsState } from '../state/document';
-import { DEFAULT_PANEL_ORDER, sidePanels, type SidePanelButton, type SidePanelHandle, type WidgetContext } from './contributions';
+import { DEFAULT_PANEL_ORDER, sidePanels, type PanelDockView, type SidePanelButton, type SidePanelDescriptor, type SidePanelHandle, type SidePanelHeader, type WidgetContext } from './contributions';
 import { SidePanel } from './side-panel';
 
 /** What the dock needs from whatever chrome shows its toggles. */
@@ -29,6 +29,9 @@ export interface PanelDockDeps {
     changed?(): void;
     /** The shell's translator (panel titles). Absent: English. */
     i18n?: Translator;
+    /** Where `placement: 'column'` panels mount — the shell's full-height column region.
+     *  Absent: they mount with the others. */
+    columnHost?(): HTMLElement;
 }
 
 /** A panel the SHELL owns and destroys — the dock only docks it. */
@@ -63,6 +66,7 @@ export class PanelDock {
     /** A restored `open` naming a panel that has not registered yet: honored when it docks. */
     private pendingOpen: string | null = null;
     private chart: Vela | null = null;
+    private readonly listeners = new Set<() => void>();
 
     constructor(
         private readonly host: HTMLElement,
@@ -86,12 +90,14 @@ export class PanelDock {
         const openBefore = this.openId;
         for (const entry of [...this.entries]) if (entry.contributed) this.drop(entry);
         for (const desc of sidePanels()) {
-            const panel = new SidePanel(this.host, desc.title, `vela-panel-${desc.id}`, {
+            const host = desc.placement === 'column' && this.deps.columnHost ? this.deps.columnHost() : this.host;
+            const panel = new SidePanel(host, desc.title, `vela-panel-${desc.id}`, {
                 width: desc.width,
                 resizable: desc.resizable,
                 minWidth: desc.minWidth,
                 maxWidth: desc.maxWidth,
                 overlay: desc.overlay,
+                ...(desc.header ? { header: desc.header } : {}),
                 ...(this.deps.i18n ? { i18n: this.deps.i18n } : {}),
             });
             const entry: Entry = {
@@ -105,8 +111,16 @@ export class PanelDock {
             // A contribution that throws on mount must not take the shell down with it: the
             // panel stays docked but empty, and the reason is on the console.
             try {
-                const mounted = desc.mount(this.deps.context(), panel.content, { slot: panel.headerSlot, setTitle: (t) => panel.setTitle(t) });
-                entry.handle = mounted ? mounted : undefined;
+                const header: SidePanelHeader = {
+                    slot: panel.headerSlot,
+                    setTitle: (t) => panel.setTitle(t),
+                    get maximized() {
+                        return panel.maximized;
+                    },
+                    setMaximized: (on) => panel.setMaximized(on),
+                    close: () => panel.toggle(false),
+                };
+                entry.handle = desc.mount(this.deps.context(), panel.content, header) ?? undefined;
                 if (this.chart) entry.handle?.onChart?.(this.chart);
             } catch (err) {
                 console.warn(`[vela] side panel "${desc.id}" failed to mount`, err);
@@ -140,6 +154,19 @@ export class PanelDock {
      *  three-dots drawer) lists so every panel stays reachable there too. */
     list(): ReadonlyArray<SidePanelButton> {
         return this.entries.map((e) => ({ id: e.id, title: textOf(this.deps.i18n, e.title), icon: e.icon }));
+    }
+
+    /** The dock as plugins read it ({@link WidgetContext.panels}). */
+    view(): PanelDockView {
+        return {
+            list: () => this.entries.map((e) => ({ id: e.id, title: textOf(this.deps.i18n, e.title), icon: e.icon, builtIn: !e.contributed })),
+            openId: () => this.openId,
+            isMaximized: (id) => this.entries.find((e) => e.id === id)?.panel.maximized ?? false,
+            onDidChange: (cb) => {
+                this.listeners.add(cb);
+                return () => this.listeners.delete(cb);
+            },
+        };
     }
 
     /** Re-read every panel's header and the toggle tooltips in the current language. */
@@ -201,7 +228,9 @@ export class PanelDock {
             this.deps.chrome.setPanelActive(entry.id, open);
             if (open) entry.handle?.onOpen?.();
             this.deps.changed?.();
+            this.notify();
         };
+        entry.panel.onMaximizedChange = () => this.notify();
         entry.panel.onWidthChange = (px) => {
             this.widths.set(entry.id, px);
             this.deps.changed?.();
@@ -213,6 +242,18 @@ export class PanelDock {
         };
         if (this.pendingOpen === entry.id) entry.panel.toggle(true);
         if (!entry.contributed) this.publish();
+        this.notify();
+    }
+
+    /** Tell the plugins reading the dock that it changed; one listener's failure spares the rest. */
+    private notify(): void {
+        for (const cb of [...this.listeners]) {
+            try {
+                cb();
+            } catch (err) {
+                console.warn('[vela] panels listener failed', err);
+            }
+        }
     }
 
     private drop(entry: Entry): void {
@@ -224,6 +265,7 @@ export class PanelDock {
             console.warn(`[vela] side panel "${entry.id}" failed to release`, err);
         }
         entry.panel.destroy();
+        this.notify();
     }
 
     /** Push the current toggle group to the chrome, pressed states included. */

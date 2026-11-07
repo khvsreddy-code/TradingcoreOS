@@ -10,8 +10,8 @@ const VENDOR = path.join(ROOT, 'vendor/vela');
 const SNAPSHOT = path.join(VENDOR, 'UPSTREAM-DIFF.json');
 const RELEASE_SNAPSHOT = path.join(VENDOR, 'UPSTREAM-RELEASE-DIFF.json');
 const PATCH_MANIFEST = path.join(VENDOR, 'patches.json');
-const UPSTREAM_BASE_COMMIT = '596cbbdeba15406cfb72465afd07f8c60c6b1852';
-const UPSTREAM_COMMIT = 'aecb13847dff3c1a50a2f3433e9804d26fc581ed';
+const UPSTREAM_BASE_COMMIT = 'aecb13847dff3c1a50a2f3433e9804d26fc581ed';
+const UPSTREAM_COMMIT = 'e77d22325e51c7a10edcc617e666ca1a5fd65e68';
 const args = new Set(process.argv.slice(2));
 const upstreamArg = process.argv.slice(2).find((arg) => arg.startsWith('--upstream-dir='));
 const upstreamIndex = process.argv.indexOf('--upstream-dir');
@@ -37,7 +37,7 @@ if (status.status !== 0) fail(status.stderr || 'could not verify upstream workin
 if (status.stdout.trim()) fail('upstream checkout must be clean before generating the source diff');
 const baseRef = spawnSync('git', ['-C', upstreamDir, 'rev-parse', `${UPSTREAM_BASE_COMMIT}^{commit}`], { encoding: 'utf8' });
 if (baseRef.status !== 0 || baseRef.stdout.trim() !== UPSTREAM_BASE_COMMIT) {
-  fail(`required 0.8.5 base commit ${UPSTREAM_BASE_COMMIT} is not available in the upstream checkout`);
+  fail(`required 0.9.0 base commit ${UPSTREAM_BASE_COMMIT} is not available in the upstream checkout`);
 }
 
 const patchManifest = JSON.parse(fs.readFileSync(PATCH_MANIFEST, 'utf8'));
@@ -114,8 +114,8 @@ const releaseSnapshot = {
   generatedBy: 'tools/vela-overlay-manifest.mjs',
   upstream: {
     repository: 'https://github.com/LuxAlgo/Vela',
-    base: { version: '0.8.5', commit: UPSTREAM_BASE_COMMIT },
-    release: { version: '0.9.0', tag: 'v0.9.0', commit: UPSTREAM_COMMIT }
+    base: { version: '0.9.0', commit: UPSTREAM_BASE_COMMIT },
+    release: { version: '0.10.1', tag: 'v0.10.1', commit: UPSTREAM_COMMIT }
   },
   comparison: 'Git blob SHA-1 from exact upstream release trees, restricted to src/',
   counts: releaseCounts,
@@ -150,7 +150,7 @@ const snapshot = {
   generatedBy: 'tools/vela-overlay-manifest.mjs',
   upstream: {
     repository: 'https://github.com/LuxAlgo/Vela',
-    tag: 'v0.9.0',
+    tag: 'v0.10.1',
     commit: UPSTREAM_COMMIT
   },
   comparison: 'Git blob SHA-1; only src/ is compared so local provenance/docs remain separate',
@@ -169,11 +169,11 @@ const serialized = JSON.stringify(snapshot, null, 2) + '\n';
 if (write) {
   fs.writeFileSync(SNAPSHOT, serialized);
   fs.writeFileSync(RELEASE_SNAPSHOT, releaseSerialized);
-  console.log(`[vela-overlay] wrote vendor diffs: ${modified.length} modified/local overlay entries; upstream 0.8.5→0.9.0 changed ${releaseChanges.length} source files`);
+  console.log(`[vela-overlay] wrote vendor diffs: ${modified.length} modified/local overlay entries; upstream 0.9.0→0.10.1 changed ${releaseChanges.length} source files`);
 } else if (check) {
   if (!fs.existsSync(SNAPSHOT)) fail('vendor/vela/UPSTREAM-DIFF.json is missing; rerun with --write');
   if (fs.readFileSync(SNAPSHOT, 'utf8') !== serialized) fail('UPSTREAM-DIFF.json is stale; rerun with --write against the pinned commit');
   if (!fs.existsSync(RELEASE_SNAPSHOT)) fail('vendor/vela/UPSTREAM-RELEASE-DIFF.json is missing; rerun with --write');
-  if (fs.readFileSync(RELEASE_SNAPSHOT, 'utf8') !== releaseSerialized) fail('UPSTREAM-RELEASE-DIFF.json is stale; rerun with --write against the pinned 0.8.5 and 0.9.0 commits');
+  if (fs.readFileSync(RELEASE_SNAPSHOT, 'utf8') !== releaseSerialized) fail('UPSTREAM-RELEASE-DIFF.json is stale; rerun with --write against the pinned 0.9.0 and 0.10.1 commits');
   console.log(`[vela-overlay] verified local overlay: ${modified.length} modified, ${localOnly.length} local-only; upstream release delta: ${releaseChanges.length} source files`);
 }

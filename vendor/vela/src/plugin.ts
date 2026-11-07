@@ -87,6 +87,7 @@ export {
 } from './chart-types/registry';
 export type { BarTransform } from './core/price-styles/BarTransform';
 export { registerRendererDefaults, unregisterRendererDefaults, rendererDefaults } from './core/renderer-defaults';
+export { registerShellDefaults, unregisterShellDefaults, shellDefaults, type ShellDefaults } from './widget/shell-defaults';
 export {
     registerNativeIndicator,
     unregisterNativeIndicator,
@@ -153,14 +154,22 @@ export {
     type SidePanelHandle,
     type SidePanelHeader,
     type SidePanelButton,
+    type TopbarItems,
+    type TopbarItemId,
+    type PanelDockView,
+    type DockedPanelInfo,
+    type DockStripOptions,
+    type DockedStrip,
+    type SidebarControl,
 } from './widget/contributions';
+export { composeSidebar, SIDEBAR_DEFAULT_TOP, SIDEBAR_DEFAULT_BOTTOM, type SidebarComposition } from './widget/sidebar-composition';
 // Where the built-in right-click rows sit in the sort `context:*` actions share with them.
 export { CONTEXT_MENU_BUILTIN_ORDER } from './widget/context-menu-model';
 // A plugin panel gets the shell's own column; these bounds are what `resizable` clamps to.
 export { clampPanelWidth, DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_MAX_WIDTH, type SidePanelOptions } from './widget/side-panel';
 export { drawingTypes, getDrawingType, type DrawingTypeMeta } from './core/drawings/registry';
 export type { DrawingTypeKey } from './core/drawings/Drawing';
-export { registerIcon, iconMarkup } from './ui/icons';
+export { registerIcon, iconMarkup } from '@luxalgo/vela-ui/icons';
 export type { KeyBindingDescriptor, ResolvedBinding } from './ui/keymap';
 export type { PriceStyle } from './core/options';
 export type { DataProvider, ProviderInfo, ProviderCapabilities, SymbolDescriptor } from './core/ports/DataProvider';

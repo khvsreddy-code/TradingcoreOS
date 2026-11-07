@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, WorkspacePaneScaleState } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
@@ -164,20 +164,6 @@ export class RendererControl {
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe {
         return this.renderer.onAxisLongPress?.(cb) ?? (() => undefined);
-    }
-
-    /** Read and restore native price/study pane scales when workspace layouts are persisted. */
-    getWorkspaceScaleState(): WorkspacePaneScaleState[] {
-        return this.renderer.getWorkspaceScaleState?.() ?? [];
-    }
-
-    applyWorkspaceScaleState(state: readonly WorkspacePaneScaleState[]): this {
-        this.renderer.applyWorkspaceScaleState?.(state);
-        return this;
-    }
-
-    onWorkspaceScaleChange(cb: () => void): Unsubscribe {
-        return this.renderer.onWorkspaceScaleChange?.(cb) ?? (() => undefined);
     }
 
     /**

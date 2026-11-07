@@ -1,4 +1,4 @@
-# TradingCoreOS overlay on Vela 0.9.0
+# TradingCoreOS overlay on Vela 0.10.1
 
 The upstream source baseline is Vela tag `v0.9.0`, commit
 `aecb13847dff3c1a50a2f3433e9804d26fc581ed`. Do not identify a TCO-local edit as an
@@ -16,7 +16,7 @@ upstream change just because it lives under `vendor/vela/src`.
 | `provider-and-sdk-compatibility` | `src/core/ports/**`, `src/data/**`, SDK boundaries | Keep Vela's public port types connected to the canonical TCO market-data plane without replacing provider ownership or progressive history paging. | Live UI, candle fast-switch, time normalization, and foundation contracts. |
 | `widget-workspace-and-local-catalog` | `src/widget/**`, `src/workspace/**`, `src/state/**` | Preserve workspace and picker integration, serialized state extensions, and the local TCO UX. | Workspace autosave, pane persistence, live UI, and foundation contracts. |
 
-The exact file-by-file source comparison is recorded in
+The exact 0.10.1 file-by-file source comparison is recorded in
 [`UPSTREAM-DIFF.json`](./UPSTREAM-DIFF.json). The groups and their path patterns,
 purposes, and test associations live in [`patches.json`](./patches.json). The
 manifest generator refuses to complete if an upstream-modified or TCO-only source

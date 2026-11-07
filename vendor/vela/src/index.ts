@@ -40,7 +40,17 @@ export {
     loadNativeIndicatorType,
 } from './core/native-indicators/lazyCatalog';
 export type { LazyNativeIndicatorCatalogEntry, ClassicIndicatorFamily } from './core/native-indicators/lazyCatalog';
-export { DARK_THEME, LIGHT_THEME, resolveTheme } from './core/theme';
+export { DARK_THEME, LIGHT_THEME, resolveTheme, registerTheme, registeredThemes, type RegisteredTheme } from './core/theme';
+export {
+    createTheme,
+    checkTheme,
+    type UiTheme,
+    type ThemeInput,
+    type ThemeSettings,
+    type CreateThemeOptions,
+    type ComponentSettings,
+    type TokenName,
+} from '@luxalgo/vela-ui/theme';
 export { TypedEventBus } from './core/events/EventBus';
 
 // User drawings (model + registry + persistence; renderer-agnostic)
@@ -88,6 +98,7 @@ export type {
     MarketSnapshot,
     VelaTheme,
     ThemeName,
+    ThemeId,
     ProviderName,
     RendererConstructor,
     RendererDisplayOptions,
@@ -102,7 +113,7 @@ export type {
     PriceAxisTickContext,
     PriceAxisTicksFn,
 } from './core/options';
-export type { IndicatorHandle, IndicatorEventMap } from './core/IndicatorHandle';
+export type { CodeUpdateResult, IndicatorHandle, IndicatorEventMap } from './core/IndicatorHandle';
 export type { VelaEventMap } from './core/events/types';
 // The script-run surface: the `script:run` payload and what `chart.runScript()` resolves.
 export type { ScriptRun, ScriptRunCause, ScriptRunResult } from './core/script-run';
@@ -116,6 +127,7 @@ export type {
     AxisLongPressEvent,
     InputChangeEvent,
     VisibleRange,
+    VisibleRangeOptions,
     DataWindowReadout,
     DataWindowGroup,
     DataWindowRow,

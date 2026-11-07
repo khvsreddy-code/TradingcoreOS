@@ -7,6 +7,7 @@ import type { LineStyle } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
 import { percentScaleFor } from '../core/SceneGraph';
+import { effectiveCandlePaint } from '../core/chartConfig';
 // Re-exported so existing importers (crosshair) can keep sourcing it from here.
 export { percentScaleFor } from '../core/SceneGraph';
 import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet } from '../../shared/DrawingSceneRenderer';
@@ -16,7 +17,7 @@ import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
 import { PriceAxisTickSource } from './priceAxisTicks';
 import { axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
 import { DARK_THEME } from '../../../core/theme';
-import { tzOffsetMs } from './tz';
+import { displayZone, tzOffsetMs } from './tz';
 import { indiaSessionCountdownText } from './countdown';
 import { tagTextColor } from './contrast';
 import { markGroupVisible } from '../../shared/marks-state';
@@ -480,7 +481,7 @@ export class ChromeRenderer {
         ctx.textAlign = 'center';
         const y = dataH + (fullH - dataH) / 2;
         const tr = coords.visibleTimeRange();
-        const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
+        const offset = tzOffsetMs((tr.from + tr.to) / 2, displayZone(scene.timezone, coords.barInterval));
         // Width-adaptive density so a narrow surface — a phone, a multi-chart cell —
         // asks for fewer ticks instead of cramming the default eight. The floor of 3
         // keeps a narrow axis populated (a too-small target snaps the ladder to a huge
@@ -521,4 +522,37 @@ function setDash(ctx: CanvasRenderingContext2D, style: LineStyle): void {
     else ctx.setLineDash([]);
 }
 
-
+/**
+ * The color of the latest price element for the active chart style — matches how the
+ * series itself is drawn: candle/bar body up-down, the line/area line color, or the
+ * baseline side (above/below the baseline price). Candles resolve through the active
+ * style's own candle colors (a candle-based plugin style such as Footprint or TPO keeps
+ * its own), exactly as the candle painter does; with bodies hidden the candle reads as
+ * its outline, so the outline color is used.
+ */
+export function priceElementColor(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, last: OHLCV): string {
+    const st = scene.style;
+    switch (scene.priceStyle) {
+        case 'bars':
+            return last.close >= last.open ? (st.bars.upColor ?? theme.upColor) : (st.bars.downColor ?? theme.downColor);
+        case 'line':
+            return st.line.color ?? theme.upColor;
+        case 'area':
+            return st.area.lineColor ?? theme.upColor;
+        case 'baseline': {
+            const i0 = Math.max(0, Math.floor(coords.visibleLogicalRange().from));
+            const baseline = scene.baselineValue ?? scene.bars[i0]?.close ?? 0;
+            return last.close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
+        }
+        default: {
+            // 'candles', 'heikinashi', and candle-based plugin styles.
+            const paint = effectiveCandlePaint(st.candle, scene.candleOverride, theme.upColor, theme.downColor);
+            const up = last.close >= last.open;
+            const body = up ? paint.up : paint.down;
+            if (!paint.candle.bodyVisible && paint.candle.borderVisible) {
+                return (up ? paint.candle.borderUpColor : paint.candle.borderDownColor) ?? body;
+            }
+            return body;
+        }
+    }
+}
