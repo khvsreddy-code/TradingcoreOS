@@ -27,6 +27,7 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [notes, setNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('Loading notes…');
+  const [notesReady, setNotesReady] = useState(false);
   const [form, setForm] = useState({
     symbol,
     side: 'long' as 'long' | 'short',
@@ -61,8 +62,12 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
       if (!live) return;
       setNotes(value || '');
       setNotesStatus('Notes synced to your account');
+      setNotesReady(true);
     }).catch(() => {
-      if (live) setNotesStatus('Notes sync unavailable');
+      if (live) {
+        setNotesStatus('Notes sync unavailable');
+        setNotesReady(true);
+      }
     });
     return () => { live = false; };
   }, []);
@@ -76,6 +81,7 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
   }, [symbol, timeframe]);
 
   useEffect(() => {
+    if (!notesReady) return;
     const timer = window.setTimeout(() => {
       setNotesStatus('Saving notes…');
       void saveTcoVelaJournal(notes).then(saved => {
@@ -83,7 +89,7 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
       }).catch(() => setNotesStatus('Notes saved locally · cloud sync unavailable'));
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [notes]);
+  }, [notes, notesReady]);
 
   const closed = useMemo(() => trades.filter(trade => trade.net_pnl != null), [trades]);
   const net = useMemo(() => closed.reduce((sum, trade) => sum + Number(trade.net_pnl || 0), 0), [closed]);
