@@ -102,7 +102,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
 
   try{
     const ai=new GoogleGenAI({apiKey});
-    const model=String(process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.8-flash').trim();
+    const model=String(process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.1-flash-lite').trim();
     const systemInstruction=[
       'You are CoreSpirit Copilot, a code author for the TradingCoreOS CoreScript language.',
       'Generate a draft source program only for source-changing modes. Never claim to execute, backtest, or trade it.',
@@ -307,7 +307,7 @@ async function handleCoreSpiritAiInvoke(req:AuthenticatedRequest,res:Response):P
     if(capabilityErrors.length||architectureErrors.length){
       res.status(403).json({success:false,error:'The server automation sandbox denied this AI invocation.',diagnostics:[...architectureErrors,...capabilityErrors].slice(0,20)});return;
     }
-    const modelVersion=String(process.env.CORESPIRIT_AI_INVOKE_MODEL||process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.8-flash').trim();
+    const modelVersion=String(process.env.CORESPIRIT_AI_INVOKE_MODEL||process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.1-flash-lite').trim();
     const inputFingerprint=createCoreSpiritAiInputFingerprint({source:input.source,artifactHash:input.artifactHash,prompt:input.prompt,context:input.context,modelVersion,outputTokenLimit:input.outputTokenLimit});
     const userHash=coreSpiritCopilotSha256(userId).slice(0,32);
     const cacheKey='tco:corespirit:ai-invoke:cache:'+userHash+':'+inputFingerprint;
@@ -528,7 +528,7 @@ async function handleCoreSpiritChartAssistantStream(req: AuthenticatedRequest, r
     ].join('\n');
 
     const ai = new GoogleGenAI({ apiKey });
-    const model = String(process.env.CORESPIRIT_CHAT_ASSISTANT_MODEL || process.env.CORESPIRIT_COPILOT_MODEL || 'gemini-3.8-flash').trim();
+    const model = String(process.env.CORESPIRIT_CHAT_ASSISTANT_MODEL || process.env.CORESPIRIT_COPILOT_MODEL || 'gemini-3.1-flash-lite').trim();
     const controller = new AbortController();
     res.on('close', () => {
       if (!res.writableEnded) controller.abort();
