@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Bot, Loader2, Send, Sparkles, Square, X } from 'lucide-react';
 import { getSupabaseClient } from '../../services/auth/supabaseClient';
+import { appendTerminalQuantMessage, createTerminalQuantConversation } from '../../services/terminal/terminalDataService';
 
 type RecentBar = {
   time: string;
@@ -11,7 +12,7 @@ type RecentBar = {
   volume: number | null;
 };
 
-type ChartAssistantContext = {
+export type ChartAssistantContext = {
   symbol: string;
   timeframe: string;
   lastPrice?: number | null;
@@ -86,8 +87,8 @@ async function readAssistantStream(
   if (buffer.trim()) consumeFrame(buffer);
 }
 
-export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantContext }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function CoreSpiritChartAssistant({ context, embedded = false }: { context: ChartAssistantContext; embedded?: boolean }) {
+  const [isOpen, setIsOpen] = useState(embedded);
   const [draft, setDraft] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState('');
@@ -97,11 +98,13 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
   const chartIdentityRef = useRef(context.symbol + '|' + context.timeframe);
   const activeAssistantIdRef = useRef<string | null>(null);
   const requestSequenceRef = useRef(0);
+  const conversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const identity = context.symbol + '|' + context.timeframe;
     if (chartIdentityRef.current === identity) return;
     chartIdentityRef.current = identity;
+    conversationIdRef.current = null;
     requestSequenceRef.current += 1;
     activeAssistantIdRef.current = null;
     abortRef.current?.abort();
@@ -146,6 +149,17 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
     try {
       const { data: { session }, error: sessionError } = await getSupabaseClient().auth.getSession();
       if (sessionError || !session?.access_token) throw new Error('Sign in to TradingCore before using the chart assistant.');
+      // Persist the conversation under the authenticated Supabase user; history failure never blocks the live assistant request.
+      try {
+        if (!conversationIdRef.current) {
+          conversationIdRef.current = await createTerminalQuantConversation('Chart · ' + context.symbol, {
+            symbol: context.symbol, timeframe: context.timeframe,
+          });
+        }
+        if (conversationIdRef.current) {
+          void appendTerminalQuantMessage({ conversationId: conversationIdRef.current, role: 'user', content: messageText }).catch(() => undefined);
+        }
+      } catch { /* Keep the assistant available if cloud history is temporarily unavailable. */ }
       // A reset or chart switch can happen while session restoration is pending.
       // Do not start a stale request after its UI context has been invalidated.
       if (requestId !== requestSequenceRef.current || activeAssistantIdRef.current !== assistantMessage.id) return;
@@ -174,8 +188,12 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
         setMessages(current => current.map(item => item.id === assistantMessage.id ? { ...item, content: fullAnswer } : item));
       }, payload => {
         const answer = typeof payload.answer === 'string' ? payload.answer : fullAnswer;
+        fullAnswer = answer;
         setMessages(current => current.map(item => item.id === assistantMessage.id ? { ...item, content: answer } : item));
       });
+      if (conversationIdRef.current && fullAnswer.trim()) {
+        void appendTerminalQuantMessage({ conversationId: conversationIdRef.current, role: 'assistant', content: fullAnswer, model: 'gemini-3.1-flash-lite' }).catch(() => undefined);
+      }
     } catch (caught) {
       const stopped = caught instanceof Error && caught.name === 'AbortError';
       const errorMessage = stopped ? 'Response stopped.' : caught instanceof Error ? caught.message : 'Assistant request failed.';
@@ -202,12 +220,13 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
     activeAssistantIdRef.current = null;
     setError('');
     setDraft('');
+    conversationIdRef.current = null;
     setMessages([introMessage(context.symbol, context.timeframe)]);
   };
 
   return (
     <>
-      <button
+      {!embedded && <button
         type="button"
         aria-label={isOpen ? 'Close CoreSpirit AI assistant' : 'Open CoreSpirit AI assistant'}
         aria-expanded={isOpen}
@@ -217,14 +236,14 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
         <Sparkles className="h-4 w-4 text-[#60a5fa]" />
         CoreSpirit AI
         <span className="rounded-full bg-[#3b82f6]/15 px-1.5 py-0.5 text-[9px] text-[#93c5fd]">CHAT</span>
-      </button>
+      </button>}
 
-      {isOpen && (
+      {(isOpen || embedded) && (
         <section
           role="dialog"
           aria-label="CoreSpirit chart assistant"
           aria-modal="false"
-          className="fixed bottom-[4.6rem] right-4 z-[100] flex h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[#293448] bg-[#0b1018] text-[#e5edf7] shadow-2xl"
+          className={embedded ? 'flex h-full min-h-0 w-full flex-col overflow-hidden rounded-none border-0 bg-[#0b1018] text-[#e5edf7] shadow-none' : 'fixed bottom-[4.6rem] right-4 z-[100] flex h-[min(620px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[#293448] bg-[#0b1018] text-[#e5edf7] shadow-2xl'}
         >
           <header className="flex items-center justify-between gap-3 border-b border-[#273143] bg-[#111722] px-3.5 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -236,7 +255,7 @@ export function CoreSpiritChartAssistant({ context }: { context: ChartAssistantC
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <button type="button" onClick={resetConversation} title="Start a new conversation" aria-label="Start a new conversation" className="rounded-lg px-2 py-1.5 text-[10px] text-[#91a0b5] hover:bg-[#1d2735] hover:text-white">New chat</button>
-              <button type="button" onClick={() => setIsOpen(false)} title="Close assistant" aria-label="Close assistant" className="rounded-lg p-1.5 text-[#91a0b5] hover:bg-[#1d2735] hover:text-white"><X className="h-4 w-4" /></button>
+              {!embedded && <button type="button" onClick={() => setIsOpen(false)} title="Close assistant" aria-label="Close assistant" className="rounded-lg p-1.5 text-[#91a0b5] hover:bg-[#1d2735] hover:text-white"><X className="h-4 w-4" /></button>}
             </div>
           </header>
 
