@@ -1,8 +1,9 @@
 # TradingCoreOS overlay on Vela 0.10.1
 
-The upstream source baseline is Vela tag `v0.9.0`, commit
-`aecb13847dff3c1a50a2f3433e9804d26fc581ed`. Do not identify a TCO-local edit as an
-upstream change just because it lives under `vendor/vela/src`.
+The final upstream source baseline is Vela tag `v0.10.1`, commit
+`e77d22325e51c7a10edcc617e666ca1a5fd65e68`. The three-way common ancestor for the
+TradingCoreOS overlay is Vela 0.9.0 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
+Do not identify a TCO-local edit as an upstream change just because it lives under `vendor/vela/src`.
 
 ## Patch groups
 
@@ -29,7 +30,7 @@ repository root:
 
 ```sh
 git clone https://github.com/LuxAlgo/Vela.git /tmp/vela-upstream
-git -C /tmp/vela-upstream checkout aecb13847dff3c1a50a2f3433e9804d26fc581ed
+git -C /tmp/vela-upstream checkout e77d22325e51c7a10edcc617e666ca1a5fd65e68
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --write
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --check
 ```

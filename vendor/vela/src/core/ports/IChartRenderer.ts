@@ -1,4 +1,5 @@
 import type { OHLCV } from '../model/ohlcv';
+import type { ColumnarBars, ColumnarBarUpdate } from '../model/columnar-bars';
 import type { Pane } from '../model/scene';
 import type { IndicatorModel } from '../model/indicator';
 import type { ScenePatch } from '../model/patch';
@@ -186,6 +187,10 @@ export interface DataWindowOHLC {
 /** One indicator's readout: its title plus a row per plot. */
 export interface DataWindowGroup {
     name: string;
+    /** Stable pane identity lets host Data Window panels filter studies by the hovered pane. */
+    paneId?: string;
+    /** Pane kind is additive; legacy consumers can continue using `name` and `rows`. */
+    paneKind?: 'price' | 'study';
     rows: DataWindowRow[];
 }
 
@@ -287,6 +292,11 @@ export interface IChartRenderer {
     setBars(bars: OHLCV[], opts?: { preserveView?: boolean }): void;
     /** Append a new bar or replace the forming (last) bar, decided by time. */
     updateBar(bar: OHLCV): void;
+
+    /** Replace OHLCV history without allocating one object per candle. */
+    setBarsColumns(columns: ColumnarBars, opts?: { preserveView?: boolean }): void;
+    /** Apply an append/replace/correct operation on the shared columnar candle tape. */
+    updateBarColumns(update: ColumnarBarUpdate): void;
 
     /**
      * Set the active symbol's tick size (e.g. `0.01`) so the price axis renders the

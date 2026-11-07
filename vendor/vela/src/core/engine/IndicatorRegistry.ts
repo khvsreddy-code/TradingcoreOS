@@ -1,10 +1,22 @@
 import type { IndicatorModel } from '../model/indicator';
-import type { InputValue } from '../model/inputs';
+import type { InputSchema, InputValue } from '../model/inputs';
+import type { CodeUpdateResult } from '../IndicatorHandle';
 import type { PreparedScript, ScriptingEngine, ExecutionSession } from '../ports/ScriptingEngine';
 import type { IndicatorRenderHandle } from '../ports/IChartRenderer';
 import type { AddIndicatorOptions } from '../options';
 import type { ScriptRunCause } from '../script-run';
 import type { NativeIndicator, NativeIndicatorDescriptor } from '../native-indicators/NativeIndicator';
+
+/** Last known-good script state used to roll back a failed code trial. */
+export interface CodeSnapshot {
+    source: string;
+    engine?: ScriptingEngine;
+    prepared?: PreparedScript;
+    inputValues: Record<string, InputValue>;
+    propValues: Record<string, InputValue>;
+    inputs: InputSchema[];
+    props: InputSchema[];
+}
 
 /** Per-indicator instance state held by the orchestrator. */
 export interface IndicatorRecord {
@@ -47,6 +59,10 @@ export interface IndicatorRecord {
      * race the older one onto the chart.
      */
     pendingSource?: string;
+    /** Callers waiting on the latest update in the current in-place edit chain. */
+    codeWaiters?: Array<(result: CodeUpdateResult) => void>;
+    /** The new source is on trial until its first model arrives; failure restores this snapshot. */
+    codeTrial?: { previous: CodeSnapshot };
     /** The live execution session (static or streaming) — poked on input/viewport/bar changes. */
     session?: ExecutionSession;
     /**

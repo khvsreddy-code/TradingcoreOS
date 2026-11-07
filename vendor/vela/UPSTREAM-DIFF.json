@@ -455,6 +455,10 @@
       "blob": "ed5a176adcfeb747285eb58f32540c6ee91bdd7f"
     },
     {
+      "path": "src/core/engine/IndicatorHandleImpl.ts",
+      "blob": "8c2250f6a59e787f56b4bcf4906b802bfa30293d"
+    },
+    {
       "path": "src/core/engine/inspect.ts",
       "blob": "94199bbd6c47bc33228472ef2ed5dbbb47a6f6a2"
     },
@@ -677,10 +681,6 @@
     {
       "path": "src/core/renderer-defaults.ts",
       "blob": "b088c2d573e951a4dcd99ad855a9d912b41984e3"
-    },
-    {
-      "path": "src/core/RendererControl.ts",
-      "blob": "b9662d202b9a08912f4ad1f40c672e6bb3e02366"
     },
     {
       "path": "src/core/ReplayControl.ts",
@@ -1379,19 +1379,13 @@
     {
       "path": "src/core/engine/EngineOrchestrator.ts",
       "upstreamBlob": "6ceaf659a0780bde03ee9cdb2dded13d19218395",
-      "localBlob": "a0901e0d9987a6d431cd98ef94b0cc6c27f3ff7c",
-      "patchId": "engine-and-indicator-lifecycle"
-    },
-    {
-      "path": "src/core/engine/IndicatorHandleImpl.ts",
-      "upstreamBlob": "8c2250f6a59e787f56b4bcf4906b802bfa30293d",
-      "localBlob": "2f4840261b16e856cbb1c3b47d040885ad940f06",
+      "localBlob": "6013137facdbc7c2d70651fa573f45516839778e",
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
       "path": "src/core/engine/IndicatorRegistry.ts",
       "upstreamBlob": "6c63e3ca90554e45526caf4f84fcec3619639489",
-      "localBlob": "5aad48a16f401abfbe1ea82d7af0f874ea654f39",
+      "localBlob": "925be46303bb0fc0aed82eb6d3b59a1989b8e930",
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
@@ -1403,7 +1397,7 @@
     {
       "path": "src/core/IndicatorHandle.ts",
       "upstreamBlob": "32b692c593f2a9960d441b37c15eb52b49f80345",
-      "localBlob": "f63df5bd7b6ef245b6e687a989fdffaccb0345ee",
+      "localBlob": "b500f42882263363bc73f86a34c4f5e87e120660",
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
@@ -1445,7 +1439,7 @@
     {
       "path": "src/core/ports/IChartRenderer.ts",
       "upstreamBlob": "14dc3b570757b23da1ba43b835ec11f6f5e7493a",
-      "localBlob": "2839321607ba3066f8a07d7eaf0a3c8bca93d614",
+      "localBlob": "c906b243525e2ceda2a9c839520a3f2362718dec",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1458,6 +1452,12 @@
       "path": "src/core/ports/ScriptingEngine.ts",
       "upstreamBlob": "e0230fbb89fdfadbcdfffdc3e131f19af2230a00",
       "localBlob": "5ff5329d68cf0cf98660ac31ce3caba306315812",
+      "patchId": "provider-and-sdk-compatibility"
+    },
+    {
+      "path": "src/core/RendererControl.ts",
+      "upstreamBlob": "b9662d202b9a08912f4ad1f40c672e6bb3e02366",
+      "localBlob": "dc244f27c224e7e7eefeb3de405594a1c6805662",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1595,7 +1595,7 @@
     {
       "path": "src/renderers/native/drawings/DrawingToolbar.ts",
       "upstreamBlob": "ffaa88dda1e4148f4ca3edfb47f382375760cf09",
-      "localBlob": "6be205ec332673d47182c6a9c43ee710686ff2fe",
+      "localBlob": "f0b66c631f510108206a9f0e73a4cb5bc951358c",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1613,7 +1613,7 @@
     {
       "path": "src/renderers/native/NativeRenderer.ts",
       "upstreamBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef",
-      "localBlob": "86d15c336becba49382307ce4db24e097f5a8b04",
+      "localBlob": "590f533e1188737321a99227623f19c047b673b3",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1631,7 +1631,7 @@
     {
       "path": "src/widget/contributions.ts",
       "upstreamBlob": "fccfe2a6bec655e4854bdd4757019d687f0686b6",
-      "localBlob": "21cceafdfbc0ce6b13cba1080ba64030f5520cd4",
+      "localBlob": "ae3a698778d5f5ac3b3e6ac02fa6de5e5b449881",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
@@ -1643,7 +1643,7 @@
     {
       "path": "src/widget/panel-dock.ts",
       "upstreamBlob": "85d07a8e1e27022095af22af2aa426274c7b5e5a",
-      "localBlob": "59695096988434600b7f3431bfb1298fb49ab310",
+      "localBlob": "a9db0e8870d7dc5a8bfb5a2be378c9401fbfc15c",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
@@ -1661,7 +1661,7 @@
     {
       "path": "src/widget/symbol-picker.ts",
       "upstreamBlob": "da9594d7d215cee6f967992af80194b53aabb366",
-      "localBlob": "2e73b433011c09163a2a0972d0133389a05a0933",
+      "localBlob": "2ecc24e895fb879b27567f8cf33642ef36818854",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
@@ -1712,13 +1712,13 @@
       "patchId": "drawing-registries-and-state"
     },
     {
-      "path": "src/core/model/ColumnarHistoryTape.ts",
-      "localBlob": "f1d53658c2a97118088121618924dcee3274d21f",
+      "path": "src/core/model/columnar-bars.ts",
+      "localBlob": "eec620453b8a6dc3cb5ad08d846cf653bbefc567",
       "patchId": "columnar-history-and-scene-patches"
     },
     {
-      "path": "src/core/model/columnar-bars.ts",
-      "localBlob": "eec620453b8a6dc3cb5ad08d846cf653bbefc567",
+      "path": "src/core/model/ColumnarHistoryTape.ts",
+      "localBlob": "f1d53658c2a97118088121618924dcee3274d21f",
       "patchId": "columnar-history-and-scene-patches"
     },
     {

@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, WorkspacePaneScaleState } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
@@ -174,6 +174,22 @@ export class RendererControl {
      */
     dataWindowReadout(): DataWindowReadout | null {
         return this.renderer.getDataWindowReadout?.() ?? null;
+    }
+
+    /** Read the active renderer's pane-axis framing for per-workspace persistence. */
+    getWorkspaceScaleState(): WorkspacePaneScaleState[] | undefined {
+        return this.renderer.getWorkspaceScaleState?.();
+    }
+
+    /** Restore previously persisted pane-axis framing after the pane set is reconstructed. */
+    applyWorkspaceScaleState(state: readonly WorkspacePaneScaleState[]): this {
+        this.renderer.applyWorkspaceScaleState?.(state);
+        return this;
+    }
+
+    /** Subscribe to user edits of pane-axis framing so the workspace can save them. */
+    onWorkspaceScaleChange(cb: () => void): Unsubscribe {
+        return this.renderer.onWorkspaceScaleChange?.(cb) ?? (() => undefined);
     }
 
     /**

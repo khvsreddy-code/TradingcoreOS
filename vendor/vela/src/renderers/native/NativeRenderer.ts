@@ -10,7 +10,6 @@ import type {
     VisibleRange,
     VisibleRangeOptions,
     WorkspacePaneScaleState,
-    VisibleRangeOptions,
     IndicatorStatus,
     LegendActionView,
     LegendCalloutView,

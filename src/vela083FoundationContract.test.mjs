@@ -16,6 +16,9 @@ const options = read('../vendor/vela/src/core/options.ts');
 const nativeIndicator = read('../vendor/vela/src/core/native-indicators/NativeIndicator.ts');
 const paneControl = read('../vendor/vela/src/core/PanesControl.ts');
 const chartRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const rendererControl = read('../vendor/vela/src/core/RendererControl.ts');
+const indicatorHandle = read('../vendor/vela/src/core/IndicatorHandle.ts');
+const indicatorRegistry = read('../vendor/vela/src/core/engine/IndicatorRegistry.ts');
 const engine = read('../vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
 const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack.ts');
@@ -27,21 +30,25 @@ const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseDiff = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
-assert.match(provenance, /Upstream source version: \*\*0\.9\.0\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
-assert.match(provenance, /Previous source base: Vela 0\.8\.5/, 'record the 0.8.5 ancestry of the upstream release');
-assert.match(releaseNotes, /^## \[0\.9\.0\]/m, 'vendored changelog must include the 0.9.0 release notes');
+assert.match(provenance, /Upstream source version: \*\*0\.10\.1\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
+assert.match(provenance, /Previous source base: Vela 0\.9\.0/, 'record the 0.9.0 common ancestor of the upstream release');
+assert.match(releaseNotes, /^## \[0\.10\.1\]/m, 'vendored changelog must start with the target 0.10.1 release');
+assert.match(releaseNotes, /^## \[0\.9\.0\]/m, 'vendored changelog must retain the 0.9.0 historical release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
 const noticeBytes = Buffer.from(notice, 'utf8');
 const noticeBlobSha = createHash('sha1').update(Buffer.from('blob ' + noticeBytes.length + '\0', 'utf8')).update(noticeBytes).digest('hex');
-assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.9.0');
-assert.match(provenance, /aecb13847dff3c1a50a2f3433e9804d26fc581ed/, 'record the exact upstream source commit');
-assert.equal(overlayDiff.upstream.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'machine-generated diff must use the pinned source commit');
-assert.equal(releaseDiff.upstream.base.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'release diff must compare from the exact 0.8.5 source base');
-assert.equal(releaseDiff.upstream.release.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'release diff must terminate at the exact 0.9.0 source commit');
+assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.10.1');
+assert.match(provenance, /aecb13847dff3c1a50a2f3433e9804d26fc581ed/, 'record the 0.9.0 common-ancestor source commit');
+assert.equal(overlayDiff.upstream.commit, 'e77d22325e51c7a10edcc617e666ca1a5fd65e68', 'machine-generated diff must use the pinned 0.10.1 source commit');
+assert.equal(releaseDiff.upstream.base.commit, 'aecb13847dff3c1a50a2f3433e9804d26fc581ed', 'release diff must compare from the exact 0.9.0 source base');
+assert.equal(releaseDiff.upstream.release.commit, 'e77d22325e51c7a10edcc617e666ca1a5fd65e68', 'release diff must terminate at the exact 0.10.1 source commit');
 assert.equal(releaseDiff.counts.total, releaseDiff.files.length, 'release diff summary must match changed source entries');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/i18n/registry.ts'), 'release diff must include the localization registry');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/native-indicators/classics/averages.ts'), 'release diff must include the breaking regression-study migration');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/ui/chromeStyles.ts' && file.status === 'added'), '0.10.1 adds the UI-kit CSS isolation boundary');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/ui/renamed.ts' && file.status === 'added'), '0.10.1 adds compatibility aliases for renamed UI-kit exports');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/engine/EngineOrchestrator.ts'), 'release delta includes the updated indicator code-trial lifecycle');
 assert.equal(overlayDiff.counts.modified, overlayDiff.modified.length, 'diff summary must agree with the per-file modifications');
 assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff summary must agree with TCO-only source files');
 assert.ok(overlayDiff.modified.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every modified upstream source file must have a patch owner');
@@ -49,7 +56,7 @@ assert.ok(overlayDiff.localOnly.every((file) => patchManifest.patches.some((patc
 assert.match(persistedDocument, /paneHeightWeights\?: Record<string, number>/, 'pane weights are part of the versioned per-cell state');
 assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 64\)/, 'persisted pane count is bounded');
 assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
-assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.9.0 pane API');
+assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the Vela pane API through the 0.10.1 overlay');
 assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
 assert.match(paneCell, /const normalization = Math\.max\(1, maxWeight \/ 100\)/, 'oversized API weights are normalized by a common factor so pane proportions survive persistence');
 assert.match(paneCell, /if \(pending\) \{[\s\S]*maxWeight = Math\.max\(maxWeight, weight\)/, 'pending panes participate in the same normalization factor during progressive restore');
@@ -58,6 +65,16 @@ assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option con
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'native indicators can opt into full-history gating');
 assert.match(paneControl, /setHeightWeight\(paneId: string, weight: number\)/, 'pane height weights are part of the public Vela API');
 assert.match(chartRenderer, /paneId\?: string \| null/, 'click and crosshair events include an optional pane identity');
+assert.match(chartRenderer, /setBarsColumns\(columns: ColumnarBars/, 'columnar history replacement is part of the renderer port');
+assert.match(chartRenderer, /updateBarColumns\(update: ColumnarBarUpdate/, 'columnar live patches are part of the renderer port');
+assert.match(rendererControl, /getWorkspaceScaleState\(\)/, 'workspace pane scales are exposed through the public renderer control');
+assert.match(rendererControl, /applyWorkspaceScaleState\(/, 'saved pane scales restore through the public renderer control');
+assert.match(rendererControl, /onWorkspaceScaleChange\(/, 'user axis changes notify the workspace through the renderer control');
+assert.match(indicatorHandle, /export interface CodeUpdateResult/, 'indicator updates expose a typed result');
+assert.match(indicatorHandle, /updateCode\(source: string\): Promise<CodeUpdateResult>/, 'updateCode resolves with its execution result');
+assert.match(indicatorRegistry, /codeWaiters\?: Array/, 'the indicator registry tracks in-flight code-update callers');
+assert.match(indicatorRegistry, /codeTrial\?: \{ previous: CodeSnapshot \}/, 'the registry records the last known-good code for rollback');
+assert.match(engine, /private rejectCode\(/, 'failed first execution restores the last known-good indicator code');
 assert.match(engine, /historyComplete\(\): Promise<void>/, 'full-history completion remains an explicit lifecycle boundary');
 assert.match(inputController, /this\.dragging && this\.region === 'data' && wasTouch/, 'native inertial fling must only run for touch releases, not mouse drags');
 assert.match(sceneGraph, /heightWeight: heightWeight \?\? \(kind === 'price' \? 3 : 1\)/, 'new panes receive deterministic default weights');
@@ -74,7 +91,7 @@ for (const path of [
   '../vendor/vela/src/renderers/native/chrome/vela-logos.ts',
   '../vendor/vela/src/ui/surface-events.ts',
   '../vendor/vela/src/ui/surface-exit.ts',
-]) assert.equal(exists(path), true, path + ' must be present from upstream Vela 0.9.0');
+]) assert.equal(exists(path), true, path + ' must remain present as local UI compatibility fixtures');
 
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'keep native chart settings enabled');
 assert.match(nativeRenderer, /btn\.addEventListener\('pointerdown', \(event\) => event\.stopPropagation\(\)\)/, 'native settings gear must not bubble into chart gestures');
@@ -99,5 +116,5 @@ assert.match(vela, /setLocale\(next: string \| LocalizationOptions\)/, 'Vela sup
 assert.match(localeRegistry, /export function registerLocale\(/, 'locale registration is explicit and opt-in');
 assert.match(hindiLocale, /locale: 'hi'/, 'the Hindi locale pack is included');
 assert.ok(exists('../vendor/vela/src/locales/hi.json'), 'Hindi translation catalogue is included');
-assert.ok(releaseDiff.files.some((file) => file.path === 'src/locales/hi.json'), '0.9.0 release delta includes the Hindi catalogue');
-console.log('VELA_090_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/locales/hi.json'), '0.10.1 release delta includes the Hindi catalogue');
+console.log('VELA_101_FOUNDATION_AND_TCO_OVERLAY_CONTRACT_OK');

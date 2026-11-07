@@ -7,6 +7,7 @@ import type { LegendActionView, LegendCalloutView } from '../core/ports/IChartRe
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { SymbolDescriptor } from '../core/ports/DataProvider';
 import type { InputValue } from '../core/model/inputs';
+import type { IndicatorHandle } from '../core/IndicatorHandle';
 import type { MessageLike, Translator } from '../core/i18n/types';
 import { textOf } from '../core/i18n/text';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
@@ -291,6 +292,10 @@ export interface SidePanelHeader {
     /** Replace the header title (an empty string hides it). The topbar toggle keeps the
      *  DECLARED `title` as its tooltip. */
     setTitle(title: MessageLike): void;
+    /** Whether this panel currently covers the shell's chart area. */
+    readonly maximized: boolean;
+    /** Maximize the panel over the chart area or restore it. */
+    setMaximized(maximized: boolean): void;
     /** Close the panel — what the header's close button does. A panel declared
      *  `header: 'none'` wires its own close control to this. */
     close(): void;

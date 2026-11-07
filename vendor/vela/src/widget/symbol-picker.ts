@@ -251,8 +251,6 @@ export interface SymbolPickerOptions {
     iconFor?: (d: SymbolDescriptor) => string | undefined;
     /** Optional remote/provider search. Indexed results remain visible while it runs. */
     search?: (query: string, limit: number, market: string) => Promise<SymbolDescriptor[]>;
-    /** Optional remote/provider search. The existing indexed results remain visible while it runs. */
-    search?: (query: string, limit: number, market: string) => Promise<SymbolDescriptor[]>;
     /** Translator provided by the active Vela workspace. */
     i18n?: Translator | null;
 }

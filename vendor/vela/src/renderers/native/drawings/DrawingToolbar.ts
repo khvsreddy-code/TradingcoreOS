@@ -3,6 +3,7 @@ import type { DrawingTypeKey, SnapMode } from '../../../core/drawings';
 import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/drawings';
 import { icon } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
+import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily } from '../../../core/drawings/registry';
 import { announceSurface } from '@luxalgo/vela-ui/surface-events';
 import { holdForExit, type SurfaceExit } from '@luxalgo/vela-ui/surface-exit';

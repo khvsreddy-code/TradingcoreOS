@@ -120,7 +120,8 @@ export class PanelDock {
                     setMaximized: (on) => panel.setMaximized(on),
                     close: () => panel.toggle(false),
                 };
-                entry.handle = desc.mount(this.deps.context(), panel.content, header) ?? undefined;
+                const mountedHandle = desc.mount(this.deps.context(), panel.content, header);
+                if (mountedHandle) entry.handle = mountedHandle;
                 if (this.chart) entry.handle?.onChart?.(this.chart);
             } catch (err) {
                 console.warn(`[vela] side panel "${desc.id}" failed to mount`, err);

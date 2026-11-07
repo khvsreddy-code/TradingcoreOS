@@ -9,6 +9,14 @@ export interface IndicatorEventMap extends Record<string, unknown> {
     alert: { id: string; message: string; title?: string; time: number };
 }
 
+/** Outcome of an in-place script update. The call resolves on success or failure; it never rejects. */
+export interface CodeUpdateResult {
+    /** The new code is now the code running (or, while hidden, the code used when shown). */
+    ok: boolean;
+    /** Why the update did not land. Null on success. */
+    error: Error | null;
+}
+
 /**
  * What `chart.addIndicator(...)` returns to the developer. The handle is usable
  * synchronously; data renders when execution resolves (see `on('ready')`).
@@ -59,7 +67,7 @@ export interface IndicatorHandle {
      * anything else takes the new declaration default. No-op for a native indicator and
      * for an unchanged source.
      */
-    updateCode(source: string): void;
+    updateCode(source: string): Promise<CodeUpdateResult>;
     /**
      * Hide or show the indicator. Hiding **suspends** it — its visuals are dropped (the legend
      * row stays, marked hidden) and its computation stops (the engine session is torn down), so a
