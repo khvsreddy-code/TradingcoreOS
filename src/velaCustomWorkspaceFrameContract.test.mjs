@@ -19,9 +19,9 @@ assert.match(upstream, /Previous source base: Vela 0\.9\.0/, 'the Vela 0.10.1 in
 assert.match(terminal, /topbar:\s*\{/);
 assert.match(terminal, /'tco\.workspace-frame'/, 'workspace customization must be reachable from the existing top bar');
 assert.match(terminal, /bottombar:\s*false/, 'the terminal keeps its topbar-only command surface');
-assert.doesNotMatch(terminal, /'tco\\.quant'/i, 'Quant must stay out of the Vela topbar and use its right-sidebar action');
-assert.match(chrome, /id: 'tco\\.quant'[\\s\\S]{0,180}target: 'sidebar'/, 'Quant is exposed as a Vela right-sidebar action');
-assert.match(chrome, /id: 'indicators'[\\s\\S]{0,160}target: 'topbar'/, 'the indicator library replaces the native indicator slot instead of adding a duplicate topbar control');
+assert.ok(!terminal.includes("'tco.quant'"), 'Quant must stay out of the Vela topbar and use its right-sidebar action');
+assert.ok(chrome.includes("id: 'tco.quant',\\n  target: 'sidebar'"), 'Quant is exposed as a Vela right-sidebar action');
+assert.ok(chrome.includes("id: 'indicators',\\n  target: 'topbar'"), 'the indicator library replaces the native indicator slot instead of adding a duplicate topbar control');
 assert.match(chrome, /id:'tco\.workspace-frame'/, 'workspace frame panel/action must be registered');
 assert.match(chrome, /TCO_FRAME_STORAGE_KEY/, 'frame preferences must persist across reloads');
 assert.match(chrome, /data-tco-sidebar="left"/, 'sidebar placement can be switched left');
