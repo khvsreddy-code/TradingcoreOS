@@ -1,58 +1,8 @@
-// The icon registry — self-contained inline SVGs, no icon font, no CDN. It lives in core as
-// PURE STRING DATA (no DOM) so the UI kit, the renderer's own chrome and the widget all draw
-// from one set instead of each keeping its own inline copies. `src/ui/icons` adds the DOM
-// helper on top and is the public entry point for plugins.
-//
-// TWO TIERS, one apparent weight:
-//   tier A — 16×16 grid, stroke 1.2 ({@link svg16}): UI chrome (menus, panels, top bar).
-//   tier B — 24×24 grid, stroke 1.8 ({@link svg24}): drawing tools and the toolbars around
-//            them, where the glyph is a miniature of the geometry it draws.
-// 1.2/16 and 1.8/24 are the same fraction of the grid, so a tier-A and a tier-B icon at the
-// same rendered size read equally heavy. Every icon strokes `currentColor` and inherits its
-// size from the slot (`1em`), so callers style icons by color and font-size alone.
+// The icon registry lives in the kit's package; Vela's code keeps importing it from here.
+export { registerIcon, iconMarkup, icon, iconAt, svg16, svg24, svg24Solid } from '@luxalgo/vela-ui/icons';
 
-const registry = new Map<string, string>();
-
-/** Register (or replace) an icon's raw `<svg>` markup under an id. */
-export function registerIcon(id: string, svg: string): void {
-    registry.set(id, svg);
-}
-
-/** The raw `<svg>` markup for an id, or null. */
-export function iconMarkup(id: string): string | null {
-    return registry.get(id) ?? null;
-}
-
-/** The markup for an id, or empty markup — for the `innerHTML` sites that always want a
- *  string. An unknown id renders nothing rather than breaking the surrounding chrome. */
-export function icon(id: string): string {
-    return registry.get(id) ?? '';
-}
-
-/** {@link icon} pinned to an explicit pixel size, for slots that cannot inherit one (a
- *  glyph dropped into a row whose font-size belongs to the text beside it). */
-export function iconAt(id: string, px: number): string {
-    return icon(id).replace('<svg ', `<svg width="${px}" height="${px}" `);
-}
-
-// `extra` is emitted BEFORE the tier defaults: HTML keeps the first of a duplicated
-// attribute, so an icon that needs a filled root or a heavier stroke overrides the tier
-// rather than being silently ignored.
-
-/** Tier A: a 16×16 chrome icon. `extra` overrides root attributes (e.g. a filled variant). */
-export function svg16(body: string, extra = ''): string {
-    return `<svg viewBox="0 0 16 16" width="1em" height="1em" ${extra ? extra + ' ' : ''}fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
-}
-
-/** Tier B: a 24×24 drawing-tool icon. `extra` overrides root attributes. */
-export function svg24(body: string, extra = ''): string {
-    return `<svg viewBox="0 0 24 24" width="1em" height="1em" ${extra ? extra + ' ' : ''}fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
-}
-
-/** A tier-B glyph drawn as a solid shape rather than a stroke (grips, dots, carets). */
-export function svg24Solid(body: string): string {
-    return `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" stroke="none">${body}</svg>`;
-}
+import { registerIcon, svg16, svg24, svg24Solid } from '@luxalgo/vela-ui/icons';
+export { registerIcon, iconMarkup, icon, iconAt, svg16, svg24, svg24Solid } from '@luxalgo/vela-ui/icons';
 
 const S = svg16;
 

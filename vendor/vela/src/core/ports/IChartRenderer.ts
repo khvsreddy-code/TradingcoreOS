@@ -4,7 +4,7 @@ import type { IndicatorModel } from '../model/indicator';
 import type { ScenePatch } from '../model/patch';
 import type { InputValue, SymbolPickerFn } from '../model/inputs';
 import type { Millis } from '../model/time';
-import type { VelaTheme, ThemeName, MoveTarget, PriceStyle } from '../options';
+import type { VelaTheme, ThemeId, MoveTarget, PriceStyle } from '../options';
 import type { Unsubscribe } from '../util/types';
 import type { WallClock } from '../util/wall-clock';
 import type { IDrawingsRendererPort } from '../drawings/port';
@@ -218,6 +218,12 @@ export interface InputChangeEvent {
 export interface VisibleRange {
     from: Millis;
     to: Millis;
+}
+
+/** How {@link IChartRenderer.setVisibleRange} frames a range. */
+export interface VisibleRangeOptions {
+    /** Keep the configured right margin (whitespace past `range.to`) inside the frame. */
+    rightMargin?: boolean;
 }
 
 /** Serializable per-pane axis framing used by multi-chart workspace snapshots. */
@@ -486,7 +492,13 @@ export interface IChartRenderer {
     getDataWindowReadout?(): DataWindowReadout;
 
     getVisibleRange(): VisibleRange | null;
-    setVisibleRange(range: VisibleRange): void;
+    /**
+     * Frame `range` across the plot width. With `opts.rightMargin`, the renderer also
+     * leaves its configured right margin (whitespace past `range.to`, in bars) inside the
+     * frame — how a named preset frames the newest bars, so a preset (and "Reset chart
+     * view") never drops that margin. A renderer without a right margin ignores the option.
+     */
+    setVisibleRange(range: VisibleRange, opts?: VisibleRangeOptions): void;
     /** Full pane price-scale framing, optional for renderers without manual-axis zoom. */
     getWorkspaceScaleState?(): WorkspacePaneScaleState[];
     applyWorkspaceScaleState?(state: readonly WorkspacePaneScaleState[]): void;
@@ -535,12 +547,12 @@ export interface IChartRenderer {
 
     /**
      * The renderer reports a user request to switch the APP THEME, made from its own
-     * in-chart UI (the settings dialog's Canvas → Theme row). The core owns the
-     * canonical theme: it resolves the name, calls {@link setTheme}, and emits
-     * `theme:changed` so host chrome follows. Optional — a renderer without an
-     * in-chart theme control omits it.
+     * in-chart UI (the settings dialog's Canvas → Theme row): a built-in theme's name or
+     * a registered theme's id. The core owns the canonical theme: it resolves the id,
+     * calls {@link setTheme}, and emits `theme:changed` so host chrome follows.
+     * Optional — a renderer without an in-chart theme control omits it.
      */
-    onThemeSelect?(cb: (theme: ThemeName) => void): Unsubscribe;
+    onThemeSelect?(cb: (theme: ThemeId) => void): Unsubscribe;
 
     /**
      * Move keyboard focus onto the chart's interactive surface (the element its keyboard
