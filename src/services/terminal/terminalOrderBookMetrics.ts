@@ -30,8 +30,12 @@ export function calculateTerminalOrderBookDepth(
   levelLimit = 8,
 ): TerminalOrderBookDepthMetrics {
   const limit = Number.isFinite(levelLimit) ? Math.max(1, Math.min(20, Math.floor(levelLimit))) : 8;
-  const bids = (Array.isArray(bid) ? bid : []).slice(0, limit);
-  const asks = (Array.isArray(ask) ? ask : []).slice(0, limit);
+  const bids = (Array.isArray(bid) ? bid : [])
+    .filter(level => validPrice(level?.price) != null && validQuantity(level?.quantity) > 0)
+    .slice(0, limit);
+  const asks = (Array.isArray(ask) ? ask : [])
+    .filter(level => validPrice(level?.price) != null && validQuantity(level?.quantity) > 0)
+    .slice(0, limit);
   const bidQuantity = bids.reduce((sum, level) => sum + validQuantity(level?.quantity), 0);
   const askQuantity = asks.reduce((sum, level) => sum + validQuantity(level?.quantity), 0);
   const total = bidQuantity + askQuantity;
