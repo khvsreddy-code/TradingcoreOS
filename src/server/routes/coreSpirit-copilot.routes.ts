@@ -27,10 +27,10 @@ const MAX_SOURCE_BYTES=64*1024;
 
 // Keep the default Quant experience on Google's free-tier text models only.
 // Do not silently fall back to a paid model if a deployment variable is misconfigured.
-const FREE_GEMINI_MODEL_IDS = new Set(['gemini-3.1-flash-lite', 'gemini-2.5-flash-lite']);
+const FREE_GEMINI_MODEL_IDS = new Set(['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite']);
 function resolveFreeGeminiModel(value: unknown): string {
   const requested = typeof value === 'string' ? value.trim() : '';
-  return requested && FREE_GEMINI_MODEL_IDS.has(requested) ? requested : 'gemini-3.1-flash-lite';
+  return requested && FREE_GEMINI_MODEL_IDS.has(requested) ? requested : 'gemini-3.5-flash-lite';
 }
 
 const COPILOT_MODES=['generate','explain-error','fix','optimize','convert-to-quant','generate-tests','generate-backtest','generate-features','generate-model','generate-docs','explain-lookback','find-lookahead','find-repainting','find-unused-computation'] as const;
