@@ -103,7 +103,7 @@ assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
 assert.match(eventBus, /export class MarketEventBus/);
 assert.match(eventBus, /if \(!entry\.consumers \|\| !routesToConsumer\(event, entry\.consumers\)\) continue/,
   'depth fanout must require an explicit eligible consumer class');
-assert.match(orderTransport, /marketEventBus\.publish\(event\.data\)/);
+assert.match(orderTransport, /marketEventBus\.publish\(event\)/, 'typed normalized domain events are published to the shared market event bus');
 assert.doesNotMatch(orderTransport, /as DomainMarketEvent/, 'normalized order events must satisfy the domain union without unsafe casts');
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
