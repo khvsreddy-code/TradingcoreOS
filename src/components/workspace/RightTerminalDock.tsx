@@ -64,7 +64,7 @@ type WatchlistSurfaceProps = SurfaceContext & Pick<RightTerminalDockProps,
   | 'watchlists' | 'activeWatchlistId' | 'watchlistBusy' | 'watchlistError' | 'onSwitchWatchlist' | 'onCreateWatchlist' | 'onRenameWatchlist' | 'onDeleteWatchlist'
 >;
 
-type LocalAlert = { id: string; symbol?: string; price: number; createdAt: string; status: string };
+type LocalAlert = { id: string; symbol?: string; price: number; createdAt: string; status: string; condition: string };
 
 const MIN_RIGHT_DOCK_WIDTH = 260;
 const MAX_RIGHT_DOCK_WIDTH = 460;
@@ -95,25 +95,34 @@ const depthRows = (levels: MarketDepthLevel[] | undefined) => (Array.isArray(lev
 function useSymbolAlerts(selectedKey?: string) {
   const [alerts, setAlerts] = useState<LocalAlert[]>([]);
   const [alertPrice, setAlertPrice] = useState('');
+  const [alertCondition, setAlertCondition] = useState<'above' | 'below' | 'crosses_above' | 'crosses_below'>('above');
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
     setAlertPrice('');
     setError('');
-    void listTerminalAlertRules().then(rows => {
-      if (!active) return;
-      setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
-        id: row.id,
-        symbol: row.symbol,
-        price: Number(row.target_price),
-        createdAt: row.created_at,
-        status: String(row.status || 'armed'),
-      })));
-    }).catch(caught => {
-      if (active) setError(caught instanceof Error ? caught.message : 'Alerts could not be loaded.');
-    });
-    return () => { active = false; };
+    const refresh = () => {
+      void listTerminalAlertRules().then(rows => {
+        if (!active) return;
+        setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
+          id: row.id,
+          symbol: row.symbol,
+          price: Number(row.target_price),
+          createdAt: row.last_triggered_at || row.created_at,
+          status: String(row.status || 'armed'),
+          condition: row.condition,
+        })));
+      }).catch(caught => {
+        if (active) setError(caught instanceof Error ? caught.message : 'Alerts could not be loaded.');
+      });
+    };
+    refresh();
+    window.addEventListener('tco:terminal-alerts-changed', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('tco:terminal-alerts-changed', refresh);
+    };
   }, [selectedKey]);
 
   const arm = async () => {
@@ -121,10 +130,12 @@ function useSymbolAlerts(selectedKey?: string) {
     if (!selectedKey || !Number.isFinite(price) || price <= 0) return false;
     setError('');
     try {
-      await saveTerminalAlertRule({ symbol: selectedKey, label: selectedKey, condition: 'above', target_price: price, status: 'armed' });
+      await saveTerminalAlertRule({ symbol: selectedKey, label: selectedKey, condition: alertCondition, target_price: price, status: 'armed' });
+      window.dispatchEvent(new Event('tco:terminal-alerts-changed'));
       const rows = await listTerminalAlertRules();
       setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
-        id: row.id, symbol: row.symbol, price: Number(row.target_price), createdAt: row.created_at, status: String(row.status || 'armed'),
+        id: row.id, symbol: row.symbol, price: Number(row.target_price), createdAt: row.last_triggered_at || row.created_at,
+        status: String(row.status || 'armed'), condition: row.condition,
       })));
       setAlertPrice('');
       return true;
@@ -139,12 +150,13 @@ function useSymbolAlerts(selectedKey?: string) {
     try {
       await deleteTerminalAlertRule(id);
       setAlerts(current => current.filter(item => item.id !== id));
+      window.dispatchEvent(new Event('tco:terminal-alerts-changed'));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Alert could not be removed.');
     }
   };
 
-  return { alerts, alertPrice, setAlertPrice, arm, remove, error };
+  return { alerts, alertPrice, setAlertPrice, alertCondition, setAlertCondition, arm, remove, error };
 }
 
 const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceProps) {
@@ -400,11 +412,21 @@ const OrderBookSurface = memo(function OrderBookSurface({ selectedItem, selected
 });
 
 const AlertsSurface = memo(function AlertsSurface({ selectedItem }: Pick<SurfaceContext, 'selectedItem'>) {
-  const { alerts, alertPrice, setAlertPrice, arm, remove, error } = useSymbolAlerts(selectedItem?.key);
+  const { alerts, alertPrice, setAlertPrice, alertCondition, setAlertCondition, arm, remove, error } = useSymbolAlerts(selectedItem?.key);
   return <div className="tct-dock-content tct-alerts-content" id="tct-panel-alerts" role="tabpanel" aria-labelledby="tct-tab-alerts" data-tco-dock-surface="alerts">
-    <div className="tct-alert-create"><div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div><div className="tct-alert-entry"><input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/><button type="button" onClick={() => void arm()} disabled={!selectedItem || !alertPrice}>ARM</button></div></div>
-    <div className="tct-alert-head"><span>ACTIVE ALERTS</span><b>{alerts.length}</b></div>
-    <div className="tct-alert-list">{error && <div role="alert" className="tct-wl-empty">{error}</div>}{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.status.toUpperCase()} · {new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div><button type="button" onClick={() => void remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No alerts armed for this instrument.</div>}</div>
+    <div className="tct-alert-create">
+      <div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div>
+      <div className="tct-alert-entry">
+        <select value={alertCondition} onChange={event => setAlertCondition(event.target.value as typeof alertCondition)} aria-label="Price alert condition">
+          <option value="above">Above</option><option value="below">Below</option>
+          <option value="crosses_above">Crosses above</option><option value="crosses_below">Crosses below</option>
+        </select>
+        <input type="number" min="0.01" step="any" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/>
+        <button type="button" onClick={() => void arm()} disabled={!selectedItem || !alertPrice}>ARM</button>
+      </div>
+    </div>
+    <div className="tct-alert-head"><span>PRICE ALERTS</span><b>{alerts.length}</b></div>
+    <div className="tct-alert-list">{error && <div role="alert" className="tct-wl-empty">{error}</div>}{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.condition.replace('_', ' ').toUpperCase()} · {alert.status.toUpperCase()}{alert.status === 'triggered' ? ' · ' + new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</small></div><button type="button" onClick={() => void remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No price alerts for this instrument.</div>}</div>
   </div>;
 });
 
