@@ -7,6 +7,7 @@ import { historyStore } from '../../services/marketData/HistoryStore';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
 import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
+import { deleteTerminalAlertRule, listTerminalAlertRules, saveTerminalAlertRule } from '../../services/terminal/terminalDataService';
 
 export type RightDockTab = 'watchlist' | 'orderbook' | 'alerts';
 export type WatchlistDockTab = RightDockTab;
@@ -80,43 +81,58 @@ const formatNewsTime = (value: string) => {
 const depthRows = (levels: MarketDepthLevel[] | undefined) => (Array.isArray(levels) ? levels : []).slice(0, 8);
 
 function useSymbolAlerts(selectedKey?: string) {
-  const storageKey = `tradingcore:alerts:${selectedKey || 'chart'}`;
   const [alerts, setAlerts] = useState<LocalAlert[]>([]);
   const [alertPrice, setAlertPrice] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const value = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      setAlerts(Array.isArray(value) ? value : []);
-    } catch {
-      setAlerts([]);
-    }
+    let active = true;
     setAlertPrice('');
-  }, [storageKey]);
+    setError('');
+    void listTerminalAlertRules().then(rows => {
+      if (!active) return;
+      setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
+        id: row.id,
+        symbol: row.symbol,
+        price: Number(row.target_price),
+        createdAt: row.created_at,
+        status: String(row.status || 'armed'),
+      })));
+    }).catch(caught => {
+      if (active) setError(caught instanceof Error ? caught.message : 'Alerts could not be loaded.');
+    });
+    return () => { active = false; };
+  }, [selectedKey]);
 
-  const persist = (next: LocalAlert[]) => {
-    setAlerts(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
-  };
-
-  const arm = () => {
+  const arm = async () => {
     const price = Number(alertPrice);
     if (!selectedKey || !Number.isFinite(price) || price <= 0) return false;
-    const next: LocalAlert = {
-      id: globalThis.crypto?.randomUUID?.() || String(Date.now()),
-      symbol: selectedKey,
-      price,
-      createdAt: new Date().toISOString(),
-      status: 'armed',
-    };
-    persist([...alerts, next].slice(-50));
-    setAlertPrice('');
-    return true;
+    setError('');
+    try {
+      await saveTerminalAlertRule({ symbol: selectedKey, label: selectedKey, condition: 'above', target_price: price, status: 'armed' });
+      const rows = await listTerminalAlertRules();
+      setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
+        id: row.id, symbol: row.symbol, price: Number(row.target_price), createdAt: row.created_at, status: String(row.status || 'armed'),
+      })));
+      setAlertPrice('');
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Alert could not be saved.');
+      return false;
+    }
   };
 
-  const remove = (id: string) => persist(alerts.filter(x => x.id !== id));
+  const remove = async (id: string) => {
+    setError('');
+    try {
+      await deleteTerminalAlertRule(id);
+      setAlerts(current => current.filter(item => item.id !== id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Alert could not be removed.');
+    }
+  };
 
-  return { alerts, alertPrice, setAlertPrice, arm, remove };
+  return { alerts, alertPrice, setAlertPrice, arm, remove, error };
 }
 
 const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceProps) {
@@ -359,11 +375,11 @@ const OrderBookSurface = memo(function OrderBookSurface({ selectedItem, selected
 });
 
 const AlertsSurface = memo(function AlertsSurface({ selectedItem }: Pick<SurfaceContext, 'selectedItem'>) {
-  const { alerts, alertPrice, setAlertPrice, arm, remove } = useSymbolAlerts(selectedItem?.key);
+  const { alerts, alertPrice, setAlertPrice, arm, remove, error } = useSymbolAlerts(selectedItem?.key);
   return <div className="tct-dock-content tct-alerts-content" id="tct-panel-alerts" role="tabpanel" aria-labelledby="tct-tab-alerts" data-tco-dock-surface="alerts">
-    <div className="tct-alert-create"><div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div><div className="tct-alert-entry"><input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/><button type="button" onClick={arm} disabled={!selectedItem || !alertPrice}>ARM</button></div></div>
+    <div className="tct-alert-create"><div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div><div className="tct-alert-entry"><input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/><button type="button" onClick={() => void arm()} disabled={!selectedItem || !alertPrice}>ARM</button></div></div>
     <div className="tct-alert-head"><span>ACTIVE ALERTS</span><b>{alerts.length}</b></div>
-    <div className="tct-alert-list">{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.status.toUpperCase()} · {new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div><button type="button" onClick={() => remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No alerts armed for this instrument.</div>}</div>
+    <div className="tct-alert-list">{error && <div role="alert" className="tct-wl-empty">{error}</div>}{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.status.toUpperCase()} · {new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div><button type="button" onClick={() => void remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No alerts armed for this instrument.</div>}</div>
   </div>;
 });
 
@@ -428,6 +444,13 @@ export function RightTerminalDock(props: RightTerminalDockProps) {
     }
   };
 
+  const selectedHealth = classifyMarketDataHealth({
+    source: selectedTick?.source,
+    lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp,
+    receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt,
+    providerConnected: selectedTick?.source === 'fyers' || selectedTick?.source === 'upstox' ? true : undefined,
+    expectedIntervalMs: 5_000,
+  });
   const tabPanel = activeTab === 'watchlist'
     ? <WatchlistSurface {...props} selectedItem={selectedItem} selectedTick={selectedTick} />
     : activeTab === 'orderbook'
@@ -451,7 +474,7 @@ export function RightTerminalDock(props: RightTerminalDockProps) {
 
         {tabPanel}
         <footer className="tct-dock-status" aria-label="Right dock status">
-          <span><i className="tct-status-dot"/>LIVE</span>
+          <span><i className="tct-status-dot"/> {selectedHealth.label.toUpperCase()} · {selectedHealth.source.toUpperCase()}</span>
           <span>{selectedItem?.short || selectedItem?.label || 'NO SYMBOL'}</span>
           <span className="tct-status-key">Alt+0 collapse</span>
         </footer>
