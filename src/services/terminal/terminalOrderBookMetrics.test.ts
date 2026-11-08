@@ -15,7 +15,7 @@ const metrics = calculateTerminalOrderBookDepth(
 );
 assert.equal(metrics.bidQuantity, 200);
 assert.equal(metrics.askQuantity, 100);
-assert.equal(metrics.imbalancePercent, 100 / 3);
+assert.ok(Math.abs((metrics.imbalancePercent ?? 0) - 100 / 3) < 1e-9);
 assert.equal(metrics.bidLevels, 2);
 assert.equal(metrics.askLevels, 2);
 assert.equal(metrics.bidOrders, 6);
@@ -48,6 +48,7 @@ assert.equal(malformed.bidQuantity, 10);
 assert.equal(malformed.askQuantity, 0);
 assert.equal(malformed.bidLevels, 1);
 assert.equal(malformed.imbalancePercent, 100);
-assert.equal(malformed.spread, 1);
+assert.equal(malformed.bestAsk, null);
+assert.equal(malformed.spread, null, 'invalid ask prices must not fabricate a spread');
 
 console.log('TERMINAL_ORDER_BOOK_DEPTH_METRICS_OK');
