@@ -5,7 +5,7 @@ import type { CoreSpiritComponentContract } from './coreSpiritExecutionModel';
 export type CoreSpiritLibraryNamespace =
   | 'core' | 'market' | 'series' | 'math' | 'stats' | 'time' | 'structure'
   | 'volatility' | 'liquidity' | 'probability' | 'regime' | 'model' | 'ml' | 'prediction'
-  | 'visual' | 'chart' | 'automation' | 'events' | 'strategy' | 'portfolio' | 'risk'
+  | 'visual' | 'chart' | 'automation' | 'events' | 'strategy' | 'portfolio' | 'risk' | 'request'
   | 'background' | 'ta' | 'data' | 'orderflow' | 'options' | 'state';
 
 export type CoreSpiritLibraryEntryStatus = 'builtin' | 'component' | 'catalog';
@@ -25,7 +25,7 @@ const k=(namespace:CoreSpiritLibraryNamespace,member:string,description:string):
 
 export const CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES:readonly CoreSpiritLibraryNamespace[]=Object.freeze([
   'market','series','math','stats','time','structure','volatility','liquidity',
-  'core','probability','regime','model','ml','prediction','visual','chart','automation','events','strategy','portfolio','risk','background','ta','data','orderflow','options','state',
+  'core','probability','regime','model','ml','prediction','visual','chart','automation','events','strategy','portfolio','risk','background','ta','data','orderflow','options','state','request',
 ]);
 
 export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNamespaceEntry[]=Object.freeze([
@@ -92,7 +92,9 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('automation','route','automation.route','Host-routed automation execution event.'),
   b('risk','allowed','risk.allowed','Host risk-policy query; never grants broker authority.'),
   b('background','when','background.when','Conditional chart background projection.'),
-  b('data','request','request','Market-data request.'), b('data','requestBatch','requestBatch','Batched request.'), b('data','bid','bid','Bid.'), b('data','ask','ask','Ask.'), b('data','spread','spread','Spread.'), b('data','mid','mid','Mid.'),
+  b('data','request','request','Market-data request.'), b('data','requestBatch','requestBatch','Batched request.'),
+  b('request','security','request.security','Confirmed higher-timeframe market-data request.'),
+  b('request','security_lower_tf','request.security_lower_tf','Bounded lower-timeframe intrabar array request.'), b('data','bid','bid','Bid.'), b('data','ask','ask','Ask.'), b('data','spread','spread','Spread.'), b('data','mid','mid','Mid.'),
   b('orderflow','depthImbalance','depthImbalance','Depth imbalance from the host market-data plane.'), b('orderflow','footprintDelta','footprintDelta','Footprint delta from normalized order-flow data.'), b('orderflow','footprintBuy','footprintBuy','Footprint buy volume.'), b('orderflow','footprintSell','footprintSell','Footprint sell volume.'),
   k('orderflow','imbalance','Order-flow imbalance component surface.'), k('orderflow','sweep','Liquidity sweep component surface.'),
   k('options','impliedVolatility','Options implied-volatility surface.'), k('options','delta','Options delta surface.'), k('options','gamma','Options gamma surface.'), k('options','theta','Options theta surface.'), k('options','vega','Options vega surface.'),
