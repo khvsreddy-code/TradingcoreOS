@@ -408,7 +408,7 @@ export async function claimTerminalAlertRuleTrigger(
           observedPrice: price,
           source: trigger.source,
           firedAt: firedAt.toISOString(),
-          marketTimestamp: Number.isFinite(Number(trigger.marketTimestamp)) ? Number(trigger.marketTimestamp) : null,
+          marketTimestamp: trigger.marketTimestamp != null && Number.isFinite(Number(trigger.marketTimestamp)) ? Number(trigger.marketTimestamp) : null,
         },
       },
     })
