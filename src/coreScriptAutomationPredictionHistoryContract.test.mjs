@@ -60,7 +60,7 @@ assert.match(outputAdapter, /CoreSpiritVelaOutputRevisionGate/, 'Vela output app
 assert.match(outputAdapter, /does not match a canonical chart bar/, 'indicator points must align to the canonical chart timeline');
 
 assert.match(historical, /HISTORICAL_RECENT_SESSIONS = 5/, 'a complete exchange calendar counts five observed weekday sessions');
-assert.match(historical, /HISTORICAL_SOURCE_POLICY = 'fyers-primary-7d\\+investiny-2to5y-historical-backfill\\/v6'/, 'the shared history source policy records FYERS recent history and Investiny backfill');
+assert.ok(historical.includes("HISTORICAL_SOURCE_POLICY = 'fyers-primary-7d+investiny-2to5y-historical-backfill/v6'"), 'the shared history source policy records FYERS recent history and Investiny backfill');
 assert.match(historical, /HISTORICAL_MAX_BARS = 5_000/);
 assert.match(historical, /FYERS_HISTORY_WINDOW_DAYS/);
 assert.match(historical, /fyersHistoryWindowFloorMs\(now\)/, 'FYERS history requests are bounded by the configured recent-history floor');
