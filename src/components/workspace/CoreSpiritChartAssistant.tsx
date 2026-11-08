@@ -122,6 +122,15 @@ export function CoreSpiritChartAssistant({ context, embedded = false }: { contex
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, streaming, isOpen]);
 
+  useEffect(() => {
+    const prefill = (event: Event) => {
+      const prompt = String((event as CustomEvent<{ prompt?: unknown }>).detail?.prompt || '').slice(0, 500);
+      if (prompt) setDraft(prompt);
+    };
+    window.addEventListener('tco:quant-prefill', prefill);
+    return () => window.removeEventListener('tco:quant-prefill', prefill);
+  }, []);
+
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const sendMessage = async (event?: FormEvent<HTMLFormElement>) => {
