@@ -82,7 +82,9 @@ assert.match(predictionRoute, /useCanonicalHistory/, 'prediction history selecti
 assert.match(predictionClient, /fetchProductionPredictionsFromCanonicalHistory/, 'browser inference can use server-owned canonical history without shipping chart arrays');
 assert.match(researchHistoryClient, /fetchCoreSpiritResearchHistory/, 'CoreSpirit research has a typed client for the shared history endpoint');
 assert.match(brokerAdapter, /availableAt\?: number\[\]/, 'columnar history must retain per-bar availability provenance');
-assert.match(chartPlane, /availableAtMs/, 'chart column materialization must preserve availability timestamps');
+assert.match(chartPlane, /availableAt\?: ArrayLike<number>/, 'chart columnar history carries per-bar availability timestamps');
+assert.match(chartPlane, /previous\?\.availableAt \? \{ availableAt: align\(previous\.availableAt/, 'backfilled rows retain availability timestamps aligned to candle time');
+assert.match(chartPlane, /mergeSidecar\(previous\?\.availableAt/, 'live candle changes preserve aligned availability metadata');
 assert.match(runtimeHistory, /availableAt: ordered\.map/, 'runtime object-to-columnar fallback must preserve temporal provenance');
 assert.match(mlRuntime, /contract_lookback|required_lookback_bars/, 'production inference preserves the per-artifact lookback metadata');
 assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
