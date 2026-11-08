@@ -84,7 +84,7 @@ assert.match(researchHistoryClient, /fetchCoreSpiritResearchHistory/, 'CoreSpiri
 assert.match(brokerAdapter, /availableAt\?: number\[\]/, 'columnar history must retain per-bar availability provenance');
 assert.match(chartPlane, /availableAt\?: ArrayLike<number>/, 'chart columnar history carries per-bar availability timestamps');
 assert.match(chartPlane, /previous\?\.availableAt \? \{ availableAt: align\(previous\.availableAt/, 'backfilled rows retain availability timestamps aligned to candle time');
-assert.match(chartPlane, /const availableAt = previous\?\.availableAt \? mergeSidecar\(previous\?\.availableAt/, 'live candle changes preserve aligned availability metadata');
+assert.ok(chartPlane.includes('const availableAt = previous?.availableAt ? mergeSidecar(previous?.availableAt'), 'live candle changes preserve aligned availability metadata');
 assert.match(runtimeHistory, /availableAt: ordered\.map/, 'runtime object-to-columnar fallback must preserve temporal provenance');
 assert.match(mlRuntime, /contract_lookback|required_lookback_bars/, 'production inference preserves the per-artifact lookback metadata');
 assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
