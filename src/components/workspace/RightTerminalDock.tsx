@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsBundle, type TradingCoreNewsItem } from '../../services/news/newsService';
 import type { InstrumentSearchSegment, SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../services/marketData/watchlistTechnicals';
@@ -8,6 +8,7 @@ import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
 import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
 import { deleteTerminalAlertRule, listTerminalAlertRules, saveTerminalAlertRule } from '../../services/terminal/terminalDataService';
+import type { TerminalWatchlistRecord } from '../../services/terminal/terminalDataService';
 
 export type RightDockTab = 'watchlist' | 'orderbook' | 'alerts';
 export type WatchlistDockTab = RightDockTab;
@@ -27,6 +28,14 @@ export type RightTerminalDockProps = {
   activeTab: RightDockTab;
   onTabChange: (tab: RightDockTab) => void;
   watch: WatchlistDockItem[];
+  watchlists: TerminalWatchlistRecord[];
+  activeWatchlistId: string;
+  watchlistBusy: boolean;
+  watchlistError: string;
+  onSwitchWatchlist: (id: string) => void;
+  onCreateWatchlist: () => void;
+  onRenameWatchlist: () => void;
+  onDeleteWatchlist: () => void;
   selected: string;
   onSelect: (key: string) => void;
   onRemove: (key: string) => void;
@@ -52,6 +61,7 @@ type SurfaceContext = {
 
 type WatchlistSurfaceProps = SurfaceContext & Pick<RightTerminalDockProps,
   'onSelect' | 'onRemove' | 'onAdd' | 'query' | 'onQueryChange' | 'segment' | 'onSegmentChange' | 'results' | 'searching'
+  | 'watchlists' | 'activeWatchlistId' | 'watchlistBusy' | 'watchlistError' | 'onSwitchWatchlist' | 'onCreateWatchlist' | 'onRenameWatchlist' | 'onDeleteWatchlist'
 >;
 
 type LocalAlert = { id: string; symbol?: string; price: number; createdAt: string; status: string };
@@ -138,7 +148,7 @@ function useSymbolAlerts(selectedKey?: string) {
 }
 
 const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceProps) {
-  const { watch, selected, selectedItem, selectedTick, broker, ticks, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching } = props;
+  const { watch, selected, selectedItem, selectedTick, broker, ticks, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching, watchlists, activeWatchlistId, watchlistBusy, watchlistError, onSwitchWatchlist, onCreateWatchlist, onRenameWatchlist, onDeleteWatchlist } = props;
   const [newsByKey, setNewsByKey] = useState<Record<string, TradingCoreNewsBundle>>({});
   const [newsLoadingByKey, setNewsLoadingByKey] = useState<Record<string, boolean>>({});
   const [technicalByKey, setTechnicalByKey] = useState<Record<string, WatchlistTechnicalSummary | null>>({});
@@ -282,7 +292,20 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   }, [watch]);
 
   return <div className="tct-dock-content" id="tct-panel-watchlist" role="tabpanel" aria-labelledby="tct-tab-watchlist" data-tco-dock-surface="watchlist">
-    <div className="tct-wl-head"><div className="tct-wl-account">WATCHLIST <span>· {broker.toUpperCase()}</span></div><div className="tct-wl-actions"><button className="tct-rail-mini" title="More watchlist actions" type="button"><MoreHorizontal size={15}/></button></div></div>
+    <div className="tct-wl-head">
+      <div className="tct-wl-account">WATCHLIST <span>· {broker.toUpperCase()}</span></div>
+      <div className="tct-wl-actions">
+        {watchlists.length > 0 && <select aria-label="Select watchlist" value={activeWatchlistId} disabled={watchlistBusy} onChange={event => onSwitchWatchlist(event.target.value)} className="max-w-[118px] rounded border border-[#2a3a4f] bg-[#101a27] px-1.5 py-1 text-[9px] text-[#c9d7e8] outline-none">
+          {watchlists.map(list => <option key={list.id} value={list.id}>{list.name}{list.is_default ? ' · default' : ''}</option>)}
+        </select>}
+        <button className="tct-rail-mini" title="Create watchlist" aria-label="Create watchlist" type="button" disabled={watchlistBusy} onClick={onCreateWatchlist}><Plus size={14}/></button>
+        {watchlists.some(list => list.id === activeWatchlistId && !list.is_default) && <>
+          <button className="tct-rail-mini" title="Rename watchlist" aria-label="Rename watchlist" type="button" disabled={watchlistBusy} onClick={onRenameWatchlist}><Pencil size={13}/></button>
+          <button className="tct-rail-mini" title="Delete watchlist" aria-label="Delete watchlist" type="button" disabled={watchlistBusy} onClick={onDeleteWatchlist}><Trash2 size={13}/></button>
+        </>}
+      </div>
+    </div>
+    {watchlistError && <div role="alert" className="mx-2 mt-1 rounded border border-rose-900/60 bg-rose-950/30 px-2 py-1.5 text-[9px] text-rose-200">{watchlistError}</div>}
     <div className="tct-wl-search"><Search size={14}/><input value={query} onChange={e => onQueryChange(e.target.value)} placeholder="Search instruments" aria-label="Search instruments"/><span>{watch.length}</span></div>
     <div className="tct-wl-filters">
       <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="stocks">Stocks</option><option value="futures">Futures</option><option value="options">Options</option><option value="commodities">Commodities</option><option value="currency">Currency</option></select>
