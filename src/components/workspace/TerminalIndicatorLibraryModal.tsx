@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleHelp, Heart, Loader2, MessageCircle, Plus, Search, Sparkles, Star, X } from 'lucide-react';
 import { getTerminalIndicatorFavoriteKeys, setTerminalIndicatorFavorite } from '../../services/terminal/terminalDataService';
 import { listMyIndicatorPublications, listPublicIndicatorPublications, saveIndicatorSourceLocally, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
@@ -16,6 +16,7 @@ type VelaIndicatorBridge = {
   [key: string]: unknown;
   getNativeIndicatorCatalog?: () => Promise<NativeIndicatorInfo[]>;
   addNativeIndicator?: (type: string) => Promise<{ id?: string; alreadyPresent?: boolean }>;
+  renderNativeIndicatorPreview?: (type: string) => Promise<string | null>;
 };
 
 declare global {
@@ -137,6 +138,9 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [nativePreview, setNativePreview] = useState<string | null>(null);
+  const [nativePreviewLoading, setNativePreviewLoading] = useState(false);
+  const previewRequestRef = useRef(0);
 
   const load = async () => {
     setLoading(true);
@@ -213,6 +217,35 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
     publishedCatalog.forEach(item => { const family = item.category || 'Other'; result[family] = (result[family] || 0) + 1; });
     return result;
   }, [catalog, favorites, publishedCatalog, myPublications]);
+
+  useEffect(() => {
+    const request = ++previewRequestRef.current;
+    if (!open || !selectedItem?.supported) {
+      setNativePreview(null);
+      setNativePreviewLoading(false);
+      return;
+    }
+    setNativePreview(null);
+    setNativePreviewLoading(true);
+    const render = window.__TCO_VELA__?.renderNativeIndicatorPreview;
+    if (!render) {
+      setNativePreviewLoading(false);
+      return;
+    }
+    void render(selectedItem.type)
+      .then(image => {
+        if (previewRequestRef.current === request) setNativePreview(image);
+      })
+      .catch(() => {
+        if (previewRequestRef.current === request) setNativePreview(null);
+      })
+      .finally(() => {
+        if (previewRequestRef.current === request) setNativePreviewLoading(false);
+      });
+    return () => {
+      if (previewRequestRef.current === request) previewRequestRef.current += 1;
+    };
+  }, [open, selectedItem?.type, selectedItem?.supported]);
 
   const toggleFavorite = async (item: NativeIndicatorInfo) => {
     const next = !favorites.includes(item.type);
@@ -303,7 +336,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
                 const favorite = favorites.includes(item.type);
                 return <article key={item.type} className={'overflow-hidden rounded-xl border transition ' + (active ? 'border-[#5481ba] bg-[#142238] shadow-[0_0_0_1px_rgba(84,129,186,.18)]' : 'border-[#273449] bg-[#101823] hover:border-[#3c5371]')}>
                   <button type="button" onClick={() => { setSelectedPublicationId(null); setSelected(item.type); }} className="block w-full text-left">
-                    <div className="relative h-[112px] overflow-hidden border-b border-[#263449]"><PreviewGraphic type={item.type} family={family} /><span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{family}</span></div>
+                    <div className="relative h-[112px] overflow-hidden border-b border-[#263449]"><PreviewGraphic type={item.type} family={family} /><span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{family}</span><span className="absolute bottom-2 right-2 rounded border border-[#34465e] bg-[#0b1019]/90 px-1.5 py-1 text-[7px] font-semibold uppercase tracking-wide text-[#9aaec7]">Illustrative</span></div>
                     <div className="px-3 py-3">
                       <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[11px] font-semibold text-[#e5edf7]">{item.title}</div><div className="mt-1 truncate text-[9px] text-[#778ba5]">{item.type}</div></div>{item.beta && <span className="rounded bg-amber-500/10 px-1.5 py-1 text-[8px] font-bold text-amber-300">BETA</span>}</div>
                     </div>
@@ -337,7 +370,16 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
               </div>
             </> : selectedItem ? <>
               <div className="mb-3 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-[.15em] text-[#7e91aa]">Indicator details</span><button type="button" onClick={() => void toggleFavorite(selectedItem)} className={favorites.includes(selectedItem.type) ? 'text-amber-300' : 'text-[#8293aa]'}><Star className={'h-4 w-4 ' + (favorites.includes(selectedItem.type) ? 'fill-current' : '')} /></button></div>
-              <div className="overflow-hidden rounded-xl border border-[#2b3b51] bg-[#080e17]"><div className="h-[148px]"><PreviewGraphic type={selectedItem.type} family={familyFor(selectedItem)} large /></div></div>
+              <div className="overflow-hidden rounded-xl border border-[#2b3b51] bg-[#080e17]">
+                <div className="relative h-[148px]">
+                  {nativePreview
+                    ? <img src={nativePreview} alt={selectedItem.title + ' rendered by the Vela native engine using sample data'} className="h-full w-full object-cover" />
+                    : <PreviewGraphic type={selectedItem.type} family={familyFor(selectedItem)} large />}
+                  <span className="absolute bottom-2 left-2 rounded border border-[#34465e] bg-[#0b1019]/90 px-2 py-1 text-[7px] font-semibold uppercase tracking-wide text-[#a9bdd6]">
+                    {nativePreview ? 'Vela renderer · sample bars' : nativePreviewLoading ? 'Rendering native sample…' : 'Illustrative guide'}
+                  </span>
+                </div>
+              </div>
               <div className="mt-4 text-[15px] font-semibold leading-5 text-white">{selectedItem.title}</div>
               <div className="mt-1 text-[9px] text-[#8093ad]">{familyFor(selectedItem)} · Vela native</div>
               <p className="mt-3 text-[10px] leading-5 text-[#b2c0d2]">{descriptionFor(selectedItem, familyFor(selectedItem))}</p>
