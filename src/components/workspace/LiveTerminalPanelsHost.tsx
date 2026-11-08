@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Bot, BookOpen, X } from 'lucide-react';
+import { Activity, Bot, BookOpen, Wallet, X } from 'lucide-react';
 import { RightTerminalDock, type RightDockTab, type WatchlistDockItem } from './RightTerminalDock';
 import { TerminalJournalPanel } from './TerminalJournalPanel';
+import { TerminalPortfolioPanel } from './TerminalPortfolioPanel';
 import { CoreSpiritChartAssistant } from './CoreSpiritChartAssistant';
 import { searchBrokerInstruments, type InstrumentSearchSegment, type SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
@@ -60,7 +61,7 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
   const [segment, setSegment] = useState<InstrumentSearchSegment>('all');
   const [results, setResults] = useState<SearchInstrument[]>([]);
   const [searching, setSearching] = useState(false);
-  const [auxPanel, setAuxPanel] = useState<'journal' | 'quant' | null>(null);
+  const [auxPanel, setAuxPanel] = useState<'journal' | 'quant' | 'portfolio' | null>(null);
   const broker = String(tradingCoreRuntime.getPrimaryBrokerId() || 'fyers').toLowerCase();
   const selectedItem = watch.find(item => item.key === selected) || watch[0];
   const selectedTick = selectedItem ? ticks[selectedItem.key] || tradingCoreRuntime.getMarketSnapshot(selectedItem.key) : undefined;
@@ -224,12 +225,15 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
     <div className="pointer-events-auto absolute bottom-12 left-14 z-[135] flex items-center gap-1 rounded-lg border border-[#29364a] bg-[#0b111b]/95 p-1 shadow-xl backdrop-blur">
       <button type="button" onClick={() => setAuxPanel(current => current === 'journal' ? null : 'journal')} className={'inline-flex items-center gap-2 rounded-md px-3 py-2 text-[10px] font-semibold ' + (auxPanel === 'journal' ? 'bg-[#1d3552] text-white' : 'text-[#9fb0c6] hover:bg-white/5 hover:text-white')}><BookOpen size={13}/> Journal</button>
       <button type="button" onClick={() => setAuxPanel(current => current === 'quant' ? null : 'quant')} className={'inline-flex items-center gap-2 rounded-md px-3 py-2 text-[10px] font-semibold ' + (auxPanel === 'quant' ? 'bg-[#1d3552] text-white' : 'text-[#9fb0c6] hover:bg-white/5 hover:text-white')}><Bot size={13}/> Quant</button>
+      <button type="button" onClick={() => setAuxPanel(current => current === 'portfolio' ? null : 'portfolio')} className={'inline-flex items-center gap-2 rounded-md px-3 py-2 text-[10px] font-semibold ' + (auxPanel === 'portfolio' ? 'bg-[#1d3552] text-white' : 'text-[#9fb0c6] hover:bg-white/5 hover:text-white')}><Wallet size={13}/> Activity</button>
       {auxPanel && <button type="button" onClick={() => setAuxPanel(null)} aria-label="Close terminal panel" className="rounded-md p-2 text-[#8193aa] hover:bg-white/5"><X size={13}/></button>}
     </div>
     {auxPanel && <section className="pointer-events-auto absolute bottom-[88px] left-14 z-[134] flex h-[min(430px,55vh)] w-[min(520px,calc(100vw-90px))] flex-col overflow-hidden rounded-xl border border-[#2a394e] bg-[#0b1018] shadow-2xl">
       {auxPanel === 'journal'
         ? <TerminalJournalPanel symbol={symbol} timeframe={timeframe}/>
-        : <CoreSpiritChartAssistant context={assistantContext} embedded />}
+        : auxPanel === 'portfolio'
+          ? <TerminalPortfolioPanel />
+          : <CoreSpiritChartAssistant context={assistantContext} embedded />}
     </section>}
   </>;
 }
