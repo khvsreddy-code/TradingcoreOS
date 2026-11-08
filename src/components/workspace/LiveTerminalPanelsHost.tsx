@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Bot, BookOpen, Wallet, X } from 'lucide-react';
+import { Bot, BookOpen, Wallet, X } from 'lucide-react';
 import { RightTerminalDock, type RightDockTab, type WatchlistDockItem } from './RightTerminalDock';
 import { TerminalJournalPanel } from './TerminalJournalPanel';
 import { TerminalPortfolioPanel } from './TerminalPortfolioPanel';
