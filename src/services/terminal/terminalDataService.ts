@@ -256,3 +256,12 @@ export async function appendTerminalQuantMessage(input: {
   });
   throwOnError(error, 'Save Quant conversation message');
 }
+
+
+export async function deleteTerminalAlertRule(id: string): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to remove alert rules.');
+  const { error } = await getSupabaseClient().from('terminal_alert_rules')
+    .delete().eq('user_id', userId).eq('id', id);
+  throwOnError(error, 'Delete alert rule');
+}
