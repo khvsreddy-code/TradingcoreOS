@@ -4,8 +4,8 @@ process.env.NODE_ENV = 'test';
 process.env.ENCRYPTION_SECRET = 'c'.repeat(64);
 process.env.TRADINGCORE_ALLOW_IN_MEMORY_SESSIONS = 'true';
 
-const { BrokerRepository } = await import('./src/server/storage/BrokerRepository.ts');
-const { EncryptionService } = await import('./src/server/encryption/EncryptionService.ts');
+const { BrokerRepository } = await import('./server/storage/BrokerRepository.ts');
+const { EncryptionService } = await import('./server/encryption/EncryptionService.ts');
 
 const brokerId = 'fyers';
 const userId = 'token-cache-contract';
