@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, BookOpen, Wallet, X } from 'lucide-react';
 import { RightTerminalDock, type RightDockTab, type WatchlistDockItem } from './RightTerminalDock';
 import { TerminalJournalPanel } from './TerminalJournalPanel';
@@ -6,7 +6,8 @@ import { TerminalPortfolioPanel } from './TerminalPortfolioPanel';
 import { CoreSpiritChartAssistant } from './CoreSpiritChartAssistant';
 import { searchBrokerInstruments, type InstrumentSearchSegment, type SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
-import { createTerminalWatchlist, deleteTerminalWatchlist, deleteTerminalWatchlistItem, ensureDefaultTerminalWatchlist, listTerminalWatchlists, loadDefaultTerminalWatchlist, loadTerminalWatchlistItems, renameTerminalWatchlist, saveDefaultTerminalWatchlist, upsertTerminalWatchlistItem, type TerminalWatchlistRecord } from '../../services/terminal/terminalDataService';
+import { claimTerminalAlertRuleTrigger, createTerminalWatchlist, deleteTerminalWatchlist, deleteTerminalWatchlistItem, ensureDefaultTerminalWatchlist, listTerminalAlertRules, listTerminalWatchlists, loadDefaultTerminalWatchlist, loadTerminalWatchlistItems, renameTerminalWatchlist, saveDefaultTerminalWatchlist, upsertTerminalWatchlistItem, type TerminalAlertRuleRecord, type TerminalWatchlistRecord } from '../../services/terminal/terminalDataService';
+import { evaluateTerminalAlertRule, isEligibleTerminalAlertTick } from '../../services/terminal/terminalAlertEngine';
 import type { NormalizedMarketTick } from '../../types/market';
 
 const LOCAL_WATCHLIST_KEY = 'tradingcore:vela:watchlist:v2';
@@ -54,6 +55,12 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
   const [watch, setWatch] = useState<WatchlistDockItem[]>(DEFAULT_WATCHLIST);
   const [selected, setSelected] = useState(DEFAULT_WATCHLIST[0].key);
   const [ticks, setTicks] = useState<Record<string, NormalizedMarketTick>>({});
+  const [alertSymbols, setAlertSymbols] = useState<string[]>([]);
+  const [alertNotice, setAlertNotice] = useState<{ symbol: string; label: string; condition: string; price: number; source: string } | null>(null);
+  const alertRulesRef = useRef<TerminalAlertRuleRecord[]>([]);
+  const previousAlertPricesRef = useRef(new Map<string, number>());
+  const pendingAlertClaimsRef = useRef(new Set<string>());
+  const alertClaimBackoffRef = useRef(new Map<string, number>());
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem('tradingcore:terminal:rightdock-open') !== '0'; } catch { return true; }
   });
@@ -140,10 +147,59 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
     };
   }, []);
 
+  const refreshArmedAlerts = useCallback(async () => {
+    try {
+      const rows = await listTerminalAlertRules();
+      const armed = rows.filter(rule => rule.status === 'armed' && Boolean(rule.symbol));
+      alertRulesRef.current = armed;
+      const symbols = [...new Set(armed.map(rule => rule.symbol.trim()).filter(Boolean))].sort();
+      setAlertSymbols(current => current.join('|') === symbols.join('|') ? current : symbols);
+    } catch {
+      // Keep the last verified rule set; the next explicit change or refresh retries.
+    }
+  }, []);
+
   useEffect(() => {
-    if (!watch.length) return;
     let active = true;
-    const keys = watch.map(item => item.key).filter(Boolean);
+    const refresh = () => { if (active) void refreshArmedAlerts(); };
+    refresh();
+    window.addEventListener('tco:terminal-alerts-changed', refresh);
+    const interval = window.setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      window.removeEventListener('tco:terminal-alerts-changed', refresh);
+      window.clearInterval(interval);
+    };
+  }, [refreshArmedAlerts]);
+
+  useEffect(() => {
+    const onTriggered = (event: Event) => {
+      const detail = (event as CustomEvent<{ symbol?: unknown; label?: unknown; condition?: unknown; price?: unknown; source?: unknown }>).detail || {};
+      const price = Number(detail.price);
+      if (!Number.isFinite(price) || price <= 0) return;
+      setAlertNotice({
+        symbol: String(detail.symbol || ''),
+        label: String(detail.label || detail.symbol || 'Price alert'),
+        condition: String(detail.condition || 'price condition'),
+        price,
+        source: String(detail.source || 'broker'),
+      });
+    };
+    window.addEventListener('tco:terminal-alert-triggered', onTriggered);
+    return () => window.removeEventListener('tco:terminal-alert-triggered', onTriggered);
+  }, []);
+
+  useEffect(() => {
+    if (!alertNotice) return;
+    const timeout = window.setTimeout(() => setAlertNotice(null), 8_000);
+    return () => window.clearTimeout(timeout);
+  }, [alertNotice]);
+
+  useEffect(() => {
+    const watchKeys = watch.map(item => item.key).filter(Boolean);
+    const keys = [...new Set([...watchKeys, ...alertSymbols])];
+    if (!keys.length) return;
+    let active = true;
     for (const key of keys) {
       const cached = tradingCoreRuntime.getMarketSnapshot(key);
       if (cached) setTicks(current => ({ ...current, [key]: cached }));
@@ -152,10 +208,52 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
       if (!active || event.type !== 'tick' || !event.tick) return;
       const tick = event.tick as NormalizedMarketTick;
       const key = String(tick.instrumentKey || '');
-      if (key && keys.includes(key)) setTicks(current => ({ ...current, [key]: tick }));
+      if (!key || !keys.includes(key)) return;
+
+      setTicks(current => ({ ...current, [key]: tick }));
+      if (!isEligibleTerminalAlertTick(tick)) return;
+
+      const currentPrice = Number(tick.ltp);
+      const previousPrice = previousAlertPricesRef.current.get(key) ?? null;
+      previousAlertPricesRef.current.set(key, currentPrice);
+      const source = tick.source;
+      if (source !== 'fyers' && source !== 'upstox') return;
+
+      const now = Date.now();
+      for (const rule of alertRulesRef.current) {
+        if (rule.symbol !== key || pendingAlertClaimsRef.current.has(rule.id)) continue;
+        if ((alertClaimBackoffRef.current.get(rule.id) || 0) > now) continue;
+        if (!evaluateTerminalAlertRule(rule, previousPrice, currentPrice)) continue;
+
+        pendingAlertClaimsRef.current.add(rule.id);
+        const firedAt = new Date(now).toISOString();
+        void claimTerminalAlertRuleTrigger(rule, {
+          price: currentPrice,
+          source,
+          firedAt,
+          marketTimestamp: tick.brokerTimestamp ?? tick.timestamp ?? null,
+        }).then(claimed => {
+          if (!claimed) return;
+          alertRulesRef.current = alertRulesRef.current.filter(item => item.id !== rule.id);
+          window.dispatchEvent(new CustomEvent('tco:terminal-alert-triggered', {
+            detail: {
+              symbol: rule.symbol,
+              label: rule.label || rule.symbol,
+              condition: rule.condition,
+              price: currentPrice,
+              source,
+            },
+          }));
+          window.dispatchEvent(new Event('tco:terminal-alerts-changed'));
+        }).catch(() => {
+          alertClaimBackoffRef.current.set(rule.id, Date.now() + 10_000);
+        }).finally(() => {
+          pendingAlertClaimsRef.current.delete(rule.id);
+        });
+      }
     }, selected);
     return () => { active = false; stop(); };
-  }, [watch.map(item => item.key).join('|'), selected, broker]);
+  }, [watch.map(item => item.key).join('|'), alertSymbols.join('|'), selected, broker]);
 
   useEffect(() => {
     const term = query.trim();
@@ -345,5 +443,16 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
           ? <TerminalPortfolioPanel />
           : <CoreSpiritChartAssistant context={assistantContext} embedded />}
     </section>}
+    {alertNotice && <div role="status" className="pointer-events-auto fixed bottom-24 right-6 z-[260] w-[min(360px,calc(100vw-32px))] rounded-xl border border-emerald-800/70 bg-[#0d1b1b]/95 p-3 text-[#e5f7ef] shadow-2xl backdrop-blur">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-emerald-300">Price alert triggered · {alertNotice.source}</div>
+          <div className="mt-1 truncate text-[11px] font-semibold">{alertNotice.label}</div>
+          <div className="mt-1 text-[10px] text-[#b6c9c3]">{alertNotice.condition.replace('_', ' ')} · ₹{alertNotice.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+        </div>
+        <button type="button" aria-label="Dismiss price alert" onClick={() => setAlertNotice(null)} className="rounded p-1 text-[#9eb6ac] hover:bg-white/10"><X size={13}/></button>
+      </div>
+      <button type="button" onClick={() => { setOpen(true); setActiveTab('alerts'); setAlertNotice(null); }} className="mt-2 rounded-md border border-emerald-700/70 px-2 py-1 text-[9px] font-semibold text-emerald-200 hover:bg-emerald-950/50">View alerts</button>
+    </div>}
   </>;
 }
