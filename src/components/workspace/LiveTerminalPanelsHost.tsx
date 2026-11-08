@@ -108,8 +108,17 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
 
   useEffect(() => {
     const openWatchlist = () => { setOpen(true); setActiveTab('watchlist'); };
+    const openQuant = (event: Event) => {
+      const prompt = String((event as CustomEvent<{ prompt?: unknown }>).detail?.prompt || '').slice(0, 500);
+      setAuxPanel('quant');
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('tco:quant-prefill', { detail: { prompt } })), 80);
+    };
     window.addEventListener('tco:open-terminal-watchlist', openWatchlist);
-    return () => window.removeEventListener('tco:open-terminal-watchlist', openWatchlist);
+    window.addEventListener('tco:open-quant', openQuant);
+    return () => {
+      window.removeEventListener('tco:open-terminal-watchlist', openWatchlist);
+      window.removeEventListener('tco:open-quant', openQuant);
+    };
   }, []);
 
   useEffect(() => {
