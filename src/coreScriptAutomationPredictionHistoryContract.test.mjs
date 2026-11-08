@@ -95,7 +95,7 @@ assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 1_000_000/, 'res
 assert.match(researchValidation, /DEFAULT_RESEARCH_MAX_ROWS = 1024/, 'interactive research keeps a conservative default row budget');
 assert.match(researchValidation, /Math\.min\(CORESPIRIT_MAX_DATASET_ROWS, requestedMaxRows\)/, 'explicit research limits remain clamped to the hard dataset ceiling');
 assert.match(researchValidation, /row\.availableAt > row\.timestamp/, 'research forbids unavailable-at-decision-time features');
-assert.match(researchValidation, /purged boundary bars/);
+assert.match(researchValidation, /purged and[\s\S]*embargoed boundary bars/, 'chronological holdout explicitly separates purged and embargoed boundary bars');
 assert.match(modelArtifact, /featureSchema:[\s\S]*orderedNames:[\s\S]*types:[\s\S]*hash:/);
 assert.match(modelArtifact, /lookback:[\s\S]*minBars:[\s\S]*preferredBars:[\s\S]*maxBars:/);
 assert.match(modelArtifact, /target:[\s\S]*forecastHorizonBars:/);
