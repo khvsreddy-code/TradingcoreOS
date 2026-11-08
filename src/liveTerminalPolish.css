@@ -117,7 +117,7 @@
 .tco-live-surface .tct-alert-ident div{display:flex;flex-direction:column;gap:3px}
 .tco-live-surface .tct-alert-ident small{color:#71839a;font-size:8px}
 .tco-live-surface .tct-alert-entry{display:flex;gap:6px;margin-top:9px}
-.tco-live-surface .tct-alert-entry input{flex:1}
+.tco-live-surface .tct-alert-entry select{max-width:118px;min-width:0;border:1px solid #29384d;border-radius:6px;background:#101a27;color:#b9c8db;padding:6px 7px;font-size:9px}.tco-live-surface .tct-alert-entry input{min-width:0;flex:1}
 .tco-live-surface .tct-alert-entry button{border:1px solid #3b638e;border-radius:5px;background:#1d3d5f;color:#e5edf7;padding:6px 10px;font-size:8px;font-weight:800}
 .tco-live-surface .tct-alert-head{margin-top:10px;color:#91a3bb;font-size:8px;letter-spacing:.1em}
 .tco-live-surface .tct-alert-list{overflow:auto}
