@@ -4,13 +4,15 @@ import { readFileSync } from 'node:fs';
 import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
 
 import {
-  ADVANCED_DRAWING_FAMILIES,
-  drawingFamilyForType,
   drawingTypes,
   defaultToolbar,
-  loadDrawingFamily,
   loadAdvancedDrawingCatalog,
 } from '../vendor/vela/src/core/drawings/index.ts';
+import {
+  ADVANCED_DRAWING_FAMILIES,
+  drawingFamilyForType,
+  loadDrawingFamily,
+} from '../vendor/vela/src/core/drawings/registry.ts';
 
 const userDrawingSource = readFileSync(new URL('../vendor/vela/src/renderers/native/drawings/UserDrawingController.ts', import.meta.url), 'utf8');
 const drawingRegistrySource = readFileSync(new URL('../vendor/vela/src/core/drawings/registry.ts', import.meta.url), 'utf8');
