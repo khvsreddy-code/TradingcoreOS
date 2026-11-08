@@ -12,7 +12,7 @@ const theme=read('src/theme/theme.ts');
 const storage=read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 const vite=read('vite.config.ts');
 assert(workspace.includes('workspaceListenerDisposers'));
-assert(workspace.includes('bars: 5000'));
+assert.match(workspace, /prewarmTcoVelaHistory\([\s\S]*?\n\s+5000,\n\s+\);/, 'workspace must prewarm up to 5,000 bars per symbol/timeframe');
 assert(policy.includes("'5m': 900"));
 assert(policy.includes('return Math.max(250, Math.min(5000, Math.max(base, bars * 4)));'));
 assert(provider.includes("await plane.loadOlderHistory('visible')"));
