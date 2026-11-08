@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, CircleHelp, Heart, Loader2, Plus, Search, Sparkles, Star, X } from 'lucide-react';
+import { Check, ChevronRight, CircleHelp, Heart, Loader2, MessageCircle, Plus, Search, Sparkles, Star, X } from 'lucide-react';
 import { getTerminalIndicatorFavoriteKeys, setTerminalIndicatorFavorite } from '../../services/terminal/terminalDataService';
 
 type NativeIndicatorInfo = {
@@ -292,6 +292,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
               </div>
               <div className="mt-auto pt-4">
                 <button type="button" onClick={() => void addToChart(selectedItem)} disabled={adding || !selectedItem.supported || (selectedItem.present && !selectedItem.multiInstance)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#4b78ad] bg-[#24456c] px-3 py-3 text-[11px] font-semibold text-white transition hover:bg-[#2d5685] disabled:cursor-not-allowed disabled:opacity-40">{adding ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedItem.present && !selectedItem.multiInstance ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{selectedItem.present && !selectedItem.multiInstance ? 'Already on chart' : 'Add to chart'}</button>
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('tco:open-quant', { detail: { prompt: 'Explain the ' + selectedItem.title + ' indicator: its calculation, inputs, strengths, limitations, repainting/lookahead risks, and how I could adapt it for NIFTY on the current chart.' } }))} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#34465e] bg-[#101b2a] px-3 py-2.5 text-[10px] font-semibold text-[#b9cce4] transition hover:border-[#5a7ca7] hover:text-white"><MessageCircle className="h-3.5 w-3.5"/>Ask Quant about this indicator</button>
                 <div className="mt-2 text-center text-[8px] leading-4 text-[#6f8199]">Preview graphics are illustrative. The active chart renders the selected indicator's real output.</div>
               </div>
             </> : <div className="flex flex-1 items-center justify-center text-center text-xs text-[#7d8fa7]">Select an indicator to inspect its details.</div>}
