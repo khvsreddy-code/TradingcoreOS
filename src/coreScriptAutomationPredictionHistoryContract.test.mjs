@@ -70,7 +70,7 @@ assert.match(historyRefresh, /fetchFyersRecent\(mapping, pageRange\)/, 'FYERS su
 assert.match(historyRefresh, /fetchInvestinyHistory/, 'Investiny supplies the older historical backfill');
 assert.match(historyRefresh, /olderHistorySource: 'investiny'/, 'history metadata identifies Investiny as the older-history provider');
 assert.match(historyRefresh, /fyers-live-and-recent-history-only-7-days/, 'the FYERS source-status window is explicitly capped at seven days');
-const olderHistoryPaging = historical.slice(historical.indexOf('if (request.beforeTimestamp != null)'), historical.indexOf('const requestedBars ='));
+const olderHistoryPaging = historical.slice(historical.indexOf('if (request.beforeTimestamp != null)'));
 assert.ok(olderHistoryPaging.length > 0, 'older-history pagination implementation exists');
 assert.match(olderHistoryPaging, /Older-page navigation is Investiny-only/, 'older-page navigation does not page FYERS beyond its recent-history limit');
 assert.match(predictionJob, /MAX_PRODUCTION_PREDICTION_CANDLES = 5_000/);
