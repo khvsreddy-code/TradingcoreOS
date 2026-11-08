@@ -41,7 +41,7 @@ assert.match(claim, /status: 'triggered'/, 'a successful claim transitions the r
 
 console.log('TERMINAL_LIVE_PRICE_ALERT_ENGINE_OK');
 
-const runtime = readFileSync(new URL('../../runtime/TradingCoreRuntime.ts', import.meta.url), 'utf8');
+const runtime = readFileSync(new URL('../runtime/TradingCoreRuntime.ts', import.meta.url), 'utf8');
 assert.match(runtime, /const receivedAtEpoch = Date\.now\(\)/, 'broker ingress stamps local packet receive time');
 assert.match(runtime, /receivedAtEpoch,\s*receivedAt,/, 'normalized broker ticks carry the trusted receive timestamp');
 assert.match(runtime, /listener\(normalizedEvent\)/, 'subscribers receive the timestamped normalized tick');
