@@ -65,7 +65,7 @@ snapshotStore.capture(checkpointMetadata, { cursor:42 }, state=>({ ...state }));
 const restoredTarget = { cursor:0 };
 const compatibleIdentity = {
   modelVersion:'ir-v1', kernelType:'ema', kernelVersion:2,
-  parametersSignature:'period=3', dataRevision:17, nextBarIndex:5,
+  parametersSignature:'period=3', dataRevision:17, nextBarIndex:5, inputDependencies:['close'],
 };
 const copy = (target, source) => { target.cursor = source.cursor; };
 assert.equal(snapshotStore.restoreAt(restoredTarget,'test:ema','ir-v1',['close'],4,copy,compatibleIdentity),true);
