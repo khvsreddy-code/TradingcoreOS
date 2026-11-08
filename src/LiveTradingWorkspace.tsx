@@ -1009,7 +1009,7 @@ const browserRuntimeMetrics = useRef({
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('tco:open-terminal-watchlist'))}
             disabled={workspaceLoadState.phase !== 'ready'}
-            aria-label="Open TradingCoreOS watchlist"
+            aria-label="Toggle Watchlist panel"
             title="Watchlist"
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-slate-300 transition hover:border-slate-600 hover:bg-white/5 hover:text-white disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
           >
