@@ -96,7 +96,7 @@ assert.match(transport, /feedClass === 'depth' && !depthBids\.length && !depthAs
   'depth sockets must drop empty/non-depth frames');
 assert.match(transport, /feedClass === 'full' && ltp === undefined/,
   'full-tick sockets must not leak depth-only/informational frames');
-assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols\)/);
+assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols, \[\], quotaIdentity\)/, 'symbol capacity is checked against the broker account quota identity');
 assert.match(transport, /const domainEvent = buildDomainEvent\(tick, session\.feedClass\)/);
 assert.match(transport, /marketEventBus\.publish\(domainEvent\)/);
 assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
