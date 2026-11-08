@@ -498,8 +498,23 @@ export class TradingCoreRuntime {
           coreEventBus.emit('market.error', { brokerId: currentBrokerId, message: event.error, timestamp: Date.now() });
         }
         if (event.type === 'tick' && event.tick) {
-          const key = String(event.tick.instrumentKey || '');
-          const raw = (event.tick as any).lastTradeTimestamp ?? (event.tick as any).receivedAt ?? (event.tick as any).timestamp;
+          const receivedAtEpoch = Date.now();
+          const receivedAt = new Date(receivedAtEpoch).toISOString();
+          const brokerSource = currentBrokerId.toLowerCase();
+          const normalizedTick: NormalizedMarketTick = {
+            ...event.tick,
+            // This timestamp is assigned at the trusted broker-packet boundary.
+            // It is distinct from exchange/last-trade timestamps and is safe for
+            // freshness-sensitive consumers such as live price alerts.
+            receivedAtEpoch,
+            receivedAt,
+            ...(!event.tick.source && (brokerSource === 'fyers' || brokerSource === 'upstox')
+              ? { source: brokerSource }
+              : {}),
+          };
+          const normalizedEvent: MarketFeedEvent = { ...event, tick: normalizedTick };
+          const key = String(normalizedTick.instrumentKey || '');
+          const raw = (normalizedTick as any).lastTradeTimestamp ?? (normalizedTick as any).timestamp;
           const numericRaw = typeof raw === 'number' ? raw : Number(raw);
           const parsed = Number.isFinite(numericRaw) ? (numericRaw > 1e12 ? numericRaw : numericRaw * 1000) : Date.parse(String(raw));
           const timestamp = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : Date.now();
@@ -510,9 +525,12 @@ export class TradingCoreRuntime {
           // appear frozen even though the transport is alive. Transport order
           // is the authoritative order for live UI updates.
           if (key) this.lastTickTime.set(key, Date.now());
-          this.market.set(event.tick.instrumentKey, event.tick);
-          this.emit('TICK_UPDATE', event.tick);
-          coreEventBus.emit('market.tick', { symbol: String(event.tick.instrumentKey || ''), tick: event.tick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
+          this.market.set(normalizedTick.instrumentKey, normalizedTick);
+          this.emit('TICK_UPDATE', normalizedTick);
+          coreEventBus.emit('market.tick', { symbol: String(normalizedTick.instrumentKey || ''), tick: normalizedTick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: receivedAtEpoch });
+          listener(normalizedEvent);
+          this.marketListeners.forEach((subscriber) => subscriber(normalizedEvent));
+          return;
         }
         listener(event);
         this.marketListeners.forEach((subscriber) => subscriber(event));
