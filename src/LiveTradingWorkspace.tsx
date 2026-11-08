@@ -5,6 +5,7 @@ import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChart
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { TerminalIndicatorLibraryHost } from './components/workspace/TerminalIndicatorLibraryModal';
+import { LiveTerminalPanelsHost } from './components/workspace/LiveTerminalPanelsHost';
 import { FyersConnectionPrompt } from './components/brokers/FyersConnectionPrompt';
 import { hasValidFyersSession } from './services/marketData/yahooFallback';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -1031,6 +1032,7 @@ const browserRuntimeMetrics = useRef({
             </svg>
           </button>
         </aside>
+        <LiveTerminalPanelsHost symbol={chartStatus.symbol} timeframe={chartStatus.timeframe} />
         <TerminalIndicatorLibraryHost />
         <FyersConnectionPrompt floating onConnect={() => setBrokerStatusOpen(true)} />
         {brokerStatusOpen && (
