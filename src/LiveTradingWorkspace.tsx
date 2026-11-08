@@ -114,6 +114,37 @@ function sameChartStatus(left: ChartStatusView, right: ChartStatusView): boolean
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
+let nativeIndicatorPreviewGeneration = 0;
+let activeNativeIndicatorPreviewCleanup: (() => void) | null = null;
+
+function buildNativeIndicatorPreviewBars(seedText: string): Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> {
+  let seed = Array.from(seedText).reduce((value, char) => (Math.imul(value ^ char.charCodeAt(0), 16777619) >>> 0), 2166136261);
+  if (!seed) seed = 1;
+  const random = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 0x1_0000_0000;
+  };
+  const count = 260;
+  const stepMs = 5 * 60_000;
+  const now = Date.now();
+  let previousClose = 22_500;
+  const bars = [];
+  for (let index = 0; index < count; index += 1) {
+    const cycle = Math.sin(index / 10.5) * 2.8 + Math.cos(index / 27) * 2.1;
+    const drift = (random() - 0.48) * 11 + cycle;
+    const open = previousClose;
+    const close = Math.max(1, open + drift);
+    const spread = 1.2 + random() * 5.5;
+    const high = Math.max(open, close) + spread * (0.35 + random());
+    const low = Math.max(0.01, Math.min(open, close) - spread * (0.35 + random()));
+    bars.push({ time: now - (count - index) * stepMs, open, high, low, close, volume: 700 + random() * 5_000 });
+    previousClose = close;
+  }
+  return bars;
+}
+
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
 async function readCoreSpiritManifest(): Promise<Array<{ name: string; script: string; language: string; enabled: boolean; category: string }>> {
@@ -410,6 +441,74 @@ const browserRuntimeMetrics = useRef({
             if (entry.present && !entry.multiInstance) return { alreadyPresent: true };
             const handle = await active.chart.addNativeIndicatorAsync(type);
             return { id: handle.id, alreadyPresent: false };
+          },
+          renderNativeIndicatorPreview: async (type: string): Promise<string | null> => {
+            const generation = ++nativeIndicatorPreviewGeneration;
+            activeNativeIndicatorPreviewCleanup?.();
+            activeNativeIndicatorPreviewCleanup = null;
+            const { Vela } = await import('../vendor/vela/src');
+            if (generation !== nativeIndicatorPreviewGeneration) return null;
+
+            const container = document.createElement('div');
+            container.setAttribute('aria-hidden', 'true');
+            container.style.cssText = 'position:fixed;left:-10000px;top:0;width:360px;height:190px;overflow:hidden;pointer-events:none;contain:strict;';
+            document.body.appendChild(container);
+            let previewChart: InstanceType<typeof Vela> | null = null;
+            const cleanup = () => {
+              try { previewChart?.destroy(); } catch { /* renderer may already be torn down */ }
+              previewChart = null;
+              container.remove();
+            };
+            activeNativeIndicatorPreviewCleanup = cleanup;
+
+            try {
+              previewChart = new Vela(container, {
+                symbol: 'NSE:NIFTY50-INDEX',
+                timeframe: '5',
+                data: buildNativeIndicatorPreviewBars(type),
+                live: false,
+                theme: 'dark',
+                height: 190,
+                nativeBackend: 'canvas2d',
+                animations: false,
+                drawings: false,
+                volume: false,
+                currentPriceLine: false,
+              });
+              await previewChart.ready();
+              if (generation !== nativeIndicatorPreviewGeneration) return null;
+
+              const catalog = await previewChart.availableNativeIndicators();
+              const item = catalog.find(candidate => candidate.type === type);
+              if (!item?.supported) return null;
+
+              const handle = await previewChart.addNativeIndicatorAsync(type);
+              await new Promise<void>((resolve, reject) => {
+                let settled = false;
+                const finish = (error?: Error) => {
+                  if (settled) return;
+                  settled = true;
+                  window.clearTimeout(timer);
+                  removeReady();
+                  removeError();
+                  if (error) reject(error); else resolve();
+                };
+                const removeReady = handle.on('ready', () => finish());
+                const removeError = handle.on('error', payload => finish(payload.error));
+                const timer = window.setTimeout(() => finish(new Error('Native indicator preview timed out.')), 8_000);
+              });
+              if (generation !== nativeIndicatorPreviewGeneration) return null;
+              await new Promise<void>(resolve => {
+                if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+                else window.setTimeout(resolve, 32);
+              });
+              return previewChart.renderer.screenshot();
+            } catch {
+              return null;
+            } finally {
+              if (activeNativeIndicatorPreviewCleanup === cleanup) activeNativeIndicatorPreviewCleanup = null;
+              cleanup();
+            }
           },
         };
         if (host.current) applySavedTcoVelaAppearance(host.current);
