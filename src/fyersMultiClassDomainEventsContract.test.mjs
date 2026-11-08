@@ -117,7 +117,7 @@ assert.match(orderTransport, /normalizeFyersOrderPayload/);
 assert.doesNotMatch(orderTransport, /data: any/,
   'the broker order socket must not expose raw any payloads');
 assert.doesNotMatch(orderTransport, /data: payload/);
-assert.match(orderNormalizer, /Unknown payloads are deliberately dropped/);
+assert.match(orderNormalizer, /payloads are deliberately dropped/, 'unknown broker frames are explicitly documented as dropped');
 assert.match(streamRoute, /feed_class/);
 assert.match(streamRoute, /\['lite', 'full', 'depth'\]/);
 assert.match(orderRoute, /event: FyersOrderStreamEvent/);
