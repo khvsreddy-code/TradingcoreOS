@@ -43,6 +43,9 @@ export type CoreSpiritKernelSnapshotIdentity = Readonly<Pick<
 >>;
 
 function sameStringSet(a: readonly string[], b: readonly string[]): boolean {
+  // Runtime callers may cross an untyped JS/worker boundary; malformed identity
+  // data must fail closed instead of throwing while a checkpoint is evaluated.
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
   if (a.length !== b.length) return false;
   const left = new Set(a);
   if (left.size !== b.length) return false;

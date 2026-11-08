@@ -11,6 +11,7 @@ const velaPicker = fs.readFileSync('vendor/vela/src/widget/symbol-picker.ts', 'u
 const velaWorkspace = fs.readFileSync('vendor/vela/src/workspace/VelaWorkspace.ts', 'utf8');
 const gateway = fs.readFileSync('fyers-execution-gateway/server.mjs', 'utf8');
 const routes = fs.readFileSync('src/server/routes/trading.routes.ts', 'utf8');
+const fyersOrderExecution = fs.readFileSync('src/server/trading/fyersOrderExecution.ts', 'utf8');
 
 for (const master of ['NSE_CM','NSE_FO','NSE_CD','NSE_COM','BSE_CM','BSE_FO','MCX_COM']) {
   assert(provider.includes(master), `Vela symbol catalog must include ${master}`);
@@ -55,19 +56,27 @@ assert(gateway.includes('enforceAccountOrderRate'), 'Order-rate ceiling must be 
 assert(gateway.includes('offlineOrder: false'), 'Gateway must disallow after-market order payloads');
 assert(gateway.includes('accountKey'), 'Execution context must be bound to an account identity');
 assert(gateway.includes('nextOrderRateCleanupAt'), 'Inactive account rate windows must be cleaned up');
-assert(routes.includes('function validateFyersManualOrderPreflight'), 'A deterministic pre-trade decision must be run before gateway context is issued');
-assert(routes.includes("'manual-order-preflight-v1'"), 'The risk decision must identify its validated preflight version');
-assert(routes.includes("side !== 'BUY' && side !== 'SELL'"), 'Preflight must reject invalid order side values');
-assert(routes.includes("!['MARKET', 'LIMIT', 'SL', 'SL-M'].includes(orderType)"), 'Preflight must constrain order type to supported values');
-assert(routes.includes("!['CNC', 'MIS', 'NRML'].includes(product)"), 'Preflight must constrain product type');
-assert(routes.includes('Order quantity exceeds TradingCoreOS pre-trade limit'), 'Preflight must apply a finite configured quantity limit');
-assert(routes.includes('Stop orders require a positive trigger price'), 'Preflight must validate stop-order trigger prices');
-assert(routes.includes('riskApproved: decision.approved'), 'The approval must derive from the preflight result, not an unconditional boolean');
-assert(routes.includes('checks: decision.checks'), 'The context decision must name the checks that passed');
-assert(routes.includes("const orderHash = createHash('sha256').update(JSON.stringify(order)).digest('hex')"), 'Trusted server must bind context to exact order');
-assert(routes.includes('FYERS_GATEWAY_MAX_ORDER_QUANTITY'), 'Trusted server must apply the configured order cap');
+// The route owns ordering and invocation; the shared execution module owns
+// deterministic validation and the signed gateway context ABI.
+assert(routes.includes("import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight }"), 'Order route must import the canonical preflight and fixed-IP gateway adapter');
+assert(routes.includes("if (brokerId === 'fyers') validateFyersManualOrderPreflight(orderPayload)"), 'A deterministic pre-trade decision must run before any gateway context is issued');
+assert(routes.includes('evaluateManualPreTradeRisk({'), 'The server-owned account/position risk decision must run before live order submission');
+assert(routes.includes('placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload'), 'Approved orders must be routed through the fixed-IP gateway adapter');
+assert(routes.indexOf('validateFyersManualOrderPreflight(orderPayload)') < routes.indexOf('placeFyersOrderViaFixedIpGateway(req.accessToken'), 'Preflight must precede gateway submission');
+assert(fyersOrderExecution.includes('export function validateFyersManualOrderPreflight(order:'), 'Canonical execution module must implement deterministic preflight');
+assert(fyersOrderExecution.includes("'manual-order-preflight-v1'"), 'The risk decision must identify its validated preflight version');
+assert(fyersOrderExecution.includes("side !== 'BUY' && side !== 'SELL'"), 'Preflight must reject invalid order side values');
+assert(fyersOrderExecution.includes("!['MARKET', 'LIMIT', 'SL', 'SL-M'].includes(orderType)"), 'Preflight must constrain order type to supported values');
+assert(fyersOrderExecution.includes("!['CNC', 'MIS', 'NRML'].includes(product)"), 'Preflight must constrain product type');
+assert(fyersOrderExecution.includes('Order quantity exceeds TradingCoreOS pre-trade limit'), 'Preflight must apply a finite configured quantity limit');
+assert(fyersOrderExecution.includes('Stop orders require a positive trigger price'), 'Preflight must validate stop-order trigger prices');
+assert(fyersOrderExecution.includes('const decision = validateFyersManualOrderPreflight(order)'), 'Gateway context issuance must repeat preflight and fail closed');
+assert(fyersOrderExecution.includes('riskApproved: decision.approved'), 'The approval must derive from the preflight result, not an unconditional boolean');
+assert(fyersOrderExecution.includes('checks: decision.checks'), 'The context decision must name the checks that passed');
+assert(fyersOrderExecution.includes("const orderHash = createHash('sha256').update(JSON.stringify(order)).digest('hex')"), 'Trusted server must bind context to exact order');
+assert(fyersOrderExecution.includes('FYERS_GATEWAY_MAX_ORDER_QUANTITY'), 'Trusted server must apply the configured order cap');
+assert(fyersOrderExecution.includes('FYERS_GATEWAY_CONTEXT_TTL_MS'), 'Trusted server context expiry must match gateway configuration');
 assert(routes.includes('FYERS live orders are disabled until the fixed-IP execution gateway'), 'FYERS must fail closed when its fixed-IP gateway is missing');
-assert(routes.includes('FYERS_GATEWAY_CONTEXT_TTL_MS'), 'Trusted server context expiry must match gateway configuration');
-assert(!routes.includes("brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL\n        ?"), 'FYERS order routing must not allow a direct-broker fallback');
+assert(!routes.includes("brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL\\n        ?"), 'FYERS order routing must not allow a direct-broker fallback');
 
 console.log('FYERS_COMPLIANCE_GATEWAY_AND_VELA_SYMBOL_CATALOG_CONTRACT_OK');

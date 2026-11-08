@@ -25,6 +25,14 @@ coreSpiritCopilotRoutes.use(requireUser);
 const MAX_PROMPT_CHARS=4_000;
 const MAX_SOURCE_BYTES=64*1024;
 
+// Keep the default Quant experience on Google's free-tier text models only.
+// Do not silently fall back to a paid model if a deployment variable is misconfigured.
+const FREE_GEMINI_MODEL_IDS = new Set(['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite']);
+function resolveFreeGeminiModel(value: unknown): string {
+  const requested = typeof value === 'string' ? value.trim() : '';
+  return requested && FREE_GEMINI_MODEL_IDS.has(requested) ? requested : 'gemini-3.5-flash-lite';
+}
+
 const COPILOT_MODES=['generate','explain-error','fix','optimize','convert-to-quant','generate-tests','generate-backtest','generate-features','generate-model','generate-docs','explain-lookback','find-lookahead','find-repainting','find-unused-computation'] as const;
 type CopilotMode=typeof COPILOT_MODES[number];
 const ANALYSIS_ONLY_MODES=new Set<CopilotMode>(['explain-error','generate-tests','generate-docs','explain-lookback','find-lookahead','find-repainting','find-unused-computation']);
@@ -102,7 +110,7 @@ async function handleCopilotGenerate(req:AuthenticatedRequest,res:Response,strea
 
   try{
     const ai=new GoogleGenAI({apiKey});
-    const model=String(process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.1-flash-lite').trim();
+    const model=resolveFreeGeminiModel(process.env.CORESPIRIT_COPILOT_MODEL);
     const systemInstruction=[
       'You are CoreSpirit Copilot, a code author for the TradingCoreOS CoreScript language.',
       'Generate a draft source program only for source-changing modes. Never claim to execute, backtest, or trade it.',
@@ -307,7 +315,7 @@ async function handleCoreSpiritAiInvoke(req:AuthenticatedRequest,res:Response):P
     if(capabilityErrors.length||architectureErrors.length){
       res.status(403).json({success:false,error:'The server automation sandbox denied this AI invocation.',diagnostics:[...architectureErrors,...capabilityErrors].slice(0,20)});return;
     }
-    const modelVersion=String(process.env.CORESPIRIT_AI_INVOKE_MODEL||process.env.CORESPIRIT_COPILOT_MODEL||'gemini-3.1-flash-lite').trim();
+    const modelVersion=resolveFreeGeminiModel(process.env.CORESPIRIT_AI_INVOKE_MODEL || process.env.CORESPIRIT_COPILOT_MODEL);
     const inputFingerprint=createCoreSpiritAiInputFingerprint({source:input.source,artifactHash:input.artifactHash,prompt:input.prompt,context:input.context,modelVersion,outputTokenLimit:input.outputTokenLimit});
     const userHash=coreSpiritCopilotSha256(userId).slice(0,32);
     const cacheKey='tco:corespirit:ai-invoke:cache:'+userHash+':'+inputFingerprint;
@@ -528,7 +536,7 @@ async function handleCoreSpiritChartAssistantStream(req: AuthenticatedRequest, r
     ].join('\n');
 
     const ai = new GoogleGenAI({ apiKey });
-    const model = String(process.env.CORESPIRIT_CHAT_ASSISTANT_MODEL || process.env.CORESPIRIT_COPILOT_MODEL || 'gemini-3.1-flash-lite').trim();
+    const model = resolveFreeGeminiModel(process.env.CORESPIRIT_CHAT_ASSISTANT_MODEL || process.env.CORESPIRIT_COPILOT_MODEL);
     const controller = new AbortController();
     res.on('close', () => {
       if (!res.writableEnded) controller.abort();

@@ -1052,6 +1052,24 @@ export class CoreSpiritRuntime {
     );
   }
 
+  /**
+   * The first forming bar has no confirmed predecessor. Capture each kernel's
+   * true pre-update state after its canonical identity is known, so a revision
+   * can roll back to bar -1 without replaying or losing the initial cursor state.
+   */
+  private captureKernelBaselineIfMissing(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+    state: CoreSpiritKernelState['state'],
+    barIndex: number,
+  ): void {
+    if (barIndex !== 0) return;
+    const identity = this.kernelIdentity(family, key);
+    const expected = this.kernelSnapshotIdentity(family, key, 0);
+    if (this.kernelStateSnapshots.at(identity.nodeId, -1, expected)) return;
+    this.captureKernelSnapshot(family, key, state, -1);
+  }
+
   private snapshotKernelsForBar(barIndex: number): void {
     if (!this.compiledIr || barIndex < -1) return;
     for (const [groupId, cursor] of this.fusedCursors) this.captureKernelSnapshot('fused', groupId, cursor, barIndex);
@@ -1368,6 +1386,7 @@ export class CoreSpiritRuntime {
     if (!Number.isFinite(source)) {
       const cursor = this.fusedCursors.get(group.id);
       if (!cursor) return false;
+      this.captureKernelBaselineIfMissing('fused', group.id, cursor, barIndex);
       const outputValues = cursor.update(Number.NaN, barIndex);
       for (let i = 0; i < group.instructions.length; i += 1) {
         const stageInstruction = instructions[group.instructions[i]!];
@@ -1377,6 +1396,7 @@ export class CoreSpiritRuntime {
     }
     const cursor = this.fusedCursors.get(group.id);
     if (!cursor) return false;
+    this.captureKernelBaselineIfMissing('fused', group.id, cursor, barIndex);
     const outputValues = cursor.update(source, barIndex);
     for (let i = 0; i < group.instructions.length; i += 1) {
       const stageInstruction = instructions[group.instructions[i]!];
@@ -1807,6 +1827,7 @@ export class CoreSpiritRuntime {
       this.rememberKernelIdentity('beta', key, callKey, seriesArgs);
       let kernel=this.betaKernels.get(key);
       if(!kernel){kernel=new RollingBetaState(period);this.betaKernels.set(key,kernel);}
+      this.captureKernelBaselineIfMissing('beta', key, kernel, index);
       const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
       return finish(kernel.update(x,y,mode));
     }
@@ -1817,6 +1838,7 @@ export class CoreSpiritRuntime {
       this.rememberKernelIdentity('trend', key, callKey, seriesArgs);
       let kernel=this.trendStrengthKernels.get(key);
       if(!kernel){kernel=new RollingCorrelationState(period);this.trendStrengthKernels.set(key,kernel);}
+      this.captureKernelBaselineIfMissing('trend', key, kernel, index);
       const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
       return finish(kernel.update(value,mode));
     }
@@ -1840,6 +1862,7 @@ export class CoreSpiritRuntime {
         cursor = new CoreSpiritFusedSeriesCursor([operation]);
         this.directKernelCursors.set(key, cursor);
       }
+      this.captureKernelBaselineIfMissing('direct', key, cursor, index);
       const result = cursor.update(current, index)[0];
       return finish(Number.isFinite(result) ? result : null);
     }
@@ -1848,6 +1871,7 @@ export class CoreSpiritRuntime {
       const key = 'rsi:' + series + ':' + length;
       this.rememberKernelIdentity('rsi', key, callKey, seriesArgs);
       let kernel = this.rsiKernels.get(key); if (!kernel) { kernel = new RSIState(length); this.rsiKernels.set(key, kernel); }
+      this.captureKernelBaselineIfMissing('rsi', key, kernel, index);
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(current, mode));
     }
@@ -1855,6 +1879,7 @@ export class CoreSpiritRuntime {
       const key = 'atr:' + length;
       this.rememberKernelIdentity('atr', key, callKey, seriesArgs);
       let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(length); this.atrKernels.set(key, kernel); }
+      this.captureKernelBaselineIfMissing('atr', key, kernel, index);
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
     }
@@ -1863,6 +1888,7 @@ export class CoreSpiritRuntime {
       this.rememberKernelIdentity('vwap', key, callKey, seriesArgs);
       let kernel = this.vwapKernels.get(key); if (!kernel) { kernel = new VWAPSessionState(); this.vwapKernels.set(key, kernel); }
       const price = (Number(bar.high) + Number(bar.low) + Number(bar.close)) / 3;
+      this.captureKernelBaselineIfMissing('vwap', key, kernel, index);
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(bar.timestamp, price, Number(bar.volume) || 0, Number(bar.close), mode));
     }

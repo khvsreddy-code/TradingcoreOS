@@ -169,6 +169,8 @@ const contracts = [
 
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],
   ['vela-workspace-ux', ['src/velaTcoWorkspaceUxContract.test.mjs', false]],
+  ['terminal-live-price-alert-engine', ['src/services/terminal/terminalAlertEngine.test.ts', true]],
+  ['terminal-order-book-depth-metrics', ['src/services/terminal/terminalOrderBookMetrics.test.ts', true]],
   ['terminal-shell', ['src/terminalShellContract.test.mjs', false]],
   ['terminal-dock-system', ['src/terminalDockSystemContract.test.mjs', false]],
   ['terminal-dock-architecture', ['src/terminalDockArchitectureContract.test.mjs', false]],

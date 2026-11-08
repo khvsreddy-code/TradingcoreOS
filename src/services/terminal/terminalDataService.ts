@@ -8,6 +8,13 @@ export type TerminalWatchlistItem = {
   type?: string | null;
 };
 
+export type TerminalWatchlistRecord = {
+  id: string;
+  name: string;
+  is_default: boolean;
+  sort_order: number;
+};
+
 export type TerminalJournalTrade = {
   id: string;
   symbol: string;
@@ -106,6 +113,161 @@ export async function saveDefaultTerminalWatchlist(items: readonly TerminalWatch
   return true;
 }
 
+/** Lists the signed-in user's watchlists. No symbols or broker data are fetched here. */
+export async function listTerminalWatchlists(): Promise<TerminalWatchlistRecord[]> {
+  const userId = await authenticatedUserId();
+  if (!userId) return [];
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_watchlists')
+    .select('id,name,is_default,sort_order')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+  throwOnError(error, 'Load watchlists');
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    name: String(row.name || 'Watchlist'),
+    is_default: Boolean(row.is_default),
+    sort_order: Number(row.sort_order || 0),
+  }));
+}
+
+/** Creates Main only when an authenticated user has no default list yet. */
+export async function ensureDefaultTerminalWatchlist(): Promise<TerminalWatchlistRecord | null> {
+  const userId = await authenticatedUserId();
+  if (!userId) return null;
+  const existing = await listTerminalWatchlists();
+  const currentDefault = existing.find(item => item.is_default);
+  if (currentDefault) return currentDefault;
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_watchlists')
+    .insert({ user_id: userId, name: 'Main', is_default: true, sort_order: 0 })
+    .select('id,name,is_default,sort_order')
+    .single();
+  if (error) {
+    // A second tab may have created Main after the initial read. Re-read before surfacing.
+    const refreshed = await listTerminalWatchlists();
+    const racedDefault = refreshed.find(item => item.is_default);
+    if (racedDefault) return racedDefault;
+    throw new Error('Create default watchlist: ' + error.message);
+  }
+  return {
+    id: String(data.id),
+    name: String(data.name),
+    is_default: Boolean(data.is_default),
+    sort_order: Number(data.sort_order || 0),
+  };
+}
+
+export async function createTerminalWatchlist(name: string): Promise<TerminalWatchlistRecord> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to create watchlists.');
+  const normalizedName = name.trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!normalizedName || normalizedName.toLowerCase() === 'main') {
+    throw new Error('Choose a name other than Main.');
+  }
+  const current = await listTerminalWatchlists();
+  if (current.length >= 20) throw new Error('You can create up to 20 watchlists.');
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_watchlists')
+    .insert({ user_id: userId, name: normalizedName, is_default: false, sort_order: current.length })
+    .select('id,name,is_default,sort_order')
+    .single();
+  throwOnError(error, 'Create watchlist');
+  return { id: String(data.id), name: String(data.name), is_default: Boolean(data.is_default), sort_order: Number(data.sort_order || 0) };
+}
+
+export async function renameTerminalWatchlist(id: string, name: string): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to rename watchlists.');
+  const normalizedName = name.trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!normalizedName || normalizedName.toLowerCase() === 'main') throw new Error('Choose a different watchlist name.');
+  const { data: target, error: readError } = await getSupabaseClient()
+    .from('terminal_watchlists')
+    .select('id,is_default')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  throwOnError(readError, 'Check watchlist');
+  if (!target) throw new Error('Watchlist not found.');
+  if (target.is_default) throw new Error('The Main watchlist cannot be renamed.');
+  const { error } = await getSupabaseClient().from('terminal_watchlists')
+    .update({ name: normalizedName, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('user_id', userId);
+  throwOnError(error, 'Rename watchlist');
+}
+
+export async function deleteTerminalWatchlist(id: string): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to delete watchlists.');
+  const { data: target, error: readError } = await getSupabaseClient()
+    .from('terminal_watchlists')
+    .select('id,is_default')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  throwOnError(readError, 'Check watchlist');
+  if (!target) return;
+  if (target.is_default) throw new Error('The Main watchlist cannot be deleted.');
+  const supabase = getSupabaseClient();
+  const { error: itemsError } = await supabase.from('terminal_watchlist_items')
+    .delete().eq('watchlist_id', id).eq('user_id', userId);
+  throwOnError(itemsError, 'Delete watchlist items');
+  const { error } = await supabase.from('terminal_watchlists').delete().eq('id', id).eq('user_id', userId);
+  throwOnError(error, 'Delete watchlist');
+}
+
+export async function loadTerminalWatchlistItems(watchlistId: string): Promise<TerminalWatchlistItem[]> {
+  const userId = await authenticatedUserId();
+  if (!userId) return [];
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_watchlist_items')
+    .select('symbol,label,short_name,exchange,instrument_type')
+    .eq('user_id', userId)
+    .eq('watchlist_id', watchlistId)
+    .order('sort_order', { ascending: true });
+  throwOnError(error, 'Load watchlist items');
+  return (data || []).map((row: Record<string, unknown>) => ({
+    symbol: String(row.symbol || ''),
+    label: String(row.label || row.symbol || ''),
+    short: String(row.short_name || row.symbol || ''),
+    exchange: row.exchange == null ? null : String(row.exchange),
+    type: row.instrument_type == null ? null : String(row.instrument_type),
+  })).filter((item: TerminalWatchlistItem) => item.symbol);
+}
+
+/** Item-level writes are independently protected by the existing watchlist RLS policies. */
+export async function upsertTerminalWatchlistItem(watchlistId: string, item: TerminalWatchlistItem, sortOrder: number): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to sync watchlist items.');
+  const symbol = String(item.symbol || '').trim().toUpperCase();
+  if (!symbol) throw new Error('A watchlist symbol is required.');
+  const { error } = await getSupabaseClient().from('terminal_watchlist_items').upsert({
+    user_id: userId,
+    watchlist_id: watchlistId,
+    symbol,
+    label: String(item.label || symbol).slice(0, 120),
+    short_name: String(item.short || symbol).slice(0, 60),
+    exchange: item.exchange || null,
+    instrument_type: item.type || null,
+    sort_order: Math.max(0, Math.floor(sortOrder)),
+    metadata: {},
+  }, { onConflict: 'watchlist_id,symbol' });
+  throwOnError(error, 'Save watchlist item');
+}
+
+export async function deleteTerminalWatchlistItem(watchlistId: string, symbol: string): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to sync watchlist items.');
+  const { error } = await getSupabaseClient().from('terminal_watchlist_items')
+    .delete()
+    .eq('user_id', userId)
+    .eq('watchlist_id', watchlistId)
+    .eq('symbol', symbol.toUpperCase());
+  throwOnError(error, 'Remove watchlist item');
+}
+
 export async function getTerminalIndicatorFavoriteKeys(): Promise<string[]> {
   const userId = await authenticatedUserId();
   if (!userId) return [];
@@ -149,7 +311,7 @@ export async function listTerminalJournalTrades(limit = 100): Promise<TerminalJo
   const boundedLimit = Math.max(1, Math.min(250, Math.floor(limit)));
   const { data, error } = await getSupabaseClient()
     .from('terminal_journal_trades')
-    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,created_at')
+    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,metadata,created_at')
     .eq('user_id', userId)
     .order('entry_at', { ascending: false })
     .limit(boundedLimit);
@@ -179,11 +341,12 @@ export async function saveTerminalJournalTrade(input: TerminalJournalTradeInput)
     tags: input.tags || [],
     notes: input.notes || '',
     source: input.source || 'manual',
+    metadata: input.metadata || {},
   };
   const { data, error } = await getSupabaseClient()
     .from('terminal_journal_trades')
     .upsert(payload)
-    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,created_at')
+    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,metadata,created_at')
     .single();
   throwOnError(error, 'Save journal trade');
   return data as unknown as TerminalJournalTrade;
@@ -197,17 +360,65 @@ export async function deleteTerminalJournalTrade(id: string): Promise<void> {
   throwOnError(error, 'Delete journal trade');
 }
 
-export async function listTerminalAlertRules(): Promise<Array<TerminalAlertRuleInput & { id: string; created_at: string }>> {
+export type TerminalAlertRuleRecord = Omit<TerminalAlertRuleInput, 'status'> & {
+  id: string;
+  status: 'armed' | 'triggered' | 'paused' | 'cancelled';
+  last_triggered_at: string | null;
+  created_at: string;
+};
+
+export async function listTerminalAlertRules(): Promise<TerminalAlertRuleRecord[]> {
   const userId = await authenticatedUserId();
   if (!userId) return [];
   const { data, error } = await getSupabaseClient()
     .from('terminal_alert_rules')
-    .select('id,symbol,label,condition,target_price,timeframe,status,metadata,created_at')
+    .select('id,symbol,label,condition,target_price,timeframe,status,metadata,last_triggered_at,created_at')
     .eq('user_id', userId)
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false });
   throwOnError(error, 'Load alert rules');
-  return (data || []) as unknown as Array<TerminalAlertRuleInput & { id: string; created_at: string }>;
+  return (data || []) as unknown as TerminalAlertRuleRecord[];
+}
+
+/**
+ * Claims a live alert exactly once across tabs/devices. The armed-status filter
+ * is the compare-and-set guard; RLS still scopes the mutation to auth.uid().
+ */
+export async function claimTerminalAlertRuleTrigger(
+  rule: TerminalAlertRuleRecord,
+  trigger: { price: number; source: 'fyers' | 'upstox'; firedAt: string; marketTimestamp?: number | null },
+): Promise<boolean> {
+  const userId = await authenticatedUserId();
+  if (!userId) return false;
+  const firedAt = new Date(trigger.firedAt);
+  const price = Number(trigger.price);
+  if (!Number.isFinite(firedAt.getTime()) || !Number.isFinite(price) || price <= 0) return false;
+
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_alert_rules')
+    .update({
+      status: 'triggered',
+      last_triggered_at: firedAt.toISOString(),
+      updated_at: firedAt.toISOString(),
+      metadata: {
+        ...(rule.metadata || {}),
+        trigger: {
+          condition: rule.condition,
+          targetPrice: Number(rule.target_price),
+          observedPrice: price,
+          source: trigger.source,
+          firedAt: firedAt.toISOString(),
+          marketTimestamp: trigger.marketTimestamp != null && Number.isFinite(Number(trigger.marketTimestamp)) ? Number(trigger.marketTimestamp) : null,
+        },
+      },
+    })
+    .eq('id', rule.id)
+    .eq('user_id', userId)
+    .eq('status', 'armed')
+    .select('id')
+    .maybeSingle();
+  throwOnError(error, 'Claim price alert trigger');
+  return Boolean(data?.id);
 }
 
 export async function saveTerminalAlertRule(input: TerminalAlertRuleInput): Promise<void> {
@@ -255,4 +466,13 @@ export async function appendTerminalQuantMessage(input: {
     model: input.model || null,
   });
   throwOnError(error, 'Save Quant conversation message');
+}
+
+
+export async function deleteTerminalAlertRule(id: string): Promise<void> {
+  const userId = await authenticatedUserId();
+  if (!userId) throw new Error('Sign in to remove alert rules.');
+  const { error } = await getSupabaseClient().from('terminal_alert_rules')
+    .delete().eq('user_id', userId).eq('id', id);
+  throwOnError(error, 'Delete alert rule');
 }

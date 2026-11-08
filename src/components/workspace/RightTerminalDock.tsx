@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Bell, Bookmark, ChevronDown, GripVertical, Layers3, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { fetchTradingCoreNewsBundle, type TradingCoreNewsBundle, type TradingCoreNewsItem } from '../../services/news/newsService';
 import type { InstrumentSearchSegment, SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { buildWatchlistTechnicalSummary, type WatchlistTechnicalSummary } from '../../services/marketData/watchlistTechnicals';
@@ -7,6 +7,9 @@ import { historyStore } from '../../services/marketData/HistoryStore';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import type { MarketDepthLevel, NormalizedMarketTick } from '../../types/market';
 import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
+import { deleteTerminalAlertRule, listTerminalAlertRules, saveTerminalAlertRule } from '../../services/terminal/terminalDataService';
+import type { TerminalWatchlistRecord } from '../../services/terminal/terminalDataService';
+import { calculateTerminalOrderBookDepth } from '../../services/terminal/terminalOrderBookMetrics';
 
 export type RightDockTab = 'watchlist' | 'orderbook' | 'alerts';
 export type WatchlistDockTab = RightDockTab;
@@ -26,6 +29,14 @@ export type RightTerminalDockProps = {
   activeTab: RightDockTab;
   onTabChange: (tab: RightDockTab) => void;
   watch: WatchlistDockItem[];
+  watchlists: TerminalWatchlistRecord[];
+  activeWatchlistId: string;
+  watchlistBusy: boolean;
+  watchlistError: string;
+  onSwitchWatchlist: (id: string) => void;
+  onCreateWatchlist: () => void;
+  onRenameWatchlist: () => void;
+  onDeleteWatchlist: () => void;
   selected: string;
   onSelect: (key: string) => void;
   onRemove: (key: string) => void;
@@ -51,9 +62,10 @@ type SurfaceContext = {
 
 type WatchlistSurfaceProps = SurfaceContext & Pick<RightTerminalDockProps,
   'onSelect' | 'onRemove' | 'onAdd' | 'query' | 'onQueryChange' | 'segment' | 'onSegmentChange' | 'results' | 'searching'
+  | 'watchlists' | 'activeWatchlistId' | 'watchlistBusy' | 'watchlistError' | 'onSwitchWatchlist' | 'onCreateWatchlist' | 'onRenameWatchlist' | 'onDeleteWatchlist'
 >;
 
-type LocalAlert = { id: string; symbol?: string; price: number; createdAt: string; status: string };
+type LocalAlert = { id: string; symbol?: string; price: number; createdAt: string; status: string; condition: string };
 
 const MIN_RIGHT_DOCK_WIDTH = 260;
 const MAX_RIGHT_DOCK_WIDTH = 460;
@@ -65,6 +77,8 @@ const sectionFor = (item: WatchlistDockItem) => {
   if (text.includes('future')) return 'FUTURES';
   if (text.includes('commodity')) return 'COMMODITIES';
   if (text.includes('option')) return 'OPTIONS';
+  if (text.includes('currency') || text.includes('forex')) return 'CURRENCY';
+  if (text.includes('stock') || text.includes('equity') || text.includes('share')) return 'EQUITIES';
   return 'INDICES';
 };
 
@@ -80,47 +94,74 @@ const formatNewsTime = (value: string) => {
 const depthRows = (levels: MarketDepthLevel[] | undefined) => (Array.isArray(levels) ? levels : []).slice(0, 8);
 
 function useSymbolAlerts(selectedKey?: string) {
-  const storageKey = `tradingcore:alerts:${selectedKey || 'chart'}`;
   const [alerts, setAlerts] = useState<LocalAlert[]>([]);
   const [alertPrice, setAlertPrice] = useState('');
+  const [alertCondition, setAlertCondition] = useState<'above' | 'below' | 'crosses_above' | 'crosses_below'>('above');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const value = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      setAlerts(Array.isArray(value) ? value : []);
-    } catch {
-      setAlerts([]);
-    }
+    let active = true;
     setAlertPrice('');
-  }, [storageKey]);
+    setError('');
+    const refresh = () => {
+      void listTerminalAlertRules().then(rows => {
+        if (!active) return;
+        setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
+          id: row.id,
+          symbol: row.symbol,
+          price: Number(row.target_price),
+          createdAt: row.last_triggered_at || row.created_at,
+          status: String(row.status || 'armed'),
+          condition: row.condition,
+        })));
+      }).catch(caught => {
+        if (active) setError(caught instanceof Error ? caught.message : 'Alerts could not be loaded.');
+      });
+    };
+    refresh();
+    window.addEventListener('tco:terminal-alerts-changed', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('tco:terminal-alerts-changed', refresh);
+    };
+  }, [selectedKey]);
 
-  const persist = (next: LocalAlert[]) => {
-    setAlerts(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
-  };
-
-  const arm = () => {
+  const arm = async () => {
     const price = Number(alertPrice);
     if (!selectedKey || !Number.isFinite(price) || price <= 0) return false;
-    const next: LocalAlert = {
-      id: globalThis.crypto?.randomUUID?.() || String(Date.now()),
-      symbol: selectedKey,
-      price,
-      createdAt: new Date().toISOString(),
-      status: 'armed',
-    };
-    persist([...alerts, next].slice(-50));
-    setAlertPrice('');
-    return true;
+    setError('');
+    try {
+      await saveTerminalAlertRule({ symbol: selectedKey, label: selectedKey, condition: alertCondition, target_price: price, status: 'armed' });
+      window.dispatchEvent(new Event('tco:terminal-alerts-changed'));
+      const rows = await listTerminalAlertRules();
+      setAlerts(rows.filter(row => !selectedKey || row.symbol === selectedKey).map(row => ({
+        id: row.id, symbol: row.symbol, price: Number(row.target_price), createdAt: row.last_triggered_at || row.created_at,
+        status: String(row.status || 'armed'), condition: row.condition,
+      })));
+      setAlertPrice('');
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Alert could not be saved.');
+      return false;
+    }
   };
 
-  const remove = (id: string) => persist(alerts.filter(x => x.id !== id));
+  const remove = async (id: string) => {
+    setError('');
+    try {
+      await deleteTerminalAlertRule(id);
+      setAlerts(current => current.filter(item => item.id !== id));
+      window.dispatchEvent(new Event('tco:terminal-alerts-changed'));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Alert could not be removed.');
+    }
+  };
 
-  return { alerts, alertPrice, setAlertPrice, arm, remove };
+  return { alerts, alertPrice, setAlertPrice, alertCondition, setAlertCondition, arm, remove, error };
 }
 
 const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceProps) {
-  const { watch, selected, selectedItem, selectedTick, broker, ticks, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching } = props;
+  const { watch, selected, selectedItem, selectedTick, broker, ticks, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching, watchlists, activeWatchlistId, watchlistBusy, watchlistError, onSwitchWatchlist, onCreateWatchlist, onRenameWatchlist, onDeleteWatchlist } = props;
   const [newsByKey, setNewsByKey] = useState<Record<string, TradingCoreNewsBundle>>({});
   const [newsLoadingByKey, setNewsLoadingByKey] = useState<Record<string, boolean>>({});
   const [technicalByKey, setTechnicalByKey] = useState<Record<string, WatchlistTechnicalSummary | null>>({});
@@ -145,7 +186,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItemsRef.current.filter(item =>
+    const pending = watchItemsRef.current.filter(item => item.key === selected &&
       !Object.prototype.hasOwnProperty.call(newsByKeyRef.current, item.key)
       && !newsInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -180,14 +221,14 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       controller.abort();
       for (const item of pending) newsInFlightRef.current.delete(item.key);
     };
-  }, [watchKeys]);
+  }, [selected, watchKeys]);
 
   // Calculate watchlist technicals from the same cached 5-minute candle timeline.
   // No external indicator endpoint is needed for RSI/EMA/MACD summaries.
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItemsRef.current.filter(item =>
+    const pending = watchItemsRef.current.filter(item => item.key === selected &&
       !Object.prototype.hasOwnProperty.call(technicalByKeyRef.current, item.key)
       && !technicalInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -227,7 +268,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       controller.abort();
       for (const item of pending) technicalInFlightRef.current.delete(item.key);
     };
-  }, [watchKeys, broker]);
+  }, [selected, watchKeys, broker]);
 
   const refreshNews = (item: WatchlistDockItem) => {
     const key = item.key;
@@ -253,7 +294,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   const selectedHealth = classifyMarketDataHealth({ source: selectedTick?.source, lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp, receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt, providerConnected: selectedTick?.source === 'fyers' || selectedTick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 });
 
   const groups = useMemo(() => {
-    const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
+    const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['EQUITIES', []], ['FUTURES', []], ['OPTIONS', []], ['COMMODITIES', []], ['CURRENCY', []]]);
     for (const item of watch) {
       const section = sectionFor(item);
       const list = map.get(section) || [];
@@ -264,13 +305,26 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   }, [watch]);
 
   return <div className="tct-dock-content" id="tct-panel-watchlist" role="tabpanel" aria-labelledby="tct-tab-watchlist" data-tco-dock-surface="watchlist">
-    <div className="tct-wl-head"><div className="tct-wl-account">WATCHLIST <span>· {broker.toUpperCase()}</span></div><div className="tct-wl-actions"><button className="tct-rail-mini" title="More watchlist actions" type="button"><MoreHorizontal size={15}/></button></div></div>
+    <div className="tct-wl-head">
+      <div className="tct-wl-account">WATCHLIST <span>· {broker.toUpperCase()}</span></div>
+      <div className="tct-wl-actions">
+        {watchlists.length > 0 && <select aria-label="Select watchlist" value={activeWatchlistId} disabled={watchlistBusy} onChange={event => onSwitchWatchlist(event.target.value)} className="max-w-[118px] rounded border border-[#2a3a4f] bg-[#101a27] px-1.5 py-1 text-[9px] text-[#c9d7e8] outline-none">
+          {watchlists.map(list => <option key={list.id} value={list.id}>{list.name}{list.is_default ? ' · default' : ''}</option>)}
+        </select>}
+        <button className="tct-rail-mini" title="Create watchlist" aria-label="Create watchlist" type="button" disabled={watchlistBusy} onClick={onCreateWatchlist}><Plus size={14}/></button>
+        {watchlists.some(list => list.id === activeWatchlistId && !list.is_default) && <>
+          <button className="tct-rail-mini" title="Rename watchlist" aria-label="Rename watchlist" type="button" disabled={watchlistBusy} onClick={onRenameWatchlist}><Pencil size={13}/></button>
+          <button className="tct-rail-mini" title="Delete watchlist" aria-label="Delete watchlist" type="button" disabled={watchlistBusy} onClick={onDeleteWatchlist}><Trash2 size={13}/></button>
+        </>}
+      </div>
+    </div>
+    {watchlistError && <div role="alert" className="mx-2 mt-1 rounded border border-rose-900/60 bg-rose-950/30 px-2 py-1.5 text-[9px] text-rose-200">{watchlistError}</div>}
     <div className="tct-wl-search"><Search size={14}/><input value={query} onChange={e => onQueryChange(e.target.value)} placeholder="Search instruments" aria-label="Search instruments"/><span>{watch.length}</span></div>
     <div className="tct-wl-filters">
-      <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="equity">Equity</option><option value="index">Index</option><option value="futures">Futures</option><option value="options">Options</option></select>
+      <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="stocks">Stocks</option><option value="futures">Futures</option><option value="options">Options</option><option value="commodities">Commodities</option><option value="currency">Currency</option></select>
       {selectedItem && <span className="tct-selection-chip">{selectedItem.short || selectedItem.label}</span>}
     </div>
-    <div className="tct-wl-columns"><span>Symbol</span><span>Last</span><span>Chg</span><span>Chg%</span></div>
+    <div className="tct-wl-columns"><span></span><span>Symbol</span><span>Last</span><span>Chg</span><span>Chg%</span><span></span></div>
     <div className="tct-wl-scroll">
       {query.length >= 2 && <div className="tct-wl-results">{searching ? <div className="tct-wl-empty">Searching broker instruments…</div> : results.length ? results.map(r => <button type="button" className="tct-wl-result" key={r.key} onClick={() => onAdd(r)}><Plus size={13}/><span><b>{r.label || r.symbol}</b><small>{r.exchange || ''} {r.type || ''} {r.expiry || ''} {r.strike || ''} {r.optionType || ''}</small></span></button>) : <div className="tct-wl-empty">No matching broker instrument.</div>}</div>}
       {groups.map(([group, items]) => <div key={group} className="tct-wl-group">
@@ -333,12 +387,19 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
 const OrderBookSurface = memo(function OrderBookSurface({ selectedItem, selectedTick }: Pick<SurfaceContext, 'selectedItem' | 'selectedTick'>) {
   const ask = depthRows(selectedTick?.ask);
   const bid = depthRows(selectedTick?.bid);
-  const spread = ask.length && bid.length ? Number(ask[0].price) - Number(bid[0].price) : 0;
+  const depth = calculateTerminalOrderBookDepth(bid, ask, 8);
   const maxQty = Math.max(1, ...ask.map(x => Number(x.quantity) || 0), ...bid.map(x => Number(x.quantity) || 0));
+  const quantityLabel = (value: number | null) => value == null ? '—' : value.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const imbalanceLabel = depth.imbalancePercent == null ? '—' : (depth.imbalancePercent > 0 ? '+' : '') + depth.imbalancePercent.toFixed(1) + '%';
 
   return <div className="tct-dock-content tct-orderbook-content" id="tct-panel-orderbook" role="tabpanel" aria-labelledby="tct-tab-orderbook" data-tco-dock-surface="orderbook">
-    <div className="tct-ob-summary"><div><span>LAST</span><b>{formatPrice(selectedTick?.ltp)}</b></div><div><span>SPREAD</span><b>{spread ? formatPrice(spread) : '—'}</b></div><div><span>VOLUME</span><b>{selectedTick?.volume == null ? '—' : formatPrice(selectedTick.volume)}</b></div></div>
-    <div className="tct-ob-title"><b>{selectedItem?.short || selectedItem?.label || 'Selected instrument'}</b><span>Level 2</span></div>
+    <div className="tct-ob-summary"><div><span>LAST</span><b>{formatPrice(selectedTick?.ltp)}</b></div><div><span>SPREAD</span><b>{depth.spread == null ? '—' : formatPrice(depth.spread)}</b></div><div><span>VOLUME</span><b>{selectedTick?.volume == null ? '—' : quantityLabel(selectedTick.volume)}</b></div></div>
+    <div className="tct-ob-depth-stats" aria-label="Visible Level 2 depth statistics">
+      <div><span>BID DEPTH · {depth.bidLevels} LEVELS</span><b className="text-emerald-300">{quantityLabel(depth.bidQuantity)}</b></div>
+      <div><span>IMBALANCE · VISIBLE LEVELS</span><b className={depth.imbalancePercent == null ? 'text-[#8ea1b9]' : depth.imbalancePercent > 0 ? 'text-emerald-300' : depth.imbalancePercent < 0 ? 'text-rose-300' : 'text-[#c5d7ee]'}>{imbalanceLabel}</b></div>
+      <div><span>ASK DEPTH · {depth.askLevels} LEVELS</span><b className="text-rose-300">{quantityLabel(depth.askQuantity)}</b></div>
+    </div>
+    <div className="tct-ob-title"><b>{selectedItem?.short || selectedItem?.label || 'Selected instrument'}</b><span>Broker Level 2 · displayed depth, not traded volume</span></div>
     <div className="tct-ob-head"><span>ASK QTY</span><span>ASK</span><span>BID</span><span>BID QTY</span></div>
     <div className="tct-ob-scroll">
       {Array.from({length: Math.max(ask.length, bid.length, 1)}, (_, i) => {
@@ -359,11 +420,21 @@ const OrderBookSurface = memo(function OrderBookSurface({ selectedItem, selected
 });
 
 const AlertsSurface = memo(function AlertsSurface({ selectedItem }: Pick<SurfaceContext, 'selectedItem'>) {
-  const { alerts, alertPrice, setAlertPrice, arm, remove } = useSymbolAlerts(selectedItem?.key);
+  const { alerts, alertPrice, setAlertPrice, alertCondition, setAlertCondition, arm, remove, error } = useSymbolAlerts(selectedItem?.key);
   return <div className="tct-dock-content tct-alerts-content" id="tct-panel-alerts" role="tabpanel" aria-labelledby="tct-tab-alerts" data-tco-dock-surface="alerts">
-    <div className="tct-alert-create"><div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div><div className="tct-alert-entry"><input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/><button type="button" onClick={arm} disabled={!selectedItem || !alertPrice}>ARM</button></div></div>
-    <div className="tct-alert-head"><span>ACTIVE ALERTS</span><b>{alerts.length}</b></div>
-    <div className="tct-alert-list">{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.status.toUpperCase()} · {new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small></div><button type="button" onClick={() => remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No alerts armed for this instrument.</div>}</div>
+    <div className="tct-alert-create">
+      <div className="tct-alert-ident"><Bell size={14}/><div><b>PRICE ALERT</b><small>{selectedItem?.label || 'Select an instrument'}</small></div></div>
+      <div className="tct-alert-entry">
+        <select value={alertCondition} onChange={event => setAlertCondition(event.target.value as typeof alertCondition)} aria-label="Price alert condition">
+          <option value="above">Above</option><option value="below">Below</option>
+          <option value="crosses_above">Crosses above</option><option value="crosses_below">Crosses below</option>
+        </select>
+        <input type="number" min="0.01" step="any" value={alertPrice} onChange={e => setAlertPrice(e.target.value)} placeholder="Trigger price" aria-label="Trigger price"/>
+        <button type="button" onClick={() => void arm()} disabled={!selectedItem || !alertPrice}>ARM</button>
+      </div>
+    </div>
+    <div className="tct-alert-head"><span>PRICE ALERTS</span><b>{alerts.length}</b></div>
+    <div className="tct-alert-list">{error && <div role="alert" className="tct-wl-empty">{error}</div>}{alerts.length ? alerts.slice().reverse().map(alert => <div className="tct-alert-row" key={alert.id}><div><b>₹{formatPrice(alert.price)}</b><small>{alert.condition.replace('_', ' ').toUpperCase()} · {alert.status.toUpperCase()}{alert.status === 'triggered' ? ' · ' + new Date(alert.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</small></div><button type="button" onClick={() => void remove(alert.id)} title="Remove alert"><X size={12}/></button></div>) : <div className="tct-wl-empty"><Bell size={14}/> No price alerts for this instrument.</div>}</div>
   </div>;
 });
 
@@ -428,6 +499,13 @@ export function RightTerminalDock(props: RightTerminalDockProps) {
     }
   };
 
+  const selectedHealth = classifyMarketDataHealth({
+    source: selectedTick?.source,
+    lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp,
+    receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt,
+    providerConnected: selectedTick?.source === 'fyers' || selectedTick?.source === 'upstox' ? true : undefined,
+    expectedIntervalMs: 5_000,
+  });
   const tabPanel = activeTab === 'watchlist'
     ? <WatchlistSurface {...props} selectedItem={selectedItem} selectedTick={selectedTick} />
     : activeTab === 'orderbook'
@@ -451,7 +529,7 @@ export function RightTerminalDock(props: RightTerminalDockProps) {
 
         {tabPanel}
         <footer className="tct-dock-status" aria-label="Right dock status">
-          <span><i className="tct-status-dot"/>LIVE</span>
+          <span><i className="tct-status-dot"/> {selectedHealth.label.toUpperCase()} · {selectedHealth.source.toUpperCase()}</span>
           <span>{selectedItem?.short || selectedItem?.label || 'NO SYMBOL'}</span>
           <span className="tct-status-key">Alt+0 collapse</span>
         </footer>

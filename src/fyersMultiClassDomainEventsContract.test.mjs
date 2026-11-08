@@ -96,14 +96,14 @@ assert.match(transport, /feedClass === 'depth' && !depthBids\.length && !depthAs
   'depth sockets must drop empty/non-depth frames');
 assert.match(transport, /feedClass === 'full' && ltp === undefined/,
   'full-tick sockets must not leak depth-only/informational frames');
-assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols\)/);
+assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols, \[\], quotaIdentity\)/, 'symbol capacity is checked against the broker account quota identity');
 assert.match(transport, /const domainEvent = buildDomainEvent\(tick, session\.feedClass\)/);
 assert.match(transport, /marketEventBus\.publish\(domainEvent\)/);
 assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
 assert.match(eventBus, /export class MarketEventBus/);
 assert.match(eventBus, /if \(!entry\.consumers \|\| !routesToConsumer\(event, entry\.consumers\)\) continue/,
   'depth fanout must require an explicit eligible consumer class');
-assert.match(orderTransport, /marketEventBus\.publish\(event\.data\)/);
+assert.match(orderTransport, /marketEventBus\.publish\(event\)/, 'typed normalized domain events are published to the shared market event bus');
 assert.doesNotMatch(orderTransport, /as DomainMarketEvent/, 'normalized order events must satisfy the domain union without unsafe casts');
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
@@ -117,7 +117,7 @@ assert.match(orderTransport, /normalizeFyersOrderPayload/);
 assert.doesNotMatch(orderTransport, /data: any/,
   'the broker order socket must not expose raw any payloads');
 assert.doesNotMatch(orderTransport, /data: payload/);
-assert.match(orderNormalizer, /Unknown payloads are deliberately dropped/);
+assert.match(orderNormalizer, /payloads are deliberately dropped/, 'unknown broker frames are explicitly documented as dropped');
 assert.match(streamRoute, /feed_class/);
 assert.match(streamRoute, /\['lite', 'full', 'depth'\]/);
 assert.match(orderRoute, /event: FyersOrderStreamEvent/);

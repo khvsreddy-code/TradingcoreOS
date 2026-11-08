@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, CircleHelp, Heart, Loader2, Plus, Search, Sparkles, Star, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronRight, CircleHelp, Heart, Loader2, MessageCircle, Plus, Search, Sparkles, Star, X } from 'lucide-react';
 import { getTerminalIndicatorFavoriteKeys, setTerminalIndicatorFavorite } from '../../services/terminal/terminalDataService';
+import { listMyIndicatorPublications, listPublicIndicatorPublications, saveIndicatorSourceLocally, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
 
 type NativeIndicatorInfo = {
   type: string;
@@ -15,6 +16,7 @@ type VelaIndicatorBridge = {
   [key: string]: unknown;
   getNativeIndicatorCatalog?: () => Promise<NativeIndicatorInfo[]>;
   addNativeIndicator?: (type: string) => Promise<{ id?: string; alreadyPresent?: boolean }>;
+  renderNativeIndicatorPreview?: (type: string) => Promise<string | null>;
 };
 
 declare global {
@@ -24,25 +26,34 @@ declare global {
 }
 
 const CATEGORIES = [
-  'Discover',
-  'Favorites',
-  'Trend',
-  'Momentum',
-  'Volatility',
-  'Volume & Order Flow',
-  'Market Structure',
-  'Other',
+  'Discover', 'Favorites', 'My Scripts', 'Bring a Script', 'Basic',
+  'Trend', 'Momentum', 'Volatility', 'Volume & Order Flow', 'SMC / ICT',
+  'Market Structure', 'Patterns', 'Statistics', 'Support/Resistance & Levels',
+  'Time & Seasonality', 'Elliott & Harmonics', 'Sentiment & Breadth',
+  'Meta & Composition', 'Machine Learning', 'Wyckoff', 'Risk', 'Other',
 ] as const;
 
 type Category = typeof CATEGORIES[number];
+type NativeFamily = Exclude<Category, 'Discover' | 'Favorites' | 'My Scripts' | 'Bring a Script' | 'Basic'>;
 
-function familyFor(item: NativeIndicatorInfo): Exclude<Category, 'Discover' | 'Favorites'> {
+function familyFor(item: NativeIndicatorInfo): NativeFamily {
   const value = (item.type + ' ' + item.title).toLowerCase();
-  if (/volume|vwap|obv|chaikin|money flow|delta|footprint|accumulation/.test(value)) return 'Volume & Order Flow';
+  if (/smc|ict|order block|fair value gap|liquidity|bos|choch/.test(value)) return 'SMC / ICT';
+  if (/volume|vwap|obv|chaikin|money flow|delta|footprint|accumulation|cvd/.test(value)) return 'Volume & Order Flow';
   if (/rsi|stochastic|momentum|roc|cmo|macd|cci|williams|awesome oscillator/.test(value)) return 'Momentum';
   if (/atr|volatil|band|keltner|donchian|deviation|range/.test(value)) return 'Volatility';
   if (/aroon|adx|trend|supertrend|moving average|sma|ema|hma|ichimoku|directional/.test(value)) return 'Trend';
-  if (/pivot|swing|fractal|structure|zigzag|market profile/.test(value)) return 'Market Structure';
+  if (/pivot|support|resistance|swing|fractal|structure|zigzag|market profile/.test(value)) return 'Support/Resistance & Levels';
+  if (/pattern|harmonic|triangle|wedge|flag|head and shoulders/.test(value)) return 'Patterns';
+  if (/statistics|zscore|z-score|regression|correlation|variance|deviation/.test(value)) return 'Statistics';
+  if (/season|session|time|opening range|killzone/.test(value)) return 'Time & Seasonality';
+  if (/elliott|fibonacci|harmonic|wave/.test(value)) return 'Elliott & Harmonics';
+  if (/breadth|sentiment|advance|decline|put.call/.test(value)) return 'Sentiment & Breadth';
+  if (/machine learning|ml|classifier|cluster|forecast|prediction/.test(value)) return 'Machine Learning';
+  if (/wyckoff|accumulation|distribution|spring|upthrust/.test(value)) return 'Wyckoff';
+  if (/risk|position size|sizing|stop|target|exit/.test(value)) return 'Risk';
+  if (/meta|composite|combine|multi/.test(value)) return 'Meta & Composition';
+  if (/bos|choch|swing|structure|zigzag/.test(value)) return 'Market Structure';
   return 'Other';
 }
 
@@ -116,6 +127,9 @@ export function TerminalIndicatorLibraryHost() {
 
 function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [catalog, setCatalog] = useState<NativeIndicatorInfo[]>([]);
+  const [publishedCatalog, setPublishedCatalog] = useState<IndicatorPublication[]>([]);
+  const [myPublications, setMyPublications] = useState<IndicatorPublication[]>([]);
+  const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [category, setCategory] = useState<Category>('Discover');
   const [query, setQuery] = useState('');
@@ -124,6 +138,9 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [nativePreview, setNativePreview] = useState<string | null>(null);
+  const [nativePreviewLoading, setNativePreviewLoading] = useState(false);
+  const previewRequestRef = useRef(0);
 
   const load = async () => {
     setLoading(true);
@@ -131,12 +148,17 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
     try {
       const bridge = window.__TCO_VELA__;
       if (!bridge?.getNativeIndicatorCatalog) throw new Error('The Vela chart workspace is still starting. Open the library again in a moment.');
-      const [nativeItems, saved] = await Promise.all([
+      const [nativeItems, saved, published, mine] = await Promise.all([
         bridge.getNativeIndicatorCatalog(),
         getTerminalIndicatorFavoriteKeys().catch(() => []),
+        listPublicIndicatorPublications({ sort: 'popular', scriptKind: 'indicator' }).catch(() => []),
+        listMyIndicatorPublications().catch(() => []),
       ]);
       setCatalog(nativeItems.filter(item => item && item.type && item.title).sort((a, b) => a.title.localeCompare(b.title)));
+      setPublishedCatalog(published);
+      setMyPublications(mine);
       setFavorites(saved);
+      setSelectedPublicationId(null);
       setSelected(current => current && nativeItems.some(item => item.type === current) ? current : nativeItems[0]?.type || null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load the Vela indicator catalog.');
@@ -170,21 +192,60 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
 
   const visible = useMemo(() => catalog.filter(item => {
     const family = familyFor(item);
-    const categoryMatch = category === 'Discover'
-      || (category === 'Favorites' ? favorites.includes(item.type) : family === category);
+    const categoryMatch = category === 'Discover' || category === 'Basic'
+      || (category === 'Favorites' ? favorites.includes(item.type) : category === 'My Scripts' || category === 'Bring a Script' ? false : family === category);
     const queryMatch = !query.trim()
       || (item.title + ' ' + item.type + ' ' + family).toLowerCase().includes(query.trim().toLowerCase());
     return categoryMatch && queryMatch;
   }), [catalog, category, favorites, query]);
-  const selectedItem = catalog.find(item => item.type === selected) || visible[0] || null;
-  const counts = useMemo(() => {
-    const result: Record<string, number> = { Discover: catalog.length, Favorites: favorites.length };
-    catalog.forEach(item => {
-      const family = familyFor(item);
-      result[family] = (result[family] || 0) + 1;
+  const publishedVisible = useMemo(() => {
+    const source = category === 'My Scripts' ? myPublications : publishedCatalog;
+    if (category === 'Bring a Script' || category === 'Basic' || category === 'Favorites') return [];
+    return source.filter(item => {
+      const familyText = (item.category + ' ' + (item.tags || []).join(' ')).toLowerCase();
+      const familyMatch = category === 'Discover' || category === 'My Scripts'
+        || (category === 'SMC / ICT' ? /smc|ict|order block|fvg|liquidity/.test(familyText) : familyText.includes(category.toLowerCase()));
+      const queryMatch = !query.trim() || (item.title + ' ' + item.description + ' ' + item.category + ' ' + (item.tags || []).join(' ')).toLowerCase().includes(query.trim().toLowerCase());
+      return familyMatch && queryMatch;
     });
+  }, [category, myPublications, publishedCatalog, query]);
+  const selectedItem = selectedPublicationId ? null : visible.find(item => item.type === selected) || visible[0] || null;
+  const selectedPublication = [...publishedCatalog, ...myPublications].find(item => item.id === selectedPublicationId) || null;
+  const counts = useMemo(() => {
+    const result: Record<string, number> = { Discover: catalog.length + publishedCatalog.length, Favorites: favorites.length, 'My Scripts': myPublications.length, 'Bring a Script': 0, Basic: catalog.length };
+    catalog.forEach(item => { const family = familyFor(item); result[family] = (result[family] || 0) + 1; });
+    publishedCatalog.forEach(item => { const family = item.category || 'Other'; result[family] = (result[family] || 0) + 1; });
     return result;
-  }, [catalog, favorites]);
+  }, [catalog, favorites, publishedCatalog, myPublications]);
+
+  useEffect(() => {
+    const request = ++previewRequestRef.current;
+    if (!open || !selectedItem?.supported) {
+      setNativePreview(null);
+      setNativePreviewLoading(false);
+      return;
+    }
+    setNativePreview(null);
+    setNativePreviewLoading(true);
+    const render = window.__TCO_VELA__?.renderNativeIndicatorPreview;
+    if (!render) {
+      setNativePreviewLoading(false);
+      return;
+    }
+    void render(selectedItem.type)
+      .then(image => {
+        if (previewRequestRef.current === request) setNativePreview(image);
+      })
+      .catch(() => {
+        if (previewRequestRef.current === request) setNativePreview(null);
+      })
+      .finally(() => {
+        if (previewRequestRef.current === request) setNativePreviewLoading(false);
+      });
+    return () => {
+      if (previewRequestRef.current === request) previewRequestRef.current += 1;
+    };
+  }, [open, selectedItem?.type, selectedItem?.supported]);
 
   const toggleFavorite = async (item: NativeIndicatorInfo) => {
     const next = !favorites.includes(item.type);
@@ -237,7 +298,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
             <nav className="space-y-1">
               {CATEGORIES.map(item => {
                 const active = category === item;
-                return <button key={item} type="button" onClick={() => setCategory(item)} className={'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[11px] transition ' + (active ? 'border border-[#34517a] bg-[#16263b] font-semibold text-[#dbeafe]' : 'border border-transparent text-[#94a3b8] hover:bg-[#141f2e] hover:text-white')}>
+                return <button key={item} type="button" onClick={() => { if (item === 'Bring a Script') { window.dispatchEvent(new CustomEvent('tco:open-corespirit-studio')); return; } setCategory(item); setSelectedPublicationId(null); }} className={'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[11px] transition ' + (active ? 'border border-[#34517a] bg-[#16263b] font-semibold text-[#dbeafe]' : 'border border-transparent text-[#94a3b8] hover:bg-[#141f2e] hover:text-white')}>
                   <span className="flex items-center gap-2">{item === 'Favorites' ? <Heart className="h-3.5 w-3.5" /> : item === 'Discover' ? <Sparkles className="h-3.5 w-3.5" /> : <ChevronRight className="h-3 w-3" />}{item}</span>
                   <span className="text-[9px] tabular-nums text-[#71839e]">{counts[item] || 0}</span>
                 </button>;
@@ -256,15 +317,26 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
             </div>
             {loading && <div className="flex min-h-48 items-center justify-center gap-2 text-xs text-[#91a4bd]"><Loader2 className="h-4 w-4 animate-spin" /> Loading chart indicator catalog…</div>}
             {!loading && error && <div className="rounded-xl border border-rose-900/60 bg-rose-950/20 p-4 text-xs text-rose-200">{error}<button onClick={() => void load()} className="ml-3 underline">Retry</button></div>}
-            {!loading && !error && !visible.length && <div className="rounded-xl border border-[#273449] bg-[#101824] p-8 text-center text-xs text-[#8798b0]">No indicators match this search.</div>}
+            {!loading && !error && !visible.length && !publishedVisible.length && <div className="rounded-xl border border-[#273449] bg-[#101824] p-8 text-center text-xs text-[#8798b0]">No indicators match this search.</div>}
+            {!loading && !error && publishedVisible.length > 0 && <>
+              <div className="mb-3 mt-7 flex items-end justify-between"><div><div className="text-[12px] font-semibold text-[#e5edf7]">{category === 'My Scripts' ? 'My published scripts' : 'Community CoreSpirit indicators'}</div><div className="mt-1 text-[9px] text-[#788aa2]">{publishedVisible.length} published indicators · source snapshots are compiled through CoreScript</div></div></div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                {publishedVisible.map(item => <article key={item.id} className={'overflow-hidden rounded-xl border transition ' + (selectedPublicationId === item.id ? 'border-[#5481ba] bg-[#142238]' : 'border-[#273449] bg-[#101823] hover:border-[#3c5371]')}>
+                  <button type="button" onClick={() => { setSelected(null); setSelectedPublicationId(item.id); }} className="block w-full text-left">
+                    <div className="relative h-[112px] overflow-hidden border-b border-[#263449] bg-[#080d15]">{item.cover_image_url ? <img src={item.cover_image_url} alt={item.title + ' preview'} className="h-full w-full object-cover"/> : <div className="flex h-full items-center justify-center text-[10px] text-[#70839c]">CoreScript indicator · preview not supplied</div>}<span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{item.category || 'Community'}</span></div>
+                    <div className="px-3 py-3"><div className="truncate text-[11px] font-semibold text-[#e5edf7]">{item.title}</div><div className="mt-1 truncate text-[9px] text-[#778ba5]">by {item.author_name} · {item.installs_count.toLocaleString()} installs</div></div>
+                  </button>
+                </article>)}
+              </div>
+            </>}
             {!loading && !error && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {visible.map(item => {
                 const family = familyFor(item);
                 const active = selectedItem?.type === item.type;
                 const favorite = favorites.includes(item.type);
                 return <article key={item.type} className={'overflow-hidden rounded-xl border transition ' + (active ? 'border-[#5481ba] bg-[#142238] shadow-[0_0_0_1px_rgba(84,129,186,.18)]' : 'border-[#273449] bg-[#101823] hover:border-[#3c5371]')}>
-                  <button type="button" onClick={() => setSelected(item.type)} className="block w-full text-left">
-                    <div className="relative h-[112px] overflow-hidden border-b border-[#263449]"><PreviewGraphic type={item.type} family={family} /><span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{family}</span></div>
+                  <button type="button" onClick={() => { setSelectedPublicationId(null); setSelected(item.type); }} className="block w-full text-left">
+                    <div className="relative h-[112px] overflow-hidden border-b border-[#263449]"><PreviewGraphic type={item.type} family={family} /><span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{family}</span><span className="absolute bottom-2 right-2 rounded border border-[#34465e] bg-[#0b1019]/90 px-1.5 py-1 text-[7px] font-semibold uppercase tracking-wide text-[#9aaec7]">Illustrative</span></div>
                     <div className="px-3 py-3">
                       <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[11px] font-semibold text-[#e5edf7]">{item.title}</div><div className="mt-1 truncate text-[9px] text-[#778ba5]">{item.type}</div></div>{item.beta && <span className="rounded bg-amber-500/10 px-1.5 py-1 text-[8px] font-bold text-amber-300">BETA</span>}</div>
                     </div>
@@ -279,9 +351,35 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
           </main>
 
           <aside className="hidden min-h-0 flex-col border-l border-[#263449] bg-[#0d1520] p-4 lg:flex">
-            {selectedItem ? <>
+            {selectedPublication ? <>
+              <div className="mb-3 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-[.15em] text-[#7e91aa]">CoreScript details</span><span className="text-[8px] text-[#7f93ad]">{selectedPublication.license}</span></div>
+              <div className="overflow-hidden rounded-xl border border-[#2b3b51] bg-[#080e17]">{selectedPublication.cover_image_url ? <img src={selectedPublication.cover_image_url} alt={selectedPublication.title + ' preview'} className="h-[148px] w-full object-cover"/> : <div className="flex h-[148px] items-center justify-center text-[10px] text-[#71839a]">No preview supplied</div>}</div>
+              <div className="mt-4 text-[15px] font-semibold leading-5 text-white">{selectedPublication.title}</div>
+              <div className="mt-1 text-[9px] text-[#8093ad]">{selectedPublication.category} · by {selectedPublication.author_name}</div>
+              <p className="mt-3 text-[10px] leading-5 text-[#b2c0d2]">{selectedPublication.description || 'Published CoreScript indicator.'}</p>
+              <div className="mt-4 flex flex-wrap gap-1">{(selectedPublication.tags || []).map(tag => <span key={tag} className="rounded-md border border-[#2b3b51] bg-[#101b2a] px-2 py-1 text-[8px] text-[#9eb2cc]">{tag}</span>)}</div>
+              <div className="mt-4 space-y-2 rounded-lg border border-[#27364a] bg-[#101b2a] p-3 text-[9px] text-[#92a3ba]">
+                <div className="flex justify-between"><span>Visibility</span><span>{selectedPublication.visibility}</span></div>
+                <div className="flex justify-between"><span>License</span><span>{selectedPublication.license}</span></div>
+                <div className="flex justify-between"><span>Source</span><span className="text-[#c5d7ee]">CoreScript snapshot</span></div>
+              </div>
+              <div className="mt-auto pt-4">
+                <button type="button" onClick={() => { saveIndicatorSourceLocally(selectedPublication.source_snapshot); window.dispatchEvent(new CustomEvent('tco:corespirit:source-changed', { detail: { name: selectedPublication.title, source: selectedPublication.source_snapshot } })); window.dispatchEvent(new CustomEvent('tco:open-corespirit-studio')); setStatus('Loaded into CoreSpirit Studio. Review, compile and add it to the chart.'); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#4b78ad] bg-[#24456c] px-3 py-3 text-[11px] font-semibold text-white transition hover:bg-[#2d5685]"><Plus className="h-4 w-4"/>Open in CoreSpirit</button>
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('tco:open-quant', { detail: { prompt: 'Review the published CoreScript indicator ' + selectedPublication.title + '. Explain its source, calculations, inputs, temporal safety, repainting/lookahead risks and whether it is suitable for the current NIFTY chart.' } }))} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#34465e] bg-[#101b2a] px-3 py-2.5 text-[10px] font-semibold text-[#b9cce4] transition hover:border-[#5a7ca7] hover:text-white"><MessageCircle className="h-3.5 w-3.5"/>Ask Quant about this script</button>
+                <div className="mt-2 text-center text-[8px] leading-4 text-[#6f8199]">Opening a community script never executes it automatically. Review and compile it in CoreSpirit first.</div>
+              </div>
+            </> : selectedItem ? <>
               <div className="mb-3 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-[.15em] text-[#7e91aa]">Indicator details</span><button type="button" onClick={() => void toggleFavorite(selectedItem)} className={favorites.includes(selectedItem.type) ? 'text-amber-300' : 'text-[#8293aa]'}><Star className={'h-4 w-4 ' + (favorites.includes(selectedItem.type) ? 'fill-current' : '')} /></button></div>
-              <div className="overflow-hidden rounded-xl border border-[#2b3b51] bg-[#080e17]"><div className="h-[148px]"><PreviewGraphic type={selectedItem.type} family={familyFor(selectedItem)} large /></div></div>
+              <div className="overflow-hidden rounded-xl border border-[#2b3b51] bg-[#080e17]">
+                <div className="relative h-[148px]">
+                  {nativePreview
+                    ? <img src={nativePreview} alt={selectedItem.title + ' rendered by the Vela native engine using sample data'} className="h-full w-full object-cover" />
+                    : <PreviewGraphic type={selectedItem.type} family={familyFor(selectedItem)} large />}
+                  <span className="absolute bottom-2 left-2 rounded border border-[#34465e] bg-[#0b1019]/90 px-2 py-1 text-[7px] font-semibold uppercase tracking-wide text-[#a9bdd6]">
+                    {nativePreview ? 'Vela renderer · sample bars' : nativePreviewLoading ? 'Rendering native sample…' : 'Illustrative guide'}
+                  </span>
+                </div>
+              </div>
               <div className="mt-4 text-[15px] font-semibold leading-5 text-white">{selectedItem.title}</div>
               <div className="mt-1 text-[9px] text-[#8093ad]">{familyFor(selectedItem)} · Vela native</div>
               <p className="mt-3 text-[10px] leading-5 text-[#b2c0d2]">{descriptionFor(selectedItem, familyFor(selectedItem))}</p>
@@ -292,6 +390,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
               </div>
               <div className="mt-auto pt-4">
                 <button type="button" onClick={() => void addToChart(selectedItem)} disabled={adding || !selectedItem.supported || (selectedItem.present && !selectedItem.multiInstance)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#4b78ad] bg-[#24456c] px-3 py-3 text-[11px] font-semibold text-white transition hover:bg-[#2d5685] disabled:cursor-not-allowed disabled:opacity-40">{adding ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedItem.present && !selectedItem.multiInstance ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{selectedItem.present && !selectedItem.multiInstance ? 'Already on chart' : 'Add to chart'}</button>
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('tco:open-quant', { detail: { prompt: 'Explain the ' + selectedItem.title + ' indicator: its calculation, inputs, strengths, limitations, repainting/lookahead risks, and how I could adapt it for NIFTY on the current chart.' } }))} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#34465e] bg-[#101b2a] px-3 py-2.5 text-[10px] font-semibold text-[#b9cce4] transition hover:border-[#5a7ca7] hover:text-white"><MessageCircle className="h-3.5 w-3.5"/>Ask Quant about this indicator</button>
                 <div className="mt-2 text-center text-[8px] leading-4 text-[#6f8199]">Preview graphics are illustrative. The active chart renders the selected indicator's real output.</div>
               </div>
             </> : <div className="flex flex-1 items-center justify-center text-center text-xs text-[#7d8fa7]">Select an indicator to inspect its details.</div>}

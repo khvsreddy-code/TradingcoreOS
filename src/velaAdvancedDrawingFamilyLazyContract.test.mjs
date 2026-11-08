@@ -4,13 +4,15 @@ import { readFileSync } from 'node:fs';
 import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
 
 import {
-  ADVANCED_DRAWING_FAMILIES,
-  drawingFamilyForType,
   drawingTypes,
   defaultToolbar,
-  loadDrawingFamily,
   loadAdvancedDrawingCatalog,
 } from '../vendor/vela/src/core/drawings/index.ts';
+import {
+  ADVANCED_DRAWING_FAMILIES,
+  drawingFamilyForType,
+  loadDrawingFamily,
+} from '../vendor/vela/src/core/drawings/registry.ts';
 
 const userDrawingSource = readFileSync(new URL('../vendor/vela/src/renderers/native/drawings/UserDrawingController.ts', import.meta.url), 'utf8');
 const drawingRegistrySource = readFileSync(new URL('../vendor/vela/src/core/drawings/registry.ts', import.meta.url), 'utf8');
@@ -88,10 +90,11 @@ const availableTools = new Set(hydratedTools);
 for (const type of CORE_SPIRIT_DRAWING_TOOL_CATALOG) {
   assert.ok(availableTools.has(type), 'Vela drawing tool missing from toolbar: ' + type);
 }
-const priceAction = hydratedToolbar.groups.find((group) => group.id === 'price-action');
-assert.ok(priceAction, 'Vela 0.8.4 Price Action group must be directly accessible');
+const fibonacciGann = hydratedToolbar.groups.find((group) => group.id === 'fibonacci-gann');
+assert.ok(fibonacciGann, 'Vela Fibonacci/Gann toolbar group must be directly accessible');
+const priceActionTools = new Set((fibonacciGann.sections ?? []).flatMap((section) => section.tools.map((tool) => tool.type)));
 for (const type of ['fairvaluegap', 'orderblock', 'liquidity']) {
-  assert.ok(priceAction.tools.some((tool) => tool.type === type), 'Price Action toolbar group missing ' + type);
+  assert.ok(priceActionTools.has(type), 'Fibonacci/Gann Price Action section missing ' + type);
 }
 const hydratedIcons = hydratedToolbar.groups.flatMap((group) => group.tools.map((tool) => tool.icon));
 assert.ok(new Set(hydratedIcons).size > 20, 'advanced drawing tools must expose distinct recognisable SVG icons');
