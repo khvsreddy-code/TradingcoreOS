@@ -184,15 +184,21 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   // If the parent cannot be proved locally, fail open and rebuild.
   if (!previousSha) {
     try {
-      // A shallow Vercel checkout may contain HEAD but not its parent object.
-      // Fetch depth two for the checked-out commit before deciding to rebuild.
-      execFileSync('git', ['fetch', '--no-tags', '--depth=2', 'origin', currentSha], {
-        stdio: 'pipe',
-        encoding: 'utf8',
-        timeout: 15_000,
-      });
-      previousSha = execFileSync('git', ['rev-parse', '--verify', `${currentSha}^1`], { encoding: 'utf8' }).trim();
-      console.warn('[realtime-ignore] Previous deployment SHA missing; fetched and compared with the current commit parent.');
+      // Full local clones already have the parent. Use that verified object first
+      // so fixture/offline builds do not need an unnecessary remote fetch. A
+      // shallow Vercel checkout may lack it; only then fetch depth two.
+      try {
+        previousSha = execFileSync('git', ['rev-parse', '--verify', `${currentSha}^1`], { encoding: 'utf8' }).trim();
+        console.warn('[realtime-ignore] Previous deployment SHA missing; using the locally verified current commit parent.');
+      } catch {
+        execFileSync('git', ['fetch', '--no-tags', '--depth=2', 'origin', currentSha], {
+          stdio: 'pipe',
+          encoding: 'utf8',
+          timeout: 15_000,
+        });
+        previousSha = execFileSync('git', ['rev-parse', '--verify', `${currentSha}^1`], { encoding: 'utf8' }).trim();
+        console.warn('[realtime-ignore] Previous deployment SHA missing; fetched and compared with the current commit parent.');
+      }
     } catch (error) {
       console.warn('[realtime-ignore] Previous deployment SHA and parent could not be verified; rebuilding safely.', error instanceof Error ? error.message : '');
       return 1;
