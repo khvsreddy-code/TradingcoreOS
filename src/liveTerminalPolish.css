@@ -49,7 +49,7 @@
 .tco-live-surface .tct-wl-filters{display:flex;align-items:center;gap:7px}
 .tco-live-surface .tct-wl-filters select,.tco-live-surface .tct-alert-entry input{min-width:0;border:1px solid #29384d;border-radius:6px;background:#101a27;color:#b9c8db;padding:6px 8px;font-size:9px}
 .tco-live-surface .tct-selection-chip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#93b5dd;font-size:9px}
-.tco-live-surface .tct-wl-columns,.tco-live-surface .tct-wl-row{display:grid;grid-template-columns:minmax(0,1fr) 70px 54px 52px;gap:5px;align-items:center}
+.tco-live-surface .tct-wl-columns,.tco-live-surface .tct-wl-row{display:grid;grid-template-columns:26px minmax(0,1fr) 66px 48px 45px 14px;gap:5px;align-items:center}
 .tco-live-surface .tct-wl-columns{padding:4px 5px;color:#657790;font-size:8px;text-transform:uppercase;letter-spacing:.08em}
 .tco-live-surface .tct-wl-scroll{flex:1;min-height:100px;overflow:auto;overscroll-behavior:contain}
 .tco-live-surface .tct-wl-group{margin-bottom:8px}
@@ -130,4 +130,4 @@
 .tco-live-surface .tct-right-rail{display:flex;height:100%;width:100%;flex-direction:column;align-items:center;gap:8px;padding:10px 4px;background:#0a1019}
 .tco-live-surface .tct-right-rail-btn{display:flex;width:34px;height:34px;align-items:center;justify-content:center;border:1px solid transparent;border-radius:7px;background:transparent;color:#a1b2c8;cursor:pointer}
 .tco-live-surface .tct-right-rail-btn:hover{border-color:#33465f;background:#142238;color:#fff}
-@media(max-width:720px){.tco-live-surface .tct-rightdock{box-shadow:-12px 0 30px rgba(0,0,0,.5)}.tco-live-surface .tct-wl-columns,.tco-live-surface .tct-wl-row{grid-template-columns:minmax(0,1fr) 64px 42px 44px}.tco-live-surface .tct-dock-tabs kbd{display:none}.tco-live-surface .tct-ticker-card{max-height:38%}}
+@media(max-width:720px){.tco-live-surface .tct-rightdock{box-shadow:-12px 0 30px rgba(0,0,0,.5)}.tco-live-surface .tct-wl-columns,.tco-live-surface .tct-wl-row{grid-template-columns:24px minmax(0,1fr) 60px 40px 40px 12px}.tco-live-surface .tct-dock-tabs kbd{display:none}.tco-live-surface .tct-ticker-card{max-height:38%}}
