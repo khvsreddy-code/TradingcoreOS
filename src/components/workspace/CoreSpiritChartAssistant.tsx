@@ -192,7 +192,7 @@ export function CoreSpiritChartAssistant({ context, embedded = false }: { contex
       }
 
       let fullAnswer = '';
-      let modelVersion = 'gemini-3.1-flash-lite';
+      let modelVersion = 'gemini-3.5-flash-lite';
       await readAssistantStream(response, delta => {
         fullAnswer = (fullAnswer + delta).slice(0, 8_000);
         setMessages(current => current.map(item => item.id === assistantMessage.id ? { ...item, content: fullAnswer } : item));
