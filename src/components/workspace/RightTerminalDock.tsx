@@ -388,16 +388,15 @@ const OrderBookSurface = memo(function OrderBookSurface({ selectedItem, selected
   const ask = depthRows(selectedTick?.ask);
   const bid = depthRows(selectedTick?.bid);
   const depth = calculateTerminalOrderBookDepth(bid, ask, 8);
-  const spread = depth.spread ?? 0;
   const maxQty = Math.max(1, ...ask.map(x => Number(x.quantity) || 0), ...bid.map(x => Number(x.quantity) || 0));
   const quantityLabel = (value: number | null) => value == null ? '—' : value.toLocaleString('en-IN', { maximumFractionDigits: 0 });
   const imbalanceLabel = depth.imbalancePercent == null ? '—' : (depth.imbalancePercent > 0 ? '+' : '') + depth.imbalancePercent.toFixed(1) + '%';
 
   return <div className="tct-dock-content tct-orderbook-content" id="tct-panel-orderbook" role="tabpanel" aria-labelledby="tct-tab-orderbook" data-tco-dock-surface="orderbook">
-    <div className="tct-ob-summary"><div><span>LAST</span><b>{formatPrice(selectedTick?.ltp)}</b></div><div><span>SPREAD</span><b>{spread > 0 ? formatPrice(spread) : '—'}</b></div><div><span>VOLUME</span><b>{selectedTick?.volume == null ? '—' : quantityLabel(selectedTick.volume)}</b></div></div>
+    <div className="tct-ob-summary"><div><span>LAST</span><b>{formatPrice(selectedTick?.ltp)}</b></div><div><span>SPREAD</span><b>{depth.spread == null ? '—' : formatPrice(depth.spread)}</b></div><div><span>VOLUME</span><b>{selectedTick?.volume == null ? '—' : quantityLabel(selectedTick.volume)}</b></div></div>
     <div className="tct-ob-depth-stats" aria-label="Visible Level 2 depth statistics">
       <div><span>BID DEPTH · {depth.bidLevels} LEVELS</span><b className="text-emerald-300">{quantityLabel(depth.bidQuantity)}</b></div>
-      <div><span>IMBALANCE · TOP 8</span><b className={depth.imbalancePercent == null ? 'text-[#8ea1b9]' : depth.imbalancePercent > 0 ? 'text-emerald-300' : depth.imbalancePercent < 0 ? 'text-rose-300' : 'text-[#c5d7ee]'}>{imbalanceLabel}</b></div>
+      <div><span>IMBALANCE · VISIBLE LEVELS</span><b className={depth.imbalancePercent == null ? 'text-[#8ea1b9]' : depth.imbalancePercent > 0 ? 'text-emerald-300' : depth.imbalancePercent < 0 ? 'text-rose-300' : 'text-[#c5d7ee]'}>{imbalanceLabel}</b></div>
       <div><span>ASK DEPTH · {depth.askLevels} LEVELS</span><b className="text-rose-300">{quantityLabel(depth.askQuantity)}</b></div>
     </div>
     <div className="tct-ob-title"><b>{selectedItem?.short || selectedItem?.label || 'Selected instrument'}</b><span>Broker Level 2 · displayed depth, not traded volume</span></div>
