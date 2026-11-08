@@ -19,8 +19,8 @@ const DEFAULT_WATCHLIST: WatchlistDockItem[] = [{
   type: 'index',
 }];
 
-function toDockItem(item: SearchInstrument): WatchlistDockItem {
-  return { ...item, key: item.key, label: item.label || item.symbol, short: item.description || item.label || item.symbol };
+function toDockItem(item: SearchInstrument & { short?: string }): WatchlistDockItem {
+  return { ...item, key: item.key, label: item.label || item.symbol, short: item.short || item.label || item.symbol };
 }
 
 function readLocalWatchlist(): WatchlistDockItem[] {
@@ -75,7 +75,7 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
         key: item.symbol,
         symbol: item.symbol,
         label: item.label,
-        description: item.short,
+        short: item.short,
       }));
       const usable = next.length ? next : DEFAULT_WATCHLIST;
       setWatch(usable);
@@ -168,25 +168,24 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
   }, []);
 
   const add = useCallback((item: SearchInstrument) => {
-    setWatch(current => {
-      if (current.some(existing => existing.key === item.key) || current.length >= 50) return current;
-      const next = [...current, toDockItem(item)];
+    const next = watch.some(existing => existing.key === item.key)
+      ? watch
+      : watch.length >= 50 ? watch : [...watch, toDockItem(item)];
+    if (next !== watch) {
+      setWatch(next);
       persistWatchlist(next);
-      setSelected(item.key);
-      return next;
-    });
+    }
+    setSelected(item.key);
     setQuery('');
     setResults([]);
-  }, [persistWatchlist]);
+  }, [persistWatchlist, watch]);
 
   const remove = useCallback((key: string) => {
-    setWatch(current => {
-      const next = current.filter(item => item.key !== key);
-      persistWatchlist(next);
-      if (selected === key) setSelected(next[0]?.key || '');
-      return next;
-    });
-  }, [persistWatchlist, selected]);
+    const next = watch.filter(item => item.key !== key);
+    setWatch(next);
+    persistWatchlist(next);
+    if (selected === key) setSelected(next[0]?.key || '');
+  }, [persistWatchlist, selected, watch]);
 
   const changeWidth = useCallback((next: number) => setWidth(Math.max(260, Math.min(460, next))), []);
   const assistantContext = useMemo(() => ({
