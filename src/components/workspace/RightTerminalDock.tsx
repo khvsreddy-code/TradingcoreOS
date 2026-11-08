@@ -267,7 +267,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
     <div className="tct-wl-head"><div className="tct-wl-account">WATCHLIST <span>· {broker.toUpperCase()}</span></div><div className="tct-wl-actions"><button className="tct-rail-mini" title="More watchlist actions" type="button"><MoreHorizontal size={15}/></button></div></div>
     <div className="tct-wl-search"><Search size={14}/><input value={query} onChange={e => onQueryChange(e.target.value)} placeholder="Search instruments" aria-label="Search instruments"/><span>{watch.length}</span></div>
     <div className="tct-wl-filters">
-      <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="equity">Equity</option><option value="index">Index</option><option value="futures">Futures</option><option value="options">Options</option></select>
+      <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="stocks">Stocks</option><option value="futures">Futures</option><option value="options">Options</option><option value="commodities">Commodities</option><option value="currency">Currency</option></select>
       {selectedItem && <span className="tct-selection-chip">{selectedItem.short || selectedItem.label}</span>}
     </div>
     <div className="tct-wl-columns"><span>Symbol</span><span>Last</span><span>Chg</span><span>Chg%</span></div>
