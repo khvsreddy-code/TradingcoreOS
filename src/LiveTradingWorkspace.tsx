@@ -257,6 +257,9 @@ const browserRuntimeMetrics = useRef({
         resolveIndicatorManifest: readCoreSpiritManifest,
       }));
       workspaceRef.current = workspace;
+      const openCoreSpiritStudio = () => { workspace.togglePanel('tco.corespirit-code'); };
+      window.addEventListener('tco:open-corespirit-studio', openCoreSpiritStudio);
+      workspaceListenerDisposers.push(() => window.removeEventListener('tco:open-corespirit-studio', openCoreSpiritStudio));
 
       // Hydrate the account's selected named setup once at mount. Capture the local value
       // first so an intentional local selection made while the request is in flight wins.
