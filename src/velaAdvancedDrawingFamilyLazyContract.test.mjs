@@ -90,10 +90,11 @@ const availableTools = new Set(hydratedTools);
 for (const type of CORE_SPIRIT_DRAWING_TOOL_CATALOG) {
   assert.ok(availableTools.has(type), 'Vela drawing tool missing from toolbar: ' + type);
 }
-const priceAction = hydratedToolbar.groups.find((group) => group.id === 'price-action');
-assert.ok(priceAction, 'Vela 0.8.4 Price Action group must be directly accessible');
+const fibonacciGann = hydratedToolbar.groups.find((group) => group.id === 'fibonacci-gann');
+assert.ok(fibonacciGann, 'Vela Fibonacci/Gann toolbar group must be directly accessible');
+const priceActionTools = new Set((fibonacciGann.sections ?? []).flatMap((section) => section.tools.map((tool) => tool.type)));
 for (const type of ['fairvaluegap', 'orderblock', 'liquidity']) {
-  assert.ok(priceAction.tools.some((tool) => tool.type === type), 'Price Action toolbar group missing ' + type);
+  assert.ok(priceActionTools.has(type), 'Fibonacci/Gann Price Action section missing ' + type);
 }
 const hydratedIcons = hydratedToolbar.groups.flatMap((group) => group.tools.map((tool) => tool.icon));
 assert.ok(new Set(hydratedIcons).size > 20, 'advanced drawing tools must expose distinct recognisable SVG icons');
