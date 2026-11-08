@@ -311,7 +311,7 @@ export async function listTerminalJournalTrades(limit = 100): Promise<TerminalJo
   const boundedLimit = Math.max(1, Math.min(250, Math.floor(limit)));
   const { data, error } = await getSupabaseClient()
     .from('terminal_journal_trades')
-    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,created_at')
+    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,metadata,created_at')
     .eq('user_id', userId)
     .order('entry_at', { ascending: false })
     .limit(boundedLimit);
@@ -341,11 +341,12 @@ export async function saveTerminalJournalTrade(input: TerminalJournalTradeInput)
     tags: input.tags || [],
     notes: input.notes || '',
     source: input.source || 'manual',
+    metadata: input.metadata || {},
   };
   const { data, error } = await getSupabaseClient()
     .from('terminal_journal_trades')
     .upsert(payload)
-    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,created_at')
+    .select('id,symbol,side,quantity,entry_price,exit_price,entry_at,exit_at,gross_pnl,fees,net_pnl,timeframe,setup,strategy_name,tags,notes,source,metadata,created_at')
     .single();
   throwOnError(error, 'Save journal trade');
   return data as unknown as TerminalJournalTrade;
