@@ -94,7 +94,20 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
   const closed = useMemo(() => trades.filter(trade => trade.net_pnl != null), [trades]);
   const net = useMemo(() => closed.reduce((sum, trade) => sum + Number(trade.net_pnl || 0), 0), [closed]);
   const wins = useMemo(() => closed.filter(trade => Number(trade.net_pnl) > 0).length, [closed]);
+  const losses = closed.length - wins;
+  const grossWins = useMemo(() => closed.reduce((sum, trade) => {
+    const value = Number(trade.net_pnl || 0);
+    return value > 0 ? sum + value : sum;
+  }, 0), [closed]);
+  const grossLosses = useMemo(() => closed.reduce((sum, trade) => {
+    const value = Number(trade.net_pnl || 0);
+    return value < 0 ? sum + Math.abs(value) : sum;
+  }, 0), [closed]);
   const winRate = closed.length ? wins / closed.length * 100 : 0;
+  const profitFactor = grossLosses > 0 ? grossWins / grossLosses : null;
+  const expectancy = closed.length ? net / closed.length : 0;
+  const averageWin = wins ? grossWins / wins : 0;
+  const averageLoss = losses ? grossLosses / losses : 0;
 
   const update = (key: keyof typeof form, value: string) => setForm(current => ({ ...current, [key]: value }));
 
@@ -188,7 +201,11 @@ export function TerminalJournalPanel({ symbol, timeframe }: Props) {
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Net P&amp;L</div><div className={'mt-1 text-[12px] font-semibold tabular-nums ' + (net >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{money(net)}</div></div>
         <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Win rate</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-[#e2e8f0]">{closed.length ? winRate.toFixed(1) + '%' : '—'}</div></div>
-        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Trades</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-[#e2e8f0]">{trades.length}</div></div>
+        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Profit factor</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-[#e2e8f0]">{profitFactor == null ? '—' : profitFactor.toFixed(2)}</div></div>
+        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Closed trades</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-[#e2e8f0]">{closed.length}</div></div>
+        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Expectancy / trade</div><div className={'mt-1 text-[12px] font-semibold tabular-nums ' + (expectancy >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{closed.length ? money(expectancy) : '—'}</div></div>
+        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Average win</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-emerald-400">{wins ? money(averageWin) : '—'}</div></div>
+        <div className="rounded-lg border border-[#28374a] bg-[#101a27] p-2"><div className="text-[8px] uppercase tracking-wider text-[#7f91a8]">Average loss</div><div className="mt-1 text-[12px] font-semibold tabular-nums text-rose-400">{losses ? money(-averageLoss) : '—'}</div></div>
       </div>
 
       <button type="button" onClick={() => setShowForm(value => !value)} className="flex items-center justify-center gap-2 rounded-lg border border-[#4c79af] bg-[#1c3a5b] px-3 py-2.5 text-[10px] font-semibold text-white hover:bg-[#254b74]">
