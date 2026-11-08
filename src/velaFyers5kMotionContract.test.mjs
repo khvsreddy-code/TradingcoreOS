@@ -19,7 +19,8 @@ assert(policy.includes("'5m': 500"), 'background warm history must remain bounde
 assert(policy.includes('HISTORICAL_DATASET_MAX_BARS = 5_000'), 'the canonical historical dataset cap must remain 5,000 bars');
 assert(policy.includes('return Math.max(250, Math.min(1500, Math.max(base, bars * 4)));'), 'visible-range demand pages must remain capped at 1,500 bars');
 assert(provider.includes("await plane.loadOlderHistory('visible')"));
-assert(fyers.includes("'10minute': '10'"));
+assert(fyers.includes("const timeframe = String(req.query.interval || '').trim();'), 'history route must accept Vela’s selected interval');
+assert(fyers.includes('timeframe,'), 'history route must forward the selected interval to canonical history loading');
 assert(fyers.includes('Math.min(5_000'));
 assert(engine.includes('const CHUNK_BARS = 5_000'));
 assert(cache.includes('const PAGE_BARS = 5_000'));
