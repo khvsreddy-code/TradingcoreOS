@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronRight, CircleHelp, Heart, Loader2, MessageCircle, Plus, Search, Sparkles, Star, X } from 'lucide-react';
 import { getTerminalIndicatorFavoriteKeys, setTerminalIndicatorFavorite } from '../../services/terminal/terminalDataService';
-import { listMyIndicatorPublications, listPublicIndicatorPublications, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
-import { saveIndicatorSourceLocally } from '../../services/coreSpirit/indicatorPublicationService';
+import { listMyIndicatorPublications, listPublicIndicatorPublications, saveIndicatorSourceLocally, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
 
 type NativeIndicatorInfo = {
   type: string;
@@ -285,7 +284,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
             </div>
             {loading && <div className="flex min-h-48 items-center justify-center gap-2 text-xs text-[#91a4bd]"><Loader2 className="h-4 w-4 animate-spin" /> Loading chart indicator catalog…</div>}
             {!loading && error && <div className="rounded-xl border border-rose-900/60 bg-rose-950/20 p-4 text-xs text-rose-200">{error}<button onClick={() => void load()} className="ml-3 underline">Retry</button></div>}
-            {!loading && !error && !visible.length && <div className="rounded-xl border border-[#273449] bg-[#101824] p-8 text-center text-xs text-[#8798b0]">No indicators match this search.</div>}
+            {!loading && !error && !visible.length && !publishedVisible.length && <div className="rounded-xl border border-[#273449] bg-[#101824] p-8 text-center text-xs text-[#8798b0]">No indicators match this search.</div>}
             {!loading && !error && publishedVisible.length > 0 && <>
               <div className="mb-3 mt-7 flex items-end justify-between"><div><div className="text-[12px] font-semibold text-[#e5edf7]">{category === 'My Scripts' ? 'My published scripts' : 'Community CoreSpirit indicators'}</div><div className="mt-1 text-[9px] text-[#788aa2]">{publishedVisible.length} published indicators · source snapshots are compiled through CoreScript</div></div></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
