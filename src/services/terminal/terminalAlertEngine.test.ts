@@ -27,6 +27,7 @@ assert.equal(isEligibleTerminalAlertTick({ source: 'paper', ltp: 101, receivedAt
 assert.equal(isEligibleTerminalAlertTick({ source: 'fyers', ltp: 101, receivedAtEpoch: now - 31_000 }, now), false);
 assert.equal(isEligibleTerminalAlertTick({ source: 'fyers', ltp: 0, receivedAtEpoch: now - 1_000 }, now), false);
 assert.equal(isEligibleTerminalAlertTick({ source: 'fyers', ltp: 101 }, now), false);
+assert.equal(isEligibleTerminalAlertTick({ source: 'fyers', ltp: 101, brokerTimestamp: now, timestamp: now }, now), false, 'exchange timestamps alone cannot prove local packet freshness');
 
 const repository = readFileSync(new URL('./terminalDataService.ts', import.meta.url), 'utf8');
 const claimStart = repository.indexOf('export async function claimTerminalAlertRuleTrigger(');
@@ -39,3 +40,8 @@ assert.match(claim, /\.select\('id'\)/, 'claim reads whether this caller won the
 assert.match(claim, /status: 'triggered'/, 'a successful claim transitions the rule to triggered');
 
 console.log('TERMINAL_LIVE_PRICE_ALERT_ENGINE_OK');
+
+const runtime = readFileSync(new URL('../../runtime/TradingCoreRuntime.ts', import.meta.url), 'utf8');
+assert.match(runtime, /const receivedAtEpoch = Date\.now\(\)/, 'broker ingress stamps local packet receive time');
+assert.match(runtime, /receivedAtEpoch,\s*receivedAt,/, 'normalized broker ticks carry the trusted receive timestamp');
+assert.match(runtime, /listener\(normalizedEvent\)/, 'subscribers receive the timestamped normalized tick');
