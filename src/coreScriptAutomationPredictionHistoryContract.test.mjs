@@ -90,7 +90,9 @@ assert.match(mlRuntime, /contract_lookback|required_lookback_bars/, 'production 
 assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
 assert.match(hmmTraining, /validateConfirmedResearchRows/);
 assert.match(hmmTraining, /Dataset snapshot hash mismatch/);
-assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 5000/);
+assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 1_000_000/, 'research row ceiling supports bounded large-dataset jobs');
+assert.match(researchValidation, /DEFAULT_RESEARCH_MAX_ROWS = 1024/, 'interactive research keeps a conservative default row budget');
+assert.match(researchValidation, /Math\.min\(CORESPIRIT_MAX_DATASET_ROWS, requestedMaxRows\)/, 'explicit research limits remain clamped to the hard dataset ceiling');
 assert.match(researchValidation, /row\.availableAt > row\.timestamp/, 'research forbids unavailable-at-decision-time features');
 assert.match(researchValidation, /purged boundary bars/);
 assert.match(modelArtifact, /featureSchema:[\s\S]*orderedNames:[\s\S]*types:[\s\S]*hash:/);
