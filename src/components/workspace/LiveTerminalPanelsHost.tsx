@@ -107,6 +107,12 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
   }, [open, width]);
 
   useEffect(() => {
+    const openWatchlist = () => { setOpen(true); setActiveTab('watchlist'); };
+    window.addEventListener('tco:open-terminal-watchlist', openWatchlist);
+    return () => window.removeEventListener('tco:open-terminal-watchlist', openWatchlist);
+  }, []);
+
+  useEffect(() => {
     if (!watch.length) return;
     let active = true;
     const keys = watch.map(item => item.key).filter(Boolean);
