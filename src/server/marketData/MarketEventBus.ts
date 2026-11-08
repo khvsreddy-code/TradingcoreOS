@@ -86,7 +86,7 @@ function routesToConsumer(event: DomainMarketEvent, consumers: ReadonlySet<Marke
         .some(consumer => consumers.has(consumer as MarketConsumer));
     case 'Trade':
     case 'Fill':
-      return ['execution', 'orderbook', 'corespirit', 'ml', 'replay', 'audit']
+      return ['execution', 'corespirit', 'ml', 'replay', 'audit']
         .some(consumer => consumers.has(consumer as MarketConsumer));
     case 'OrderUpdate':
       return ['execution', 'corespirit', 'replay', 'audit']
