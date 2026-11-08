@@ -66,6 +66,8 @@ const sectionFor = (item: WatchlistDockItem) => {
   if (text.includes('future')) return 'FUTURES';
   if (text.includes('commodity')) return 'COMMODITIES';
   if (text.includes('option')) return 'OPTIONS';
+  if (text.includes('currency') || text.includes('forex')) return 'CURRENCY';
+  if (text.includes('stock') || text.includes('equity') || text.includes('share')) return 'EQUITIES';
   return 'INDICES';
 };
 
@@ -161,7 +163,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItemsRef.current.filter(item =>
+    const pending = watchItemsRef.current.filter(item => item.key === selected &&
       !Object.prototype.hasOwnProperty.call(newsByKeyRef.current, item.key)
       && !newsInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -196,14 +198,14 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       controller.abort();
       for (const item of pending) newsInFlightRef.current.delete(item.key);
     };
-  }, [watchKeys]);
+  }, [selected, watchKeys]);
 
   // Calculate watchlist technicals from the same cached 5-minute candle timeline.
   // No external indicator endpoint is needed for RSI/EMA/MACD summaries.
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const pending = watchItemsRef.current.filter(item =>
+    const pending = watchItemsRef.current.filter(item => item.key === selected &&
       !Object.prototype.hasOwnProperty.call(technicalByKeyRef.current, item.key)
       && !technicalInFlightRef.current.has(item.key));
     for (const item of pending) {
@@ -243,7 +245,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       controller.abort();
       for (const item of pending) technicalInFlightRef.current.delete(item.key);
     };
-  }, [watchKeys, broker]);
+  }, [selected, watchKeys, broker]);
 
   const refreshNews = (item: WatchlistDockItem) => {
     const key = item.key;
@@ -269,7 +271,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
   const selectedHealth = classifyMarketDataHealth({ source: selectedTick?.source, lastUpdateAt: selectedTick?.brokerTimestamp ?? selectedTick?.timestamp ?? selectedTick?.lastTradeTimestamp, receivedAt: selectedTick?.receivedAtEpoch ?? selectedTick?.receivedAt, providerConnected: selectedTick?.source === 'fyers' || selectedTick?.source === 'upstox' ? true : undefined, expectedIntervalMs: 5_000 });
 
   const groups = useMemo(() => {
-    const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
+    const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['EQUITIES', []], ['FUTURES', []], ['OPTIONS', []], ['COMMODITIES', []], ['CURRENCY', []]]);
     for (const item of watch) {
       const section = sectionFor(item);
       const list = map.get(section) || [];
@@ -286,7 +288,7 @@ const WatchlistSurface = memo(function WatchlistSurface(props: WatchlistSurfaceP
       <select value={segment} onChange={e => onSegmentChange(e.target.value as InstrumentSearchSegment)} aria-label="Instrument segment"><option value="all">All</option><option value="stocks">Stocks</option><option value="futures">Futures</option><option value="options">Options</option><option value="commodities">Commodities</option><option value="currency">Currency</option></select>
       {selectedItem && <span className="tct-selection-chip">{selectedItem.short || selectedItem.label}</span>}
     </div>
-    <div className="tct-wl-columns"><span>Symbol</span><span>Last</span><span>Chg</span><span>Chg%</span></div>
+    <div className="tct-wl-columns"><span></span><span>Symbol</span><span>Last</span><span>Chg</span><span>Chg%</span><span></span></div>
     <div className="tct-wl-scroll">
       {query.length >= 2 && <div className="tct-wl-results">{searching ? <div className="tct-wl-empty">Searching broker instruments…</div> : results.length ? results.map(r => <button type="button" className="tct-wl-result" key={r.key} onClick={() => onAdd(r)}><Plus size={13}/><span><b>{r.label || r.symbol}</b><small>{r.exchange || ''} {r.type || ''} {r.expiry || ''} {r.strike || ''} {r.optionType || ''}</small></span></button>) : <div className="tct-wl-empty">No matching broker instrument.</div>}</div>}
       {groups.map(([group, items]) => <div key={group} className="tct-wl-group">
