@@ -206,7 +206,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
       return familyMatch && queryMatch;
     });
   }, [category, myPublications, publishedCatalog, query]);
-  const selectedItem = selectedPublicationId ? null : catalog.find(item => item.type === selected) || visible[0] || null;
+  const selectedItem = selectedPublicationId ? null : visible.find(item => item.type === selected) || visible[0] || null;
   const selectedPublication = [...publishedCatalog, ...myPublications].find(item => item.id === selectedPublicationId) || null;
   const counts = useMemo(() => {
     const result: Record<string, number> = { Discover: catalog.length + publishedCatalog.length, Favorites: favorites.length, 'My Scripts': myPublications.length, 'Bring a Script': 0, Basic: catalog.length };
@@ -303,7 +303,7 @@ function TerminalIndicatorLibraryModal({ open, onClose }: { open: boolean; onClo
                 const active = selectedItem?.type === item.type;
                 const favorite = favorites.includes(item.type);
                 return <article key={item.type} className={'overflow-hidden rounded-xl border transition ' + (active ? 'border-[#5481ba] bg-[#142238] shadow-[0_0_0_1px_rgba(84,129,186,.18)]' : 'border-[#273449] bg-[#101823] hover:border-[#3c5371]')}>
-                  <button type="button" onClick={() => setSelected(item.type)} className="block w-full text-left">
+                  <button type="button" onClick={() => { setSelectedPublicationId(null); setSelected(item.type); }} className="block w-full text-left">
                     <div className="relative h-[112px] overflow-hidden border-b border-[#263449]"><PreviewGraphic type={item.type} family={family} /><span className="absolute left-2 top-2 rounded-md border border-[#405572] bg-[#0c1521]/90 px-2 py-1 text-[8px] font-semibold uppercase tracking-wide text-[#aec9eb]">{family}</span></div>
                     <div className="px-3 py-3">
                       <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[11px] font-semibold text-[#e5edf7]">{item.title}</div><div className="mt-1 truncate text-[9px] text-[#778ba5]">{item.type}</div></div>{item.beta && <span className="rounded bg-amber-500/10 px-1.5 py-1 text-[8px] font-bold text-amber-300">BETA</span>}</div>
