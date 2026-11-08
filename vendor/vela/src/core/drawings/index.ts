@@ -145,6 +145,7 @@ export {
     resetDrawingSettings,
     deserializeDrawing,
     loadAdvancedDrawingCatalog,
+    drawingFamilyForType,
     type DrawingTypeMeta,
 } from './registry';
 export { migrate, isValidSerialized, clonePlain, DRAWINGS_DOC_VERSION, type DrawingsDocument } from './document';
