@@ -162,7 +162,7 @@ export async function ensureDefaultTerminalWatchlist(): Promise<TerminalWatchlis
 export async function createTerminalWatchlist(name: string): Promise<TerminalWatchlistRecord> {
   const userId = await authenticatedUserId();
   if (!userId) throw new Error('Sign in to create watchlists.');
-  const normalizedName = name.trim().replace(/\\s+/g, ' ').slice(0, 40);
+  const normalizedName = name.trim().replace(/\s+/g, ' ').slice(0, 40);
   if (!normalizedName || normalizedName.toLowerCase() === 'main') {
     throw new Error('Choose a name other than Main.');
   }
@@ -180,7 +180,7 @@ export async function createTerminalWatchlist(name: string): Promise<TerminalWat
 export async function renameTerminalWatchlist(id: string, name: string): Promise<void> {
   const userId = await authenticatedUserId();
   if (!userId) throw new Error('Sign in to rename watchlists.');
-  const normalizedName = name.trim().replace(/\\s+/g, ' ').slice(0, 40);
+  const normalizedName = name.trim().replace(/\s+/g, ' ').slice(0, 40);
   if (!normalizedName || normalizedName.toLowerCase() === 'main') throw new Error('Choose a different watchlist name.');
   const { data: target, error: readError } = await getSupabaseClient()
     .from('terminal_watchlists')
