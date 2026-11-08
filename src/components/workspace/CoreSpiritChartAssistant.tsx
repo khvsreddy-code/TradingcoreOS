@@ -192,16 +192,18 @@ export function CoreSpiritChartAssistant({ context, embedded = false }: { contex
       }
 
       let fullAnswer = '';
+      let modelVersion = 'gemini-3.1-flash-lite';
       await readAssistantStream(response, delta => {
         fullAnswer = (fullAnswer + delta).slice(0, 8_000);
         setMessages(current => current.map(item => item.id === assistantMessage.id ? { ...item, content: fullAnswer } : item));
       }, payload => {
+        if (typeof payload.modelVersion === 'string') modelVersion = payload.modelVersion;
         const answer = typeof payload.answer === 'string' ? payload.answer : fullAnswer;
         fullAnswer = answer;
         setMessages(current => current.map(item => item.id === assistantMessage.id ? { ...item, content: answer } : item));
       });
       if (conversationIdRef.current && fullAnswer.trim()) {
-        void appendTerminalQuantMessage({ conversationId: conversationIdRef.current, role: 'assistant', content: fullAnswer, model: 'gemini-3.1-flash-lite' }).catch(() => undefined);
+        void appendTerminalQuantMessage({ conversationId: conversationIdRef.current, role: 'assistant', content: fullAnswer, model: modelVersion }).catch(() => undefined);
       }
     } catch (caught) {
       const stopped = caught instanceof Error && caught.name === 'AbortError';
