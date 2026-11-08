@@ -64,7 +64,7 @@ assert.match(historical, /HISTORICAL_SOURCE_POLICY = 'fyers-primary-7d\\+investi
 assert.match(historical, /HISTORICAL_MAX_BARS = 5_000/);
 assert.match(historical, /FYERS_HISTORY_WINDOW_DAYS/);
 assert.match(historical, /fyersHistoryWindowFloorMs\(now\)/, 'FYERS history requests are bounded by the configured recent-history floor');
-const historyRefresh = historical.slice(historical.indexOf('private async refresh('), historical.indexOf('\\n  async load('));
+const historyRefresh = historical.slice(historical.indexOf('private async refresh('), historical.indexOf('\n  async load('));
 assert.ok(historyRefresh.length > 0, 'the canonical history refresh implementation exists');
 assert.match(historyRefresh, /fetchFyersRecent\(mapping, pageRange\)/, 'FYERS supplies only the recent candle window');
 assert.match(historyRefresh, /fetchInvestinyHistory/, 'Investiny supplies the older historical backfill');
