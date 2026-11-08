@@ -6,7 +6,7 @@ import { TerminalPortfolioPanel } from './TerminalPortfolioPanel';
 import { CoreSpiritChartAssistant } from './CoreSpiritChartAssistant';
 import { searchBrokerInstruments, type InstrumentSearchSegment, type SearchInstrument } from '../../services/marketData/instrumentSearch';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
-import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../services/terminal/terminalDataService';
+import { createTerminalWatchlist, deleteTerminalWatchlist, deleteTerminalWatchlistItem, ensureDefaultTerminalWatchlist, listTerminalWatchlists, loadDefaultTerminalWatchlist, loadTerminalWatchlistItems, renameTerminalWatchlist, saveDefaultTerminalWatchlist, upsertTerminalWatchlistItem, type TerminalWatchlistRecord } from '../../services/terminal/terminalDataService';
 import type { NormalizedMarketTick } from '../../types/market';
 
 const LOCAL_WATCHLIST_KEY = 'tradingcore:vela:watchlist:v2';
@@ -47,6 +47,10 @@ function readLocalWatchlist(): WatchlistDockItem[] {
 }
 
 export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; timeframe: string }) {
+  const [watchlists, setWatchlists] = useState<TerminalWatchlistRecord[]>([]);
+  const [activeWatchlistId, setActiveWatchlistId] = useState<string | null>(null);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
+  const [watchlistError, setWatchlistError] = useState('');
   const [watch, setWatch] = useState<WatchlistDockItem[]>(DEFAULT_WATCHLIST);
   const [selected, setSelected] = useState(DEFAULT_WATCHLIST[0].key);
   const [ticks, setTicks] = useState<Record<string, NormalizedMarketTick>>({});
@@ -68,26 +72,40 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
 
   useEffect(() => {
     let active = true;
-    void loadDefaultTerminalWatchlist().then(saved => {
-      if (!active) return;
-      const next = (saved?.length ? saved : readLocalWatchlist()).map(item => toDockItem({
-        ...item,
-        key: item.symbol,
-        symbol: item.symbol,
-        label: item.label,
-        short: item.short,
-      }));
-      const usable = next.length ? next : DEFAULT_WATCHLIST;
-      setWatch(usable);
-      setSelected(current => usable.some(item => item.key === current) ? current : usable[0].key);
-    }).catch(() => {
-      if (!active) return;
-      const local = readLocalWatchlist();
-      if (local.length) {
-        setWatch(local);
-        setSelected(local[0].key);
+    void (async () => {
+      try {
+        let lists = await listTerminalWatchlists();
+        if (!active) return;
+        if (!lists.length) {
+          const main = await ensureDefaultTerminalWatchlist();
+          if (main) lists = [main];
+        }
+        if (!active) return;
+        setWatchlists(lists);
+        const storedId = (() => {
+          try { return localStorage.getItem('tradingcore:vela:active-watchlist') || ''; } catch { return ''; }
+        })();
+        const target = lists.find(item => item.id === storedId)
+          || lists.find(item => item.is_default)
+          || lists[0];
+        const saved = target ? await loadTerminalWatchlistItems(target.id) : await loadDefaultTerminalWatchlist();
+        if (!active) return;
+        setActiveWatchlistId(target?.id || null);
+        const next = (target ? saved : (saved?.length ? saved : readLocalWatchlist())).map(item => toDockItem({
+          ...item, key: item.symbol, symbol: item.symbol, label: item.label, short: item.short,
+        }));
+        const usable = target ? next : next.length ? next : DEFAULT_WATCHLIST;
+        setWatch(usable);
+        setSelected(current => usable.some(item => item.key === current) ? current : usable[0]?.key || '');
+      } catch (caught) {
+        if (!active) return;
+        setWatchlistError(caught instanceof Error ? caught.message : 'Watchlists could not be loaded.');
+        const local = readLocalWatchlist();
+        const usable = local.length ? local : DEFAULT_WATCHLIST;
+        setWatch(usable);
+        setSelected(usable[0]?.key || '');
       }
-    });
+    })();
     return () => { active = false; };
   }, []);
 
@@ -157,15 +175,10 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
     return () => { active = false; window.clearTimeout(timer); };
   }, [query, segment, broker]);
 
-  const persistWatchlist = useCallback((items: WatchlistDockItem[]) => {
-    void saveDefaultTerminalWatchlist(items.map(item => ({
-      symbol: item.symbol,
-      label: item.label,
-      short: item.short || item.label,
-      exchange: item.exchange,
-      type: item.type,
-    }))).catch(() => undefined);
-  }, []);
+  const toStoredItem = (item: WatchlistDockItem) => ({
+    symbol: item.symbol, label: item.label, short: item.short || item.label,
+    exchange: item.exchange, type: item.type,
+  });
 
   const add = useCallback((item: SearchInstrument) => {
     const next = watch.some(existing => existing.key === item.key)
@@ -173,19 +186,109 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
       : watch.length >= 50 ? watch : [...watch, toDockItem(item)];
     if (next !== watch) {
       setWatch(next);
-      persistWatchlist(next);
+      if (activeWatchlistId) {
+        void upsertTerminalWatchlistItem(activeWatchlistId, toStoredItem(next[next.length - 1]!), next.length - 1)
+          .catch(caught => setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist item could not be saved.'));
+      } else {
+        void saveDefaultTerminalWatchlist(next.map(toStoredItem))
+          .catch(caught => setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be saved.'));
+      }
     }
     setSelected(item.key);
     setQuery('');
     setResults([]);
-  }, [persistWatchlist, watch]);
+  }, [activeWatchlistId, watch]);
 
   const remove = useCallback((key: string) => {
     const next = watch.filter(item => item.key !== key);
     setWatch(next);
-    persistWatchlist(next);
+    if (activeWatchlistId) {
+      void deleteTerminalWatchlistItem(activeWatchlistId, key)
+        .catch(caught => setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist item could not be removed.'));
+    } else {
+      void saveDefaultTerminalWatchlist(next.map(toStoredItem))
+        .catch(caught => setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be saved.'));
+    }
     if (selected === key) setSelected(next[0]?.key || '');
-  }, [persistWatchlist, selected, watch]);
+  }, [activeWatchlistId, selected, watch]);
+
+  const switchWatchlist = useCallback(async (id: string) => {
+    if (!id || id === activeWatchlistId) return;
+    setWatchlistBusy(true);
+    setWatchlistError('');
+    try {
+      const items = await loadTerminalWatchlistItems(id);
+      const next = items.map(item => toDockItem({ ...item, key: item.symbol, symbol: item.symbol }));
+      setActiveWatchlistId(id);
+      setWatchlists(current => current);
+      setWatch(next);
+      setSelected(next[0]?.key || '');
+      try { localStorage.setItem('tradingcore:vela:active-watchlist', id); } catch { /* best effort */ }
+    } catch (caught) {
+      setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be opened.');
+    } finally {
+      setWatchlistBusy(false);
+    }
+  }, [activeWatchlistId]);
+
+  const createWatchlist = useCallback(async () => {
+    const name = window.prompt('Name this watchlist', 'Scalps');
+    if (!name?.trim()) return;
+    setWatchlistBusy(true);
+    setWatchlistError('');
+    try {
+      const created = await createTerminalWatchlist(name);
+      setWatchlists(current => [...current, created]);
+      setActiveWatchlistId(created.id);
+      setWatch([]);
+      setSelected('');
+      try { localStorage.setItem('tradingcore:vela:active-watchlist', created.id); } catch { /* best effort */ }
+    } catch (caught) {
+      setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be created.');
+    } finally {
+      setWatchlistBusy(false);
+    }
+  }, []);
+
+  const renameWatchlist = useCallback(async () => {
+    const activeList = watchlists.find(item => item.id === activeWatchlistId);
+    if (!activeList || activeList.is_default) return;
+    const name = window.prompt('Rename watchlist', activeList.name);
+    if (!name?.trim()) return;
+    setWatchlistBusy(true);
+    setWatchlistError('');
+    try {
+      await renameTerminalWatchlist(activeList.id, name);
+      setWatchlists(current => current.map(item => item.id === activeList.id ? { ...item, name: name.trim().slice(0, 40) } : item));
+    } catch (caught) {
+      setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be renamed.');
+    } finally {
+      setWatchlistBusy(false);
+    }
+  }, [activeWatchlistId, watchlists]);
+
+  const deleteWatchlist = useCallback(async () => {
+    const activeList = watchlists.find(item => item.id === activeWatchlistId);
+    if (!activeList || activeList.is_default || !window.confirm(`Delete watchlist “${activeList.name}” and its saved symbols?`)) return;
+    setWatchlistBusy(true);
+    setWatchlistError('');
+    try {
+      await deleteTerminalWatchlist(activeList.id);
+      const lists = watchlists.filter(item => item.id !== activeList.id);
+      setWatchlists(lists);
+      const target = lists.find(item => item.is_default) || lists[0];
+      if (target) await switchWatchlist(target.id);
+      else {
+        setActiveWatchlistId(null);
+        setWatch(DEFAULT_WATCHLIST);
+        setSelected(DEFAULT_WATCHLIST[0].key);
+      }
+    } catch (caught) {
+      setWatchlistError(caught instanceof Error ? caught.message : 'Watchlist could not be deleted.');
+    } finally {
+      setWatchlistBusy(false);
+    }
+  }, [activeWatchlistId, switchWatchlist, watchlists]);
 
   const changeWidth = useCallback((next: number) => setWidth(Math.max(260, Math.min(460, next))), []);
   const assistantContext = useMemo(() => ({
@@ -206,6 +309,14 @@ export function LiveTerminalPanelsHost({ symbol, timeframe }: { symbol: string; 
           activeTab={activeTab}
           onTabChange={setActiveTab}
           watch={watch}
+          watchlists={watchlists}
+          activeWatchlistId={activeWatchlistId || ''}
+          watchlistBusy={watchlistBusy}
+          watchlistError={watchlistError}
+          onSwitchWatchlist={switchWatchlist}
+          onCreateWatchlist={() => void createWatchlist()}
+          onRenameWatchlist={() => void renameWatchlist()}
+          onDeleteWatchlist={() => void deleteWatchlist()}
           selected={selected}
           onSelect={setSelected}
           onRemove={remove}
