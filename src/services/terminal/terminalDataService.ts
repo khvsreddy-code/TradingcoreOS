@@ -360,17 +360,65 @@ export async function deleteTerminalJournalTrade(id: string): Promise<void> {
   throwOnError(error, 'Delete journal trade');
 }
 
-export async function listTerminalAlertRules(): Promise<Array<TerminalAlertRuleInput & { id: string; created_at: string }>> {
+export type TerminalAlertRuleRecord = Omit<TerminalAlertRuleInput, 'status'> & {
+  id: string;
+  status: 'armed' | 'triggered' | 'paused' | 'cancelled';
+  last_triggered_at: string | null;
+  created_at: string;
+};
+
+export async function listTerminalAlertRules(): Promise<TerminalAlertRuleRecord[]> {
   const userId = await authenticatedUserId();
   if (!userId) return [];
   const { data, error } = await getSupabaseClient()
     .from('terminal_alert_rules')
-    .select('id,symbol,label,condition,target_price,timeframe,status,metadata,created_at')
+    .select('id,symbol,label,condition,target_price,timeframe,status,metadata,last_triggered_at,created_at')
     .eq('user_id', userId)
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false });
   throwOnError(error, 'Load alert rules');
-  return (data || []) as unknown as Array<TerminalAlertRuleInput & { id: string; created_at: string }>;
+  return (data || []) as unknown as TerminalAlertRuleRecord[];
+}
+
+/**
+ * Claims a live alert exactly once across tabs/devices. The armed-status filter
+ * is the compare-and-set guard; RLS still scopes the mutation to auth.uid().
+ */
+export async function claimTerminalAlertRuleTrigger(
+  rule: TerminalAlertRuleRecord,
+  trigger: { price: number; source: 'fyers' | 'upstox'; firedAt: string; marketTimestamp?: number | null },
+): Promise<boolean> {
+  const userId = await authenticatedUserId();
+  if (!userId) return false;
+  const firedAt = new Date(trigger.firedAt);
+  const price = Number(trigger.price);
+  if (!Number.isFinite(firedAt.getTime()) || !Number.isFinite(price) || price <= 0) return false;
+
+  const { data, error } = await getSupabaseClient()
+    .from('terminal_alert_rules')
+    .update({
+      status: 'triggered',
+      last_triggered_at: firedAt.toISOString(),
+      updated_at: firedAt.toISOString(),
+      metadata: {
+        ...(rule.metadata || {}),
+        trigger: {
+          condition: rule.condition,
+          targetPrice: Number(rule.target_price),
+          observedPrice: price,
+          source: trigger.source,
+          firedAt: firedAt.toISOString(),
+          marketTimestamp: Number.isFinite(Number(trigger.marketTimestamp)) ? Number(trigger.marketTimestamp) : null,
+        },
+      },
+    })
+    .eq('id', rule.id)
+    .eq('user_id', userId)
+    .eq('status', 'armed')
+    .select('id')
+    .maybeSingle();
+  throwOnError(error, 'Claim price alert trigger');
+  return Boolean(data?.id);
 }
 
 export async function saveTerminalAlertRule(input: TerminalAlertRuleInput): Promise<void> {
