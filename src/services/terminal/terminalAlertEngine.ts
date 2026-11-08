@@ -27,11 +27,13 @@ export function isEligibleTerminalAlertTick(
   const price = Number(tick.ltp);
   if (!Number.isFinite(price) || price <= 0) return false;
 
+  // Only the local receive timestamp stamped by TradingCoreRuntime is trusted.
+  // Exchange timestamps describe the market event, not when this process received it.
   const receivedAt = Number.isFinite(Number(tick.receivedAtEpoch)) && Number(tick.receivedAtEpoch) > 0
     ? Number(tick.receivedAtEpoch)
     : tick.receivedAt
       ? Date.parse(tick.receivedAt)
-      : Number(tick.brokerTimestamp || tick.timestamp || 0);
+      : Number.NaN;
   if (!Number.isFinite(receivedAt) || receivedAt <= 0) return false;
 
   const normalizedAt = receivedAt < 1_000_000_000_000 ? receivedAt * 1000 : receivedAt;
