@@ -441,11 +441,8 @@ export class ChartDataPlane {
       latest,
       CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
     );
-    chartPerformanceTelemetry.recordCompute(
-      this.key,
-      Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt),
-      this.state.revision + 1,
-    );
+    const computeDurationMs = Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt);
+    chartPerformanceTelemetry.recordCompute(this.key, computeDurationMs, this.state.revision + 1);
     this.state.lastAcceptedTradeTimestampMs = this.liveCandle.lastAcceptedTimestampMs;
 
     if (transition.kind === 'out-of-order') return;
