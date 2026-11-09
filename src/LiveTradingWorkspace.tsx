@@ -113,6 +113,7 @@ const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
+type VelaAppTab = Readonly<{ id: string; symbol: string; timeframe: string }>;
 
 async function readCoreSpiritManifest(): Promise<Array<{ name: string; script: string; language: string; enabled: boolean; category: string }>> {
   try {
@@ -145,6 +146,8 @@ const browserRuntimeMetrics = useRef({
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [velaAppTabs, setVelaAppTabs] = useState<VelaAppTab[]>([]);
+  const [activeVelaAppTabId, setActiveVelaAppTabId] = useState('');
   const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>({ phase: 'loading' });
   const [workspaceMountAttempt, setWorkspaceMountAttempt] = useState(0);
   const [chartStatus, setChartStatus] = useState<ChartStatusView>({
@@ -271,6 +274,25 @@ const browserRuntimeMetrics = useRef({
         resolveIndicatorManifest: readCoreSpiritManifest,
       }));
       workspaceRef.current = workspace;
+
+      // The application tab strip is a projection of Vela's actual chart cells,
+      // not a parallel tab/session model. Clicking a tab only activates that cell.
+      const refreshVelaAppTabs = () => {
+        if (cancelled || workspaceRef.current !== workspace) return;
+        const context = workspace.context();
+        setVelaAppTabs(context.cells.map((cell) => ({
+          id: cell.id,
+          symbol: cell.symbol,
+          timeframe: cell.timeframe,
+        })));
+        setActiveVelaAppTabId(context.activeCellId);
+      };
+      refreshVelaAppTabs();
+      workspaceListenerDisposers.push(workspace.on('cell:active', refreshVelaAppTabs));
+      workspaceListenerDisposers.push(workspace.on('cell:created', refreshVelaAppTabs));
+      workspaceListenerDisposers.push(workspace.on('cell:destroyed', refreshVelaAppTabs));
+      workspaceListenerDisposers.push(workspace.on('layout:changed', refreshVelaAppTabs));
+      workspaceListenerDisposers.push(workspace.on('state:changed', refreshVelaAppTabs));
 
       // Restore the user's saved Vela panel choice first. For a genuinely new workspace,
       // open Watchlist by default so quotes, technicals and news are visible on entry.
@@ -905,12 +927,118 @@ const browserRuntimeMetrics = useRef({
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-      <div className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]">
+      <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#050609] text-[#e5e7eb]">
+        <header className="absolute inset-x-0 top-0 z-[130] flex h-[34px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
+          <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#292b31] pr-3">
+            <span className="grid h-[21px] w-[21px] place-items-center rounded-[6px] border border-[#3b3e48] bg-[#1b1d23] text-[#f0b75b]" aria-hidden="true">
+              <svg viewBox="0 0 20 20" className="h-[15px] w-[15px]" fill="none">
+                <path d="M10 1.8 12.3 6.1 17.1 7.2 13.8 10.9 14.4 15.8 10 13.7 5.6 15.8 6.2 10.9 2.9 7.2 7.7 6.1 10 1.8Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"/>
+                <circle cx="10" cy="9.4" r="2" fill="currentColor"/>
+              </svg>
+            </span>
+            <span className="hidden font-semibold tracking-[.03em] text-[#e8e9ed] sm:inline">TradingCoreOS</span>
+            <span className="text-[#666b75]">/</span>
+            <span className="font-semibold text-[#d6d8de]">Vela</span>
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Active Vela chart cells">
+            {velaAppTabs.map((tab) => {
+              const ticker = tab.symbol.includes(':') ? tab.symbol.split(':').pop() || tab.symbol : tab.symbol;
+              const selected = tab.id === activeVelaAppTabId;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  title={`Activate ${tab.symbol} · ${tab.timeframe}`}
+                  onClick={() => workspaceRef.current?.setActiveCell(tab.id)}
+                  className={`flex h-[26px] max-w-[210px] shrink-0 items-center gap-2 rounded-[5px] border px-2 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff] ${selected ? 'border-[#414550] bg-[#202229] text-white' : 'border-transparent text-[#9ca3af] hover:border-[#30333b] hover:bg-[#1a1c21] hover:text-[#e5e7eb]'}`}
+                >
+                  <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${selected ? 'bg-[#e9a84f]' : 'bg-[#606673]'}`} aria-hidden="true"/>
+                  <span className="truncate font-medium">{ticker}</span>
+                  <span className="shrink-0 text-[10px] text-[#8b909a]">{tab.timeframe}m</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              title="Add chart · open symbol search"
+              aria-label="Add chart or search symbol"
+              onClick={() => workspaceRef.current?.context().openSymbolSearch()}
+              className="grid h-[26px] w-[27px] shrink-0 place-items-center rounded-[5px] border border-transparent text-[#9ca3af] transition-colors hover:border-[#30333b] hover:bg-[#1a1c21] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>
+            </button>
+          </div>
+
+          <div className="flex h-full shrink-0 items-center gap-1 border-l border-[#292b31] pl-2">
+            <span className={`mr-1 hidden h-[19px] items-center gap-1.5 rounded border px-2 text-[9px] font-semibold tracking-[.08em] sm:inline-flex ${chartStatus.phase === 'live' ? 'border-emerald-900/80 bg-emerald-950/40 text-emerald-300' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'border-red-900/80 bg-red-950/35 text-red-300' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'border-amber-900/80 bg-amber-950/30 text-amber-300' : 'border-[#414550] bg-[#202229] text-[#aeb4bf]'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${chartStatus.phase === 'live' ? 'bg-emerald-400' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'bg-red-400' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'bg-amber-400' : 'bg-[#87909f]'}`} aria-hidden="true"/>
+              {chartStatus.phase === 'live' ? 'LIVE' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'OFFLINE' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'CHECK FEED' : 'HISTORY'}
+            </span>
+            <button
+              type="button"
+              title="Open Watchlist"
+              aria-label="Open Watchlist"
+              onClick={() => workspaceRef.current?.context().togglePanel('tco.bookmarks', true)}
+              className="hidden h-[26px] items-center gap-1.5 rounded-[5px] px-2 text-[#aeb4bf] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff] sm:inline-flex"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 3.5h12M2 7.5h12M2 11.5h8"/><circle cx="12.5" cy="11.5" r="1.5"/></svg>
+              Watchlist
+            </button>
+            <button
+              type="button"
+              title="Open Data Window"
+              aria-label="Open Data Window"
+              onClick={() => workspaceRef.current?.context().togglePanel('dataWindow', true)}
+              className="grid h-[26px] w-[27px] place-items-center rounded-[5px] text-[#969ca7] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M4.5 5h7M4.5 8h5M4.5 11h6"/></svg>
+            </button>
+            <button
+              type="button"
+              title="Open Objects Tree"
+              aria-label="Open Objects Tree"
+              onClick={() => workspaceRef.current?.context().togglePanel('objects', true)}
+              className="grid h-[26px] w-[27px] place-items-center rounded-[5px] text-[#969ca7] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"><path d="M2 3.5h12M2 8h12M2 12.5h12"/><circle cx="4" cy="3.5" r="1.2" fill="#111215"/><circle cx="9" cy="8" r="1.2" fill="#111215"/><circle cx="6" cy="12.5" r="1.2" fill="#111215"/></svg>
+            </button>
+          </div>
+        </header>
+
         <div
           ref={host}
-          className="absolute inset-0"
+          className="absolute inset-x-0 bottom-[27px] top-[34px]"
           aria-label="TradingCoreOS Vela live trading chart"
         />
+        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#292b31] bg-[#111215] px-3 text-[10px] text-[#8e939d]">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="hidden font-semibold tracking-[.08em] text-[#b5bac4] sm:inline">RANGE</span>
+            <span className="hidden text-[#555b65] sm:inline">/</span>
+            <div className="flex items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Chart visible-range presets">
+              {(['1D','1W','1M','3M','6M','YTD','1Y','ALL'] as const).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  title={`Frame chart to ${preset}`}
+                  onClick={() => {
+                    try { workspaceRef.current?.chart.setVisibleRangePreset(preset); } catch { /* chart may still be mounting */ }
+                  }}
+                  className="rounded px-1.5 py-1 text-[#8e939d] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="ml-3 flex shrink-0 items-center gap-2">
+            <span className="hidden text-[#686e79] md:inline">VELA CHART ENGINE</span>
+            <span className="h-1 w-1 rounded-full bg-[#515762]" aria-hidden="true"/>
+            <span className="font-medium text-[#aeb4bf]">TRADINGCOREOS</span>
+          </div>
+        </footer>
         {workspaceLoadState.phase !== 'ready' && (
           <div
             className="absolute inset-0 z-[110] flex items-center justify-center bg-[#050609] px-6"
