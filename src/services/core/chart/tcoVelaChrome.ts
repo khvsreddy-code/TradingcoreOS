@@ -56,6 +56,7 @@ import { themeTokens } from './velaNativeChartKernel';
 // render blank spans inside clickable icon-only controls.
 const TCO_CHROME_ICONS: Record<string, string> = {
   activity: svg16('<path d="M1.5 8h3l2-5 3 10 2-5h3"/>'),
+  corespirit: svg16('<path d="M8 1.2c.9 2.1 3.6 3.4 3.6 6.1a3.6 3.6 0 1 1-7.2 0c0-1.4.8-2.5 1.6-3.6.4 1 1 1.7 1.7 2.3.8-1.2 1-2.9.3-4.8Z"/><circle cx="8" cy="8.5" r="2.4"/><path d="M8 5.2v.9M8 10.9v.9M4.7 8.5h.9M10.4 8.5h.9"/>'),
   briefcase: svg16('<rect x="2" y="5" width="12" height="9" rx="1.5"/><path d="M5 5V3h6v2M2 8h12"/>'),
   shield: svg16('<path d="M8 1.5 13.5 3.5v4c0 3.4-2.4 5.8-5.5 7-3.1-1.2-5.5-3.6-5.5-7v-4z"/><path d="m5.5 7.8 1.7 1.8 3.4-3.4"/>'),
   list: svg16('<path d="M5 3h9M5 8h9M5 13h9"/><path d="M2 3h.1M2 8h.1M2 13h.1"/>'),
@@ -936,8 +937,8 @@ const workspaceFramePanel: SidePanelDescriptor = {
 
 const coreSpiritCodePanel: SidePanelDescriptor = {
   id: 'tco.corespirit-code',
-  title: 'CoreSpirit',
-  icon: 'indicators',
+  title: 'CoreSpirit Studio',
+  icon: 'corespirit',
   order: 5,
   width: 520,
   resizable: true,

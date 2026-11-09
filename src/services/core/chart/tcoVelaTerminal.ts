@@ -72,20 +72,12 @@ export function createTcoVelaTerminalOptions(
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
-    // Vela owns the chart chrome. Keep its native editing/history, alerts and screenshot
-    // actions visible, while TCO integrations use compact icon actions with tooltips.
+    // Keep TradingCoreOS application panels in Vela's native right sidebar. The chart
+    // topbar remains dedicated to market controls, indicator discovery, Save and Alerts.
+    sidebar:true,
     topbar:{
       left:['symbol','timeframes','style','layout','indicators'],
-      right:[
-        'tco.research',
-        'tco.automation',
-        'tco.trading',
-        'tco.journal',
-        'tco.positions',
-        'tco.save-workspace',
-        'tco.workspace-frame',
-        'alerts',
-      ],
+      right:['tco.save-workspace','alerts'],
     },
     sync:{
       symbol:false,

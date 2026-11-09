@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { X, List } from 'lucide-react';
+import { X } from 'lucide-react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -245,16 +245,43 @@ const browserRuntimeMetrics = useRef({
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
       const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '1');
 
+      const baseWorkspaceStorage = createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers');
+      let releaseInitialWorkspaceRestore!: () => void;
+      const initialWorkspaceRestore = new Promise<void>((resolve) => {
+        releaseInitialWorkspaceRestore = resolve;
+      });
+      const workspaceStorage = {
+        ...baseWorkspaceStorage,
+        async get(key: string) {
+          try {
+            return await baseWorkspaceStorage.get(key);
+          } finally {
+            releaseInitialWorkspaceRestore();
+          }
+        },
+      };
+
       workspace = new VelaWorkspaceClass(host.current, createTcoVelaTerminalOptions({
         layout: initialLayout,
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
-        storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
+        storage: workspaceStorage,
         createDataProvider: createTcoVelaDataProvider,
         createCoreSpiritEngine: () => new LazyCoreSpiritVelaEngine(),
         resolveIndicatorManifest: readCoreSpiritManifest,
       }));
       workspaceRef.current = workspace;
+
+      // Restore the user's saved Vela panel choice first. For a genuinely new workspace,
+      // open Watchlist by default so quotes, technicals and news are visible on entry.
+      void initialWorkspaceRestore.then(() => {
+        window.setTimeout(() => {
+          if (cancelled || workspaceRef.current !== workspace) return;
+          if (!workspace.getState().panels?.open) {
+            workspace.togglePanel('tco.bookmarks', true);
+          }
+        }, 0);
+      });
 
       // Hydrate the account's selected named setup once at mount. Capture the local value
       // first so an intentional local selection made while the request is in flight wins.
@@ -881,7 +908,7 @@ const browserRuntimeMetrics = useRef({
       <div className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]">
         <div
           ref={host}
-          className="absolute inset-y-0 left-0 right-11"
+          className="absolute inset-0"
           aria-label="TradingCoreOS Vela live trading chart"
         />
         {workspaceLoadState.phase !== 'ready' && (
@@ -999,38 +1026,6 @@ const browserRuntimeMetrics = useRef({
             </div>
           </div>
         )}
-        <aside
-          className="pointer-events-auto absolute right-0 top-0 bottom-0 z-[130] flex w-11 flex-col items-center gap-2 border-l border-[#263043] bg-[#0b101a] py-2 shadow-xl"
-          aria-label="TradingCoreOS right sidebar"
-        >
-          <button
-            type="button"
-            onClick={() => workspaceRef.current?.togglePanel('tco.bookmarks')}
-            disabled={workspaceLoadState.phase !== 'ready'}
-            aria-label="Toggle Watchlist panel"
-            title="Watchlist"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-slate-300 transition hover:border-slate-600 hover:bg-white/5 hover:text-white disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-          >
-            <List size={18} aria-hidden="true" />
-          </button>
-          <div className="h-px w-6 bg-[#263043]" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => workspaceRef.current?.togglePanel('tco.corespirit-code')}
-            disabled={workspaceLoadState.phase !== 'ready'}
-            aria-label="Toggle CoreSpirit coding terminal"
-            title="CoreSpirit Studio"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/20 bg-orange-500/5 text-orange-300 transition hover:border-orange-400/70 hover:bg-orange-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40"
-          >
-            <svg width="25" height="25" viewBox="0 0 32 32" aria-hidden="true">
-              <defs><linearGradient id="corespirit-rail-flame" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#ef4444"/><stop offset="1" stopColor="#fbbf24"/></linearGradient></defs>
-              <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="url(#corespirit-rail-flame)" strokeWidth="2" strokeLinejoin="round"/>
-              <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#101827" stroke="#67e8f9" strokeWidth="1.3" strokeLinejoin="round"/>
-              <circle cx="16" cy="17" r="3.2" fill="none" stroke="#a5f3fc" strokeWidth="1.4"/>
-              <circle cx="16" cy="17" r="1" fill="#f8fafc"/>
-            </svg>
-          </button>
-        </aside>
         <TerminalIndicatorLibraryHost />
         <FyersConnectionPrompt floating onConnect={() => setBrokerStatusOpen(true)} />
         {brokerStatusOpen && (

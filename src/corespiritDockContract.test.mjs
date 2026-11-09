@@ -36,10 +36,13 @@ const contributions = read('../vendor/vela/src/widget/contributions.ts');
 const includes = (source, snippet, message) => assert.ok(source.includes(snippet), message);
 const excludes = (source, snippet, message) => assert.ok(!source.includes(snippet), message);
 
-includes(live, 'aria-label="Toggle Watchlist panel"', 'right rail exposes the Watchlist control');
-includes(live, 'aria-label="Toggle CoreSpirit coding terminal"', 'right rail exposes the CoreSpirit control');
-includes(live, 'corespirit-rail-flame', 'right-side button uses the custom fire-and-cogwheel icon');
-includes(live, 'right-11', 'chart host reserves space for the right rail');
+includes(terminal, 'sidebar:true', 'the live terminal enables Vela native right-sidebar navigation');
+includes(chrome, "id: 'tco.bookmarks'", 'Watchlist remains a native dock panel with quote, technical and news detail');
+includes(chrome, "id: 'tco.corespirit-code'", 'CoreSpirit Studio remains a native dock panel');
+includes(chrome, "icon: 'corespirit'", 'CoreSpirit Studio has its dedicated fire-and-gear sidebar icon');
+includes(live, 'workspace.getState().panels?.open', 'saved panel selection is checked before choosing a first-run default');
+includes(live, "workspace.togglePanel('tco.bookmarks', true)", 'Watchlist opens by default only when no panel was saved');
+assert.doesNotMatch(live, /right-11|TradingCoreOS right sidebar/, 'the duplicate React rail is removed; Vela owns the app sidebar');
 includes(live, 'activeCell.addExternalIndicator(', 'Add to Chart uses Vela external-indicator lifecycle on the active chart');
 includes(live, '__TCO_ADD_CORESPIRIT_TO_CHART__', 'active-chart bridge is installed and disposed with the workspace');
 includes(chrome, 'createRoot(body)', 'CoreSpirit React terminal is mounted inside Vela panel body');
