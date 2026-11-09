@@ -276,6 +276,7 @@ const TEXT = {
     syncSymbol: msg('workspace.sync.symbol', 'Symbol'),
     syncInterval: msg('workspace.sync.interval', 'Interval'),
     syncCrosshair: msg('workspace.sync.crosshair', 'Crosshair'),
+    syncTime: msg('workspace.sync.time', 'Time'),
     syncStyle: msg('workspace.sync.style', 'Style'),
     alert: msg('workspace.alerts.untitled', 'Alert'),
     alertToast: msg('workspace.alerts.toast', '{source} — {title} — {message}'),
@@ -669,7 +670,7 @@ export class VelaWorkspace {
                 // The picker composes dynamic layouts on its grid canvas; registered
                 // presets the canvas cannot express (bespoke plugin areas) list as rows.
                 shape: () => layoutShape(this.def),
-                presets: () => layouts(this.localeState).filter((l) => layoutShape(l) === null).map((l) => ({ id: l.id, label: l.label })),
+                presets: () => layouts(this.localeState).filter((l) => layoutShape(l) === null).map((l) => ({ id: l.id, label: l.label, rows: l.rows.length, cols: l.cols.length, areas: l.areas, cellAreas: l.cells.map((cell) => cell.area ?? cell.id) })),
                 onSelectGrid: (rows, cols) => this.setLayout(layoutForGrid(rows, cols)),
                 onSelectPreset: (id) => this.setLayout(id),
                 // The SYNC switches reflect the simple all-cells form; flipping one
@@ -2763,7 +2764,15 @@ export class VelaWorkspace {
                 presets: () =>
                     layouts(this.localeState)
                         .filter((l) => layoutShape(l) === null)
-                        .map((l) => ({ id: l.id, label: l.label, checked: l.id === this.def.id })),
+                        .map((l) => ({
+                            id: l.id,
+                            label: l.label,
+                            checked: l.id === this.def.id,
+                            rows: l.rows.length,
+                            cols: l.cols.length,
+                            areas: l.areas,
+                            cellAreas: l.cells.map((cell) => cell.area ?? cell.id),
+                        })),
                 onSelectGrid: (rows, cols) => this.setLayout(layoutForGrid(rows, cols)),
                 onSelectPreset: (id) => this.setLayout(id),
                 syncs: () => this.syncRows(),
@@ -2800,6 +2809,7 @@ export class VelaWorkspace {
             { id: 'symbol', label: this.t(TEXT.syncSymbol), checked: this.syncOpts.symbol === true },
             { id: 'timeframe', label: this.t(TEXT.syncInterval), checked: this.syncOpts.timeframe === true },
             { id: 'crosshair', label: this.t(TEXT.syncCrosshair), checked: this.syncOpts.crosshair === true },
+            { id: 'viewport', label: this.t(TEXT.syncTime), checked: this.syncOpts.viewport === true },
             { id: 'style', label: this.t(TEXT.syncStyle), checked: this.syncOpts.style === true },
         ];
     }
