@@ -102,6 +102,41 @@ const CSS = css`@layer vela.chrome {
 .vela-lp-preset:hover { background: ${t.hover}; }
 .vela-lp-preset:active { transform: scale(0.98); }
 .vela-lp-preset[data-checked='1'] { background: ${t.hover.strong}; color: ${t.fg.bright}; }
+.vela-lp-presets[data-layout-glyphs='1'] {
+    display: grid;
+    grid-template-columns: repeat(3, 24px);
+    grid-auto-rows: 24px;
+    gap: 4px;
+    margin-top: 8px;
+}
+.vela-lp-presets[data-layout-glyphs='1'] .vela-lp-preset {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    padding: 2px;
+}
+.vela-lp-preset-glyph {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    gap: 1px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: ${t.border.faint};
+}
+.vela-lp-preset-glyph > span {
+    min-width: 0;
+    min-height: 0;
+    background: ${t.hover.strong};
+    border: 1px solid ${t.border.faint};
+}
+.vela-lp-preset[data-checked='1'] .vela-lp-preset-glyph > span {
+    background: ${t.selected.bg};
+    border-color: ${t.selected.bg};
+}
 .vela-lp-sync { display: flex; flex-direction: column; gap: 4px; min-width: 118px; }
 .vela-lp-sync-row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 14px; padding: 6px 8px; border-radius: 5px; cursor: pointer; }
 .vela-lp-sync-row:hover { background: ${t.hover}; }
@@ -182,7 +217,7 @@ export interface LayoutPickerOptions {
     /** Current layout's canvas shape (null = a preset the canvas cannot express). */
     shape: () => LayoutPickerShape | null;
     /** Registered layouts NOT expressible on the canvas — rendered as labeled rows. */
-    presets: () => Array<{ id: string; label: string; checked: boolean }>;
+    presets: () => Array<{ id: string; label: string; checked: boolean; rows?: number; cols?: number; areas?: readonly string[]; cellAreas?: readonly string[] }>;
     onSelectGrid: (rows: number, cols: number) => void;
     onSelectPreset: (id: string) => void;
     /** SYNC switch rows (re-read on every open and after every toggle). */
@@ -423,12 +458,37 @@ export class LayoutPicker {
         const doc = this.doc;
         this.presetsEl.replaceChildren();
         const presets = this.opts.presets();
+        const graphical = presets.length > 0 && presets.every((p) =>
+            Number.isInteger(p.rows) && Number.isInteger(p.cols) &&
+            (p.areas?.length ?? 0) === p.rows &&
+            (p.cellAreas?.length ?? 0) > 0,
+        );
+        if (graphical) this.presetsEl.dataset.layoutGlyphs = '1';
+        else delete this.presetsEl.dataset.layoutGlyphs;
         this.presetsEl.style.display = presets.length > 0 ? '' : 'none';
         for (const p of presets) {
             const b = doc.createElement('button');
             b.className = 'vela-lp-preset';
-            b.textContent = p.label;
+            b.title = p.label;
+            b.setAttribute('aria-label', p.label);
+            b.dataset.layoutPreset = p.id;
             if (p.checked) b.dataset.checked = '1';
+            if (graphical && p.rows && p.cols && p.areas && p.cellAreas) {
+                const glyph = doc.createElement('span');
+                glyph.className = 'vela-lp-preset-glyph';
+                glyph.setAttribute('aria-hidden', 'true');
+                glyph.style.gridTemplateColumns = `repeat(${p.cols}, minmax(0, 1fr))`;
+                glyph.style.gridTemplateRows = `repeat(${p.rows}, minmax(0, 1fr))`;
+                glyph.style.gridTemplateAreas = p.areas.map((row) => `"${row}"`).join(' ');
+                for (const area of p.cellAreas) {
+                    const cell = doc.createElement('span');
+                    cell.style.gridArea = area;
+                    glyph.appendChild(cell);
+                }
+                b.appendChild(glyph);
+            } else {
+                b.textContent = p.label;
+            }
             b.addEventListener('click', () => {
                 this.close();
                 this.opts.onSelectPreset(p.id);
