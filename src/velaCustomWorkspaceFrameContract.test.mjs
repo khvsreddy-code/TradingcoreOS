@@ -130,4 +130,16 @@ assert.match(nativeRenderer, /private setPaneInvert\([\s\S]{0,280}emitWorkspaceS
 assert.match(nativeRenderer, /configurePaneAppearance\([\s\S]{0,1300}emitWorkspaceScaleChange\(\)/, 'manual pane scale-dialog changes are autosaved');
 assert.match(rendererPort, /interface WorkspacePaneScaleState/, 'price-scale state is a renderer-neutral persistence contract');
 
+// Vela application chrome is a projection of the native workspace, never a second chart model.
+const liveWorkspace = read('src/LiveTradingWorkspace.tsx');
+assert.match(liveWorkspace, /role="tablist" aria-label="Active Vela chart cells"/, 'the app tab strip is built from actual Vela chart cells');
+assert.match(liveWorkspace, /workspace\.context\(\)\.cells\.map/, 'application tabs project the Vela workspace cell identities and market context');
+assert.match(liveWorkspace, /workspace\.on\('cell:active'/, 'tab selection follows native Vela active-cell changes');
+assert.match(liveWorkspace, /openSymbolSearch\(\)/, 'the add-chart affordance opens Vela native symbol search');
+assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app chrome opens the existing Vela watchlist panel');
+assert.match(liveWorkspace, /togglePanel\('dataWindow', true\)/, 'the app chrome opens Vela Data Window');
+assert.match(liveWorkspace, /togglePanel\('objects', true\)/, 'the app chrome opens Vela Objects Tree');
+assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
+assert.match(liveWorkspace, /bottom-\[27px\] top-\[34px\]/, 'Vela chart surface reserves space for the native-style app header and range dock');
+
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
