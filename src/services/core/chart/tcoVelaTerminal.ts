@@ -52,7 +52,7 @@ const TCO_VELA_LAYOUT_PRESETS = [
     areas: ['b c', 'a a'],
     cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }],
   },
-] as const;
+];
 
 /** Match Vela's asymmetric multi-chart presets while keeping all cells Vela-native. */
 function registerTcoVelaLayoutPresets(): void {
