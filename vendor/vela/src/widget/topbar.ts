@@ -198,7 +198,7 @@ export interface TopbarOptions {
         /** Current layout's picker-canvas shape (null = not canvas-expressible). */
         shape: () => LayoutPickerShape | null;
         /** Registered layouts the canvas cannot express — rendered as labeled rows. */
-        presets: () => Array<{ id: string; label: string }>;
+        presets: () => Array<{ id: string; label: string; rows?: number; cols?: number; areas?: readonly string[]; cellAreas?: readonly string[] }>;
         onSelectGrid: (rows: number, cols: number) => void;
         onSelectPreset: (id: string) => void;
         /** SYNC switch rows (re-read on every open and after each toggle). */
