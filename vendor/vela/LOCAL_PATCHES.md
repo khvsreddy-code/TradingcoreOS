@@ -1,7 +1,7 @@
-# TradingCoreOS overlay on Vela 0.10.1
+# TradingCoreOS overlay on Vela 0.10.2
 
-The final upstream source baseline is Vela tag `v0.10.1`, commit
-`e77d22325e51c7a10edcc617e666ca1a5fd65e68`. The three-way common ancestor for the
+The final upstream source baseline is Vela tag `v0.10.2`, commit
+`305521811eabc35c3797e5b6ab58adb25e70c1c7`. The three-way common ancestor for the
 TradingCoreOS overlay is Vela 0.9.0 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
 Do not identify a TCO-local edit as an upstream change just because it lives under `vendor/vela/src`.
 
@@ -17,7 +17,7 @@ Do not identify a TCO-local edit as an upstream change just because it lives und
 | `provider-and-sdk-compatibility` | `src/core/ports/**`, `src/data/**`, SDK boundaries | Keep Vela's public port types connected to the canonical TCO market-data plane without replacing provider ownership or progressive history paging. | Live UI, candle fast-switch, time normalization, and foundation contracts. |
 | `widget-workspace-and-local-catalog` | `src/widget/**`, `src/workspace/**`, `src/state/**` | Preserve workspace and picker integration, serialized state extensions, and the local TCO UX. | Workspace autosave, pane persistence, live UI, and foundation contracts. |
 
-The exact 0.10.1 file-by-file source comparison is recorded in
+The exact 0.10.2 file-by-file source comparison is recorded in
 [`UPSTREAM-DIFF.json`](./UPSTREAM-DIFF.json). The groups and their path patterns,
 purposes, and test associations live in [`patches.json`](./patches.json). The
 manifest generator refuses to complete if an upstream-modified or TCO-only source
@@ -30,7 +30,7 @@ repository root:
 
 ```sh
 git clone https://github.com/LuxAlgo/Vela.git /tmp/vela-upstream
-git -C /tmp/vela-upstream checkout e77d22325e51c7a10edcc617e666ca1a5fd65e68
+git -C /tmp/vela-upstream checkout 305521811eabc35c3797e5b6ab58adb25e70c1c7
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --write
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --check
 ```
