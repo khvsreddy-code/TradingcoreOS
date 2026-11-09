@@ -49,7 +49,7 @@ assert.ok(releaseDiff.files.some((file) => file.path === 'src/data/providers/hyp
 assert.ok(overlayDiff.identical.some((file) => file.path === 'src/data/providers/hyperliquid/HyperliquidProvider.ts'), 'HIP-3 provider source is carried byte-identically from upstream 0.10.2');
 assert.match(hyperliquid, /private async listHip3\(/, 'the vendored provider enumerates builder-deployed HIP-3 perp dex markets');
 assert.match(hyperliquid, /type: 'perpDexs'/, 'the vendored provider discovers deployed perp dexes from the public API');
-assert.match(hyperliquid, /splitDexCoin\(ticker\)/, 'the vendored provider parses qualified dex:coin tickers');
+assert.match(hyperliquid, /splitDexCoin\(t\)/, 'the vendored provider parses qualified dex:coin tickers after ticker normalization');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/locales/catalog.d.ts'), 'release diff must include the generated localization catalogue types');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/widget/contributions.ts'), 'release diff must include the updated widget contribution contract');
 assert.ok(releaseDiff.files.some((file) => file.path === 'src/ui/chromeStyles.ts' && file.status === 'added'), '0.10.1 adds the UI-kit CSS isolation boundary');
