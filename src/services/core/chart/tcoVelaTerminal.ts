@@ -1,6 +1,63 @@
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
 import type { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
+import { registerLayout } from '../../../../vendor/vela/src/workspace/layouts';
+
+const TCO_VELA_LAYOUT_PRESETS = [
+  {
+    id: 'big-left-2',
+    label: 'Big left, 2 right',
+    cols: [1, 1],
+    rows: [1, 1],
+    areas: ['a b', 'a c'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }],
+  },
+  {
+    id: 'big-left-3',
+    label: 'Big left, 3 right',
+    cols: [1, 1],
+    rows: [1, 1, 1],
+    areas: ['a b', 'a c', 'a d'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }, { id: 'c4', area: 'd' }],
+  },
+  {
+    id: 'big-right-2',
+    label: '2 left, big right',
+    cols: [1, 1],
+    rows: [1, 1],
+    areas: ['b a', 'c a'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }],
+  },
+  {
+    id: 'big-top-2',
+    label: 'Big top, 2 below',
+    cols: [1, 1],
+    rows: [1, 1],
+    areas: ['a a', 'b c'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }],
+  },
+  {
+    id: 'big-top-3',
+    label: 'Big top, 3 below',
+    cols: [1, 1, 1],
+    rows: [1, 1],
+    areas: ['a a a', 'b c d'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }, { id: 'c4', area: 'd' }],
+  },
+  {
+    id: 'big-bottom-2',
+    label: '2 top, big below',
+    cols: [1, 1],
+    rows: [1, 1],
+    areas: ['b c', 'a a'],
+    cells: [{ id: 'c1', area: 'a' }, { id: 'c2', area: 'b' }, { id: 'c3', area: 'c' }],
+  },
+] as const;
+
+/** Match Vela's asymmetric multi-chart presets while keeping all cells Vela-native. */
+function registerTcoVelaLayoutPresets(): void {
+  for (const preset of TCO_VELA_LAYOUT_PRESETS) registerLayout(preset);
+}
 
 export type TcoVelaTerminalDependencies = {
   symbol:string;
@@ -41,6 +98,8 @@ export function createTcoVelaTerminalOptions(
   deps:TcoVelaTerminalDependencies,
 ): VelaWorkspaceOptions {
   const { symbol, timeframe, layout, storage } = deps;
+
+  registerTcoVelaLayoutPresets();
 
   return {
     layout,
@@ -83,6 +142,7 @@ export function createTcoVelaTerminalOptions(
       symbol:false,
       timeframe:false,
       crosshair:true,
+      viewport:false,
       style:true,
       drawings:false,
     },
