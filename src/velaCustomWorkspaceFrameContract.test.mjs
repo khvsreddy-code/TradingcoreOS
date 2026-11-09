@@ -133,7 +133,7 @@ assert.match(rendererPort, /interface WorkspacePaneScaleState/, 'price-scale sta
 // Vela application chrome is a projection of the native workspace, never a second chart model.
 const liveWorkspace = read('src/LiveTradingWorkspace.tsx');
 assert.match(liveWorkspace, /role="tablist" aria-label="Active Vela chart cells"/, 'the app tab strip is built from actual Vela chart cells');
-assert.match(liveWorkspace, /workspace\.context\(\)\.cells\.map/, 'application tabs project the Vela workspace cell identities and market context');
+assert.match(liveWorkspace, /const context = workspace\.context\(\);[\s\S]{0,220}context\.cells\.map/, 'application tabs project the Vela workspace cell identities and market context');
 assert.match(liveWorkspace, /workspace\.on\('cell:active'/, 'tab selection follows native Vela active-cell changes');
 assert.match(liveWorkspace, /openSymbolSearch\(\)/, 'the add-chart affordance opens Vela native symbol search');
 assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app chrome opens the existing Vela watchlist panel');
