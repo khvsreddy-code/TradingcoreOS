@@ -33,7 +33,11 @@ assert.match(terminal, /animations:\{ zoom:true, pan:true, liveBar:false \}/, 'c
 const topbar = terminal.match(/topbar:\{([\s\S]*?)\n    \},/);
 assert.ok(topbar, 'TCO should explicitly define a compact topbar');
 assert.doesNotMatch(topbar[1], /tco\.chart-settings/, 'native Vela chart settings must not be duplicated by a TCO topbar action');
-assert.match(topbar[1], /tco\.journal[\s\S]*tco\.positions/, 'Journal and Positions remain accessible as dedicated TCO actions');
+assert.match(terminal, /sidebar:\s*true/, 'TCO application panels are available through Vela native sidebar');
+assert.match(chrome, /id: 'tco\.journal'[\s\S]*title: 'Journal'/, 'the Trading Journal remains registered as a native side panel');
+assert.match(chrome, /id: 'tco\.positions'[\s\S]*title: 'Positions'/, 'broker Positions remain registered as a native side panel');
+assert.match(chrome, /registerSidePanel\(journalPanel\)/, 'the journal panel is registered with Vela dock');
+assert.match(chrome, /registerSidePanel\(positionsPanel\)/, 'the positions panel is registered with Vela dock');
 assert.match(nativeRenderer, /private settingsEnabled = true/, 'native Vela chart settings must remain enabled');
 assert.match(nativeRenderer, /this\.openSettingsDialog\(\)/, 'native Vela gear must open its settings dialog');
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'upstream native-indicator history gating stays available');
