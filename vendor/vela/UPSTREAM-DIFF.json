@@ -3,8 +3,8 @@
   "generatedBy": "tools/vela-overlay-manifest.mjs",
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
-    "tag": "v0.10.1",
-    "commit": "e77d22325e51c7a10edcc617e666ca1a5fd65e68"
+    "tag": "v0.10.2",
+    "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
   },
   "comparison": "Git blob SHA-1; only src/ is compared so local provenance/docs remain separate",
   "counts": {
@@ -744,7 +744,7 @@
     },
     {
       "path": "src/data/providers/hyperliquid/HyperliquidProvider.ts",
-      "blob": "92365cdc80895a5d0e21cc040c5d2110e152e3ae"
+      "blob": "f4d468801e9bbc515cffc3c21f27b0de013bedb3"
     },
     {
       "path": "src/data/providers/hyperliquid/index.ts",
@@ -764,7 +764,7 @@
     },
     {
       "path": "src/locales/ar.json",
-      "blob": "176470b723f44ea8a27aec434a71f1c45dccdfc0"
+      "blob": "93af88d332fcfa76bb9b6e9e50589dae688a1e53"
     },
     {
       "path": "src/locales/ar.ts",
@@ -772,11 +772,11 @@
     },
     {
       "path": "src/locales/catalog.d.ts",
-      "blob": "10e04ccfa55f15a25e14b1bf739b1fcd1ccadc13"
+      "blob": "61251aeaec81e67bd240f248967efc0aff061b95"
     },
     {
       "path": "src/locales/de.json",
-      "blob": "f8eb389f693e773fffb764422494997228257bd0"
+      "blob": "560e1dbfbec2cab583ed27195d885dfbe74cb007"
     },
     {
       "path": "src/locales/de.ts",
@@ -784,7 +784,7 @@
     },
     {
       "path": "src/locales/en.json",
-      "blob": "0fe1fd9397cb33661c3c0e2a061367b84c0ce01e"
+      "blob": "140701036567011e98084664a480991912ecfe62"
     },
     {
       "path": "src/locales/en.ts",
@@ -792,7 +792,7 @@
     },
     {
       "path": "src/locales/es.json",
-      "blob": "f93b18cb5eaa3e3a2956391711f550d1dbf33de9"
+      "blob": "ae98126ed6506dffb6a3bc10691b366937b0a84f"
     },
     {
       "path": "src/locales/es.ts",
@@ -800,7 +800,7 @@
     },
     {
       "path": "src/locales/fr.json",
-      "blob": "2f0bb9a12ab3d5437a9d04e6a87525228bfed97f"
+      "blob": "8516e2b7fa2df7ab93aebb3cdaf9e3999af811b5"
     },
     {
       "path": "src/locales/fr.ts",
@@ -808,7 +808,7 @@
     },
     {
       "path": "src/locales/he.json",
-      "blob": "99aaa6cf57d0a8da69241e3d03d496e6871cc054"
+      "blob": "42357b2db375bb79daed40d383bcaffdd87a410f"
     },
     {
       "path": "src/locales/he.ts",
@@ -816,7 +816,7 @@
     },
     {
       "path": "src/locales/hi.json",
-      "blob": "1cda21f641c7ba7a1f168e19b117add2d6948c81"
+      "blob": "ee8b0c44b64068c51055f4120549481f88066398"
     },
     {
       "path": "src/locales/hi.ts",
@@ -824,7 +824,7 @@
     },
     {
       "path": "src/locales/id.json",
-      "blob": "6c0921818061dd741667c7494799ea9a05a22744"
+      "blob": "92869e92e6f65af021ea599de1fefb458d3beca8"
     },
     {
       "path": "src/locales/id.ts",
@@ -832,7 +832,7 @@
     },
     {
       "path": "src/locales/it.json",
-      "blob": "d592efcbfb059ebf8b48ac09337025d6f7d6ae3b"
+      "blob": "94b965233cc45c5f58f78572f7cdc9bdc393caca"
     },
     {
       "path": "src/locales/it.ts",
@@ -840,7 +840,7 @@
     },
     {
       "path": "src/locales/ja.json",
-      "blob": "98ac1cb7fe670469c7bf7d33084b07f452510763"
+      "blob": "3d283364a3f1ccb17c81ddc78c3c06c29fe68744"
     },
     {
       "path": "src/locales/ja.ts",
@@ -848,7 +848,7 @@
     },
     {
       "path": "src/locales/ko.json",
-      "blob": "32000198de5b88c83ccb0702deee6b003a78c14a"
+      "blob": "b4fc800651e3502b2034f1184e9d8dc0e9677803"
     },
     {
       "path": "src/locales/ko.ts",
@@ -856,7 +856,7 @@
     },
     {
       "path": "src/locales/ms.json",
-      "blob": "f1f056952402e0ba66d1c8e8cdb8109bdf63bbe6"
+      "blob": "3780f26f96a8fa5fcb012169a975acf51e212b9e"
     },
     {
       "path": "src/locales/ms.ts",
@@ -864,7 +864,7 @@
     },
     {
       "path": "src/locales/pl.json",
-      "blob": "acf110d46131f486c74fe1e3919aa60b9ba6f685"
+      "blob": "be078e4dca574b40a421dac980269d8a7857c69f"
     },
     {
       "path": "src/locales/pl.ts",
@@ -872,7 +872,7 @@
     },
     {
       "path": "src/locales/pt-BR.json",
-      "blob": "37a3b703903b3cb1a41a403ceb487d5868d558e4"
+      "blob": "c2806ca48b3b1b762c2f13fce222bfc12a134789"
     },
     {
       "path": "src/locales/pt-BR.ts",
@@ -880,7 +880,7 @@
     },
     {
       "path": "src/locales/ru.json",
-      "blob": "8f896b7de3a297d2579a3196aba5a10d74e43c90"
+      "blob": "8cb31af184c5f045bc7bc780ec71ed5b176472a3"
     },
     {
       "path": "src/locales/ru.ts",
@@ -888,7 +888,7 @@
     },
     {
       "path": "src/locales/th.json",
-      "blob": "33dbcdadc65325f288db4638f776d4b7285fd5f2"
+      "blob": "e9af5406e23f20d69fa67eeb11b5430aaa41a630"
     },
     {
       "path": "src/locales/th.ts",
@@ -896,7 +896,7 @@
     },
     {
       "path": "src/locales/tr.json",
-      "blob": "80f46bc470b4d5980330beddc423024ec42f8314"
+      "blob": "d8a41195992b16d373d91e4bddbef3a561a90896"
     },
     {
       "path": "src/locales/tr.ts",
@@ -904,7 +904,7 @@
     },
     {
       "path": "src/locales/vi.json",
-      "blob": "f41cc901e0345e871910a6a4dcdcf88db8478287"
+      "blob": "7b73ceee939875bc5232862037660374f90068e6"
     },
     {
       "path": "src/locales/vi.ts",
@@ -912,7 +912,7 @@
     },
     {
       "path": "src/locales/zh-Hans.json",
-      "blob": "fc207cb0575b1a56bc7b462aa5edc0139d9bfac6"
+      "blob": "40d391a0bbba20fd60af79b468a41463eb1da639"
     },
     {
       "path": "src/locales/zh-Hans.ts",
@@ -920,7 +920,7 @@
     },
     {
       "path": "src/locales/zh-Hant.json",
-      "blob": "0504778c5d86c8bd11b9ce4228872edb2102654f"
+      "blob": "15c772e7f2952c72d1b99fdc6968850088dec4ac"
     },
     {
       "path": "src/locales/zh-Hant.ts",

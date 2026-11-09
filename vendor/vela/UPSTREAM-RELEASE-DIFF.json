@@ -8,26 +8,38 @@
       "commit": "aecb13847dff3c1a50a2f3433e9804d26fc581ed"
     },
     "release": {
-      "version": "0.10.1",
-      "tag": "v0.10.1",
-      "commit": "e77d22325e51c7a10edcc617e666ca1a5fd65e68"
+      "version": "0.10.2",
+      "tag": "v0.10.2",
+      "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
     }
   },
   "comparison": "Git blob SHA-1 from exact upstream release trees, restricted to src/",
   "counts": {
-    "modified": 96,
+    "modified": 97,
     "added": 5,
     "removed": 67,
-    "total": 168,
+    "total": 169,
     "baseFiles": 452,
     "releaseFiles": 390
   },
   "files": [
     {
+      "path": "src/Vela.ts",
+      "status": "modified",
+      "baseBlob": "eb284b20ddfc75ebeea0be1d96ff50137ef84907",
+      "releaseBlob": "f8688f5f0c9cd38ab481825b071b0e9090846079"
+    },
+    {
       "path": "src/browser.ts",
       "status": "modified",
       "baseBlob": "fca21f22b773eed7117f8ab8012180a437ba2e37",
       "releaseBlob": "d8c4e413007a43f79d7a79ec42f1c77c8b9bbd8f"
+    },
+    {
+      "path": "src/core/IndicatorHandle.ts",
+      "status": "modified",
+      "baseBlob": "d035ac4012618a7b50c5794a1dbe1b5dd0c448d4",
+      "releaseBlob": "32b692c593f2a9960d441b37c15eb52b49f80345"
     },
     {
       "path": "src/core/color.ts",
@@ -72,12 +84,6 @@
       "releaseBlob": "018d2152440ad67f04ceff7c29a5efd71e8a9df8"
     },
     {
-      "path": "src/core/IndicatorHandle.ts",
-      "status": "modified",
-      "baseBlob": "d035ac4012618a7b50c5794a1dbe1b5dd0c448d4",
-      "releaseBlob": "32b692c593f2a9960d441b37c15eb52b49f80345"
-    },
-    {
       "path": "src/core/model/strategy.ts",
       "status": "modified",
       "baseBlob": "02eec64eae9cccac79c7013bba561d029ed35f59",
@@ -120,6 +126,12 @@
       "releaseBlob": "39efd276c6893080ab105a42ecefc22f2919669c"
     },
     {
+      "path": "src/data/providers/hyperliquid/HyperliquidProvider.ts",
+      "status": "modified",
+      "baseBlob": "92365cdc80895a5d0e21cc040c5d2110e152e3ae",
+      "releaseBlob": "f4d468801e9bbc515cffc3c21f27b0de013bedb3"
+    },
+    {
       "path": "src/index.ts",
       "status": "modified",
       "baseBlob": "927339748fb64bb761426c3f599231999bfd4a96",
@@ -129,133 +141,139 @@
       "path": "src/locales/ar.json",
       "status": "modified",
       "baseBlob": "f334751d0821e96db21b869223ba79e3bd89e918",
-      "releaseBlob": "176470b723f44ea8a27aec434a71f1c45dccdfc0"
+      "releaseBlob": "93af88d332fcfa76bb9b6e9e50589dae688a1e53"
     },
     {
       "path": "src/locales/catalog.d.ts",
       "status": "modified",
       "baseBlob": "ad21b6550434b50b382418620e4a53d17749a523",
-      "releaseBlob": "10e04ccfa55f15a25e14b1bf739b1fcd1ccadc13"
+      "releaseBlob": "61251aeaec81e67bd240f248967efc0aff061b95"
     },
     {
       "path": "src/locales/de.json",
       "status": "modified",
       "baseBlob": "aacf93c26d98fe9af69cf69f4e5fba589395b320",
-      "releaseBlob": "f8eb389f693e773fffb764422494997228257bd0"
+      "releaseBlob": "560e1dbfbec2cab583ed27195d885dfbe74cb007"
     },
     {
       "path": "src/locales/en.json",
       "status": "modified",
       "baseBlob": "d91ba9dfc1ed91828ce9d60b6d90f216e8d122a4",
-      "releaseBlob": "0fe1fd9397cb33661c3c0e2a061367b84c0ce01e"
+      "releaseBlob": "140701036567011e98084664a480991912ecfe62"
     },
     {
       "path": "src/locales/es.json",
       "status": "modified",
       "baseBlob": "1612fe96bc3423821813daa4d0cd4e1b18930400",
-      "releaseBlob": "f93b18cb5eaa3e3a2956391711f550d1dbf33de9"
+      "releaseBlob": "ae98126ed6506dffb6a3bc10691b366937b0a84f"
     },
     {
       "path": "src/locales/fr.json",
       "status": "modified",
       "baseBlob": "e797f402aca997c606bcd7004802f0483a650df4",
-      "releaseBlob": "2f0bb9a12ab3d5437a9d04e6a87525228bfed97f"
+      "releaseBlob": "8516e2b7fa2df7ab93aebb3cdaf9e3999af811b5"
     },
     {
       "path": "src/locales/he.json",
       "status": "modified",
       "baseBlob": "90cce47d1057226a3ca13228a57b234fe8286847",
-      "releaseBlob": "99aaa6cf57d0a8da69241e3d03d496e6871cc054"
+      "releaseBlob": "42357b2db375bb79daed40d383bcaffdd87a410f"
     },
     {
       "path": "src/locales/hi.json",
       "status": "modified",
       "baseBlob": "0137dc856a30650c4b82b30f5280cfa1ebd04c33",
-      "releaseBlob": "1cda21f641c7ba7a1f168e19b117add2d6948c81"
+      "releaseBlob": "ee8b0c44b64068c51055f4120549481f88066398"
     },
     {
       "path": "src/locales/id.json",
       "status": "modified",
       "baseBlob": "af3335c053e07748b93e5cedca6248c12aef3174",
-      "releaseBlob": "6c0921818061dd741667c7494799ea9a05a22744"
+      "releaseBlob": "92869e92e6f65af021ea599de1fefb458d3beca8"
     },
     {
       "path": "src/locales/it.json",
       "status": "modified",
       "baseBlob": "bb7761c15f36085197b5452141b26683fd290a0a",
-      "releaseBlob": "d592efcbfb059ebf8b48ac09337025d6f7d6ae3b"
+      "releaseBlob": "94b965233cc45c5f58f78572f7cdc9bdc393caca"
     },
     {
       "path": "src/locales/ja.json",
       "status": "modified",
       "baseBlob": "fb46079cbb1d7818ca162af1154228913f4302c2",
-      "releaseBlob": "98ac1cb7fe670469c7bf7d33084b07f452510763"
+      "releaseBlob": "3d283364a3f1ccb17c81ddc78c3c06c29fe68744"
     },
     {
       "path": "src/locales/ko.json",
       "status": "modified",
       "baseBlob": "fa6a3a5890b2c35a0a401bfc6499e11a7422a352",
-      "releaseBlob": "32000198de5b88c83ccb0702deee6b003a78c14a"
+      "releaseBlob": "b4fc800651e3502b2034f1184e9d8dc0e9677803"
     },
     {
       "path": "src/locales/ms.json",
       "status": "modified",
       "baseBlob": "77303f3483051e20e5bc912517944523a20c7548",
-      "releaseBlob": "f1f056952402e0ba66d1c8e8cdb8109bdf63bbe6"
+      "releaseBlob": "3780f26f96a8fa5fcb012169a975acf51e212b9e"
     },
     {
       "path": "src/locales/pl.json",
       "status": "modified",
       "baseBlob": "c455a91ba98753d1d14f0a04f8ad644c0da3bf1c",
-      "releaseBlob": "acf110d46131f486c74fe1e3919aa60b9ba6f685"
+      "releaseBlob": "be078e4dca574b40a421dac980269d8a7857c69f"
     },
     {
       "path": "src/locales/pt-BR.json",
       "status": "modified",
       "baseBlob": "c86e77ad7448684de7634ca13f39ad6df48db06c",
-      "releaseBlob": "37a3b703903b3cb1a41a403ceb487d5868d558e4"
+      "releaseBlob": "c2806ca48b3b1b762c2f13fce222bfc12a134789"
     },
     {
       "path": "src/locales/ru.json",
       "status": "modified",
       "baseBlob": "39838fe0e6a0b3af3bc8f6d90b1025c1af68e3dd",
-      "releaseBlob": "8f896b7de3a297d2579a3196aba5a10d74e43c90"
+      "releaseBlob": "8cb31af184c5f045bc7bc780ec71ed5b176472a3"
     },
     {
       "path": "src/locales/th.json",
       "status": "modified",
       "baseBlob": "2e59201a4c655b161caf2808a6369c16252266b5",
-      "releaseBlob": "33dbcdadc65325f288db4638f776d4b7285fd5f2"
+      "releaseBlob": "e9af5406e23f20d69fa67eeb11b5430aaa41a630"
     },
     {
       "path": "src/locales/tr.json",
       "status": "modified",
       "baseBlob": "8ce9b1d1f07aa2cd76b6511da8793ec77c5655a0",
-      "releaseBlob": "80f46bc470b4d5980330beddc423024ec42f8314"
+      "releaseBlob": "d8a41195992b16d373d91e4bddbef3a561a90896"
     },
     {
       "path": "src/locales/vi.json",
       "status": "modified",
       "baseBlob": "6c2c769a8727e4e91e0df52d140d869f2b63c700",
-      "releaseBlob": "f41cc901e0345e871910a6a4dcdcf88db8478287"
+      "releaseBlob": "7b73ceee939875bc5232862037660374f90068e6"
     },
     {
       "path": "src/locales/zh-Hans.json",
       "status": "modified",
       "baseBlob": "15d0f89326705586978133d5c009aa63523e1fd8",
-      "releaseBlob": "fc207cb0575b1a56bc7b462aa5edc0139d9bfac6"
+      "releaseBlob": "40d391a0bbba20fd60af79b468a41463eb1da639"
     },
     {
       "path": "src/locales/zh-Hant.json",
       "status": "modified",
       "baseBlob": "04b2fbec7f3aba35fde1d27f52a03333dabeb0d4",
-      "releaseBlob": "0504778c5d86c8bd11b9ce4228872edb2102654f"
+      "releaseBlob": "15c772e7f2952c72d1b99fdc6968850088dec4ac"
     },
     {
       "path": "src/plugin.ts",
       "status": "modified",
       "baseBlob": "e060d050f82612c1d94fe961ef37d8e3031abc01",
       "releaseBlob": "032996fd3b34d0d3cab1aff50e4282bbb19eae83"
+    },
+    {
+      "path": "src/renderers/native/NativeRenderer.ts",
+      "status": "modified",
+      "baseBlob": "0f7e68a4635d2f0d7c5d5457c5ef03ff2378bd77",
+      "releaseBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef"
     },
     {
       "path": "src/renderers/native/backdrop/BackdropRenderer.ts",
@@ -282,12 +300,6 @@
       "releaseBlob": "0375bbeda73afe8ee0d2227f1c0df4904135111c"
     },
     {
-      "path": "src/renderers/native/chrome/marks/MarkPopover.ts",
-      "status": "modified",
-      "baseBlob": "1d82f35a93fa402b15750dc5b4f2e6a559ef9a52",
-      "releaseBlob": "021f090c2c972cd15011464de769541e479be57c"
-    },
-    {
       "path": "src/renderers/native/chrome/PaneControls.ts",
       "status": "modified",
       "baseBlob": "b1ad0ff56177d794c684b148930f00a2350bc17b",
@@ -298,6 +310,12 @@
       "status": "modified",
       "baseBlob": "55961ff99d6d8457b7fe4998293a41d59b209fb4",
       "releaseBlob": "33751e599bf046e9b8cf3d3da947a954cae2c819"
+    },
+    {
+      "path": "src/renderers/native/chrome/marks/MarkPopover.ts",
+      "status": "modified",
+      "baseBlob": "1d82f35a93fa402b15750dc5b4f2e6a559ef9a52",
+      "releaseBlob": "021f090c2c972cd15011464de769541e479be57c"
     },
     {
       "path": "src/renderers/native/chrome/ticks.ts",
@@ -312,16 +330,16 @@
       "releaseBlob": "51e74d50f37fa2f51f65e61373b7f00dbd515aa5"
     },
     {
-      "path": "src/renderers/native/core/chartConfig.ts",
-      "status": "modified",
-      "baseBlob": "55a3b889fae1dfbc11290a6fe317ac7529955ff1",
-      "releaseBlob": "213bb95c6091aaf752223eb8867b17e9c63960f8"
-    },
-    {
       "path": "src/renderers/native/core/SceneGraph.ts",
       "status": "modified",
       "baseBlob": "41d8c55369da9b2924f69524620d6710be1f4279",
       "releaseBlob": "275e2ef9286316a8aaed9505b00c60f576208a4c"
+    },
+    {
+      "path": "src/renderers/native/core/chartConfig.ts",
+      "status": "modified",
+      "baseBlob": "55a3b889fae1dfbc11290a6fe317ac7529955ff1",
+      "releaseBlob": "213bb95c6091aaf752223eb8867b17e9c63960f8"
     },
     {
       "path": "src/renderers/native/drawings/DrawingInteraction.ts",
@@ -358,12 +376,6 @@
       "status": "modified",
       "baseBlob": "59146d2385ffcce4954376a3e99462dd470475d8",
       "releaseBlob": "95d0792531412ae33727c2c08691759ac8a49ae3"
-    },
-    {
-      "path": "src/renderers/native/NativeRenderer.ts",
-      "status": "modified",
-      "baseBlob": "0f7e68a4635d2f0d7c5d5457c5ef03ff2378bd77",
-      "releaseBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef"
     },
     {
       "path": "src/renderers/shared/IndicatorInputsDialog.ts",
@@ -741,10 +753,10 @@
       "baseBlob": "b92e3407956390277ce616453ae892e0e2bcaaac"
     },
     {
-      "path": "src/Vela.ts",
+      "path": "src/widget/VelaWidget.ts",
       "status": "modified",
-      "baseBlob": "eb284b20ddfc75ebeea0be1d96ff50137ef84907",
-      "releaseBlob": "f8688f5f0c9cd38ab481825b071b0e9090846079"
+      "baseBlob": "66643e451f2c2bc8d4f837c2e5c8c21c4b53fc55",
+      "releaseBlob": "b98ba750ce1af68984f0b1a8b55f4673be701170"
     },
     {
       "path": "src/widget/bottombar.ts",
@@ -930,12 +942,6 @@
       "releaseBlob": "add75aba1d978924f26aa8ac59593c90f5e290d5"
     },
     {
-      "path": "src/widget/VelaWidget.ts",
-      "status": "modified",
-      "baseBlob": "66643e451f2c2bc8d4f837c2e5c8c21c4b53fc55",
-      "releaseBlob": "b98ba750ce1af68984f0b1a8b55f4673be701170"
-    },
-    {
       "path": "src/widget/watermark.ts",
       "status": "modified",
       "baseBlob": "89ca8dbe82f6d9c28b2374ac4a9fba61f37dac54",
@@ -948,16 +954,16 @@
       "releaseBlob": "8330145ebbd285c58aca3ac7db62186d04bdce2d"
     },
     {
-      "path": "src/workspace/context.ts",
-      "status": "modified",
-      "baseBlob": "1a854b20fd355d15dd49da9e4a7d439fdfc86307",
-      "releaseBlob": "f89f82b22f23432f7d88476deba24fe861973a37"
-    },
-    {
       "path": "src/workspace/VelaWorkspace.ts",
       "status": "modified",
       "baseBlob": "f9344ee240ec3b66d3cd614a8b519a385f6e9638",
       "releaseBlob": "d16e6396724a739cef5779fddf80350856fa0c56"
+    },
+    {
+      "path": "src/workspace/context.ts",
+      "status": "modified",
+      "baseBlob": "1a854b20fd355d15dd49da9e4a7d439fdfc86307",
+      "releaseBlob": "f89f82b22f23432f7d88476deba24fe861973a37"
     }
   ]
 }

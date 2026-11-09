@@ -2,6 +2,12 @@
 
 All notable changes to Vela, newest first.
 
+## [0.10.2]
+
+### Added
+
+- **Hyperliquid HIP-3 markets.** The provider now enumerates active perpetual markets from builder-deployed dexes, resolves `dex:COIN` tickers and listed coin spellings, and returns dex-aware quote currencies, descriptions and price precision. Existing main-dex perpetuals and spot pairs continue to work as before.
+
 ## [0.10.1]
 
 ### Added
