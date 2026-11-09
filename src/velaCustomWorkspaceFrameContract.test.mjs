@@ -142,4 +142,15 @@ assert.match(liveWorkspace, /togglePanel\('objects', true\)/, 'the app chrome op
 assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
 assert.match(liveWorkspace, /bottom-\[27px\] top-\[34px\]/, 'Vela chart surface reserves space for the native-style app header and range dock');
 
+// Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
+const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
+assert.match(terminal, /registerTcoVelaLayoutPresets/, 'TradingCoreOS registers its native asymmetric workspace presets');
+for (const id of ['big-left-2', 'big-left-3', 'big-right-2', 'big-top-2', 'big-top-3', 'big-bottom-2']) {
+  assert.ok(terminal.includes(id), `workspace preset ${id} is registered`);
+}
+assert.match(layoutPicker, /data-layout-glyphs/, 'asymmetric layout presets render as visual grid glyphs, not text rows');
+assert.match(workspace, /syncTime: msg\('workspace\.sync\.time', 'Time'\)/, 'Vela exposes the Time synchronization label');
+assert.match(workspace, /id: 'viewport', label: this\.t\(TEXT\.syncTime\)/, 'Time sync is connected to Vela visible-range synchronization');
+assert.match(workspace, /cellAreas: l\.cells\.map/, 'layout glyphs use the real Vela layout-area definitions');
+
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
