@@ -14,8 +14,8 @@ const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts'
 const rendererPort = read('vendor/vela/src/core/ports/IChartRenderer.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
-assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.1\*\*/i, 'TCO must continue to use the exact official Vela 0.10.1 foundation pinned by the vendor manifest');
-assert.match(upstream, /Previous source base: Vela 0\.9\.0/, 'the Vela 0.10.1 integration must retain its documented 0.9.0 three-way merge base');
+assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.2\*\*/i, 'TCO must continue to use the exact official Vela 0.10.2 foundation pinned by the vendor manifest');
+assert.match(upstream, /Previous source base: Vela 0\.9\.0/, 'the Vela 0.10.2 integration must retain its documented 0.9.0 three-way merge base');
 assert.match(terminal, /topbar:\s*\{/);
 assert.match(terminal, /sidebar:\s*true/, 'application panels use Vela native right-sidebar navigation');
 assert.match(terminal, /'tco\.workspace-frame'/, 'workspace customization is available in the native panel dock');
