@@ -23,7 +23,7 @@ The exact 0.9.0-to-0.10.2 upstream source delta is recorded in `UPSTREAM-RELEASE
 
 ## TradingCoreOS integration overlay
 
-The upgrade uses a three-way merge from Vela 0.9.0: the old upstream source, the local TradingCoreOS version, and upstream 0.10.1. Patch ownership remains declared in `vendor/vela/patches.json`. Keep TradingCoreOS's columnar history and retained scene patches, lazy native-indicator catalog, advanced drawing registries, pane persistence, canonical shared market-data plane, FYERS provider, India-market UX, and CoreSpirit output adapter.
+The upgrade uses a three-way merge from Vela 0.9.0: the old upstream source, the local TradingCoreOS version, and upstream 0.10.2. Patch ownership remains declared in `vendor/vela/patches.json`. Keep TradingCoreOS's columnar history and retained scene patches, lazy native-indicator catalog, advanced drawing registries, pane persistence, canonical shared market-data plane, FYERS provider, India-market UX, and CoreSpirit output adapter.
 
 Vela remains the chart-rendering owner. CoreSpirit owns language semantics and its output adapter; it does not implement a parallel renderer or bypass Vela's retained scene lifecycle. Market-data subscriptions, history readiness, and provider throttling remain owned by TradingCoreOS, not independent chart widgets.
 
@@ -37,7 +37,7 @@ Use a clean Vela checkout at the pinned commit:
 
 ```sh
 git clone https://github.com/LuxAlgo/Vela.git /tmp/vela-upstream
-git -C /tmp/vela-upstream checkout e77d22325e51c7a10edcc617e666ca1a5fd65e68
+git -C /tmp/vela-upstream checkout 305521811eabc35c3797e5b6ab58adb25e70c1c7
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --write
 node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --check
 ```
