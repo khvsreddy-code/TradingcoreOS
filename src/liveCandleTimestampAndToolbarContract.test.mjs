@@ -18,11 +18,15 @@ assert.match(provider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, '
 const nativeSidebar = terminal.match(/sidebar:\s*(\{[\s\S]*?\n\s{4}\}),\s*topbar:/)?.[1] ?? '';
 assert.ok(
   /sidebar:\s*true/.test(terminal) ||
-  ['tco.bookmarks', 'tco.research', 'tco.trading', 'tco.corespirit-code', 'tco.panels', 'objects', 'dataWindow', 'tco.account']
+  ['tco.bookmarks', 'tco.research', 'tco.corespirit-code', 'tco.panels', 'objects', 'dataWindow', 'tco.account']
     .every((panel) => nativeSidebar.includes(panel)),
   'TCO application navigation is exposed through Vela native right-sidebar composition',
 );
-assert.match(terminal, /right:\s*\[\s*'tco\.save-workspace',\s*'alerts'\s*\]/, 'keep the Vela chart topbar compact with Save and Alerts only; app panels are in the sidebar');
+assert.match(
+  terminal,
+  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts'\s*\]/,
+  'keep Workspace and Trade in the native Vela topbar beside Save and Alerts',
+);
 assert.doesNotMatch(terminal, /tco\.brand/, 'remove the redundant TRADINGCOREOS × VELA label');
 assert.doesNotMatch(terminal, /'panels'|tco\.profile|tco\.broker-connection|'screenshot'/, 'remove the unused icon-only toolbar cluster and extras');
 const topbar = terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '';
