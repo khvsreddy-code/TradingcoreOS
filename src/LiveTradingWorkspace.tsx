@@ -178,11 +178,11 @@ const browserRuntimeMetrics = useRef({
   const chartStatusDismissKey = `${localDayKey}|${chartStatus.symbol.toUpperCase()}|${chartStatus.timeframe}|${statusCategory}`;
   const headerTicker = chartStatus.symbol.includes(':') ? chartStatus.symbol.split(':').pop() || chartStatus.symbol : chartStatus.symbol;
   const headerExchange = chartStatus.symbol.includes(':') ? chartStatus.symbol.split(':')[0] : '';
-  const headerPrice = Number.isFinite(Number(headerQuote?.ltp))
+  const headerPrice = headerQuote?.ltp != null && Number.isFinite(Number(headerQuote.ltp))
     ? Number(headerQuote?.ltp).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '—';
-  const headerChange = Number.isFinite(Number(headerQuote?.change)) ? Number(headerQuote?.change) : undefined;
-  const headerChangePercent = Number.isFinite(Number(headerQuote?.changePercent)) ? Number(headerQuote?.changePercent) : undefined;
+  const headerChange = headerQuote?.change != null && Number.isFinite(Number(headerQuote.change)) ? Number(headerQuote?.change) : undefined;
+  const headerChangePercent = headerQuote?.changePercent != null && Number.isFinite(Number(headerQuote.changePercent)) ? Number(headerQuote?.changePercent) : undefined;
   const headerQuotePositive = (headerChange ?? headerChangePercent ?? 0) >= 0;
   const headerChangeLabel = headerChange === undefined
     ? '—'
