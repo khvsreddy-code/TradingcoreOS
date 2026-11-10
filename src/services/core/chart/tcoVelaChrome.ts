@@ -540,6 +540,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       font:16px/1 sans-serif!important;cursor:pointer!important;transition:opacity 100ms ease,background 100ms ease,color 100ms ease!important;
     }
     .tco-watchlist-row:hover .tco-watchlist-remove,.tco-watchlist-row:focus-within .tco-watchlist-remove { opacity:1; }
+    @media (hover:none) { .tco-watchlist-remove { opacity:1; } }
     .tco-watchlist-remove:hover { background:rgba(239,68,68,.1)!important;color:#ff7a86!important; }
     .tco-watchlist-resize { flex:0 0 8px!important;height:8px!important;margin:0!important; }
     .tco-watchlist-resize::after { width:34px!important;height:2px!important;background:#414650!important; }
