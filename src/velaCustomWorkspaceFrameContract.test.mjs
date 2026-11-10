@@ -30,8 +30,18 @@ assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact s
 assert.match(terminal, /sidebar:\s*\{/, 'application panels use Vela native right-sidebar navigation');
 assert.match(terminal, /'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the utility rail keeps daily panels and groups the rest in More panels');
 assert.match(chrome, /id:'tco\.workspace-frame'/, 'workspace customization remains available through the native More panels hub');
-assert.match(terminal, /right:\s*\[\s*'tco\.save-workspace',\s*'alerts'\s*\]/, 'the chart topbar avoids duplicate application-panel commands');
-assert.match(terminal, /bottombar:\s*false/, 'the terminal keeps its topbar-only command surface');
+assert.match(
+  terminal,
+  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts'\s*\]/,
+  'Workspace and Trade use Vela native topbar slots before Save and Alerts',
+);
+const sidebarActions = terminal.match(/sidebar:\s*(\{[\s\S]*?\n\s{4}\}),\s*topbar:/)?.[1] ?? '';
+assert.ok(
+  !sidebarActions.includes("'tco.workspace-frame'") && !sidebarActions.includes("'tco.trading'"),
+  'Workspace and Trade must not be duplicated in the right sidebar',
+);
+assert.match(terminal, /bottombar:\s*true/, 'the native Vela bottom bar provides range and timezone controls');
+assert.match(workspace, /opts\.bottombar !== false[\s\S]{0,120}new Bottombar/, 'the range and timezone controls are rendered by Vela, not an app-level duplicate');
 assert.ok(!terminal.includes("'tco.quant'"), 'Quant must stay out of the Vela topbar and use its right-sidebar action');
 const quantActionAt = chrome.indexOf('const quantAction: WidgetActionDescriptor');
 const indicatorActionAt = chrome.indexOf('const indicatorLibraryAction: WidgetActionDescriptor');
@@ -148,8 +158,7 @@ assert.match(liveWorkspace, /const context = workspace\.context\(\);[\s\S]{0,220
 assert.match(liveWorkspace, /workspace\.on\('cell:active'/, 'tab selection follows native Vela active-cell changes');
 assert.match(liveWorkspace, /openSymbolSearch\(\)/, 'the add-chart affordance opens Vela native symbol search');
 assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app chrome opens the existing Vela watchlist panel');
-assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
-assert.match(liveWorkspace, /absolute inset-x-0 bottom-\[27px\] top-9/, 'the Vela chart uses the full available width below the 36px Vela-style application header');
+assert.match(liveWorkspace, /absolute inset-x-0 bottom-0 top-9/, 'the Vela chart fills the area below the application header with no custom footer reserved');
 assert.match(liveWorkspace, /flex h-9 items-center gap-2 border-b border-\[#2a2b30\] bg-\[#151619\]/, 'the application header matches Vela’s compact charcoal chrome');
 assert.match(liveWorkspace, /tradingcoreos-logo\.svg/, 'the header uses the TradingCoreOS brand asset');
 assert.match(liveWorkspace, /getMarketSnapshot\(chartStatus\.symbol\)/, 'the header quote reads the active chart market snapshot');
