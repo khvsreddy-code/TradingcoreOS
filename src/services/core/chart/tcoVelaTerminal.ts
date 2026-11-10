@@ -121,6 +121,8 @@ export function createTcoVelaTerminalOptions(
       corespirit:()=>deps.createCoreSpiritEngine(),
     },
     indicators:deps.resolveIndicatorManifest,
+    // Use Vela's canonical grouped toolbar; velaWorkspaceLoader hydrates all advanced
+    // families first, so every flyout item has its real implementation on initial render.
     drawings:{ toolbar:true },
     drawingToolbar:true,
     indicatorPicker:true,
