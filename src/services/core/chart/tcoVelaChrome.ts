@@ -198,7 +198,7 @@ const JOURNAL_KEY = 'tradingcore:vela:journal:v1';
 function panelRoot(body: HTMLElement): HTMLDivElement {
   body.textContent = '';
   const root = document.createElement('div');
-  root.style.cssText = 'height:100%;display:flex;flex-direction:column;gap:8px;padding:10px;box-sizing:border-box;background:var(--vela-bg, #080b12);color:var(--vela-fg, #e5e7eb);font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;';
+  root.style.cssText = 'height:100%;min-height:0;display:flex;flex-direction:column;gap:8px;padding:10px;box-sizing:border-box;background:var(--vela-bg, #151619);color:var(--vela-fg, #d1d4dc);font-family:Inter,ui-sans-serif,system-ui,sans-serif;';
   body.appendChild(root);
   return root;
 }
@@ -416,6 +416,186 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-watch-metric { min-width:0;padding:8px 9px;border:1px solid var(--vela-border-soft);border-radius:7px;background:var(--vela-surface-sunken); }
     .tco-watch-metric-label { color:var(--vela-fg-muted);font-size:9px;margin-bottom:4px; }
     .tco-watch-metric-value { color:var(--vela-fg-bright);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere; }
+
+    /* Vela-native right rail: consistent hit targets, calm separators and a clear active-panel marker. */
+    .vela-sidebar {
+      width:46px!important;flex:0 0 46px!important;padding:8px 0!important;gap:12px!important;
+      background:linear-gradient(180deg,#17191d 0%,#141518 100%)!important;
+      border-inline-start:1px solid #292c33!important;color:#9298a4!important;
+    }
+    .vela-sidebar-section { gap:8px!important; }
+    .vela-sidebar-group { gap:3px!important; }
+    .vela-sidebar-sep { width:18px!important;margin:3px 0!important;background:#33363e!important; }
+    .vela-sidebar-btn {
+      width:34px!important;height:34px!important;border-radius:9px!important;font-size:17px!important;
+      color:#9298a4!important;transition:background 120ms ease,color 120ms ease,box-shadow 120ms ease!important;
+    }
+    .vela-sidebar-btn:hover { background:rgba(255,255,255,.065)!important;color:#eef1f6!important; }
+    .vela-sidebar-btn[data-active='1'] {
+      background:#242831!important;color:#f1f4f9!important;
+      box-shadow:inset 0 0 0 1px rgba(160,177,205,.14)!important;
+    }
+    .vela-sidebar-btn[data-active='1']::before {
+      content:"";position:absolute;inset-inline-end:-7px;top:50%;width:2px;height:17px;
+      border-radius:2px;background:#6296ee;transform:translateY(-50%);
+    }
+    .vela-sidebar-btn:focus-visible { outline:2px solid rgba(98,150,238,.72)!important;outline-offset:1px!important; }
+
+    .vela-panel { background:var(--vela-surface,#151619)!important;color:var(--vela-fg,#d1d4dc)!important; }
+    .vela-panel-header {
+      min-height:42px!important;padding:0 10px 0 14px!important;gap:8px!important;
+      background:#151619!important;border-bottom-color:#2a2d34!important;
+    }
+    .vela-panel-title { font-size:12px!important;font-weight:650!important;letter-spacing:.01em!important; }
+    .vela-panel-body { background:var(--vela-bg,#151619)!important; }
+
+    /* Watchlist layout: compact quote rows above a dedicated, independently resizable inspector. */
+    .tco-watchlist-panel {
+      min-height:0!important;padding:9px 10px 10px!important;gap:8px!important;
+      overflow:hidden!important;background:var(--vela-bg,#151619)!important;
+    }
+    .tco-watchlist-meta {
+      display:flex;align-items:center;min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      padding:0 2px;color:#858c98;font:700 9px/1.25 Inter,ui-sans-serif,system-ui,sans-serif;
+      letter-spacing:.09em;text-transform:uppercase;
+    }
+    .tco-watchlist-actions { display:flex!important;align-items:center!important;gap:8px!important;padding:0!important; }
+    .tco-watchlist-add {
+      min-height:30px!important;padding:0 10px!important;border-radius:7px!important;
+      border-color:#35558b!important;background:rgba(54,112,204,.12)!important;
+      color:#dce8ff!important;font:650 10px Inter,ui-sans-serif,system-ui,sans-serif!important;
+    }
+    .tco-watchlist-add:hover { background:rgba(54,112,204,.2)!important;border-color:#4c79bc!important; }
+    .tco-watchlist-search {
+      height:35px!important;padding:0 11px!important;border-radius:8px!important;
+      border-color:#2c3038!important;background:#101216!important;color:#e3e7ed!important;
+      font:11px Inter,ui-sans-serif,system-ui,sans-serif!important;
+    }
+    .tco-watchlist-search::placeholder { color:#777f8c!important; }
+    .tco-watchlist-search:focus { border-color:#527fbd!important;box-shadow:0 0 0 2px rgba(82,127,189,.14)!important; }
+    .tco-watchlist-filters {
+      display:flex!important;align-items:center!important;gap:4px!important;flex-wrap:nowrap!important;min-width:0;
+    }
+    .tco-watchlist-filters .tco-watch-filter {
+      padding:5px 8px!important;border-radius:6px!important;border-color:#2d3139!important;
+      background:#1a1d22!important;color:#a5abb5!important;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif!important;
+    }
+    .tco-watchlist-filters .tco-watch-filter[aria-pressed="true"] {
+      border-color:#4a6e9e!important;background:#202b3a!important;color:#e3edff!important;
+    }
+    .tco-watchlist-sort {
+      width:110px!important;max-width:110px!important;min-width:0!important;height:27px!important;
+      margin-inline-start:auto!important;padding:0 6px!important;border-radius:6px!important;
+      border-color:#2d3139!important;background:#171a1f!important;color:#b9bec8!important;font-size:9px!important;
+    }
+    .tco-watchlist-list {
+      flex:1 1 auto!important;min-height:90px!important;overflow:auto!important;gap:3px!important;
+      padding:1px 2px 6px 0!important;scrollbar-width:thin;scrollbar-color:#3a3e47 transparent;
+    }
+    .tco-watchlist-row {
+      position:relative;display:flex!important;align-items:center!important;gap:3px!important;
+      width:100%!important;min-height:51px!important;padding:2px 3px!important;box-sizing:border-box!important;
+      border:1px solid transparent!important;border-radius:8px!important;background:transparent!important;
+      transition:background 110ms ease,border-color 110ms ease!important;
+    }
+    .tco-watchlist-row:hover { background:#1c2026!important;border-color:#2d333d!important; }
+    .tco-watchlist-row[data-selected="1"] {
+      background:#1b222d!important;border-color:#34465f!important;
+      box-shadow:inset 2px 0 0 #6598e8!important;
+    }
+    .tco-watchlist-select {
+      display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;
+      flex:1 1 auto!important;min-width:0!important;min-height:45px!important;padding:6px 8px!important;
+      border:0!important;border-radius:6px!important;background:transparent!important;color:#e4e8ee!important;
+      font:inherit!important;text-align:left!important;cursor:pointer!important;
+    }
+    .tco-watchlist-select:hover { background:transparent!important; }
+    .tco-watchlist-instrument { min-width:0;display:flex;flex-direction:column;gap:3px; }
+    .tco-watchlist-ticker {
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf0f5;
+      font:700 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+    }
+    .tco-watchlist-instrument-name {
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#858d99;
+      font:400 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+    }
+    .tco-watchlist-price-block { position:relative;display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-end;gap:3px;padding-inline-end:9px; }
+    .tco-watchlist-last {
+      color:#e9edf3;font:700 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+      font-variant-numeric:tabular-nums;
+    }
+    .tco-watchlist-change {
+      color:#959daa;font:550 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+      font-variant-numeric:tabular-nums;white-space:nowrap;
+    }
+    .tco-watchlist-price-block::after {
+      content:"";position:absolute;inset-inline-end:0;top:4px;width:5px;height:5px;border-radius:50%;background:#68717e;
+    }
+    .tco-watchlist-row[data-quote-state="live"] .tco-watchlist-price-block::after { background:#16a887; }
+    .tco-watchlist-row[data-quote-state="delayed"] .tco-watchlist-price-block::after { background:#3aa9d1; }
+    .tco-watchlist-row[data-quote-state="stale"] .tco-watchlist-price-block::after { background:#d8a546; }
+    .tco-watchlist-remove {
+      flex:0 0 22px!important;width:22px!important;height:22px!important;padding:0!important;opacity:0;
+      border:0!important;border-radius:6px!important;background:transparent!important;color:#747d8b!important;
+      font:16px/1 sans-serif!important;cursor:pointer!important;transition:opacity 100ms ease,background 100ms ease,color 100ms ease!important;
+    }
+    .tco-watchlist-row:hover .tco-watchlist-remove,.tco-watchlist-row:focus-within .tco-watchlist-remove { opacity:1; }
+    .tco-watchlist-remove:hover { background:rgba(239,68,68,.1)!important;color:#ff7a86!important; }
+    .tco-watchlist-resize { flex:0 0 8px!important;height:8px!important;margin:0!important; }
+    .tco-watchlist-resize::after { width:34px!important;height:2px!important;background:#414650!important; }
+    .tco-watchlist-inspector {
+      flex:0 0 268px!important;min-height:210px!important;max-height:62%!important;overflow:auto!important;
+      padding:10px!important;border:1px solid #30353e!important;border-radius:10px!important;
+      background:linear-gradient(155deg,#1a1e25 0%,#15181e 100%)!important;
+      box-shadow:0 8px 20px rgba(0,0,0,.12);
+    }
+    .tco-watchlist-detail-head { display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:9px!important; }
+    .tco-watchlist-detail-title { color:#f0f3f8;font-size:13px!important;font-weight:750!important;line-height:1.25; }
+    .tco-watchlist-detail-subtitle { margin-top:3px!important;color:#8e97a5!important;font-size:9px!important;line-height:1.35; }
+    .tco-watchlist-live-badge {
+      flex:none;padding:3px 7px!important;border:1px solid #3b424d!important;border-radius:999px!important;
+      background:#20252d;color:#a9b2c0;font-size:8px!important;font-weight:800!important;letter-spacing:.07em;
+    }
+    .tco-watchlist-live-badge[data-quote-state="live"] { border-color:#1f6559!important;background:rgba(8,153,129,.12)!important;color:#5bd3b4!important; }
+    .tco-watchlist-live-badge[data-quote-state="delayed"] { border-color:#285c70!important;background:rgba(58,169,209,.11)!important;color:#75cde9!important; }
+    .tco-watchlist-live-badge[data-quote-state="stale"] { border-color:#6b552b!important;background:rgba(216,165,70,.1)!important;color:#e7bf6e!important; }
+    .tco-watchlist-metrics { display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important; }
+    .tco-watchlist-metric {
+      min-width:0;padding:7px 8px!important;border:1px solid #303640!important;border-radius:7px!important;
+      background:rgba(10,13,18,.42)!important;
+    }
+    .tco-watchlist-metric-label { margin-bottom:3px!important;color:#818b99!important;font-size:8px!important;letter-spacing:.02em; }
+    .tco-watchlist-metric-value { color:#e7ebf2!important;font-size:11px!important;font-weight:750!important; }
+    .tco-watchlist-detail-hint { margin-top:7px!important;color:#8490a0!important;font-size:9px!important;line-height:1.4; }
+    .tco-watchlist-section {
+      margin-top:8px!important;padding:8px!important;border:1px solid #2e343e!important;border-radius:8px!important;
+      background:rgba(10,13,18,.28)!important;
+    }
+    .tco-watchlist-section-label {
+      color:#8993a1!important;font-size:8px!important;font-weight:800!important;letter-spacing:.09em;
+    }
+    .tco-watchlist-technical-summary { margin-top:5px!important;font-size:10px!important;font-weight:750!important; }
+    .tco-watchlist-technical-values { margin-top:4px!important;font-size:9px!important;line-height:1.45!important;color:#9aa3b0!important; }
+    .tco-watchlist-news-heading { display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8px!important;font-weight:800;letter-spacing:.09em;color:#8993a1!important; }
+    .tco-watchlist-news-meta { font-size:8px!important;font-weight:500;letter-spacing:0; }
+    .tco-watchlist-news-list { display:flex;flex-direction:column;gap:6px;margin-top:6px; }
+    .tco-watchlist-news-list a { color:#dfe6f1!important;font-size:9px!important;line-height:1.35; }
+    .tco-watchlist-news-list a:hover { color:#8db7fa!important; }
+    .tco-watch-suggestion { min-height:36px;padding:8px 10px!important; }
+    .tco-watchlist-panel .tco-frame-help { font-size:9px!important;line-height:1.45!important; }
+
+    .tco-panel-hub { gap:10px!important; }
+    .tco-panel-hub-group { display:flex;flex-direction:column;gap:5px; }
+    .tco-panel-hub-heading { padding:2px 2px 4px;color:#8993a1;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase; }
+    .tco-panel-hub-item {
+      display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+      padding:10px 11px;border:1px solid #303640;border-radius:8px;background:#191d23;color:#e0e5ed;
+      font:600 11px Inter,ui-sans-serif,system-ui,sans-serif;text-align:left;cursor:pointer;
+      transition:background 120ms ease,border-color 120ms ease;
+    }
+    .tco-panel-hub-item:hover { background:#212833;border-color:#43536a; }
+    .tco-panel-hub-item span:last-child { color:#768293;font-size:9px;font-weight:500; }
+
     .tco-core-studio { min-height:0; }
     .tco-core-editor-frame { min-height:280px!important;flex:1 1 auto;border-color:var(--vela-border)!important;border-radius:9px!important;background:var(--vela-surface-sunken)!important; }
     .tco-core-editor-frame textarea { background:var(--vela-surface-sunken)!important; }
@@ -1119,29 +1299,29 @@ const quantPanel: SidePanelDescriptor = {
 };
 
 const bookmarksPanel: SidePanelDescriptor = {
-  id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 320, resizable: true, minWidth: 260, maxWidth: 460,
+  id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 348, resizable: true, minWidth: 300, maxWidth: 460,
   mount(ctx, body, header) {
     header.setTitle('Watchlist');
     const root = panelRoot(body);
-    root.classList.add('tco-frame-panel');
+    root.classList.add('tco-frame-panel', 'tco-watchlist-panel');
     root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
     const meta = document.createElement('div');
-    meta.style.cssText = 'font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);text-transform:uppercase;letter-spacing:.08em;';
+    meta.className = 'tco-watchlist-meta';
     root.appendChild(meta);
 
     const controls = document.createElement('div');
-    controls.style.cssText = 'display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:2px 0 6px;';
+    controls.className = 'tco-watchlist-actions';
     const addCurrent = document.createElement('button');
     addCurrent.type = 'button';
     addCurrent.textContent = '+ Add current';
     addCurrent.title = 'Add the active symbol to the watchlist';
-    addCurrent.className = 'tco-frame-button tco-frame-button-primary';
+    addCurrent.className = 'tco-frame-button tco-frame-button-primary tco-watchlist-add';
     addCurrent.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:7px 10px;background:var(--tco-frame-accent-soft,rgba(124,92,255,.10));color:var(--vela-fg-bright);font:650 11px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
     controls.append(addCurrent);
     root.appendChild(controls);
 
     const filterInput = document.createElement('input');
-    filterInput.className = 'tco-watch-search';
+    filterInput.className = 'tco-watch-search tco-watchlist-search';
     filterInput.type = 'search';
     filterInput.placeholder = 'Search symbols, indices, strikes, options…';
     filterInput.setAttribute('aria-label', 'Search instruments and filter watchlist');
@@ -1159,7 +1339,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     let filterMode: 'all' | 'gainers' | 'losers' = 'all';
     let sortMode: 'default' | 'symbol' | 'change' | 'price' = 'default';
     const filters = document.createElement('div');
-    filters.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;';
+    filters.className = 'tco-watchlist-filters';
     const filterButtons = new Map<string, HTMLButtonElement>();
     for (const [mode, label] of [['all', 'All'], ['gainers', 'Gainers'], ['losers', 'Losers']] as const) {
       const button = document.createElement('button');
@@ -1176,7 +1356,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       filters.appendChild(button);
     }
     const sort = document.createElement('select');
-    sort.className = 'tco-frame-select';
+    sort.className = 'tco-frame-select tco-watchlist-sort';
     sort.style.cssText = 'margin-left:auto;width:112px;max-width:112px;padding:5px 6px;font-size:10px;';
     sort.setAttribute('aria-label', 'Sort watchlist');
     for (const [value, label] of [['default', 'Custom order'], ['symbol', 'Symbol A–Z'], ['change', 'Day change'], ['price', 'Last price']] as const) {
@@ -1190,6 +1370,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     root.appendChild(filters);
 
     const rows = document.createElement('div');
+    rows.className = 'tco-watchlist-list';
     rows.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
     rows.style.flex = '1 1 auto';
     rows.style.minHeight = '72px';
@@ -1202,25 +1383,25 @@ const bookmarksPanel: SidePanelDescriptor = {
     resizeHandle.tabIndex = 0;
 
     const detailCard = document.createElement('section');
-    detailCard.className = 'tco-watch-detail';
+    detailCard.className = 'tco-watch-detail tco-watchlist-inspector';
     const detailHead = document.createElement('div');
-    detailHead.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;';
+    detailHead.className = 'tco-watchlist-detail-head';
     const detailTitleWrap = document.createElement('div');
     const detailTitle = document.createElement('div');
-    detailTitle.style.cssText = 'font-size:12px;font-weight:750;color:var(--vela-fg-bright);overflow-wrap:anywhere;';
+    detailTitle.className = 'tco-watchlist-detail-title';
     const detailSubtitle = document.createElement('div');
-    detailSubtitle.style.cssText = 'margin-top:4px;font-size:10px;color:var(--vela-fg-muted);';
+    detailSubtitle.className = 'tco-watchlist-detail-subtitle';
     detailTitleWrap.append(detailTitle, detailSubtitle);
     const liveBadge = document.createElement('span');
-    liveBadge.style.cssText = 'flex:none;padding:3px 6px;border:1px solid var(--vela-border);border-radius:5px;color:var(--vela-fg-muted);font-size:9px;font-weight:700;';
+    liveBadge.className = 'tco-watchlist-live-badge';
     liveBadge.textContent = 'MARKET';
     detailHead.append(detailTitleWrap, liveBadge);
     const metrics = document.createElement('div');
-    metrics.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;';
+    metrics.className = 'tco-watchlist-metrics';
     const metricRefs = new Map<string, HTMLSpanElement>();
     for (const [key, label] of [['ltp', 'Last price'], ['changeValue', 'Change'], ['changePercent', 'Change %'], ['high', 'Day high'], ['low', 'Day low']] as const) {
       const cell = document.createElement('div');
-      cell.className = 'tco-watch-metric';
+      cell.className = 'tco-watch-metric tco-watchlist-metric';
       const caption = document.createElement('div');
       caption.className = 'tco-watch-metric-label';
       caption.textContent = label;
@@ -1232,42 +1413,41 @@ const bookmarksPanel: SidePanelDescriptor = {
       metricRefs.set(key, value);
     }
     const detailHint = document.createElement('div');
-    detailHint.className = 'tco-frame-help';
-    detailHint.style.marginTop = '9px';
+    detailHint.className = 'tco-frame-help tco-watchlist-detail-hint';
     detailHint.textContent = 'Select a row to switch the chart to that instrument.';
     const technicalSection = document.createElement('section');
-    technicalSection.style.cssText = 'margin-top:10px;padding:9px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-elev,rgba(255,255,255,.02));';
+    technicalSection.className = 'tco-watchlist-section';
     const technicalTitle = document.createElement('div');
     technicalTitle.textContent = 'TECHNICALS';
-    technicalTitle.style.cssText = 'font-size:9px;font-weight:750;letter-spacing:.08em;color:var(--vela-fg-muted);';
+    technicalTitle.className = 'tco-watchlist-section-label';
     const technicalSummary = document.createElement('div');
-    technicalSummary.style.cssText = 'margin-top:6px;font-size:11px;font-weight:750;color:var(--vela-fg-bright);';
+    technicalSummary.className = 'tco-watchlist-technical-summary';
     const technicalValues = document.createElement('div');
-    technicalValues.style.cssText = 'margin-top:5px;font-size:10px;line-height:1.5;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
+    technicalValues.className = 'tco-watchlist-technical-values';
     technicalSection.append(technicalTitle, technicalSummary, technicalValues);
 
     const newsSection = document.createElement('section');
-    newsSection.style.cssText = 'margin-top:9px;padding:9px;border:1px solid var(--vela-border);border-radius:7px;';
+    newsSection.className = 'tco-watchlist-section';
     const newsHeading = document.createElement('div');
-    newsHeading.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;font-weight:750;letter-spacing:.08em;color:var(--vela-fg-muted);';
+    newsHeading.className = 'tco-watchlist-news-heading';
     const newsHeadingLabel = document.createElement('span');
     newsHeadingLabel.textContent = 'LATEST NEWS';
     const newsMeta = document.createElement('span');
-    newsMeta.style.cssText = 'font-size:9px;font-weight:500;letter-spacing:0;';
+    newsMeta.className = 'tco-watchlist-news-meta';
     newsHeading.append(newsHeadingLabel, newsMeta);
     const newsList = document.createElement('div');
-    newsList.style.cssText = 'display:flex;flex-direction:column;gap:7px;margin-top:7px;';
+    newsList.className = 'tco-watchlist-news-list';
     newsSection.append(newsHeading, newsList);
 
     detailCard.append(detailHead, metrics, detailHint, technicalSection, newsSection);
     root.append(rows, resizeHandle, detailCard);
-    const DETAIL_HEIGHT_KEY = 'tradingcore:vela:watchlist-detail-height:v1';
-    const clampDetailHeight = (height: number) => Math.max(150, Math.min(Math.round(body.clientHeight * 0.72), height));
-    let detailHeight = 320;
-    try { detailHeight = clampDetailHeight(Number(localStorage.getItem(DETAIL_HEIGHT_KEY)) || 320); } catch {}
+    const DETAIL_HEIGHT_KEY = 'tradingcore:vela:watchlist-detail-height:v2';
+    const clampDetailHeight = (height: number) => Math.max(210, Math.min(Math.round(body.clientHeight * 0.62), height));
+    let detailHeight = 268;
+    try { detailHeight = clampDetailHeight(Number(localStorage.getItem(DETAIL_HEIGHT_KEY)) || 268); } catch {}
     const applyDetailHeight = () => {
       detailCard.style.flex = `0 0 ${detailHeight}px`;
-      detailCard.style.maxHeight = '72%';
+      detailCard.style.maxHeight = '62%';
       resizeHandle.setAttribute('aria-valuenow', String(detailHeight));
     };
     applyDetailHeight();
@@ -1446,6 +1626,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       detailTitle.textContent = ticker || 'Active instrument';
       detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${(tradingCoreRuntime.getMarketSnapshot(current) as any)?.exchange || (tradingCoreRuntime.getMarketSnapshot(current) as any)?.venue || 'Active chart'}`;
       liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.source === 'yahoo' ? 'YAHOO DELAYED' : quote.stale ? 'STALE' : 'LIVE';
+      liveBadge.dataset.quoteState = ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
       liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'Stale quote' : 'Live quote');
       liveBadge.style.color = ltp === undefined ? 'var(--vela-fg-muted)' : quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : '#34d399';
       const setMetric = (key: string, value: string, tone?: string) => {
@@ -1552,6 +1733,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           || (filterMode === 'losers' && Number.isFinite(pct) && Number(pct) < 0);
         ref.row.hidden = !(matchesText && matchesFilter);
         const isSelected = item.symbol === current;
+        ref.row.dataset.selected = isSelected ? '1' : '';
         ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
         ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
         const absolute = quote.change;
@@ -1817,44 +1999,37 @@ const bookmarksPanel: SidePanelDescriptor = {
         let ref = rowRefs.get(item.symbol);
         if (!ref) {
           const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:4px;width:100%;border:1px solid transparent;border-radius:7px;padding:4px 5px;background:transparent;box-sizing:border-box;';
+          row.className = 'tco-watchlist-row';
 
           const button = document.createElement('button');
           button.type = 'button';
-          button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;border:0;border-radius:6px;padding:8px 7px;background:transparent;color:var(--vela-fg);font:inherit;text-align:left;cursor:pointer;';
+          button.className = 'tco-watchlist-select';
 
           const left = document.createElement('span');
-          left.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:2px;';
+          left.className = 'tco-watchlist-instrument';
           const label = document.createElement('span');
+          label.className = 'tco-watchlist-ticker';
           label.textContent = item.short;
-          label.style.cssText = 'font:700 12px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
           const detail = document.createElement('span');
+          detail.className = 'tco-watchlist-instrument-name';
           detail.textContent = item.label;
-          detail.style.cssText = 'font:400 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
           left.append(label, detail);
 
           const right = document.createElement('span');
-          right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
+          right.className = 'tco-watchlist-price-block';
           const value = document.createElement('span');
-          value.style.cssText = 'font:650 12px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-bright);font-variant-numeric:tabular-nums;';
+          value.className = 'tco-watchlist-last';
           const change = document.createElement('span');
-          change.style.cssText = 'font:500 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
+          change.className = 'tco-watchlist-change';
           right.append(value, change);
           button.append(left, right);
-
-          button.addEventListener('mouseenter', () => {
-            if (button.dataset.selected !== '1') button.style.background = 'rgba(255,255,255,.04)';
-          });
-          button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
           button.addEventListener('click', () => ctx.setSymbol(item.symbol));
 
           const remove = document.createElement('button');
           remove.type = 'button';
+          remove.className = 'tco-watchlist-remove';
           remove.textContent = '×';
           remove.title = `Remove ${item.short}`;
-          remove.style.cssText = 'width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:#475569;font:14px/1 sans-serif;cursor:pointer;';
-          remove.addEventListener('mouseenter', () => { remove.style.background = 'rgba(239,68,68,.08)'; remove.style.color = '#fb7185'; });
-          remove.addEventListener('mouseleave', () => { remove.style.background = 'transparent'; remove.style.color = '#475569'; });
           remove.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -1869,6 +2044,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         }
         rows.appendChild(ref.row);
         ref.button.dataset.selected = item.symbol === current ? '1' : '';
+        ref.row.dataset.selected = item.symbol === current ? '1' : '';
       }
 
       updateRows();
@@ -3093,6 +3269,62 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
+const panelsHubPanel: SidePanelDescriptor = {
+  id: 'tco.panels',
+  title: 'More panels',
+  icon: 'list',
+  order: 90,
+  width: 320,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 420,
+  mount(ctx, body, header) {
+    header.setTitle('More panels');
+    const root = panelRoot(body);
+    root.classList.add('tco-frame-panel', 'tco-panel-hub');
+    const groups = [
+      {
+        title: 'MARKET',
+        items: [
+          { id: 'tco.market-health', label: 'Market Health', detail: 'Provider status and data freshness' },
+          { id: 'tco.orderbook', label: 'Order Book', detail: 'Bid, ask and market depth' },
+          { id: 'tco.options', label: 'Options Chain', detail: 'Expiry, strikes and option metrics' },
+        ],
+      },
+      {
+        title: 'TRADE MANAGEMENT',
+        items: [
+          { id: 'tco.automation', label: 'Automation', detail: 'Rules and scheduled actions' },
+          { id: 'tco.risk', label: 'Risk', detail: 'Exposure and risk controls' },
+          { id: 'tco.journal', label: 'Journal', detail: 'Trades, notes and review' },
+        ],
+      },
+    ];
+    for (const group of groups) {
+      const section = document.createElement('section');
+      section.className = 'tco-panel-hub-group';
+      const heading = document.createElement('div');
+      heading.className = 'tco-panel-hub-heading';
+      heading.textContent = group.title;
+      section.appendChild(heading);
+      for (const item of group.items) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tco-panel-hub-item';
+        const label = document.createElement('span');
+        label.textContent = item.label;
+        const detail = document.createElement('span');
+        detail.textContent = item.detail;
+        button.append(label, detail);
+        button.addEventListener('click', () => ctx.togglePanel(item.id, true));
+        section.appendChild(button);
+      }
+      root.appendChild(section);
+    }
+    return {};
+  },
+};
+
 registerSidePanel(workspaceFramePanel);
 registerSidePanel(coreSpiritCodePanel);
 registerSidePanel(quantPanel);
@@ -3108,6 +3340,7 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
+registerSidePanel(panelsHubPanel);
 registerWidgetAttachment(tradeMarksAttachment);
 registerWidgetAttachment(newsMarksAttachment);
 registerWidgetAction(researchAction);
