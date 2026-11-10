@@ -967,7 +967,7 @@ const browserRuntimeMetrics = useRef({
       <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#121316] text-[#e5e7eb]">
         <header
           aria-label="TradingCoreOS workspace header"
-          className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#ffffff1a] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
+          className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#2a2b30] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
         >
           <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#ffffff1a] pe-3">
             <img
