@@ -932,7 +932,7 @@ const browserRuntimeMetrics = useRef({
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
       <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#050609] text-[#e5e7eb]">
-        <header className="absolute inset-x-0 top-0 z-[130] flex h-[34px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
+        <header aria-label="TradingCoreOS workspace and chart tabs" className="absolute inset-x-0 top-0 z-[130] flex h-[34px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
 
           <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#292b31] pr-3">
             <span className="grid h-[21px] w-[21px] place-items-center rounded-[6px] border border-[#3b3e48] bg-[#1b1d23] text-[#f0b75b]" aria-hidden="true">
