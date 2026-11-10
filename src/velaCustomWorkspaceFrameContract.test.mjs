@@ -7,6 +7,10 @@ const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const workspace = read('vendor/vela/src/workspace/VelaWorkspace.ts');
 const live = read('src/LiveTradingWorkspace.tsx');
 const journal = read('src/components/workspace/TerminalJournalPanel.tsx');
+const workspaceLoader = read('src/services/core/chart/velaWorkspaceLoader.ts');
+const drawingRegistry = read('vendor/vela/src/core/drawings/registry.ts');
+const drawingToolbar = read('vendor/vela/src/core/drawings/toolbar.ts');
+const sidebarComposition = read('vendor/vela/src/widget/sidebar-composition.ts');
 const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 const cell = read('vendor/vela/src/workspace/ChartCell.ts');
 const stateDocument = read('vendor/vela/src/state/document.ts');
@@ -158,5 +162,25 @@ assert.match(layoutPicker, /data-layout-glyphs/, 'asymmetric layout presets rend
 assert.match(workspace, /syncTime: msg\('workspace\.sync\.time', 'Time'\)/, 'Vela exposes the Time synchronization label');
 assert.match(workspace, /id: 'viewport', label: this\.t\(TEXT\.syncTime\)/, 'Time sync is connected to Vela visible-range synchronization');
 assert.match(workspace, /cellAreas: l\.cells\.map/, 'layout glyphs use the real Vela layout-area definitions');
+
+// Native Vela tools and dock presentation: load real drawing implementations before mounting.
+assert.match(workspaceLoader, /loadAdvancedDrawingCatalog\(\)/, 'the terminal preloads every advanced drawing implementation before Vela mounts');
+assert.match(drawingRegistry, /export async function loadAdvancedDrawingCatalog\(\)/, 'Vela exposes one complete drawing-catalog loader');
+assert.match(drawingRegistry, /ADVANCED_DRAWING_FAMILIES = Object.freeze\(\[/, 'all advanced drawing families are part of the native registry');
+for (const family of ['channels', 'fibonacci', 'patterns']) {
+  assert.ok(drawingRegistry.includes("'" + family + "'"), 'Vela drawing family ' + family + ' remains registered and loadable');
+}
+assert.match(drawingToolbar, /allDrawingTypeMetadata\(\)/, 'the native toolbar derives its complete catalog from registered drawing metadata');
+assert.match(terminal, /sidebar:\s*\{[\s\S]*'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the right rail uses an intentional grouped native sidebar composition');
+assert.match(chrome, /const panelsHubPanel: SidePanelDescriptor/, 'occasional panels have a native More panels hub');
+assert.match(chrome, /registerSidePanel\(panelsHubPanel\)/, 'the More panels hub is registered with Vela');
+for (const id of ['tco.market-health', 'tco.orderbook', 'tco.options', 'tco.automation', 'tco.risk', 'tco.journal']) {
+  assert.ok(chrome.includes("{ id: '" + id + "'"), 'More panels provides ' + id);
+}
+assert.match(chrome, /\.vela-sidebar-btn\[data-active='1'\]::before/, 'active right-rail panels have a clear Vela-style active marker');
+assert.match(chrome, /\.tco-watchlist-row \{[\s\S]*min-height:51px/, 'watchlist rows use the compact quote-row layout');
+assert.match(chrome, /\.tco-watchlist-inspector \{/, 'the watchlist has a separate compact instrument inspector');
+assert.match(chrome, /\.tco-watchlist-price-block::after/, 'watchlist quote provenance is indicated in each row');
+assert.match(chrome, /ref\.row\.dataset\.selected = isSelected \? '1' : ''/, 'the active watchlist row remains selected through full refreshes and tick updates');
 
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
