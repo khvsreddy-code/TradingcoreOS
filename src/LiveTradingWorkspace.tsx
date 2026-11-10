@@ -1055,41 +1055,9 @@ const browserRuntimeMetrics = useRef({
 
         <div
           ref={host}
-          className="absolute inset-x-0 bottom-[27px] top-9"
+          className="absolute inset-x-0 bottom-0 top-9"
           aria-label="TradingCoreOS Vela live trading chart"
         />
-        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#ffffff1a] bg-[#151619] px-3 text-[10px] text-[#a1a1a1]">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="hidden font-semibold tracking-[.08em] text-[#b5bac4] sm:inline">RANGE</span>
-            <span className="hidden text-[#555b65] sm:inline">/</span>
-            <div className="flex items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Chart visible-range presets">
-              {(['1D','1W','1M','3M','6M','YTD','1Y','ALL'] as const).map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  title={`Frame chart to ${preset}`}
-                  onClick={() => {
-                    try { workspaceRef.current?.chart.setVisibleRangePreset(preset); } catch { /* chart may still be mounting */ }
-                  }}
-                  className="rounded px-1.5 py-1 text-[#8e939d] transition-colors hover:bg-[#1c1d20] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#2962ff]"
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="ml-3 flex shrink-0 items-center gap-2">
-            <span className="hidden text-[#686e79] md:inline">
-              {headerExchange ? `${headerExchange} · ` : ''}{headerTicker} · {chartStatus.timeframe === 'D' ? '1D' : chartStatus.timeframe === 'W' ? '1W' : `${chartStatus.timeframe}m`}
-            </span>
-            {headerQuote?.source && (
-              <>
-                <span className="h-1 w-1 rounded-full bg-[#515762]" aria-hidden="true"/>
-                <span className="text-[9px] font-semibold tracking-[.06em] text-[#8a909b]">{headerQuote.source.toUpperCase()}</span>
-              </>
-            )}
-          </div>
-        </footer>
         {workspaceLoadState.phase !== 'ready' && (
           <div
             className="absolute inset-0 z-[110] flex items-center justify-center bg-[#050609] px-6"

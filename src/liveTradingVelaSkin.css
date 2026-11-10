@@ -5,10 +5,10 @@
  */
 
 .tco-live-surface {
-  --tco-terminal-bg: #121316;
-  --tco-terminal-panel: #151619;
-  --tco-terminal-raised: #1c1d20;
-  --tco-terminal-border: #292b31;
+  --tco-terminal-bg: #111317;
+  --tco-terminal-panel: #141517;
+  --tco-terminal-raised: #1b1d22;
+  --tco-terminal-border: #26292f;
   --tco-terminal-muted: #858b96;
   --tco-terminal-text: #d1d4dc;
   --tco-terminal-bright: #f4f5f7;
@@ -1266,13 +1266,13 @@
 
 /* Bottom-bar range/session controls and keyboard reference. */
 .tco-live-surface .vela-workspace .vela-widget-bottombar {
-  height: 27px !important;
-  min-height: 27px !important;
-  padding: 0 8px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 10px !important;
   border-top-color: #292f38 !important;
-  background: #15191f !important;
+  background: #141517 !important;
   color: #8d97a4 !important;
-  font-size: 9px !important;
+  font-size: 10px !important;
 }
 .tco-live-surface .vela-workspace .vela-bb-range,
 .tco-live-surface .vela-workspace .vela-bb-tz,

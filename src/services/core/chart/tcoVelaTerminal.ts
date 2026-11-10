@@ -101,12 +101,11 @@ export function createTcoVelaTerminalOptions(
     bars:2_000,
     timeframes:['1','3','5','10','15','30','45','60','120','240','D','W','M'],
     live:true,
-    // Match Vela's current production visual language: neutral charcoal canvas,
-    // restrained grid, standard Vela candle colors, and eased zoom/pan.
+    // Match Vela's near-black plotting surface while keeping UI chrome separate.
     theme:{
-      background:'#121316',
+      background:'#050505',
       textColor:'#a1a1a1',
-      gridColor:'#25272d',
+      gridColor:'#202226',
       borderColor:'#292b31',
       upColor:'#089981',
       downColor:'#f23645',
@@ -126,8 +125,8 @@ export function createTcoVelaTerminalOptions(
     drawings:{ toolbar:true },
     drawingToolbar:true,
     indicatorPicker:true,
-    // Keep TradingCoreOS application panels in Vela's native right sidebar. The chart
-    // topbar remains dedicated to market controls, indicator discovery, Save and Alerts.
+    // Keep TradingCoreOS application panels in Vela's native right sidebar. The
+    // topbar follows Vela's working-terminal composition, with no duplicate panel rail.
     sidebar:{
       // Daily-use panels first; advanced/occasional panels are collected in the native Panels hub.
       top:[
@@ -146,8 +145,8 @@ export function createTcoVelaTerminalOptions(
       ],
     },
     topbar:{
-      left:['symbol','timeframes','style','layout','indicators'],
-      right:['tco.save-workspace','alerts'],
+      left:['symbol','timeframes','style','layout','indicators','tco.replay','undo-redo'],
+      right:['tco.workspace-frame','tco.trading','tco.save-workspace','alerts'],
     },
     sync:{
       symbol:false,
@@ -160,7 +159,7 @@ export function createTcoVelaTerminalOptions(
     volume:true,
     watermark:true,
     statusline:true,
-    bottombar:false,
+    bottombar:true,
     autofocus:false,
     persist:'tradingcore-live-vela-v5',
     storage,

@@ -232,8 +232,8 @@ const appliedTcoVelaThemeSignatures = new WeakMap<object, string>();
 let pendingTcoChartThemeTimer: number | null = null;
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
-    uiBackground: '#121316', topbarBackground: '#151619', panelBackground: '#151619', chartBackground: '#121316',
-    chartTextColor: '#a1a1a1', gridColor: '#292b31', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
+    uiBackground: '#111317', topbarBackground: '#111317', panelBackground: '#141517', chartBackground: '#050505',
+    chartTextColor: '#a1a1a1', gridColor: '#202226', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
   } },
   { id: 'tradingview-dark', label: 'TradingView Dark', colors: {
     uiBackground: '#131722', topbarBackground: '#131722', panelBackground: '#171b26', chartBackground: '#131722',
@@ -269,12 +269,12 @@ const DEFAULT_FRAME_PREFERENCES: TcoFramePreferences = {
   sidebar: 'right',
   density: 'compact',
   themePreset: 'graphite',
-  uiBackground: '#121316',
-  topbarBackground: '#151619',
-  panelBackground: '#151619',
-  chartBackground: '#121316',
+  uiBackground: '#111317',
+  topbarBackground: '#111317',
+  panelBackground: '#141517',
+  chartBackground: '#050505',
   chartTextColor: '#a1a1a1',
-  gridColor: '#292b31',
+  gridColor: '#202226',
   accent: '#2962ff',
   upColor: '#089981',
   downColor: '#f23645',
@@ -303,25 +303,36 @@ function normalizeTcoFramePreferences(value: unknown): TcoFramePreferences {
     ? value as Partial<TcoFramePreferences> & { accent?: string }
     : {};
   const legacyAccent: Record<string, string> = { violet: '#8b7cff', teal: '#14b8a6', blue: '#60a5fa', amber: '#f59e0b' };
-  const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === raw.themePreset) ? String(raw.themePreset) : 'custom';
-  const topbarRaw = raw.topbar && typeof raw.topbar === 'object' ? raw.topbar : {};
+  // Migrate only the untouched v1 Graphite defaults. Explicit user color edits and
+  // other saved theme presets remain intact.
+  const legacyGraphiteDefaults = raw.themePreset === 'graphite'
+    && raw.uiBackground === '#121316'
+    && raw.topbarBackground === '#151619'
+    && raw.panelBackground === '#151619'
+    && raw.chartBackground === '#121316'
+    && raw.gridColor === '#292b31';
+  const normalizedRaw = legacyGraphiteDefaults
+    ? { ...raw, uiBackground: '#111317', topbarBackground: '#111317', panelBackground: '#141517', chartBackground: '#050505', chartTextColor: '#a1a1a1', gridColor: '#202226' }
+    : raw;
+  const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === normalizedRaw.themePreset) ? String(normalizedRaw.themePreset) : 'custom';
+  const topbarRaw = normalizedRaw.topbar && typeof normalizedRaw.topbar === 'object' ? normalizedRaw.topbar : {};
   return {
     ...DEFAULT_FRAME_PREFERENCES,
     sidebar: raw.sidebar === 'left' ? 'left' : 'right',
     density: raw.density === 'compact' ? 'compact' : 'comfortable',
     themePreset,
-    uiBackground: safeFrameColor(raw.uiBackground, DEFAULT_FRAME_PREFERENCES.uiBackground),
-    topbarBackground: safeFrameColor(raw.topbarBackground, DEFAULT_FRAME_PREFERENCES.topbarBackground),
-    panelBackground: safeFrameColor(raw.panelBackground, DEFAULT_FRAME_PREFERENCES.panelBackground),
-    chartBackground: safeFrameColor(raw.chartBackground, DEFAULT_FRAME_PREFERENCES.chartBackground),
-    chartTextColor: safeFrameColor(raw.chartTextColor, DEFAULT_FRAME_PREFERENCES.chartTextColor),
-    gridColor: safeFrameColor(raw.gridColor, DEFAULT_FRAME_PREFERENCES.gridColor),
-    accent: safeFrameColor(raw.accent && raw.accent in legacyAccent ? legacyAccent[raw.accent] : raw.accent, DEFAULT_FRAME_PREFERENCES.accent),
-    upColor: safeFrameColor(raw.upColor, DEFAULT_FRAME_PREFERENCES.upColor),
-    downColor: safeFrameColor(raw.downColor, DEFAULT_FRAME_PREFERENCES.downColor),
-    chartBackgroundMode: raw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
-    chartBackgroundEnd: safeFrameColor(raw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
-    chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(raw.chartGradientAngle)) ? Number(raw.chartGradientAngle) : 135))),
+    uiBackground: safeFrameColor(normalizedRaw.uiBackground, DEFAULT_FRAME_PREFERENCES.uiBackground),
+    topbarBackground: safeFrameColor(normalizedRaw.topbarBackground, DEFAULT_FRAME_PREFERENCES.topbarBackground),
+    panelBackground: safeFrameColor(normalizedRaw.panelBackground, DEFAULT_FRAME_PREFERENCES.panelBackground),
+    chartBackground: safeFrameColor(normalizedRaw.chartBackground, DEFAULT_FRAME_PREFERENCES.chartBackground),
+    chartTextColor: safeFrameColor(normalizedRaw.chartTextColor, DEFAULT_FRAME_PREFERENCES.chartTextColor),
+    gridColor: safeFrameColor(normalizedRaw.gridColor, DEFAULT_FRAME_PREFERENCES.gridColor),
+    accent: safeFrameColor(normalizedRaw.accent && normalizedRaw.accent in legacyAccent ? legacyAccent[normalizedRaw.accent] : normalizedRaw.accent, DEFAULT_FRAME_PREFERENCES.accent),
+    upColor: safeFrameColor(normalizedRaw.upColor, DEFAULT_FRAME_PREFERENCES.upColor),
+    downColor: safeFrameColor(normalizedRaw.downColor, DEFAULT_FRAME_PREFERENCES.downColor),
+    chartBackgroundMode: normalizedRaw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
+    chartBackgroundEnd: safeFrameColor(normalizedRaw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
+    chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(normalizedRaw.chartGradientAngle)) ? Number(normalizedRaw.chartGradientAngle) : 135))),
     topbar: Object.fromEntries(Object.keys(DEFAULT_FRAME_PREFERENCES.topbar).map((key) => [key, (topbarRaw as Record<string, unknown>)[key] !== false])) as Record<string, boolean>,
   };
 }
@@ -3385,6 +3396,18 @@ const tradingAction:WidgetActionDescriptor={
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
+const replayAction: WidgetActionDescriptor = {
+  id: 'tco.replay',
+  target: 'topbar',
+  label: 'Replay',
+  icon: 'replay',
+  iconOnly: false,
+  align: 'left',
+  order: 10,
+  mobile: 'bar',
+  run(ctx) { ctx.togglePanel('tco.replay', true); },
+};
+
 const positionsAction: WidgetActionDescriptor = {
   id: 'tco.positions',
   target: 'topbar',
@@ -3535,6 +3558,7 @@ registerWidgetAttachment(newsMarksAttachment);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
+registerWidgetAction(replayAction);
 registerWidgetAction(positionsAction);
 registerWidgetAction(workspaceFrameAction);
 registerWidgetAction(saveWorkspaceAction);
