@@ -967,7 +967,7 @@ const browserRuntimeMetrics = useRef({
       <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#121316] text-[#e5e7eb]">
         <header
           aria-label="TradingCoreOS workspace header"
-          className="absolute inset-x-0 top-0 z-[130] flex h-[38px] items-center gap-2 border-b border-[#ffffff1a] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
+          className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#ffffff1a] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
         >
           <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#ffffff1a] pe-3">
             <img
@@ -1054,10 +1054,10 @@ const browserRuntimeMetrics = useRef({
 
         <div
           ref={host}
-          className="absolute inset-x-0 bottom-[26px] top-[38px]"
+          className="absolute inset-x-0 bottom-[27px] top-9"
           aria-label="TradingCoreOS Vela live trading chart"
         />
-        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[26px] items-center justify-between border-t border-[#ffffff1a] bg-[#151619] px-3 text-[10px] text-[#a1a1a1]">
+        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#ffffff1a] bg-[#151619] px-3 text-[10px] text-[#a1a1a1]">
           <div className="flex min-w-0 items-center gap-2">
             <span className="hidden font-semibold tracking-[.08em] text-[#b5bac4] sm:inline">RANGE</span>
             <span className="hidden text-[#555b65] sm:inline">/</span>
