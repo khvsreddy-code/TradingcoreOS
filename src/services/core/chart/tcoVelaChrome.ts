@@ -607,6 +607,102 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .vela-widget-topbar [data-action-id="tco.save-workspace"][data-tco-save-state="local"]::after { background:#f59e0b; }
     .vela-widget-topbar [data-action-id="tco.save-workspace"][data-tco-save-state="error"]::after { background:#ef4444; }
     @keyframes tco-save-pulse { from { opacity:.35; } to { opacity:1; } }
+
+    /* Final Vela chrome pass: quieter utility rail and a cleaner, denser watchlist. */
+    .vela-sidebar {
+      width:42px!important;flex:0 0 42px!important;padding:9px 0!important;gap:10px!important;
+      background:#141518!important;border-inline-start:1px solid #272a30!important;
+    }
+    .vela-sidebar-section { gap:6px!important; }
+    .vela-sidebar-group { gap:3px!important; }
+    .vela-sidebar-sep { width:17px!important;margin:2px 0!important;background:#30333a!important; }
+    .vela-sidebar-btn {
+      width:30px!important;height:30px!important;border-radius:8px!important;font-size:16px!important;
+      color:#8d939e!important;
+    }
+    .vela-sidebar-btn:hover { background:#202329!important;color:#e7eaf0!important; }
+    .vela-sidebar-btn[data-active='1'] {
+      background:#202630!important;color:#dce8ff!important;
+      box-shadow:inset 0 0 0 1px rgba(120,157,213,.18)!important;
+    }
+    .vela-sidebar-btn[data-active='1']::before {
+      inset-inline-end:-6px!important;width:2px!important;height:16px!important;background:#6b9ce8!important;
+    }
+    .vela-panel { background:#111317!important; }
+    .vela-panel-header {
+      min-height:40px!important;padding:0 10px 0 13px!important;
+      background:#151619!important;border-bottom:1px solid #282b31!important;
+    }
+    .vela-panel-body { background:#111317!important; }
+    .tco-watchlist-panel {
+      padding:10px 11px 9px!important;gap:8px!important;background:#111317!important;
+    }
+    .tco-watchlist-meta {
+      min-height:12px!important;padding:0 1px!important;color:#7f8793!important;
+      font-size:8px!important;letter-spacing:.075em!important;
+    }
+    .tco-watchlist-add {
+      min-height:27px!important;padding:0 9px!important;border-radius:6px!important;
+      font-size:9px!important;background:#1b2737!important;border-color:#385b89!important;
+    }
+    .tco-watchlist-search {
+      height:33px!important;padding:0 10px!important;border-radius:7px!important;
+      background:#0e1014!important;border-color:#292d35!important;font-size:10px!important;
+    }
+    .tco-watchlist-filters { gap:5px!important; }
+    .tco-watchlist-filters .tco-watch-filter {
+      padding:5px 8px!important;border-radius:5px!important;background:#171a1f!important;
+      border-color:#292d35!important;font-size:9px!important;
+    }
+    .tco-watchlist-filters .tco-watch-filter[aria-pressed="true"] {
+      background:#202a38!important;border-color:#46658e!important;color:#e0eaff!important;
+    }
+    .tco-watchlist-sort {
+      height:26px!important;width:104px!important;max-width:104px!important;
+      background:#15181d!important;border-color:#292d35!important;font-size:8px!important;
+    }
+    .tco-watchlist-list {
+      gap:1px!important;padding:0 1px 5px 0!important;
+      scrollbar-color:#343942 transparent!important;
+    }
+    .tco-watchlist-row {
+      min-height:45px!important;padding:1px 2px!important;border-radius:6px!important;
+      border-bottom:1px solid rgba(255,255,255,.045)!important;
+    }
+    .tco-watchlist-row:hover { background:#191d23!important;border-color:#2a3039!important; }
+    .tco-watchlist-row[data-selected="1"] {
+      background:#1b222b!important;border-color:#33465e!important;
+      box-shadow:inset 2px 0 0 #6b9ce8!important;
+    }
+    .tco-watchlist-select { min-height:41px!important;padding:5px 7px!important; }
+    .tco-watchlist-instrument { gap:2px!important; }
+    .tco-watchlist-ticker { font-size:10px!important;font-weight:700!important; }
+    .tco-watchlist-instrument-name { font-size:8px!important;color:#7f8793!important; }
+    .tco-watchlist-price-block { gap:2px!important;padding-inline-end:8px!important; }
+    .tco-watchlist-last { font-size:10px!important; }
+    .tco-watchlist-change { font-size:8px!important; }
+    .tco-watchlist-remove { flex-basis:20px!important;width:20px!important;height:20px!important; }
+    .tco-watchlist-resize { flex-basis:6px!important;height:6px!important;margin:0!important; }
+    .tco-watchlist-inspector {
+      flex:0 0 228px!important;min-height:185px!important;max-height:52%!important;
+      padding:9px!important;border-radius:8px!important;border-color:#292e36!important;
+      background:#171a20!important;box-shadow:none!important;
+    }
+    .tco-watchlist-detail-head { margin-bottom:7px!important; }
+    .tco-watchlist-detail-title { font-size:12px!important; }
+    .tco-watchlist-detail-subtitle { font-size:8px!important; }
+    .tco-watchlist-metrics { gap:4px!important; }
+    .tco-watchlist-metric { padding:6px 7px!important;border-radius:6px!important;background:#111419!important; }
+    .tco-watchlist-metric-label { font-size:8px!important;margin-bottom:2px!important; }
+    .tco-watchlist-metric-value { font-size:10px!important; }
+    .tco-watchlist-detail-hint { display:none!important; }
+    .tco-watchlist-section { margin-top:6px!important;padding:7px!important;border-radius:6px!important;background:#13161b!important; }
+    .tco-watchlist-section-label,.tco-watchlist-news-heading { font-size:8px!important; }
+    .tco-watchlist-technical-summary { margin-top:3px!important;font-size:9px!important; }
+    .tco-watchlist-technical-values { margin-top:3px!important;font-size:8px!important; }
+    .tco-watchlist-news-list { gap:5px!important;margin-top:5px!important; }
+    .tco-watchlist-news-list a { font-size:8px!important;line-height:1.35!important; }
+    .tco-watch-suggestion { min-height:33px!important;padding:7px 9px!important; }
     `;
     style.dataset.tcoInstalled='1';
   }
@@ -1300,7 +1396,7 @@ const quantPanel: SidePanelDescriptor = {
 };
 
 const bookmarksPanel: SidePanelDescriptor = {
-  id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 348, resizable: true, minWidth: 300, maxWidth: 460,
+  id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 360, resizable: true, minWidth: 310, maxWidth: 480,
   mount(ctx, body, header) {
     header.setTitle('Watchlist');
     const root = panelRoot(body);
@@ -1443,12 +1539,12 @@ const bookmarksPanel: SidePanelDescriptor = {
     detailCard.append(detailHead, metrics, detailHint, technicalSection, newsSection);
     root.append(rows, resizeHandle, detailCard);
     const DETAIL_HEIGHT_KEY = 'tradingcore:vela:watchlist-detail-height:v2';
-    const clampDetailHeight = (height: number) => Math.max(210, Math.min(Math.round(body.clientHeight * 0.62), height));
-    let detailHeight = 268;
-    try { detailHeight = clampDetailHeight(Number(localStorage.getItem(DETAIL_HEIGHT_KEY)) || 268); } catch {}
+    const clampDetailHeight = (height: number) => Math.max(185, Math.min(Math.round(body.clientHeight * 0.52), height));
+    let detailHeight = 228;
+    try { detailHeight = clampDetailHeight(Number(localStorage.getItem(DETAIL_HEIGHT_KEY)) || 228); } catch {}
     const applyDetailHeight = () => {
       detailCard.style.flex = `0 0 ${detailHeight}px`;
-      detailCard.style.maxHeight = '62%';
+      detailCard.style.maxHeight = '52%';
       resizeHandle.setAttribute('aria-valuenow', String(detailHeight));
     };
     applyDetailHeight();
