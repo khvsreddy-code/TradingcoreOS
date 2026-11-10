@@ -1,9 +1,8 @@
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
 import type { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
-import { registerLayout } from '../../../../vendor/vela/src/workspace/layouts';
 
-const TCO_VELA_LAYOUT_PRESETS = [
+export const TCO_VELA_LAYOUT_PRESETS = [
   {
     id: 'big-left-2',
     label: 'Big left, 2 right',
@@ -54,11 +53,6 @@ const TCO_VELA_LAYOUT_PRESETS = [
   },
 ];
 
-/** Match Vela's asymmetric multi-chart presets while keeping all cells Vela-native. */
-function registerTcoVelaLayoutPresets(): void {
-  for (const preset of TCO_VELA_LAYOUT_PRESETS) registerLayout(preset);
-}
-
 export type TcoVelaTerminalDependencies = {
   symbol:string;
   timeframe:string;
@@ -98,8 +92,6 @@ export function createTcoVelaTerminalOptions(
   deps:TcoVelaTerminalDependencies,
 ): VelaWorkspaceOptions {
   const { symbol, timeframe, layout, storage } = deps;
-
-  registerTcoVelaLayoutPresets();
 
   return {
     layout,
