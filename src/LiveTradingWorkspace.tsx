@@ -1,6 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
+import { loadVelaWorkspace, registerVelaWorkspaceLayouts } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
@@ -12,7 +12,7 @@ import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persis
 import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaActiveWorkspaceId, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
-import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
+import { createTcoVelaTerminalOptions, TCO_VELA_LAYOUT_PRESETS } from './services/core/chart/tcoVelaTerminal';
 import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact';
 import type { IndicatorHandle } from './services/core/chart/velaNativeChartKernel';
 import { stageCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff';
@@ -244,6 +244,10 @@ const browserRuntimeMetrics = useRef({
         : tradingCoreRuntime.restoreBrokerConnections().catch(() => undefined);
       const defaultsPromise = loadTcoVelaDefaults();
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
+      if (cancelled || !host.current) return;
+      // Register custom layouts only after loading Vela's runtime module so the picker
+      // and the host write to the same registry instance in production code splitting.
+      await registerVelaWorkspaceLayouts(TCO_VELA_LAYOUT_PRESETS);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
       const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '1');
