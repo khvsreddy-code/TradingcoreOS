@@ -1771,6 +1771,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (!ref) continue;
         ref.row.hidden = !visible.has(item.symbol);
         const isSelected = item.symbol === current;
+        ref.row.dataset.selected = isSelected ? '1' : '';
         ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
         ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
         const quote = quoteView(item.symbol);
