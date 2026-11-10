@@ -140,11 +140,13 @@ assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app ch
 assert.match(liveWorkspace, /togglePanel\('dataWindow', true\)/, 'the app chrome opens Vela Data Window');
 assert.match(liveWorkspace, /togglePanel\('objects', true\)/, 'the app chrome opens Vela Objects Tree');
 assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
-assert.match(liveWorkspace, /bottom-\[27px\] top-\[34px\]/, 'Vela chart surface reserves space for the native-style app header and range dock');
+assert.match(liveWorkspace, /bottom-\[27px\].*top-\[38px\]/, 'Vela chart surface reserves space for the reference-height app header, navigation rail and range dock');
+assert.match(liveWorkspace, /left-\[48px\] right-0 top-\[38px\]/, 'the native chart starts beside the application navigation rail');
 
 // Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
 const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
-assert.match(terminal, /registerTcoVelaLayoutPresets/, 'TradingCoreOS registers its native asymmetric workspace presets');
+assert.match(terminal, /export const TCO_VELA_LAYOUT_PRESETS/, 'TradingCoreOS declares its native asymmetric workspace presets');
+assert.match(liveWorkspace, /registerVelaWorkspaceLayouts\(TCO_VELA_LAYOUT_PRESETS\)/, 'host presets register against the dynamically loaded Vela runtime registry');
 for (const id of ['big-left-2', 'big-left-3', 'big-right-2', 'big-top-2', 'big-top-3', 'big-bottom-2']) {
   assert.ok(terminal.includes(id), `workspace preset ${id} is registered`);
 }
