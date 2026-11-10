@@ -451,8 +451,8 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
 
     /* Watchlist layout: compact quote rows above a dedicated, independently resizable inspector. */
     .tco-watchlist-panel {
-      min-height:0!important;padding:9px 10px 10px!important;gap:8px!important;
-      overflow:hidden!important;background:var(--vela-bg,#151619)!important;
+      min-height:0!important;padding:10px 11px 11px!important;gap:7px!important;
+      overflow:hidden!important;background:#141518!important;
     }
     .tco-watchlist-meta {
       display:flex;align-items:center;min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -467,7 +467,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     }
     .tco-watchlist-add:hover { background:rgba(54,112,204,.2)!important;border-color:#4c79bc!important; }
     .tco-watchlist-search {
-      height:35px!important;padding:0 11px!important;border-radius:8px!important;
+      height:33px!important;padding:0 11px!important;border-radius:7px!important;
       border-color:#2c3038!important;background:#101216!important;color:#e3e7ed!important;
       font:11px Inter,ui-sans-serif,system-ui,sans-serif!important;
     }
@@ -494,7 +494,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     }
     .tco-watchlist-row {
       position:relative;display:flex!important;align-items:center!important;gap:3px!important;
-      width:100%!important;min-height:51px!important;padding:2px 3px!important;box-sizing:border-box!important;
+      width:100%!important;min-height:48px!important;padding:1px 3px!important;box-sizing:border-box!important;
       border:1px solid transparent!important;border-radius:8px!important;background:transparent!important;
       transition:background 110ms ease,border-color 110ms ease!important;
     }
@@ -545,7 +545,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-watchlist-resize { flex:0 0 8px!important;height:8px!important;margin:0!important; }
     .tco-watchlist-resize::after { width:34px!important;height:2px!important;background:#414650!important; }
     .tco-watchlist-inspector {
-      flex:0 0 268px!important;min-height:210px!important;max-height:62%!important;overflow:auto!important;
+      flex:0 0 220px!important;min-height:170px!important;max-height:46%!important;overflow:auto!important;
       padding:10px!important;border:1px solid #30353e!important;border-radius:10px!important;
       background:linear-gradient(155deg,#1a1e25 0%,#15181e 100%)!important;
       box-shadow:0 8px 20px rgba(0,0,0,.12);
@@ -3299,6 +3299,16 @@ const panelsHubPanel: SidePanelDescriptor = {
           { id: 'tco.automation', label: 'Automation', detail: 'Rules and scheduled actions' },
           { id: 'tco.risk', label: 'Risk', detail: 'Exposure and risk controls' },
           { id: 'tco.journal', label: 'Journal', detail: 'Trades, notes and review' },
+          { id: 'tco.positions', label: 'Positions', detail: 'Open positions and P&L' },
+        ],
+      },
+      {
+        title: 'ANALYSIS & WORKSPACE',
+        items: [
+          { id: 'tco.replay', label: 'Replay', detail: 'Historical chart replay' },
+          { id: 'tco.quant', label: 'Quant', detail: 'CoreSpirit research and analysis' },
+          { id: 'tco.corespirit-code', label: 'CoreSpirit Editor', detail: 'Create and run chart scripts' },
+          { id: 'tco.workspace-frame', label: 'Workspace', detail: 'Layouts, appearance and saved setups' },
         ],
       },
     ];
