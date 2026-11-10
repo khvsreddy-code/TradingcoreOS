@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { X, Activity, ChevronDown } from 'lucide-react';
+import { X, UserRound, Plus } from 'lucide-react';
 import { loadVelaWorkspace, registerVelaWorkspaceLayouts } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -15,6 +15,7 @@ import { chartPerformanceTelemetry } from './services/marketData/chartPerformanc
 import { createTcoVelaTerminalOptions, TCO_VELA_LAYOUT_PRESETS } from './services/core/chart/tcoVelaTerminal';
 import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact';
 import type { IndicatorHandle } from './services/core/chart/velaNativeChartKernel';
+import type { NormalizedMarketTick } from './types/market';
 import { stageCoreSpiritPrecompiledArtifact } from './services/coreSpirit/precompiledArtifactHandoff';
 import {
   coreSpiritLifecycleDiagnostic, coreSpiritLifecycleStageForError, publishCoreSpiritLifecycle,
@@ -148,6 +149,7 @@ const browserRuntimeMetrics = useRef({
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
   const [velaAppTabs, setVelaAppTabs] = useState<VelaAppTab[]>([]);
   const [activeVelaAppTabId, setActiveVelaAppTabId] = useState('');
+  const [headerQuote, setHeaderQuote] = useState<NormalizedMarketTick | null>(null);
   const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>({ phase: 'loading' });
   const [workspaceMountAttempt, setWorkspaceMountAttempt] = useState(0);
   const [chartStatus, setChartStatus] = useState<ChartStatusView>({
@@ -174,6 +176,25 @@ const browserRuntimeMetrics = useRef({
   // category + instrument + interval, not the dynamic detail string or transient phase.
   // Persist it across status refreshes and reloads; a new day/instrument/interval can notify again.
   const chartStatusDismissKey = `${localDayKey}|${chartStatus.symbol.toUpperCase()}|${chartStatus.timeframe}|${statusCategory}`;
+  const headerTicker = chartStatus.symbol.includes(':') ? chartStatus.symbol.split(':').pop() || chartStatus.symbol : chartStatus.symbol;
+  const headerExchange = chartStatus.symbol.includes(':') ? chartStatus.symbol.split(':')[0] : '';
+  const headerPrice = Number.isFinite(Number(headerQuote?.ltp))
+    ? Number(headerQuote?.ltp).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+  const headerChange = Number.isFinite(Number(headerQuote?.change)) ? Number(headerQuote?.change) : undefined;
+  const headerChangePercent = Number.isFinite(Number(headerQuote?.changePercent)) ? Number(headerQuote?.changePercent) : undefined;
+  const headerQuotePositive = (headerChange ?? headerChangePercent ?? 0) >= 0;
+  const headerChangeLabel = headerChange === undefined
+    ? '—'
+    : `${headerChange > 0 ? '+' : ''}${headerChange.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const headerChangePercentLabel = headerChangePercent === undefined
+    ? '—'
+    : `${headerChangePercent > 0 ? '+' : ''}${headerChangePercent.toFixed(2)}%`;
+  const headerQuoteTimestamp = headerQuote?.receivedAtEpoch
+    ? (headerQuote.receivedAtEpoch > 1e12 ? headerQuote.receivedAtEpoch : headerQuote.receivedAtEpoch * 1000)
+    : headerQuote?.receivedAt ? Date.parse(headerQuote.receivedAt) : 0;
+  const headerQuoteFresh = Boolean(headerQuoteTimestamp && Date.now() - headerQuoteTimestamp <= 15_000);
+
   useEffect(() => {
     if (!host.current) return;
 
@@ -775,6 +796,18 @@ const browserRuntimeMetrics = useRef({
 
 
   useEffect(() => {
+    // Read the quote already being maintained by the active chart's market-data path.
+    // This is a presentation-only projection: it creates no extra broker subscription.
+    const refreshHeaderQuote = () => {
+      const next = tradingCoreRuntime.getMarketSnapshot(chartStatus.symbol) ?? null;
+      setHeaderQuote((previous) => previous === next ? previous : next);
+    };
+    refreshHeaderQuote();
+    const timer = window.setInterval(refreshHeaderQuote, 1000);
+    return () => window.clearInterval(timer);
+  }, [chartStatus.symbol]);
+
+  useEffect(() => {
     const refreshStatusAge = () => {
       const snapshot = chartStatusSnapshotRef.current;
       if (!snapshot) return;
@@ -932,100 +965,101 @@ const browserRuntimeMetrics = useRef({
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
       <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#050609] text-[#e5e7eb]">
-        <header aria-label="TradingCoreOS workspace and chart tabs" className="absolute inset-x-0 top-0 z-[130] flex h-[34px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
-
-          <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#292b31] pr-3">
-            <span className="grid h-[21px] w-[21px] place-items-center rounded-[6px] border border-[#3b3e48] bg-[#1b1d23] text-[#f0b75b]" aria-hidden="true">
-              <svg viewBox="0 0 20 20" className="h-[15px] w-[15px]" fill="none">
-                <path d="M10 1.8 12.3 6.1 17.1 7.2 13.8 10.9 14.4 15.8 10 13.7 5.6 15.8 6.2 10.9 2.9 7.2 7.7 6.1 10 1.8Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"/>
-                <circle cx="10" cy="9.4" r="2" fill="currentColor"/>
-              </svg>
-            </span>
-            <span className="hidden font-semibold tracking-[.03em] text-[#e8e9ed] sm:inline">TradingCoreOS</span>
-            <span className="text-[#666b75]">/</span>
-            <span className="font-semibold text-[#d6d8de]">Vela</span>
+        <header
+          aria-label="TradingCoreOS workspace header"
+          className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#2a2b30] bg-[#151619] px-2 text-[12px] text-[#d1d4dc] shadow-[0_1px_0_rgba(0,0,0,.28)]"
+        >
+          <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#2a2b30] pe-3">
+            <img
+              src="/tradingcoreos-logo.svg"
+              alt=""
+              aria-hidden="true"
+              className="h-[21px] w-[21px] shrink-0 rounded-[5px] object-contain"
+            />
+            <span className="hidden font-semibold tracking-[-.015em] text-[#eceef3] sm:inline">TradingCoreOS</span>
+            <span className="text-[#656a74]">/</span>
+            <span className="font-semibold text-[#d6d9e0]">Vela</span>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Active Vela chart cells">
+          <div
+            className="flex h-full min-w-0 max-w-[min(46vw,560px)] flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+            aria-label="Open chart tabs"
+          >
             {velaAppTabs.map((tab) => {
               const ticker = tab.symbol.includes(':') ? tab.symbol.split(':').pop() || tab.symbol : tab.symbol;
               const selected = tab.id === activeVelaAppTabId;
+              const initials = ticker.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'CH';
+              const timeframeLabel = tab.timeframe === 'D' ? '1D' : tab.timeframe === 'W' ? '1W' : `${tab.timeframe}m`;
               return (
                 <button
                   key={tab.id}
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  title={`Activate ${tab.symbol} · ${tab.timeframe}`}
+                  title={`Activate ${tab.symbol} · ${timeframeLabel}`}
                   onClick={() => workspaceRef.current?.setActiveCell(tab.id)}
-                  className={`flex h-[26px] max-w-[210px] shrink-0 items-center gap-2 rounded-[5px] border px-2 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff] ${selected ? 'border-[#414550] bg-[#202229] text-white' : 'border-transparent text-[#9ca3af] hover:border-[#30333b] hover:bg-[#1a1c21] hover:text-[#e5e7eb]'}`}
+                  className={`group relative mt-1 flex h-8 max-w-56 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff] ${selected ? 'bg-[#202227] text-[#f0f2f7] shadow-[inset_0_-2px_0_#d5a24b]' : 'text-[#969ba6] hover:bg-white/[0.045] hover:text-[#e5e7eb]'}`}
                 >
-                  <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${selected ? 'bg-[#e9a84f]' : 'bg-[#606673]'}`} aria-hidden="true"/>
-                  <span className="truncate font-medium">{ticker}</span>
-                  <span className="shrink-0 text-[10px] text-[#8b909a]">{tab.timeframe}m</span>
+                  <span className={`grid size-4 shrink-0 place-items-center rounded-full text-[7px] font-bold ${selected ? 'bg-[#343b4b] text-[#d8e1ff]' : 'bg-[#292c33] text-[#a8adba]'}`} aria-hidden="true">
+                    {initials}
+                  </span>
+                  <span className="min-w-0 truncate font-medium">{ticker}</span>
+                  <span className={`shrink-0 text-[10px] tabular-nums ${selected ? 'text-[#aeb4bf]' : 'text-[#777d88]'}`}>{timeframeLabel}</span>
                 </button>
               );
             })}
             <button
               type="button"
-              title="Add chart · open symbol search"
-              aria-label="Add chart or search symbol"
+              title="Search for a symbol on the active chart"
+              aria-label="Search for a symbol on the active chart"
               onClick={() => workspaceRef.current?.context().openSymbolSearch()}
-              className="grid h-[26px] w-[27px] shrink-0 place-items-center rounded-[5px] border border-transparent text-[#9ca3af] transition-colors hover:border-[#30333b] hover:bg-[#1a1c21] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+              className="ms-1 mt-1 grid size-7 shrink-0 place-items-center rounded-md text-[#949aa5] transition-colors hover:bg-white/[0.06] hover:text-[#f0f2f7] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff]"
             >
-              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>
+              <Plus size={14} strokeWidth={1.8}/>
             </button>
           </div>
 
-          <div className="flex h-full shrink-0 items-center gap-1 border-l border-[#292b31] pl-2">
-            <span className={`mr-1 hidden h-[19px] items-center gap-1.5 rounded border px-2 text-[9px] font-semibold tracking-[.08em] sm:inline-flex ${chartStatus.phase === 'live' ? 'border-emerald-900/80 bg-emerald-950/40 text-emerald-300' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'border-red-900/80 bg-red-950/35 text-red-300' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'border-amber-900/80 bg-amber-950/30 text-amber-300' : 'border-[#414550] bg-[#202229] text-[#aeb4bf]'}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${chartStatus.phase === 'live' ? 'bg-emerald-400' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'bg-red-400' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'bg-amber-400' : 'bg-[#87909f]'}`} aria-hidden="true"/>
-              {chartStatus.phase === 'live' ? 'LIVE' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'OFFLINE' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'CHECK FEED' : 'HISTORY'}
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden px-2 lg:flex">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.07em] text-[#7d838e]">{headerExchange || 'Market'}</span>
+            <span className="max-w-[145px] truncate font-medium text-[#c8cbd3]">{headerTicker}</span>
+            <span className="shrink-0 font-semibold tabular-nums text-[#eceef3]">{headerPrice}</span>
+            <span className={`shrink-0 font-medium tabular-nums ${headerChange === undefined ? 'text-[#858b96]' : headerQuotePositive ? 'text-[#22b896]' : 'text-[#f05b68]'}`}>
+              {headerChangeLabel}
             </span>
-  
+            <span className={`shrink-0 text-[11px] tabular-nums ${headerChangePercent === undefined ? 'text-[#858b96]' : headerQuotePositive ? 'text-[#22b896]' : 'text-[#f05b68]'}`}>
+              {headerChangePercentLabel}
+            </span>
+            <span className="mx-1 h-4 w-px shrink-0 bg-[#30333a]" aria-hidden="true"/>
+            <span className={`shrink-0 rounded-[4px] px-1.5 py-[3px] text-[9px] font-bold tracking-[.06em] ${headerQuoteFresh && chartStatus.phase === 'live' ? 'bg-emerald-950/60 text-emerald-300' : 'bg-[#282a30] text-[#9ca2ad]'}`}>
+              {headerQuoteFresh && chartStatus.phase === 'live' ? String(headerQuote?.source || 'LIVE').toUpperCase() : 'QUOTE'}
+            </span>
+          </div>
+
+          <div className="ms-auto flex h-full shrink-0 items-center gap-2 border-s border-[#2a2b30] ps-2">
+            <span
+              className={`inline-flex h-[21px] items-center gap-1.5 rounded-[5px] border px-2 text-[9px] font-bold tracking-[.07em] ${chartStatus.phase === 'live' ? 'border-emerald-900/70 bg-emerald-950/45 text-emerald-300' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'border-red-900/70 bg-red-950/35 text-red-300' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'border-amber-900/70 bg-amber-950/30 text-amber-300' : 'border-[#3a3d45] bg-[#202227] text-[#a9afb9]'}`}
+              title={chartStatus.detail}
+            >
+              <span className={`size-1.5 rounded-full ${chartStatus.phase === 'live' ? 'bg-emerald-400' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'bg-red-400' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'bg-amber-400' : 'bg-[#89909b]'}`} aria-hidden="true"/>
+              {chartStatus.phase === 'live' ? 'LIVE' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'OFFLINE' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'DELAYED' : 'HISTORY'}
+            </span>
             <button
               type="button"
-              title="Open Data Window"
-              aria-label="Open Data Window"
-              onClick={() => workspaceRef.current?.context().togglePanel('dataWindow', true)}
-              className="grid h-[26px] w-[27px] place-items-center rounded-[5px] text-[#969ca7] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+              title="Account and broker settings"
+              aria-label="Open account and broker settings"
+              onClick={() => workspaceRef.current?.togglePanel('tco.account', true)}
+              className="grid size-7 shrink-0 place-items-center rounded-full text-[#aeb3bd] transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff]"
             >
-              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M4.5 5h7M4.5 8h5M4.5 11h6"/></svg>
-            </button>
-            <button
-              type="button"
-              title="Open Workspace Manager"
-              aria-label="Open Workspace Manager"
-              onClick={() => workspaceRef.current?.togglePanel('tco.workspace-frame', true)}
-              className="hidden h-[26px] items-center gap-1 rounded-[5px] px-2 text-[#aeb4bf] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff] xl:inline-flex"
-            >
-              My workspace <ChevronDown size={12}/>
-            </button>
-            <button
-              type="button"
-              title="Open Paper Trading"
-              aria-label="Open Paper Trading"
-              onClick={() => workspaceRef.current?.togglePanel('tco.trading', true)}
-              className="hidden h-[26px] items-center gap-1 rounded-[5px] border border-[#303944] bg-[#151c25] px-2 text-[10px] font-semibold text-[#cbd5e1] transition-colors hover:bg-[#202b38] hover:text-white lg:inline-flex"
-            >
-              <Activity size={12}/> Trade <span className="rounded bg-emerald-950/70 px-1 py-0.5 text-[9px] text-emerald-300">Paper</span>
-            </button>
-            <button
-              type="button"
-              title="Open Objects Tree"
-              aria-label="Open Objects Tree"
-              onClick={() => workspaceRef.current?.context().togglePanel('objects', true)}
-              className="grid h-[26px] w-[27px] place-items-center rounded-[5px] text-[#969ca7] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
-            >
-              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"><path d="M2 3.5h12M2 8h12M2 12.5h12"/><circle cx="4" cy="3.5" r="1.2" fill="#111215"/><circle cx="9" cy="8" r="1.2" fill="#111215"/><circle cx="6" cy="12.5" r="1.2" fill="#111215"/></svg>
+              <UserRound size={15} strokeWidth={1.7}/>
             </button>
           </div>
-        </header>
+        </header>/header>
 
 
         <div
           ref={host}
-          className="absolute inset-x-0 bottom-[27px] top-[34px]"
+          className="absolute inset-x-0 bottom-[27px] top-9"
           aria-label="TradingCoreOS Vela live trading chart"
         />
         <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#292b31] bg-[#111215] px-3 text-[10px] text-[#8e939d]">
@@ -1049,7 +1083,7 @@ const browserRuntimeMetrics = useRef({
             </div>
           </div>
           <div className="ml-3 flex shrink-0 items-center gap-2">
-            <span className="hidden text-[#686e79] md:inline">VELA CHART ENGINE</span>
+            <span className="hidden text-[#686e79] md:inline">CHART RANGE</span>
             <span className="h-1 w-1 rounded-full bg-[#515762]" aria-hidden="true"/>
             <span className="font-medium text-[#aeb4bf]">TRADINGCOREOS</span>
           </div>
