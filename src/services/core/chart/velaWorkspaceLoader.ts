@@ -8,7 +8,7 @@ import type { LayoutRegistration } from '../../../../vendor/vela/src/workspace';
  * implementation into the single-chart critical graph.
  */
 export async function loadVelaWorkspace() {
-  // Hydrate the full native drawing registry first so the shared Vela toolbar never ships lazy placeholders.
+  // Hydrate the full native drawing registry before workspace construction; toolbar groups then render real tools immediately, without a lazy-family placeholder or a first-open fetch.
   const [module] = await Promise.all([
     import('../../../../vendor/vela/src/workspace'),
     import('../../../../vendor/vela/src/core/drawings').then(({ loadAdvancedDrawingCatalog }) =>
