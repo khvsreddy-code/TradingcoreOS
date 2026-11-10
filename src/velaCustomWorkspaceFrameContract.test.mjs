@@ -29,7 +29,7 @@ assert.match(chrome, /Final Vela chrome pass/, 'native sidebar and watchlist rec
 assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact so the instrument list remains visible');
 assert.match(terminal, /sidebar:\s*\{/, 'application panels use Vela native right-sidebar navigation');
 assert.match(terminal, /'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the utility rail keeps daily panels and groups the rest in More panels');
-assert.match(terminal, /'tco\.workspace-frame'/, 'workspace customization is available in the native panel dock');
+assert.match(chrome, /id:'tco\.workspace-frame'/, 'workspace customization remains available through the native More panels hub');
 assert.match(terminal, /right:\s*\[\s*'tco\.save-workspace',\s*'alerts'\s*\]/, 'the chart topbar avoids duplicate application-panel commands');
 assert.match(terminal, /bottombar:\s*false/, 'the terminal keeps its topbar-only command surface');
 assert.ok(!terminal.includes("'tco.quant'"), 'Quant must stay out of the Vela topbar and use its right-sidebar action');
