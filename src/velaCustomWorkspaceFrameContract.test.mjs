@@ -27,7 +27,8 @@ assert.ok(workspaceLoader.indexOf('await drawings.loadAdvancedDrawingCatalog()')
 assert.match(terminal, /top:\s*\[\s*'tco\.bookmarks',[\s\S]*?'tco\.panels'/, 'the right rail keeps daily panels and collects advanced panels in the native hub');
 assert.match(chrome, /Final Vela chrome pass/, 'native sidebar and watchlist receive the final Vela chrome styling');
 assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact so the instrument list remains visible');
-assert.match(terminal, /sidebar:\s*true/, 'application panels use Vela native right-sidebar navigation');
+assert.match(terminal, /sidebar:\s*\{/, 'application panels use Vela native right-sidebar navigation');
+assert.match(terminal, /'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the utility rail keeps daily panels and groups the rest in More panels');
 assert.match(terminal, /'tco\.workspace-frame'/, 'workspace customization is available in the native panel dock');
 assert.match(terminal, /right:\s*\[\s*'tco\.save-workspace',\s*'alerts'\s*\]/, 'the chart topbar avoids duplicate application-panel commands');
 assert.match(terminal, /bottombar:\s*false/, 'the terminal keeps its topbar-only command surface');
