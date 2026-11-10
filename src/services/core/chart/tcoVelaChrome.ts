@@ -666,7 +666,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       scrollbar-color:#343942 transparent!important;
     }
     .tco-watchlist-row {
-      min-height:45px!important;padding:1px 2px!important;border-radius:6px!important;
+      min-height:46px!important;padding:1px 2px!important;border-radius:6px!important;
       border-bottom:1px solid rgba(255,255,255,.045)!important;
     }
     .tco-watchlist-row:hover { background:#191d23!important;border-color:#2a3039!important; }
