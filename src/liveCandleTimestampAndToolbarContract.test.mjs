@@ -15,9 +15,9 @@ assert.match(transport, /payload\.last_traded_time, payload\.exch_feed_time/, 'c
 assert.match(transport, /return candidates\.length \? Math\.max\(\.\.\.candidates\) : undefined/, 'choose the newest valid exchange timestamp');
 assert.equal((transport.match(/const brokerTimestamp = latestFyersTimestamp\(payload\);/g) || []).length, 2, 'both lite and full FYERS feeds must use the timestamp policy');
 assert.match(provider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, 'Vela must only patch candles for snapshots and validated candle ticks');
-const nativeSidebar = terminal.match(/sidebar:\\s*(\\{[\\s\\S]*?\\n\\s{4}\\}),\\s*topbar:/)?.[1] ?? '';
+const nativeSidebar = terminal.match(/sidebar:\s*(\{[\s\S]*?\n\s{4}\}),\s*topbar:/)?.[1] ?? '';
 assert.ok(
-  /sidebar:\\s*true/.test(terminal) ||
+  /sidebar:\s*true/.test(terminal) ||
   ['tco.bookmarks', 'tco.research', 'tco.trading', 'tco.corespirit-code', 'tco.panels', 'objects', 'dataWindow', 'tco.account']
     .every((panel) => nativeSidebar.includes(panel)),
   'TCO application navigation is exposed through Vela native right-sidebar composition',
