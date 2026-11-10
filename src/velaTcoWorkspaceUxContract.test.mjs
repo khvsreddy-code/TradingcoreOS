@@ -48,14 +48,15 @@ assert(settingsDialog.includes('vela-sd-symbol-grid') && settingsDialog.includes
 assert(chrome.includes("label:'Research', icon:'search', iconOnly:false"), 'restore the original TradingCoreOS toolbar labels');
 assert(chrome.includes("label:'Automation', icon:'replay', iconOnly:false"), 'restore the original Automation toolbar action');
 assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist remains registered as a dockable panel');
-assert(topology.includes('sidebar:true'), 'Watchlist, CoreSpirit and application panels use Vela native right-sidebar navigation');
+assert(topology.includes('sidebar:{') && topology.includes("'tco.bookmarks'") && topology.includes("'tco.corespirit-code'") && topology.includes("'tco.panels'"), 'Watchlist, CoreSpirit and application panels use the grouped Vela native right sidebar');
 assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist remains accessible as a Vela dock panel');
 assert(chrome.includes("id: 'tco.corespirit-code'") && chrome.includes("icon: 'corespirit'"), 'CoreSpirit Studio remains accessible in the native sidebar with its dedicated icon');
 assert(live.includes('className="absolute inset-0"'), 'the Vela workspace uses the full available width without a duplicate React rail');
 assert(!chrome.includes('registerWidgetAttachment(healthAttachment)'), 'do not reserve chart height with the custom bottom health strip');
 assert(topology.includes('animations:{ zoom:true, pan:true, liveBar:false }'), 'Vela zoom and pan animations should follow the supplied reference UI');
-assert(!topology.includes("'tco.watchlist'"), 'Watchlist must not occupy a topbar slot');
-assert(!topology.includes("'tco.corespirit-code'"), 'CoreSpirit must not occupy a topbar slot');
+const topbarComposition = topology.slice(topology.indexOf('topbar:{'), topology.indexOf('sync:{'));
+assert(!topbarComposition.includes("'tco.watchlist'"), 'Watchlist must not occupy a topbar slot');
+assert(!topbarComposition.includes("'tco.corespirit-code'"), 'CoreSpirit must not occupy a topbar slot');
 assert(chrome.includes("registerSidePanel(journalPanel)"), "journal should remain registered as a dockable panel");
 assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
