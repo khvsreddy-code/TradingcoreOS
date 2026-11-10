@@ -12,6 +12,8 @@ export async function loadVelaWorkspace() {
   // the Vela toolbar's canonical groups contain real factories on first render (not just
   // lazy placeholders), including Channels, Fibonacci/Gann, Harmonics and Elliott tools.
   const drawings = await import('../../../../vendor/vela/src/core/drawings');
+  // This promise resolves only after all advanced families have replaced their lazy
+  // metadata with executable factories; do not construct VelaWorkspace before it settles.
   await drawings.loadAdvancedDrawingCatalog();
   const workspace = await import('../../../../vendor/vela/src/workspace');
   return workspace.VelaWorkspace;
