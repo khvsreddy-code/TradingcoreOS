@@ -85,6 +85,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'tco.automation',
     'tco.trading',
     'tco.workspace-frame',
+    'tco.panels',
   ],
 } as const);
 
@@ -125,7 +126,27 @@ export function createTcoVelaTerminalOptions(
     indicatorPicker:true,
     // Keep TradingCoreOS application panels in Vela's native right sidebar. The chart
     // topbar remains dedicated to market controls, indicator discovery, Save and Alerts.
-    sidebar:true,
+    sidebar:{
+      // Daily-use panels first; advanced/occasional panels are collected in the native Panels hub.
+      top:[
+        'tco.bookmarks',
+        'tco.research',
+        'tco.trading',
+        'tco.positions',
+        '|',
+        'tco.replay',
+        'tco.quant',
+        'tco.corespirit-code',
+        'tco.panels',
+      ],
+      bottom:[
+        'tco.workspace-frame',
+        'objects',
+        'dataWindow',
+        '|',
+        'tco.account',
+      ],
+    },
     topbar:{
       left:['symbol','timeframes','style','layout','indicators'],
       right:['tco.save-workspace','alerts'],
