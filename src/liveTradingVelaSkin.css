@@ -84,8 +84,8 @@
 
 /* A slim range/status strip, not a second chart command bar. */
 .tco-live-surface > footer {
-  height: 26px;
-  min-height: 26px;
+  height: 27px;
+  min-height: 27px;
   padding-inline: 10px;
   background: #111317 !important;
   border-top: 1px solid #25282f !important;
@@ -511,10 +511,12 @@
 }
 .tco-live-surface .vela-workspace .tco-watchlist-detail-hint {
   display: block !important;
-  margin-top: 7px !important;
+  max-height: 27px;
+  overflow: hidden;
+  margin-top: 6px !important;
   color: #7f8997 !important;
-  font-size: 9px !important;
-  line-height: 1.4 !important;
+  font-size: 8px !important;
+  line-height: 1.35 !important;
 }
 .tco-live-surface .vela-workspace .tco-watchlist-section {
   margin-top: 7px !important;
