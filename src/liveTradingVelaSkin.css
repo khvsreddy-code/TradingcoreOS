@@ -157,7 +157,6 @@
 /* Keep exactly one drawing column. The child toolbar retains its native collapse width. */
 .tco-live-surface .vela-workspace .vela-ws-toolbar {
   background: var(--tco-terminal-bg) !important;
-  border-inline-end: 1px solid var(--tco-terminal-border);
 }
 .tco-live-surface .vela-workspace .vela-ws-toolbar .vela-dtb {
   background: var(--tco-terminal-bg) !important;
