@@ -18,8 +18,8 @@ if (!provider.includes('return chartDataPlaneKey(brokerId, runtimeSymbol(symbol)
 if (!dataPlane.includes('chartPerformanceTelemetry.recordPacket(this.key);')) {
   throw new Error('Per-chart data plane must record market packets under its canonical key');
 }
-if (!dataPlane.includes('chartPerformanceTelemetry.recordCompute(this.key')) {
-  throw new Error('Per-chart data plane must record compute samples under the same key');
+if (!/chartPerformanceTelemetry\\.recordCompute\\(\\s*this\\.key\\s*,/.test(dataPlane)) {
+  throw new Error('Per-chart data plane must record compute samples under the same canonical key as market packets');
 }
 if (!provider.includes('recordVelaRenderUpdate(performanceKey')) {
   throw new Error('Vela bar submission must record its renderer-frame opportunity');
