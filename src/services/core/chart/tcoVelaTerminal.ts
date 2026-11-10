@@ -67,6 +67,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
   shell:'VelaWorkspace',
   sharedSurface:[
     'topbar',
+    'bottombar',
     'objectTree',
     'dataWindow',
     'drawingToolbar',
