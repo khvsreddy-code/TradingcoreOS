@@ -33,7 +33,7 @@ assert.match(terminal, /animations:\{ zoom:true, pan:true, liveBar:false \}/, 'c
 const topbar = terminal.match(/topbar:\{([\s\S]*?)\n    \},/);
 assert.ok(topbar, 'TCO should explicitly define a compact topbar');
 assert.doesNotMatch(topbar[1], /tco\.chart-settings/, 'native Vela chart settings must not be duplicated by a TCO topbar action');
-assert.match(terminal, /sidebar:\s*true/, 'TCO application panels are available through Vela native sidebar');
+assert.match(terminal, /sidebar:\s*\{[\s\S]*'tco\.bookmarks'[\s\S]*'tco\.corespirit-code'[\s\S]*'tco\.panels'/, 'TCO application panels are available through the grouped Vela native sidebar');
 assert.match(chrome, /id: 'tco\.journal'[\s\S]*title: 'Journal'/, 'the Trading Journal remains registered as a native side panel');
 assert.match(chrome, /id: 'tco\.positions'[\s\S]*title: 'Positions'/, 'broker Positions remain registered as a native side panel');
 assert.match(chrome, /registerSidePanel\(journalPanel\)/, 'the journal panel is registered with Vela dock');
