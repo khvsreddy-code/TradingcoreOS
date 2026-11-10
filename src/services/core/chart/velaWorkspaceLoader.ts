@@ -1,3 +1,5 @@
+import type { LayoutRegistration } from '../../../../vendor/vela/src/workspace';
+
 /**
  * Optional Vela workspace capability.
  *
@@ -10,3 +12,13 @@ export async function loadVelaWorkspace() {
   return module.VelaWorkspace;
 }
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
+
+/**
+ * Register host presets against the exact layout registry used by the dynamically
+ * loaded VelaWorkspace module. Importing layouts through a separate static graph can
+ * create a second registry in split production chunks, leaving the native picker empty.
+ */
+export async function registerVelaWorkspaceLayouts(layouts: readonly LayoutRegistration[]): Promise<void> {
+  const module = await import('../../../../vendor/vela/src/workspace');
+  for (const layout of layouts) module.registerLayout(layout);
+}
