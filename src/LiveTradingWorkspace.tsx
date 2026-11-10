@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Menu, Grid2X2, Star, Search, Code2, CalendarDays, BriefcaseBusiness, Settings2, Activity, ChevronDown } from 'lucide-react';
 import { loadVelaWorkspace, registerVelaWorkspaceLayouts } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -932,7 +932,14 @@ const browserRuntimeMetrics = useRef({
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
       <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#050609] text-[#e5e7eb]">
-        <header className="absolute inset-x-0 top-0 z-[130] flex h-[34px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
+        <header className="absolute inset-x-0 top-0 z-[130] flex h-[38px] items-center border-b border-[#292b31] bg-[#111215] px-2 text-[11px] shadow-[0_1px_0_rgba(0,0,0,.35)]">
+          <button
+            type="button"
+            title="Open workspace navigation"
+            aria-label="Open workspace navigation"
+            onClick={() => workspaceRef.current?.togglePanel('tco.quant', true)}
+            className="mr-2 grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#9298a4] transition-colors hover:bg-[#252830] hover:text-white"
+          ><Menu size={15}/></button>
           <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#292b31] pr-3">
             <span className="grid h-[21px] w-[21px] place-items-center rounded-[6px] border border-[#3b3e48] bg-[#1b1d23] text-[#f0b75b]" aria-hidden="true">
               <svg viewBox="0 0 20 20" className="h-[15px] w-[15px]" fill="none">
@@ -1002,6 +1009,24 @@ const browserRuntimeMetrics = useRef({
             </button>
             <button
               type="button"
+              title="Open Workspace Manager"
+              aria-label="Open Workspace Manager"
+              onClick={() => workspaceRef.current?.togglePanel('tco.workspace-frame', true)}
+              className="hidden h-[26px] items-center gap-1 rounded-[5px] px-2 text-[#aeb4bf] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff] xl:inline-flex"
+            >
+              My workspace <ChevronDown size={12}/>
+            </button>
+            <button
+              type="button"
+              title="Open Paper Trading"
+              aria-label="Open Paper Trading"
+              onClick={() => workspaceRef.current?.togglePanel('tco.trading', true)}
+              className="hidden h-[26px] items-center gap-1 rounded-[5px] border border-[#303944] bg-[#151c25] px-2 text-[10px] font-semibold text-[#cbd5e1] transition-colors hover:bg-[#202b38] hover:text-white lg:inline-flex"
+            >
+              <Activity size={12}/> Trade <span className="rounded bg-emerald-950/70 px-1 py-0.5 text-[9px] text-emerald-300">Paper</span>
+            </button>
+            <button
+              type="button"
               title="Open Objects Tree"
               aria-label="Open Objects Tree"
               onClick={() => workspaceRef.current?.context().togglePanel('objects', true)}
@@ -1012,12 +1037,26 @@ const browserRuntimeMetrics = useRef({
           </div>
         </header>
 
+        <aside
+          aria-label="TradingCoreOS application navigation"
+          className="absolute bottom-[27px] left-0 top-[38px] z-[128] flex w-[48px] flex-col items-center gap-1 border-r border-[#292b31] bg-[#111318] py-2"
+        >
+          <button type="button" title="Workspace" aria-label="Workspace" onClick={() => workspaceRef.current?.togglePanel('tco.workspace-frame', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Grid2X2 size={17}/></button>
+          <button type="button" title="Watchlist" aria-label="Watchlist" onClick={() => workspaceRef.current?.togglePanel('tco.bookmarks', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Star size={17}/></button>
+          <button type="button" title="Research" aria-label="Research" onClick={() => workspaceRef.current?.togglePanel('tco.research', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Search size={17}/></button>
+          <button type="button" title="Indicators" aria-label="Indicators" onClick={() => window.dispatchEvent(new CustomEvent('tco:open-indicator-library'))} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Activity size={17}/></button>
+          <button type="button" title="CoreSpirit" aria-label="CoreSpirit" onClick={() => workspaceRef.current?.togglePanel('tco.corespirit', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Code2 size={17}/></button>
+          <button type="button" title="Journal" aria-label="Journal" onClick={() => workspaceRef.current?.togglePanel('tco.journal', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><CalendarDays size={17}/></button>
+          <button type="button" title="Positions" aria-label="Positions" onClick={() => workspaceRef.current?.togglePanel('tco.positions', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><BriefcaseBusiness size={17}/></button>
+          <div className="flex-1"/>
+          <button type="button" title="Settings" aria-label="Settings" onClick={() => window.dispatchEvent(new Event('tco:open-settings'))} className="grid h-9 w-9 place-items-center rounded-md text-[#818895] hover:bg-[#252a34] hover:text-white"><Settings2 size={17}/></button>
+        </aside>
         <div
           ref={host}
-          className="absolute inset-x-0 bottom-[27px] top-[34px]"
+          className="absolute bottom-[27px] left-[48px] right-0 top-[38px]"
           aria-label="TradingCoreOS Vela live trading chart"
         />
-        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#292b31] bg-[#111215] px-3 text-[10px] text-[#8e939d]">
+        <footer className="absolute bottom-0 left-[48px] right-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#292b31] bg-[#111215] px-3 text-[10px] text-[#8e939d]">
           <div className="flex min-w-0 items-center gap-2">
             <span className="hidden font-semibold tracking-[.08em] text-[#b5bac4] sm:inline">RANGE</span>
             <span className="hidden text-[#555b65] sm:inline">/</span>
