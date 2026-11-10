@@ -172,7 +172,7 @@ assert.match(workspace, /cellAreas: l\.cells\.map/, 'layout glyphs use the real 
 
 // Native Vela tools and dock presentation: load real drawing implementations before mounting.
 assert.match(workspaceLoader, /loadAdvancedDrawingCatalog\(\)/, 'the terminal preloads every advanced drawing implementation before Vela mounts');
-assert.match(drawingRegistry, /export async function loadAdvancedDrawingCatalog\(\)/, 'Vela exposes one complete drawing-catalog loader');
+assert.match(drawingRegistry, /export function loadAdvancedDrawingCatalog\(\): Promise<void>/, 'Vela exposes one complete promise-based drawing-catalog loader');
 assert.match(drawingRegistry, /ADVANCED_DRAWING_FAMILIES = Object.freeze\(\[/, 'all advanced drawing families are part of the native registry');
 for (const family of ['channels', 'fibonacci', 'patterns']) {
   assert.ok(drawingRegistry.includes("'" + family + "'"), 'Vela drawing family ' + family + ' remains registered and loadable');
