@@ -1,0 +1,613 @@
+/*
+ * TradingCoreOS live terminal — Vela reference skin.
+ * Scoped to the live route so the rest of the application keeps its own design system.
+ * The chart, data provider, panel registration and persisted workspace state remain native.
+ */
+
+.tco-live-surface {
+  --tco-terminal-bg: #121316;
+  --tco-terminal-panel: #151619;
+  --tco-terminal-raised: #1c1d20;
+  --tco-terminal-border: #292b31;
+  --tco-terminal-muted: #858b96;
+  --tco-terminal-text: #d1d4dc;
+  --tco-terminal-bright: #f4f5f7;
+  --tco-terminal-accent: #2962ff;
+  --tco-terminal-up: #089981;
+  --tco-terminal-down: #f23645;
+  background: var(--tco-terminal-bg);
+  color: var(--tco-terminal-text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* App-level chart tabs: keep the existing workspace tabs, lose the heavy shell chrome. */
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] {
+  height: 36px;
+  min-height: 36px;
+  padding-inline: 10px;
+  gap: 8px;
+  background: #111317 !important;
+  border-bottom: 1px solid #25282f !important;
+  color: var(--tco-terminal-text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .16);
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:first-child {
+  gap: 7px;
+  padding-inline-end: 11px;
+  border-color: #292c33;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [role="tab"] {
+  height: 28px;
+  margin-top: 0;
+  padding-inline: 10px;
+  gap: 8px;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  transition: background-color 110ms ease, color 110ms ease;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [role="tab"]:hover {
+  background: rgba(255, 255, 255, .055);
+  color: #f4f5f7;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [role="tab"][aria-selected="true"] {
+  background: #1c2028;
+  color: #f4f5f7;
+  box-shadow: inset 0 -2px 0 var(--tco-terminal-accent);
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [aria-label="Active chart quote"] {
+  gap: 9px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:last-child {
+  gap: 8px;
+  padding-inline-start: 10px;
+  border-color: #292c33;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:last-child > span {
+  min-height: 21px;
+  border-radius: 5px;
+  letter-spacing: .055em;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] button[aria-label="Open account and broker settings"] {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.tco-live-surface > header[aria-label="TradingCoreOS workspace header"] button[aria-label="Open account and broker settings"]:hover {
+  border-color: #343944;
+  background: #1c2028;
+}
+
+/* A slim range/status strip, not a second chart command bar. */
+.tco-live-surface > footer {
+  height: 26px;
+  min-height: 26px;
+  padding-inline: 10px;
+  background: #111317 !important;
+  border-top: 1px solid #25282f !important;
+  color: #858b96;
+  font-size: 10px;
+}
+.tco-live-surface > footer button {
+  min-width: 29px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  color: #9299a5;
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tco-live-surface > footer button:hover {
+  background: #20242b;
+  color: #f4f5f7;
+}
+
+/* Vela-native chart topbar. Symbol, timeframe, style and indicator controls stay native. */
+.tco-live-surface .vela-workspace {
+  background: var(--tco-terminal-bg) !important;
+  color: var(--tco-terminal-text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-topbar {
+  min-height: 36px !important;
+  padding: 3px 8px !important;
+  gap: 4px !important;
+  background: var(--tco-terminal-panel) !important;
+  border-bottom: 1px solid var(--tco-terminal-border) !important;
+  box-shadow: none !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-topbar button {
+  min-height: 27px;
+  border-radius: 5px !important;
+  transition: background-color 110ms ease, color 110ms ease;
+}
+.tco-live-surface .vela-workspace .vela-widget-topbar button:hover {
+  background: rgba(255, 255, 255, .055) !important;
+  color: var(--tco-terminal-bright) !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-symbol {
+  color: var(--tco-terminal-bright) !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-tf,
+.tco-live-surface .vela-workspace .vela-widget-style,
+.tco-live-surface .vela-workspace .vela-widget-indicators,
+.tco-live-surface .vela-workspace .vela-widget-action,
+.tco-live-surface .vela-workspace .vela-widget-action-left,
+.tco-live-surface .vela-workspace .vela-widget-tool {
+  color: #c1c6d0 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-topbar [data-action-id="tco.save-workspace"] {
+  border: 1px solid #343b49 !important;
+  background: #1a202a !important;
+  color: #dce6ff !important;
+}
+.tco-live-surface .vela-workspace .vela-widget-topbar [data-action-id="tco.save-workspace"]:hover {
+  border-color: #49618c !important;
+  background: #202a3a !important;
+}
+
+/* Keep exactly one drawing column. The child toolbar retains its native collapse width. */
+.tco-live-surface .vela-workspace .vela-ws-toolbar {
+  background: var(--tco-terminal-bg) !important;
+  border-inline-end: 1px solid var(--tco-terminal-border);
+}
+.tco-live-surface .vela-workspace .vela-ws-toolbar .vela-dtb {
+  background: var(--tco-terminal-bg) !important;
+  border-inline-end: 1px solid var(--tco-terminal-border) !important;
+  box-shadow: none !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-btn {
+  color: #9299a5 !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-btn:hover {
+  color: #f4f5f7 !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-hit {
+  border-radius: 6px !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-btn[data-active="1"] .vela-dtb-hit,
+.tco-live-surface .vela-workspace .vela-dtb-cell[data-active="1"] .vela-dtb-hit {
+  background: rgba(41, 98, 255, .15) !important;
+  color: #dce6ff !important;
+}
+
+/* Right-side panel rail: quiet icons, predictable hit areas, one active indicator. */
+.tco-live-surface .vela-workspace .vela-sidebar {
+  width: 42px !important;
+  flex: 0 0 42px !important;
+  padding: 7px 0 !important;
+  gap: 8px !important;
+  background: #14161a !important;
+  border-inline-start: 1px solid var(--tco-terminal-border) !important;
+  color: #8e96a3 !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-section {
+  gap: 6px !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-group {
+  gap: 3px !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-sep {
+  width: 18px !important;
+  margin: 2px 0 !important;
+  background: #30343d !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 7px !important;
+  color: #9299a5 !important;
+  font-size: 15px !important;
+  transition: background-color 110ms ease, color 110ms ease, box-shadow 110ms ease !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-btn:hover {
+  background: #20242b !important;
+  color: #f4f5f7 !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-btn[data-active="1"] {
+  background: rgba(41, 98, 255, .14) !important;
+  color: #e0e9ff !important;
+  box-shadow: inset 0 0 0 1px rgba(77, 132, 255, .23) !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-btn[data-active="1"]::before {
+  inset-inline-end: -6px !important;
+  width: 2px !important;
+  height: 16px !important;
+  border-radius: 2px !important;
+  background: var(--tco-terminal-accent) !important;
+}
+.tco-live-surface .vela-workspace .vela-sidebar-btn:focus-visible {
+  outline: 2px solid rgba(77, 132, 255, .8) !important;
+  outline-offset: 1px !important;
+}
+
+/* Dock surfaces and headers share one surface system; no stacked card-on-card effect. */
+.tco-live-surface .vela-workspace .vela-panel {
+  background: var(--tco-terminal-panel) !important;
+  border-color: var(--tco-terminal-border) !important;
+  color: var(--tco-terminal-text) !important;
+  box-shadow: none !important;
+}
+.tco-live-surface .vela-workspace .vela-panel-header {
+  min-height: 39px !important;
+  padding: 0 11px !important;
+  gap: 8px !important;
+  background: var(--tco-terminal-panel) !important;
+  border-bottom: 1px solid var(--tco-terminal-border) !important;
+  box-shadow: none !important;
+}
+.tco-live-surface .vela-workspace .vela-panel-title {
+  color: #eef1f6 !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: .01em !important;
+}
+.tco-live-surface .vela-workspace .vela-panel-header button {
+  min-width: 27px;
+  min-height: 27px;
+  border-radius: 5px;
+  color: #9299a5;
+}
+.tco-live-surface .vela-workspace .vela-panel-header button:hover {
+  background: #22262d;
+  color: #f4f5f7;
+}
+.tco-live-surface .vela-workspace .vela-panel-body {
+  background: var(--tco-terminal-bg) !important;
+  color: var(--tco-terminal-text) !important;
+}
+
+/* Watchlist: simple controls, compact quote rows, and a readable selected-symbol inspector. */
+.tco-live-surface .vela-workspace .tco-watchlist-panel {
+  display: flex !important;
+  min-height: 0 !important;
+  padding: 9px 10px 8px !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+  background: var(--tco-terminal-bg) !important;
+  color: var(--tco-terminal-text) !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-meta {
+  min-height: 15px !important;
+  padding: 0 2px !important;
+  color: #838b98 !important;
+  font: 700 9px/1.3 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  letter-spacing: .075em !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-add {
+  min-height: 29px !important;
+  padding: 0 10px !important;
+  border: 1px solid rgba(74, 123, 220, .42) !important;
+  border-radius: 6px !important;
+  background: rgba(41, 98, 255, .12) !important;
+  color: #dce6ff !important;
+  font: 650 10px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  transition: background-color 110ms ease, border-color 110ms ease;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-add:hover {
+  border-color: rgba(90, 145, 245, .65) !important;
+  background: rgba(41, 98, 255, .19) !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-search {
+  width: 100% !important;
+  height: 35px !important;
+  padding: 0 10px !important;
+  border: 1px solid #2b3039 !important;
+  border-radius: 6px !important;
+  outline: none !important;
+  background: #101216 !important;
+  color: #edf0f5 !important;
+  font: 11px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  box-shadow: none !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-search::placeholder {
+  color: #737c89 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-search:focus {
+  border-color: rgba(76, 132, 236, .78) !important;
+  box-shadow: 0 0 0 2px rgba(41, 98, 255, .12) !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-filters {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 5px !important;
+  min-width: 0;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-filters .tco-watch-filter {
+  min-height: 27px !important;
+  padding: 0 8px !important;
+  border: 1px solid #2c3038 !important;
+  border-radius: 5px !important;
+  background: #191c21 !important;
+  color: #a3aab5 !important;
+  font: 600 9px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  white-space: nowrap;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-filters .tco-watch-filter:hover {
+  border-color: #424957 !important;
+  background: #20242b !important;
+  color: #e8ebf0 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-filters .tco-watch-filter[aria-pressed="true"] {
+  border-color: rgba(76, 132, 236, .55) !important;
+  background: rgba(41, 98, 255, .13) !important;
+  color: #e0e9ff !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-sort {
+  width: 104px !important;
+  min-width: 94px !important;
+  max-width: 104px !important;
+  height: 27px !important;
+  margin-inline-start: auto !important;
+  padding: 0 6px !important;
+  border: 1px solid #2c3038 !important;
+  border-radius: 5px !important;
+  background: #15181d !important;
+  color: #b9c0cb !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-list {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  min-height: 72px !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  padding: 2px 2px 6px 0 !important;
+  overflow: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #363c47 transparent !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  padding: 1px 3px !important;
+  border: 1px solid transparent !important;
+  border-bottom-color: rgba(255, 255, 255, .055) !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: background-color 100ms ease, border-color 100ms ease;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row:hover {
+  border-color: rgba(255, 255, 255, .085) !important;
+  background: rgba(255, 255, 255, .04) !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row[data-selected="1"] {
+  border-color: rgba(41, 98, 255, .32) !important;
+  background: rgba(41, 98, 255, .085) !important;
+  box-shadow: inset 2px 0 0 var(--tco-terminal-accent) !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-select {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+  min-height: 43px !important;
+  padding: 5px 7px !important;
+  border: 0 !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+  color: #e7eaf0 !important;
+  text-align: left !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-ticker {
+  color: #f0f2f6 !important;
+  font: 700 11px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-instrument-name {
+  color: #828b98 !important;
+  font: 400 9px/1.25 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-price-block {
+  gap: 3px !important;
+  padding-inline-end: 10px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-last {
+  color: #f0f2f6 !important;
+  font: 650 11px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-variant-numeric: tabular-nums !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-change {
+  color: #9ba3af !important;
+  font: 550 9px/1.25 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-variant-numeric: tabular-nums !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row[data-quote-state="live"] .tco-watchlist-price-block::after {
+  background: #16a887 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row[data-quote-state="delayed"] .tco-watchlist-price-block::after {
+  background: #3aa9d1 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row[data-quote-state="stale"] .tco-watchlist-price-block::after {
+  background: #d8a546 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-row[data-quote-state="waiting"] .tco-watchlist-price-block::after {
+  background: #69717d !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-remove {
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 5px !important;
+  color: #77818e !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-remove:hover {
+  background: rgba(242, 54, 69, .1) !important;
+  color: #ff8992 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-inspector {
+  min-height: 170px !important;
+  max-height: 52% !important;
+  padding: 10px !important;
+  border: 1px solid #2c313a !important;
+  border-radius: 7px !important;
+  background: #15181e !important;
+  box-shadow: none !important;
+  scrollbar-width: thin;
+  scrollbar-color: #363c47 transparent;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-detail-head {
+  align-items: center !important;
+  margin-bottom: 9px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-detail-title {
+  color: #f3f5f8 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-detail-subtitle {
+  color: #8993a0 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-live-badge {
+  padding: 3px 6px !important;
+  border: 1px solid rgba(255, 255, 255, .13) !important;
+  border-radius: 4px !important;
+  background: #1b1f25 !important;
+  font-size: 8px !important;
+  font-weight: 750 !important;
+  letter-spacing: .04em !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-metric {
+  min-width: 0;
+  padding: 7px 8px !important;
+  border: 1px solid #282d36 !important;
+  border-radius: 6px !important;
+  background: #111419 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-metric-label {
+  margin-bottom: 3px !important;
+  color: #818b99 !important;
+  font-size: 8px !important;
+  letter-spacing: .015em;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-metric-value {
+  color: #e9edf3 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-detail-hint {
+  display: block !important;
+  margin-top: 7px !important;
+  color: #7f8997 !important;
+  font-size: 9px !important;
+  line-height: 1.4 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-section {
+  margin-top: 7px !important;
+  padding: 8px 0 0 !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(255, 255, 255, .085) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-section-label,
+.tco-live-surface .vela-workspace .tco-watchlist-news-heading {
+  color: #87919e !important;
+  font-size: 8px !important;
+  font-weight: 750 !important;
+  letter-spacing: .075em !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-technical-summary {
+  margin-top: 4px !important;
+  color: #e6eaf0 !important;
+  font-size: 10px !important;
+  font-weight: 650 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-technical-values,
+.tco-live-surface .vela-workspace .tco-watchlist-news-list a {
+  color: #aeb6c2 !important;
+  font-size: 9px !important;
+  line-height: 1.45 !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-news-list {
+  gap: 6px !important;
+  margin-top: 6px !important;
+}
+.tco-live-surface .vela-workspace .tco-watchlist-news-list a:hover {
+  color: #dce6ff !important;
+}
+.tco-live-surface .vela-workspace .tco-watch-suggestions {
+  border: 1px solid #303641 !important;
+  border-radius: 7px !important;
+  background: #171a20 !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .34) !important;
+}
+.tco-live-surface .vela-workspace .tco-watch-suggestion {
+  min-height: 37px !important;
+  padding: 8px 9px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, .055) !important;
+  color: #e5e9f0 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-workspace .tco-watch-suggestion:hover,
+.tco-live-surface .vela-workspace .tco-watch-suggestion[aria-selected="true"] {
+  background: rgba(41, 98, 255, .13) !important;
+}
+.tco-live-surface .vela-workspace :focus-visible {
+  outline-color: rgba(77, 132, 255, .8);
+  outline-offset: 2px;
+}
+
+/* Preserve the information hierarchy on shorter screens instead of clipping the dock. */
+@media (max-height: 760px) {
+  .tco-live-surface .vela-workspace .tco-watchlist-panel {
+    gap: 6px !important;
+    padding: 7px 8px !important;
+  }
+  .tco-live-surface .vela-workspace .tco-watchlist-inspector {
+    min-height: 150px !important;
+  }
+  .tco-live-surface .vela-workspace .tco-watchlist-section {
+    margin-top: 5px !important;
+    padding-top: 6px !important;
+  }
+}
+@media (max-width: 760px) {
+  .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] {
+    padding-inline: 6px;
+    gap: 4px;
+  }
+  .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:first-child {
+    padding-inline-end: 6px;
+  }
+  .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [aria-label="Active chart quote"] {
+    display: none;
+  }
+  .tco-live-surface .vela-workspace .vela-sidebar {
+    width: 38px !important;
+    flex-basis: 38px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tco-live-surface *,
+  .tco-live-surface *::before,
+  .tco-live-surface *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}

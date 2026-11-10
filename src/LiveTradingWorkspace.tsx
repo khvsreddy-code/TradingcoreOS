@@ -10,6 +10,7 @@ import { hasValidFyersSession } from './services/marketData/yahooFallback';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
+import './liveTradingVelaSkin.css';
 import { createTcoVelaSupabaseStorage, loadTcoVelaActiveWorkspaceId, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions, TCO_VELA_LAYOUT_PRESETS } from './services/core/chart/tcoVelaTerminal';
