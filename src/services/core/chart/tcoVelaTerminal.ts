@@ -132,7 +132,7 @@ export function createTcoVelaTerminalOptions(
         'tco.bookmarks',
         'tco.research',
         'tco.trading',
-        'tco.positions',
+        'tco.corespirit-code',
         '|',
         'tco.panels',
       ],
