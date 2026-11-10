@@ -983,8 +983,7 @@ const browserRuntimeMetrics = useRef({
 
           <div
             className="flex h-full min-w-0 max-w-[min(46vw,560px)] flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
-            aria-label="Open chart tabs"
+            role="tablist" aria-label="Open chart tabs"
           >
             {velaAppTabs.map((tab) => {
               const ticker = tab.symbol.includes(':') ? tab.symbol.split(':').pop() || tab.symbol : tab.symbol;
