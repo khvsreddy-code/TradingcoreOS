@@ -8,7 +8,12 @@ import type { LayoutRegistration } from '../../../../vendor/vela/src/workspace';
  * implementation into the single-chart critical graph.
  */
 export async function loadVelaWorkspace() {
-  const module = await import('../../../../vendor/vela/src/workspace');
+  const [module] = await Promise.all([
+    import('../../../../vendor/vela/src/workspace'),
+    import('../../../../vendor/vela/src/core/drawings').then(({ loadAdvancedDrawingCatalog }) =>
+      loadAdvancedDrawingCatalog(),
+    ),
+  ]);
   return module.VelaWorkspace;
 }
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
