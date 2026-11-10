@@ -140,7 +140,13 @@ assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app ch
 assert.match(liveWorkspace, /togglePanel\('dataWindow', true\)/, 'the app chrome opens Vela Data Window');
 assert.match(liveWorkspace, /togglePanel\('objects', true\)/, 'the app chrome opens Vela Objects Tree');
 assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
-assert.match(liveWorkspace, /absolute inset-x-0 bottom-\[27px\] top-\[34px\]/, 'the Vela chart uses the full available width below the compact app header');
+assert.match(liveWorkspace, /absolute inset-x-0 bottom-\[27px\] top-9/, 'the Vela chart uses the full available width below the 36px Vela-style application header');
+assert.match(liveWorkspace, /flex h-9 items-center gap-2 border-b border-\[#2a2b30\] bg-\[#151619\]/, 'the application header matches Vela’s compact charcoal chrome');
+assert.match(liveWorkspace, /tradingcoreos-logo\.svg/, 'the header uses the TradingCoreOS brand asset');
+assert.match(liveWorkspace, /getMarketSnapshot\(chartStatus\.symbol\)/, 'the header quote reads the active chart market snapshot');
+assert.doesNotMatch(liveWorkspace, /subscribeMarketData\(/, 'the header adds no duplicate market-data subscription');
+assert.match(liveWorkspace, /Open account and broker settings/, 'the account control opens the native account panel');
+assert.doesNotMatch(liveWorkspace, /Open Data Window|Open Objects Tree|Open Paper Trading|My workspace/, 'global header does not duplicate native Vela toolbar actions');
 assert.doesNotMatch(liveWorkspace, /TradingCoreOS application navigation|left-\[48px\]/, 'the app does not add a second left rail beside Vela drawing tools');
 
 // Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
