@@ -36,7 +36,8 @@ const contributions = read('../vendor/vela/src/widget/contributions.ts');
 const includes = (source, snippet, message) => assert.ok(source.includes(snippet), message);
 const excludes = (source, snippet, message) => assert.ok(!source.includes(snippet), message);
 
-includes(terminal, 'sidebar:true', 'the live terminal enables Vela native right-sidebar navigation');
+includes(terminal, 'sidebar:{', 'the live terminal enables Vela native right-sidebar navigation with a deliberate composition');
+includes(terminal, "'tco.corespirit-code'", 'CoreSpirit Studio remains reachable from Vela’s native right sidebar');
 includes(chrome, "id: 'tco.bookmarks'", 'Watchlist remains a native dock panel with quote, technical and news detail');
 includes(chrome, "id: 'tco.corespirit-code'", 'CoreSpirit Studio remains a native dock panel');
 includes(chrome, "icon: 'corespirit'", 'CoreSpirit Studio has its dedicated fire-and-gear sidebar icon');
@@ -217,7 +218,8 @@ for (const label of ['Compile', 'Compile & Run', 'Save', 'Publish', 'Add to char
   assert.ok(dock.includes(label), label + ' action visible');
 }
 excludes(terminal, "'tco.watchlist',", 'Watchlist must be removed from the topbar action list');
-excludes(terminal, "'tco.corespirit-code',", 'CoreSpirit must be removed from the topbar action list');
+const topbarComposition = terminal.slice(terminal.indexOf('topbar:{'), terminal.indexOf('sync:{'));
+excludes(topbarComposition, "'tco.corespirit-code'", 'CoreSpirit must be removed from the topbar action list');
 includes(editorPage, 'CORE_SPIRIT_AUTHORING_LEVELS', 'the editor retains one compiler-backed four-level authoring model');
 includes(editorPage, 'getCoreSpiritAuthoringProfileForLevel', 'authoring levels resolve through the existing shared profile');
 for (const level of ['beginner', 'trader', 'quant', 'system']) {
