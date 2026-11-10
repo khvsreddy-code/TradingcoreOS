@@ -8,14 +8,13 @@ import type { LayoutRegistration } from '../../../../vendor/vela/src/workspace';
  * implementation into the single-chart critical graph.
  */
 export async function loadVelaWorkspace() {
-  // Hydrate the full native drawing registry before workspace construction; toolbar groups then render real tools immediately, without a lazy-family placeholder or a first-open fetch.
-  const [module] = await Promise.all([
-    import('../../../../vendor/vela/src/workspace'),
-    import('../../../../vendor/vela/src/core/drawings').then(({ loadAdvancedDrawingCatalog }) =>
-      loadAdvancedDrawingCatalog(),
-    ),
-  ]);
-  return module.VelaWorkspace;
+  // Hydrate every native drawing family BEFORE constructing the workspace. This guarantees
+  // the Vela toolbar's canonical groups contain real factories on first render (not just
+  // lazy placeholders), including Channels, Fibonacci/Gann, Harmonics and Elliott tools.
+  const drawings = await import('../../../../vendor/vela/src/core/drawings');
+  await drawings.loadAdvancedDrawingCatalog();
+  const workspace = await import('../../../../vendor/vela/src/workspace');
+  return workspace.VelaWorkspace;
 }
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
 
