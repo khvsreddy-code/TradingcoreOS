@@ -524,7 +524,8 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-watchlist-instrument { min-width:0;display:flex;flex-direction:column;gap:3px; }
     .tco-watchlist-ticker {
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf0f5;
-      font:700 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+      font:700 12px Inter,ui-sans-serif,system-ui,sans-serif;
+      line-height:1.2;
     }
     .tco-watchlist-instrument-name {
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#858d99;
