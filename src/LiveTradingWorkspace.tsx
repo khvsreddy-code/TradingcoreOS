@@ -1054,7 +1054,7 @@ const browserRuntimeMetrics = useRef({
               <UserRound size={15} strokeWidth={1.7}/>
             </button>
           </div>
-        </header>/header>
+        </header>
 
 
         <div
