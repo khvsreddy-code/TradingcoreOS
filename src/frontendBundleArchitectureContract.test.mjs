@@ -45,7 +45,14 @@ assert(bundleBudget.includes('advancedRegistryFibonacci.ts'), 'production graph 
 assert(liveWorkspace.includes('Loading chart engine') && liveWorkspace.includes('Retry chart loading'), 'optional chart capability loading must expose visible pending and retry states');
 
 
-assert(tcoVelaTerminal.includes("left:['symbol','timeframes','style','layout','indicators']"), 'Vela must retain ownership of the primary symbol/timeframe/style toolbar');
+const primaryTopbarLeft = tcoVelaTerminal.match(/left:\s*\[([^\]]+)\]/)?.[1] ?? '';
+const primaryTopbarIds = [...primaryTopbarLeft.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+assert(
+  ['symbol', 'timeframes', 'style', 'layout', 'indicators'].every((id, index) => primaryTopbarIds[index] === id),
+  'Vela must retain ownership of the primary symbol/timeframe/style toolbar before contributed actions',
+);
+assert(primaryTopbarIds.includes('undo-redo'), 'the native Vela undo/redo controls must remain in the topbar');
+assert(tcoVelaTerminal.includes("'tco.replay'"), 'the live terminal must expose Replay through Vela native topbar action slots');
 assert(!tcoVelaTerminal.includes("'tco.chart-settings'"), 'native Vela chart settings must not be duplicated in the TCO terminal top bar');
 assert(tcoVelaChrome.includes("if (typeof renderer.openSettings === 'function')"), 'the registered compatibility action must delegate to the native Vela settings dialog');
 assert(tcoVelaChrome.includes("if (typeof renderer.openSettings === 'function')"), 'chart settings must delegate to the Vela chart adapter rather than maintain a duplicate settings model');
