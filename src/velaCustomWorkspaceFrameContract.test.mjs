@@ -185,7 +185,7 @@ for (const id of ['tco.market-health', 'tco.orderbook', 'tco.options', 'tco.auto
   assert.ok(chrome.includes("{ id: '" + id + "'"), 'More panels provides ' + id);
 }
 assert.match(chrome, /\.vela-sidebar-btn\[data-active='1'\]::before/, 'active right-rail panels have a clear Vela-style active marker');
-assert.match(chrome, /\.tco-watchlist-row \{[\s\S]*min-height:51px/, 'watchlist rows use the compact quote-row layout');
+assert.match(chrome, /\.tco-watchlist-row \{[\s\S]*min-height:46px/, 'watchlist rows use the compact quote-row layout');
 assert.match(chrome, /\.tco-watchlist-inspector \{/, 'the watchlist has a separate compact instrument inspector');
 assert.match(chrome, /\.tco-watchlist-price-block::after/, 'watchlist quote provenance is indicated in each row');
 assert.match(chrome, /ref\.row\.dataset\.selected = isSelected \? '1' : ''/, 'the active watchlist row remains selected through full refreshes and tick updates');
