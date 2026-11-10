@@ -134,13 +134,9 @@ export function createTcoVelaTerminalOptions(
         'tco.trading',
         'tco.positions',
         '|',
-        'tco.replay',
-        'tco.quant',
-        'tco.corespirit-code',
         'tco.panels',
       ],
       bottom:[
-        'tco.workspace-frame',
         'objects',
         'dataWindow',
         '|',
