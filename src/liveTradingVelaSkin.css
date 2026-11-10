@@ -612,3 +612,717 @@
     animation-duration: .01ms !important;
   }
 }
+
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Vela interaction surfaces — search, quick tools, flyouts, menus and panels.
+   These are Vela's existing controls; this layer only aligns their presentation.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Shared popup / command surfaces: symbol search, timeframe entry, indicator picker,
+   settings and menus use one restrained graphite surface and border language. */
+.tco-live-surface [data-slot="dialog-content"],
+.tco-live-surface [data-slot="dialog"],
+.tco-live-surface [data-slot="dropdown-menu-content"],
+.tco-live-surface [data-slot="dropdown-menu-sub-content"],
+.tco-live-surface [data-slot="context-menu-content"],
+.tco-live-surface [data-slot="context-menu-sub-content"],
+.tco-live-surface [data-slot="select-content"],
+.tco-live-surface [data-slot="combobox-content"],
+.tco-live-surface [data-slot="popover-content"] {
+  border-color: #343a45 !important;
+  border-radius: 9px !important;
+  background: #171a20 !important;
+  color: #d9dee7 !important;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .025) !important;
+}
+.tco-live-surface [data-slot="dialog-title"] {
+  color: #f0f2f6 !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+}
+.tco-live-surface [data-slot="dialog-description"] {
+  color: #929ba8 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface [data-slot="dropdown-menu-label"],
+.tco-live-surface [data-slot="context-menu-label"],
+.tco-live-surface [data-slot="select-group-label"] {
+  color: #818b99 !important;
+  font-size: 9px !important;
+  font-weight: 750 !important;
+  letter-spacing: .075em !important;
+  text-transform: uppercase;
+}
+.tco-live-surface [data-slot="dropdown-menu-item"],
+.tco-live-surface [data-slot="dropdown-menu-checkbox-item"],
+.tco-live-surface [data-slot="dropdown-menu-radio-item"],
+.tco-live-surface [data-slot="dropdown-menu-sub-trigger"],
+.tco-live-surface [data-slot="context-menu-item"],
+.tco-live-surface [data-slot="context-menu-checkbox-item"],
+.tco-live-surface [data-slot="context-menu-radio-item"],
+.tco-live-surface [data-slot="context-menu-sub-trigger"],
+.tco-live-surface [data-slot="select-item"],
+.tco-live-surface [data-slot="combobox-item"] {
+  min-height: 29px;
+  border-radius: 5px !important;
+  color: #c6ccd6 !important;
+  font-size: 11px !important;
+  transition: background-color 90ms ease, color 90ms ease;
+}
+.tco-live-surface [data-slot="dropdown-menu-item"][data-highlighted],
+.tco-live-surface [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+.tco-live-surface [data-slot="dropdown-menu-radio-item"][data-highlighted],
+.tco-live-surface [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+.tco-live-surface [data-slot="context-menu-item"][data-highlighted],
+.tco-live-surface [data-slot="context-menu-checkbox-item"][data-highlighted],
+.tco-live-surface [data-slot="context-menu-radio-item"][data-highlighted],
+.tco-live-surface [data-slot="context-menu-sub-trigger"][data-highlighted],
+.tco-live-surface [data-slot="select-item"][data-highlighted],
+.tco-live-surface [data-slot="combobox-item"][data-highlighted],
+.tco-live-surface [data-slot="dropdown-menu-item"]:hover,
+.tco-live-surface [data-slot="context-menu-item"]:hover {
+  background: #252b35 !important;
+  color: #f2f5fa !important;
+}
+.tco-live-surface [data-slot="dropdown-menu-separator"],
+.tco-live-surface [data-slot="context-menu-separator"] {
+  background: #303641 !important;
+  margin-block: 4px !important;
+}
+.tco-live-surface [data-slot="dropdown-menu-shortcut"],
+.tco-live-surface [data-slot="context-menu-shortcut"] {
+  color: #798493 !important;
+  font-size: 9px !important;
+  font-variant-numeric: tabular-nums;
+}
+.tco-live-surface [data-slot="dropdown-menu-item"][data-disabled],
+.tco-live-surface [data-slot="context-menu-item"][data-disabled],
+.tco-live-surface [data-slot="select-item"][data-disabled] {
+  opacity: .38 !important;
+}
+
+/* Symbol Search: a proper market picker, not an oversized generic dialog. */
+.tco-live-surface .vela-sp-head {
+  padding: 13px 14px 0 !important;
+}
+.tco-live-surface .vela-sp-searchrow,
+.tco-live-surface .vela-ip-searchrow {
+  height: 38px !important;
+  gap: 9px !important;
+  padding: 0 11px !important;
+  border: 1px solid #303641 !important;
+  border-radius: 6px !important;
+  background: #101318 !important;
+  color: #8e98a6 !important;
+  transition: border-color 100ms ease, box-shadow 100ms ease;
+}
+.tco-live-surface .vela-sp-searchrow:focus-within,
+.tco-live-surface .vela-ip-searchrow:focus-within {
+  border-color: #527fbd !important;
+  box-shadow: 0 0 0 2px rgba(82, 127, 189, .12);
+}
+.tco-live-surface .vela-sp-searchrow .vela-icon,
+.tco-live-surface .vela-ip-searchrow .vela-icon {
+  color: #7f8997 !important;
+  font-size: 14px !important;
+}
+.tco-live-surface .vela-sp-input,
+.tco-live-surface .vela-ip-search {
+  color: #eef1f6 !important;
+  font: 11px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  letter-spacing: .01em;
+}
+.tco-live-surface .vela-sp-input::placeholder,
+.tco-live-surface .vela-ip-search::placeholder {
+  color: #727c89 !important;
+  text-transform: none;
+}
+.tco-live-surface .vela-sp-tabs {
+  gap: 3px !important;
+  margin: 10px 0 0 !important;
+  padding: 0 0 7px !important;
+  border-bottom: 1px solid #2c323b !important;
+}
+.tco-live-surface .vela-sp-tabs .vela-tab {
+  min-height: 27px !important;
+  padding: 0 9px !important;
+  border-radius: 5px !important;
+  color: #929ba8 !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+}
+.tco-live-surface .vela-sp-tabs .vela-tab:hover {
+  background: #222832 !important;
+  color: #edf1f7 !important;
+}
+.tco-live-surface .vela-sp-tabs .vela-tab[data-active],
+.tco-live-surface .vela-sp-tabs .vela-tab[aria-selected="true"] {
+  background: rgba(41, 98, 255, .15) !important;
+  color: #e0eaff !important;
+  box-shadow: inset 0 0 0 1px rgba(83, 132, 225, .22);
+}
+.tco-live-surface .vela-sp-list {
+  max-height: min(54vh, 520px) !important;
+  margin: 7px 14px 13px !important;
+  scrollbar-width: thin;
+  scrollbar-color: #373e49 transparent;
+}
+.tco-live-surface .vela-sp-row {
+  min-height: 42px;
+  gap: 10px !important;
+  padding: 5px 8px !important;
+  border: 1px solid transparent;
+  border-radius: 5px !important;
+  transition: background-color 90ms ease, border-color 90ms ease;
+}
+.tco-live-surface .vela-sp-row:hover,
+.tco-live-surface .vela-sp-row[data-highlighted] {
+  border-color: rgba(91, 137, 220, .2);
+  background: rgba(41, 98, 255, .11) !important;
+}
+.tco-live-surface .vela-sp-avatar {
+  width: 25px !important;
+  height: 25px !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-sp-ticker {
+  color: #edf1f6 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .015em;
+}
+.tco-live-surface .vela-sp-desc {
+  color: #858f9d !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-sp-badge {
+  padding: 2px 6px !important;
+  border: 1px solid #343b46 !important;
+  border-radius: 4px !important;
+  background: #1b2028 !important;
+  color: #a5afbd !important;
+  font-size: 8px !important;
+}
+.tco-live-surface .vela-sp-expander:hover {
+  background: #252b35 !important;
+  color: #f2f5fa !important;
+}
+.tco-live-surface .vela-sp-empty {
+  padding: 18px 10px !important;
+  color: #8993a1 !important;
+  font-size: 10px !important;
+}
+
+/* Indicator picker: compact categories with clear "already on chart" separation. */
+.tco-live-surface .vela-ip-list {
+  min-width: min(420px, calc(100vw - 48px)) !important;
+  max-height: 54vh !important;
+  scrollbar-width: thin;
+  scrollbar-color: #373e49 transparent;
+}
+.tco-live-surface .vela-ip-group {
+  padding: 9px 5px 5px !important;
+  border-bottom-color: #2c323b !important;
+  color: #818b99 !important;
+  font-size: 8px !important;
+  letter-spacing: .085em !important;
+}
+.tco-live-surface .vela-ip-oncard {
+  padding: 5px 7px !important;
+  border: 1px solid #303641 !important;
+  border-radius: 6px !important;
+  background: #11151b !important;
+}
+.tco-live-surface .vela-ip-row {
+  min-height: 33px;
+  gap: 8px !important;
+  padding: 5px 7px !important;
+  border-radius: 5px !important;
+  color: #e4e9f0 !important;
+}
+.tco-live-surface .vela-ip-row:hover {
+  background: #232a34 !important;
+}
+.tco-live-surface .vela-ip-name {
+  color: #e5eaf1 !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+.tco-live-surface .vela-ip-badge {
+  padding: 1px 6px !important;
+  border-color: #343b46 !important;
+  border-radius: 4px !important;
+  background: #1a2028 !important;
+  color: #a9bfe7 !important;
+  font-size: 8px !important;
+}
+.tco-live-surface .vela-ip-trash {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px !important;
+}
+.tco-live-surface .vela-ip-trash:hover {
+  background: rgba(242, 54, 69, .1) !important;
+  color: #ff8992 !important;
+}
+.tco-live-surface .vela-ip-empty {
+  padding: 18px !important;
+  color: #8993a1 !important;
+  font-size: 10px !important;
+}
+
+/* The Alt quick-drawing wheel: the eight tools keep their native actions and anchor.
+   Only the purple prototype accent is replaced with the terminal's restrained blue. */
+.tco-live-surface .vela-alt-wheel {
+  --tco-wheel-highlight: #4d83e6 !important;
+}
+.tco-live-surface .vela-alt-wheel-orbit::before {
+  border-color: rgba(91, 137, 220, .38) !important;
+  background: rgba(17, 21, 28, .91) !important;
+  box-shadow: 0 20px 58px rgba(0, 0, 0, .5), inset 0 0 0 1px rgba(255, 255, 255, .025) !important;
+  backdrop-filter: blur(16px);
+}
+.tco-live-surface .vela-alt-wheel-action {
+  width: 58px !important;
+  height: 58px !important;
+  border-color: #343b47 !important;
+  background: #1a1f27 !important;
+  color: #dce3ed !important;
+  box-shadow: 0 9px 22px rgba(0, 0, 0, .34) !important;
+}
+.tco-live-surface .vela-alt-wheel-action:hover,
+.tco-live-surface .vela-alt-wheel-action:focus-visible {
+  border-color: #5b89dc !important;
+  background: rgba(41, 98, 255, .18) !important;
+  color: #e1ebff !important;
+  box-shadow: 0 0 0 1px rgba(77, 132, 255, .25), 0 13px 28px rgba(0, 0, 0, .4) !important;
+}
+.tco-live-surface .vela-alt-wheel-action .vela-alt-wheel-glyph {
+  width: 20px !important;
+  height: 20px !important;
+}
+.tco-live-surface .vela-alt-wheel-action .vela-alt-wheel-label {
+  top: calc(100% + 7px) !important;
+  padding: 3px 6px;
+  border: 1px solid rgba(48, 56, 68, .8);
+  border-radius: 4px;
+  background: rgba(17, 21, 28, .94);
+  color: #b7c1cf !important;
+  font-size: 8px !important;
+  font-weight: 650 !important;
+  letter-spacing: .035em !important;
+}
+.tco-live-surface .vela-alt-wheel-center {
+  width: 76px !important;
+  height: 76px !important;
+  border-color: #3b4350 !important;
+  background: linear-gradient(180deg, #252b35, #171c23) !important;
+  color: #f0f3f8 !important;
+  box-shadow: 0 15px 38px rgba(0, 0, 0, .46), inset 0 0 0 1px rgba(255, 255, 255, .035) !important;
+}
+.tco-live-surface .vela-alt-wheel-center:hover,
+.tco-live-surface .vela-alt-wheel-center:focus-visible {
+  border-color: #5b89dc !important;
+  box-shadow: 0 0 0 1px rgba(77, 132, 255, .28), 0 18px 42px rgba(0, 0, 0, .5) !important;
+}
+.tco-live-surface .vela-alt-wheel-center .vela-alt-wheel-center-label {
+  color: #aeb9c8 !important;
+  font-size: 8px !important;
+}
+.tco-live-surface .vela-alt-wheel-hint {
+  bottom: 16px !important;
+  border-color: #343b47 !important;
+  background: rgba(17, 21, 28, .94) !important;
+  color: #aeb8c6 !important;
+  font-size: 8px !important;
+}
+
+/* Drawing groups open into this flyout. Keep its full native tool catalog, favorites,
+   selected-tool marker and shortcuts, but remove the heavy generic-popover appearance. */
+.tco-live-surface .vela-workspace .vela-dtb-flyout {
+  min-width: 190px;
+  padding: 4px !important;
+  border: 1px solid #343b47 !important;
+  border-radius: 7px !important;
+  background: #171b22 !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .46) !important;
+  backdrop-filter: blur(12px);
+}
+.tco-live-surface .vela-workspace .vela-dtb-item {
+  min-height: 31px;
+  gap: 9px !important;
+  border-radius: 5px !important;
+  color: #d6dce6 !important;
+  font: 11px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-item:hover {
+  background: #252c37 !important;
+  color: #f2f5fa !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-item[data-selected="1"] {
+  background: rgba(41, 98, 255, .14) !important;
+  color: #e3ecff !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-badge {
+  border-color: #343c48 !important;
+  border-radius: 5px !important;
+  background: #202630 !important;
+  color: #aeb9c8 !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-item[data-selected="1"] .vela-dtb-badge {
+  border-color: #45669b !important;
+  background: rgba(41, 98, 255, .17) !important;
+  color: #dfeaff !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-hint {
+  color: #7f8a99 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-star {
+  color: #8d98a7 !important;
+}
+.tco-live-surface .vela-workspace .vela-dtb-star.vela-fav {
+  color: #e4bd68 !important;
+}
+
+/* Timeframe quick entry and the chart-layout picker. */
+.tco-live-surface .vela-tq-input {
+  width: 210px !important;
+  height: 40px !important;
+  border-color: #303641 !important;
+  border-radius: 6px !important;
+  background: #101318 !important;
+  color: #f1f4f8 !important;
+  font: 600 18px/1 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-tq-input:focus {
+  border-color: #527fbd !important;
+  box-shadow: 0 0 0 2px rgba(82, 127, 189, .12);
+}
+.tco-live-surface .vela-tq-hint {
+  color: #858f9d !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-tq-hint[data-invalid] {
+  color: #f08a91 !important;
+}
+.tco-live-surface .vela-lp {
+  border-color: #343b47 !important;
+  border-radius: 8px !important;
+  background: #171b22 !important;
+  color: #d5dbe4 !important;
+  box-shadow: 0 15px 38px rgba(0, 0, 0, .44) !important;
+}
+.tco-live-surface .vela-lp-heading {
+  color: #8993a1 !important;
+  font-size: 8px !important;
+  letter-spacing: .09em !important;
+}
+.tco-live-surface .vela-lp-vsep {
+  background: #343b47 !important;
+}
+.tco-live-surface .vela-lp-sq {
+  border-color: #343b47 !important;
+  background: #252b35 !important;
+}
+.tco-live-surface .vela-lp-sq:hover {
+  border-color: #64748b !important;
+  background: #303947 !important;
+}
+.tco-live-surface .vela-lp-sq[data-on="1"] {
+  border-color: #5b89dc !important;
+  background: rgba(41, 98, 255, .28) !important;
+}
+.tco-live-surface .vela-lp-preset {
+  color: #aab4c2 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-lp-preset:hover,
+.tco-live-surface .vela-lp-preset[data-checked="1"] {
+  background: #252c37 !important;
+  color: #f0f3f8 !important;
+}
+.tco-live-surface .vela-lp-sync-row:hover {
+  background: #252b35 !important;
+}
+.tco-live-surface .vela-lp-switch.on {
+  background: #456fae !important;
+  border-color: #5b89dc !important;
+}
+
+/* Chart Settings: tab rail, group TOC, instance tabs and controls. */
+.tco-live-surface .vela-sd-pane {
+  scrollbar-width: thin;
+  scrollbar-color: #363e49 transparent;
+}
+.tco-live-surface .vela-sd-tab,
+.tco-live-surface .vela-sd-toc-btn {
+  border-radius: 5px !important;
+  color: #9ba5b3 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-sd-tab:hover,
+.tco-live-surface .vela-sd-toc-btn:hover {
+  background: #242b35 !important;
+  color: #eff3f8 !important;
+}
+.tco-live-surface .vela-sd-tab.on,
+.tco-live-surface .vela-sd-toc-btn.on {
+  background: rgba(41, 98, 255, .16) !important;
+  color: #e3ecff !important;
+}
+.tco-live-surface .vela-sd-itab {
+  height: 28px !important;
+  border-color: #343b47 !important;
+  border-radius: 5px !important;
+  color: #9da8b6 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-sd-itab.on {
+  border-color: #496c9e !important;
+  background: rgba(41, 98, 255, .13) !important;
+  color: #e2ebff !important;
+}
+.tco-live-surface .vela-sd-toc {
+  gap: 3px !important;
+}
+.tco-live-surface .vela-sd-struct > [data-sd-rows-host] {
+  border-color: #343b47 !important;
+}
+.tco-live-surface .vela-sd-btn {
+  height: 29px !important;
+  border: 1px solid #3a424f !important;
+  border-radius: 5px !important;
+  background: #202630 !important;
+  color: #d6dde7 !important;
+  font: 600 10px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+.tco-live-surface .vela-sd-btn:hover {
+  border-color: #59677b !important;
+  background: #2a3340 !important;
+  color: #f4f6f9 !important;
+}
+.tco-live-surface .vela-sd-btn-primary {
+  border-color: rgba(77, 132, 255, .5) !important;
+  background: rgba(41, 98, 255, .18) !important;
+  color: #e2ebff !important;
+}
+.tco-live-surface .vela-sd-close {
+  border-radius: 5px !important;
+  color: #9aa4b2 !important;
+}
+.tco-live-surface .vela-sd-close:hover {
+  background: #2a303a !important;
+  color: #f4f6f9 !important;
+}
+.tco-live-surface .vela-sd-footer-note {
+  color: #808b99 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-sd-row,
+.tco-live-surface .vela-sd-bool,
+.tco-live-surface .vela-field-label {
+  color: #d4dbe5;
+}
+.tco-live-surface .vela-select-trigger,
+.tco-live-surface .vela-num input,
+.tco-live-surface .vela-width-field {
+  border-color: #343b47 !important;
+  border-radius: 5px !important;
+  background: #11161d !important;
+  color: #e6ebf2 !important;
+}
+.tco-live-surface .vela-select-trigger:hover,
+.tco-live-surface .vela-num input:focus,
+.tco-live-surface .vela-width-field:focus {
+  border-color: #527fbd !important;
+}
+
+/* Object Tree and Data Window: dense but readable inspection panels. */
+.tco-live-surface .vela-ot-pane {
+  border-radius: 6px !important;
+}
+.tco-live-surface .vela-ot-panehead {
+  padding: 5px 6px !important;
+}
+.tco-live-surface .vela-ot-panename,
+.tco-live-surface .vela-ot-selcount {
+  color: #8792a0 !important;
+  font-size: 8px !important;
+  letter-spacing: .09em !important;
+}
+.tco-live-surface .vela-ot-row {
+  min-height: 30px;
+  gap: 8px !important;
+  padding: 4px 6px !important;
+  border-radius: 5px !important;
+  color: #d8dee7;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-ot-row:hover {
+  background: #232a34 !important;
+}
+.tco-live-surface .vela-ot-row[data-picked] {
+  background: rgba(41, 98, 255, .14) !important;
+}
+.tco-live-surface .vela-ot-row[data-selected] {
+  box-shadow: inset 2px 0 0 #4e82d7 !important;
+}
+.tco-live-surface .vela-ot-tag {
+  background: #252b35 !important;
+  color: #97a3b2 !important;
+}
+.tco-live-surface .vela-ot-btn {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 4px !important;
+  color: #8c97a5 !important;
+}
+.tco-live-surface .vela-ot-btn:hover:not(:disabled) {
+  background: #303947 !important;
+  color: #f0f3f8 !important;
+}
+.tco-live-surface .vela-ot-selbar {
+  background: #15191f !important;
+  border-bottom-color: #343b47 !important;
+}
+.tco-live-surface .vela-ot-empty,
+.tco-live-surface .vela-dw-empty {
+  color: #8792a0 !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-dw-group {
+  padding: 8px 8px 4px !important;
+  border-top-color: #343b47 !important;
+  color: #8792a0 !important;
+  font-size: 8px !important;
+  letter-spacing: .09em !important;
+}
+.tco-live-surface .vela-dw-row {
+  min-height: 25px;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+  color: #d9e0e9;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-dw-row:hover {
+  background: #222832 !important;
+}
+.tco-live-surface .vela-dw-label {
+  color: #aab4c1 !important;
+}
+.tco-live-surface .vela-dw-value {
+  color: #edf1f6 !important;
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mobile drawing list and three-dot drawer share the same compact search and selected states. */
+.tco-live-surface .vela-dd-sticky {
+  background: #15191f !important;
+}
+.tco-live-surface .vela-dd-search {
+  min-height: 35px;
+  padding: 6px 10px !important;
+  border-color: #343b47 !important;
+  border-radius: 6px !important;
+  background: #10151b !important;
+}
+.tco-live-surface .vela-dd-search input {
+  color: #edf1f6 !important;
+  font-size: 11px !important;
+}
+.tco-live-surface .vela-dd-tabs {
+  gap: 4px !important;
+  border-bottom-color: #343b47 !important;
+  background: #15191f !important;
+}
+.tco-live-surface .vela-dd-row {
+  min-height: 38px !important;
+  gap: 9px !important;
+  border-radius: 5px !important;
+}
+.tco-live-surface .vela-dd-row[data-active="1"] {
+  background: rgba(41, 98, 255, .13) !important;
+}
+.tco-live-surface .vela-dd-row[data-active="1"] .vela-dd-label {
+  color: #e2ebff !important;
+}
+.tco-live-surface .vela-dd-section,
+.tco-live-surface .vela-dd-empty {
+  color: #8792a0 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-dd-label {
+  color: #dfe5ed !important;
+  font-size: 11px !important;
+}
+.tco-live-surface .vela-dd-star {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 5px !important;
+}
+
+/* Bottom-bar range/session controls and keyboard reference. */
+.tco-live-surface .vela-workspace .vela-widget-bottombar {
+  height: 27px !important;
+  min-height: 27px !important;
+  padding: 0 8px !important;
+  border-top-color: #292f38 !important;
+  background: #15191f !important;
+  color: #8d97a4 !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-workspace .vela-bb-range,
+.tco-live-surface .vela-workspace .vela-bb-tz,
+.tco-live-surface .vela-workspace .vela-bb-session-btn,
+.tco-live-surface .vela-workspace .vela-bb-settings {
+  height: 22px !important;
+  border-radius: 4px !important;
+  color: #a4aebb !important;
+  font-size: 9px !important;
+}
+.tco-live-surface .vela-workspace .vela-bb-range:hover,
+.tco-live-surface .vela-workspace .vela-bb-range[data-active="1"],
+.tco-live-surface .vela-workspace .vela-bb-tz:hover,
+.tco-live-surface .vela-workspace .vela-bb-session-btn:not(:disabled):hover,
+.tco-live-surface .vela-workspace .vela-bb-settings:hover {
+  background: #252b35 !important;
+  color: #f0f3f8 !important;
+}
+.tco-live-surface .vela-sh-cat {
+  color: #8792a0 !important;
+  font-size: 8px !important;
+  letter-spacing: .09em !important;
+}
+.tco-live-surface .vela-sh-row {
+  min-height: 25px;
+  gap: 10px !important;
+  font-size: 10px !important;
+}
+.tco-live-surface .vela-sh-key {
+  min-width: 20px;
+  padding: 2px 6px !important;
+  border-color: #343b47 !important;
+  border-radius: 4px !important;
+  background: #222832 !important;
+  color: #d4dce7 !important;
+  font-size: 9px !important;
+}
+
+/* Reduced height: preserve the controls and their scroll areas without inflating dialogs. */
+@media (max-height: 760px) {
+  .tco-live-surface .vela-sp-list {
+    max-height: 48vh !important;
+  }
+  .tco-live-surface .vela-ip-list {
+    max-height: 46vh !important;
+  }
+  .tco-live-surface .vela-alt-wheel-orbit {
+    transform: translate(-50%, -50%) scale(.88);
+  }
+  .tco-live-surface .vela-alt-wheel[data-open="1"] .vela-alt-wheel-orbit {
+    transform: translate(-50%, -50%) scale(.94);
+  }
+}
