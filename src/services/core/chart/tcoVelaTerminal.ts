@@ -104,13 +104,13 @@ export function createTcoVelaTerminalOptions(
     // Match Vela's current production visual language: neutral charcoal canvas,
     // restrained grid, standard Vela candle colors, and eased zoom/pan.
     theme:{
-      background:'#141518',
-      textColor:'#9ca3af',
-      gridColor:'#24262e',
-      borderColor:'#2b2d36',
+      background:'#121316',
+      textColor:'#a1a1a1',
+      gridColor:'#25272d',
+      borderColor:'#292b31',
       upColor:'#089981',
       downColor:'#f23645',
-      fontFamily:'Inter, system-ui, sans-serif',
+      fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     },
     animations:{ zoom:true, pan:true, liveBar:false },
     defaultLanguage:'corespirit',

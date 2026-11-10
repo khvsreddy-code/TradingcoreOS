@@ -964,12 +964,12 @@ const browserRuntimeMetrics = useRef({
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-      <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#050609] text-[#e5e7eb]">
+      <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#121316] text-[#e5e7eb]">
         <header
           aria-label="TradingCoreOS workspace header"
-          className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#2a2b30] bg-[#151619] px-2 text-[12px] text-[#d1d4dc] shadow-[0_1px_0_rgba(0,0,0,.28)]"
+          className="absolute inset-x-0 top-0 z-[130] flex h-[38px] items-center gap-2 border-b border-[#ffffff1a] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
         >
-          <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#2a2b30] pe-3">
+          <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#ffffff1a] pe-3">
             <img
               src="/tradingcoreos-logo.svg"
               alt=""
@@ -982,13 +982,12 @@ const browserRuntimeMetrics = useRef({
           </div>
 
           <div
-            className="flex h-full min-w-0 max-w-[min(46vw,560px)] flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex h-full min-w-0 max-w-[min(46vw,560px)] flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist" aria-label="Open chart tabs" aria-roledescription="workspace chart tabs"
           >
             {velaAppTabs.map((tab) => {
               const ticker = tab.symbol.includes(':') ? tab.symbol.split(':').pop() || tab.symbol : tab.symbol;
               const selected = tab.id === activeVelaAppTabId;
-              const initials = ticker.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'CH';
               const timeframeLabel = tab.timeframe === 'D' ? '1D' : tab.timeframe === 'W' ? '1W' : `${tab.timeframe}m`;
               return (
                 <button
@@ -998,13 +997,10 @@ const browserRuntimeMetrics = useRef({
                   aria-selected={selected}
                   title={`Activate ${tab.symbol} · ${timeframeLabel}`}
                   onClick={() => workspaceRef.current?.setActiveCell(tab.id)}
-                  className={`group relative mt-1 flex h-8 max-w-56 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff] ${selected ? 'bg-[#202227] text-[#f0f2f7] shadow-[inset_0_-2px_0_#d5a24b]' : 'text-[#969ba6] hover:bg-white/[0.045] hover:text-[#e5e7eb]'}`}
+                  className={`group relative mt-1 flex h-[30px] max-w-56 min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2.5 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#2962ff] ${selected ? 'bg-[#1c1d20] text-[#fafafa] shadow-[inset_0_-2px_0_#2962ff]' : 'text-[#a1a1a1] hover:bg-white/[0.045] hover:text-[#fafafa]'}`}
                 >
-                  <span className={`grid size-4 shrink-0 place-items-center rounded-full text-[7px] font-bold ${selected ? 'bg-[#343b4b] text-[#d8e1ff]' : 'bg-[#292c33] text-[#a8adba]'}`} aria-hidden="true">
-                    {initials}
-                  </span>
-                  <span className="min-w-0 truncate font-medium">{ticker}</span>
-                  <span className={`shrink-0 text-[10px] tabular-nums ${selected ? 'text-[#aeb4bf]' : 'text-[#777d88]'}`}>{timeframeLabel}</span>
+                  <span className="min-w-0 truncate text-[11px] font-semibold tracking-[.01em]">{ticker}</span>
+                  <span className={`shrink-0 text-[9px] font-medium tabular-nums ${selected ? 'text-[#a1a1a1]' : 'text-[#737983]'}`}>{timeframeLabel}</span>
                 </button>
               );
             })}
@@ -1019,25 +1015,25 @@ const browserRuntimeMetrics = useRef({
             </button>
           </div>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden px-2 lg:flex">
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.07em] text-[#7d838e]">{headerExchange || 'Market'}</span>
-            <span className="max-w-[145px] truncate font-medium text-[#c8cbd3]">{headerTicker}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-[#eceef3]">{headerPrice}</span>
-            <span className={`shrink-0 font-medium tabular-nums ${headerChange === undefined ? 'text-[#858b96]' : headerQuotePositive ? 'text-[#22b896]' : 'text-[#f05b68]'}`}>
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-2.5 overflow-hidden px-3 lg:flex" aria-label="Active chart quote">
+            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[.09em] text-[#737983]">LTP</span>
+            <span className="shrink-0 font-semibold tabular-nums text-[#f0f1f4]">{headerPrice}</span>
+            <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${headerChange === undefined ? 'text-[#737983]' : headerQuotePositive ? 'text-[#089981]' : 'text-[#f23645]'}`}>
               {headerChangeLabel}
             </span>
-            <span className={`shrink-0 text-[11px] tabular-nums ${headerChangePercent === undefined ? 'text-[#858b96]' : headerQuotePositive ? 'text-[#22b896]' : 'text-[#f05b68]'}`}>
+            <span className={`shrink-0 text-[10px] tabular-nums ${headerChangePercent === undefined ? 'text-[#737983]' : headerQuotePositive ? 'text-[#089981]' : 'text-[#f23645]'}`}>
               {headerChangePercentLabel}
             </span>
-            <span className="mx-1 h-4 w-px shrink-0 bg-[#30333a]" aria-hidden="true"/>
-            <span className={`shrink-0 rounded-[4px] px-1.5 py-[3px] text-[9px] font-bold tracking-[.06em] ${headerQuoteFresh && chartStatus.phase === 'live' ? 'bg-emerald-950/60 text-emerald-300' : 'bg-[#282a30] text-[#9ca2ad]'}`}>
-              {headerQuoteFresh && chartStatus.phase === 'live' ? String(headerQuote?.source || 'LIVE').toUpperCase() : 'QUOTE'}
-            </span>
+            {headerQuote?.source && (
+              <span className="ms-1 shrink-0 border-s border-[#ffffff1a] ps-2 text-[9px] font-semibold uppercase tracking-[.07em] text-[#737983]" title="Quote source">
+                {headerQuote.source}
+              </span>
+            )}
           </div>
 
-          <div className="ms-auto flex h-full shrink-0 items-center gap-2 border-s border-[#2a2b30] ps-2">
+          <div className="ms-auto flex h-full shrink-0 items-center gap-2 border-s border-[#ffffff1a] ps-3">
             <span
-              className={`inline-flex h-[21px] items-center gap-1.5 rounded-[5px] border px-2 text-[9px] font-bold tracking-[.07em] ${chartStatus.phase === 'live' ? 'border-emerald-900/70 bg-emerald-950/45 text-emerald-300' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'border-red-900/70 bg-red-950/35 text-red-300' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'border-amber-900/70 bg-amber-950/30 text-amber-300' : 'border-[#3a3d45] bg-[#202227] text-[#a9afb9]'}`}
+              className={`inline-flex h-[22px] items-center gap-1.5 rounded-md border px-2 text-[9px] font-bold tracking-[.07em] ${chartStatus.phase === 'live' ? 'border-[#1d5f51] bg-[#0d2822] text-[#5bd3b4]' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'border-[#66272c] bg-[#291518] text-[#ff8b92]' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'border-[#6b552b] bg-[#2b2417] text-[#e7bf6e]' : 'border-[#ffffff1a] bg-[#1c1d20] text-[#a1a1a1]'}`}
               title={chartStatus.detail}
             >
               <span className={`size-1.5 rounded-full ${chartStatus.phase === 'live' ? 'bg-emerald-400' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'bg-red-400' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'bg-amber-400' : 'bg-[#89909b]'}`} aria-hidden="true"/>
@@ -1048,7 +1044,7 @@ const browserRuntimeMetrics = useRef({
               title="Account and broker settings"
               aria-label="Open account and broker settings"
               onClick={() => workspaceRef.current?.togglePanel('tco.account', true)}
-              className="grid size-7 shrink-0 place-items-center rounded-full text-[#aeb3bd] transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff]"
+              className="grid size-7 shrink-0 place-items-center rounded-md text-[#a1a1a1] transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#2962ff]"
             >
               <UserRound size={15} strokeWidth={1.7}/>
             </button>
@@ -1058,10 +1054,10 @@ const browserRuntimeMetrics = useRef({
 
         <div
           ref={host}
-          className="absolute inset-x-0 bottom-[27px] top-9"
+          className="absolute inset-x-0 bottom-[26px] top-[38px]"
           aria-label="TradingCoreOS Vela live trading chart"
         />
-        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[27px] items-center justify-between border-t border-[#2a2b30] bg-[#151619] px-3 text-[10px] text-[#8e939d]">
+        <footer className="absolute inset-x-0 bottom-0 z-[130] flex h-[26px] items-center justify-between border-t border-[#ffffff1a] bg-[#151619] px-3 text-[10px] text-[#a1a1a1]">
           <div className="flex min-w-0 items-center gap-2">
             <span className="hidden font-semibold tracking-[.08em] text-[#b5bac4] sm:inline">RANGE</span>
             <span className="hidden text-[#555b65] sm:inline">/</span>
@@ -1074,7 +1070,7 @@ const browserRuntimeMetrics = useRef({
                   onClick={() => {
                     try { workspaceRef.current?.chart.setVisibleRangePreset(preset); } catch { /* chart may still be mounting */ }
                   }}
-                  className="rounded px-1.5 py-1 text-[#8e939d] transition-colors hover:bg-[#252830] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#8b7cff]"
+                  className="rounded px-1.5 py-1 text-[#8e939d] transition-colors hover:bg-[#1c1d20] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#2962ff]"
                 >
                   {preset}
                 </button>

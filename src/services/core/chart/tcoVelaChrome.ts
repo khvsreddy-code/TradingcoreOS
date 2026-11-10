@@ -232,8 +232,8 @@ const appliedTcoVelaThemeSignatures = new WeakMap<object, string>();
 let pendingTcoChartThemeTimer: number | null = null;
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
-    uiBackground: '#0d0f13', topbarBackground: '#141518', panelBackground: '#111317', chartBackground: '#141518',
-    chartTextColor: '#9ca3af', gridColor: '#26282e', accent: '#8b7cff', upColor: '#089981', downColor: '#f23645',
+    uiBackground: '#121316', topbarBackground: '#151619', panelBackground: '#151619', chartBackground: '#121316',
+    chartTextColor: '#a1a1a1', gridColor: '#292b31', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
   } },
   { id: 'tradingview-dark', label: 'TradingView Dark', colors: {
     uiBackground: '#131722', topbarBackground: '#131722', panelBackground: '#171b26', chartBackground: '#131722',
@@ -267,15 +267,15 @@ const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
 
 const DEFAULT_FRAME_PREFERENCES: TcoFramePreferences = {
   sidebar: 'right',
-  density: 'comfortable',
+  density: 'compact',
   themePreset: 'graphite',
-  uiBackground: '#0d0f13',
-  topbarBackground: '#141518',
-  panelBackground: '#111317',
-  chartBackground: '#141518',
-  chartTextColor: '#9ca3af',
-  gridColor: '#26282e',
-  accent: '#8b7cff',
+  uiBackground: '#121316',
+  topbarBackground: '#151619',
+  panelBackground: '#151619',
+  chartBackground: '#121316',
+  chartTextColor: '#a1a1a1',
+  gridColor: '#292b31',
+  accent: '#2962ff',
   upColor: '#089981',
   downColor: '#f23645',
   chartBackgroundMode: 'solid',
@@ -703,6 +703,87 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-watchlist-news-list { gap:5px!important;margin-top:5px!important; }
     .tco-watchlist-news-list a { font-size:8px!important;line-height:1.35!important; }
     .tco-watch-suggestion { min-height:33px!important;padding:7px 9px!important; }
+
+    /* Reference-derived Vela chrome: neutral graphite surfaces, quiet separators,
+       one shared drawing rail and a compact right utility rail. */
+    .vela-workspace { background:var(--tco-user-vela-ui,#121316)!important; color:#fafafa; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important; }
+    .vela-workspace .vela-widget-topbar {
+      min-height:34px!important; padding:3px 8px!important; gap:4px!important;
+      background:var(--tco-user-vela-topbar,#151619)!important; border-bottom:1px solid var(--tco-user-vela-grid,#292b31)!important;
+      box-shadow:none!important; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+    }
+    .vela-workspace .vela-widget-topbar button { min-height:27px; border-radius:6px!important; transition:background-color 110ms ease,color 110ms ease!important; }
+    .vela-workspace .vela-widget-topbar button:hover { background:rgba(255,255,255,.065)!important; color:#fafafa!important; }
+    .vela-workspace .vela-widget-symbol { color:#f4f5f7!important; font-size:12px!important; font-weight:650!important; }
+    .vela-workspace .vela-widget-tf,.vela-workspace .vela-widget-style,.vela-workspace .vela-widget-indicators,
+    .vela-workspace .vela-widget-action,.vela-workspace .vela-widget-action-left,.vela-workspace .vela-widget-tool { color:#c4c7ce!important; font-size:11px!important; }
+    .vela-workspace .vela-ws-toolbar { background:var(--tco-user-vela-ui,#121316)!important; border-inline-end:1px solid var(--tco-user-vela-grid,#292b31)!important; }
+    .vela-workspace .vela-dtb { background:var(--tco-user-vela-ui,#121316)!important; border-right:1px solid var(--tco-user-vela-grid,#292b31)!important; padding:7px 0!important; gap:4px!important; box-shadow:none!important; }
+    .vela-workspace .vela-dtb-btn { height:30px!important; color:#a1a1a1!important; }
+    .vela-workspace .vela-dtb-btn:hover { color:#fafafa!important; }
+    .vela-workspace .vela-dtb-hit { border-radius:6px!important; }
+    .vela-workspace .vela-dtb-btn[data-active="1"] .vela-dtb-hit,.vela-workspace .vela-dtb-cell[data-active="1"] .vela-dtb-hit { background:rgba(41,98,255,.16)!important; color:#dce6ff!important; }
+    .vela-workspace .vela-sidebar {
+      width:44px!important; flex:0 0 44px!important; padding:8px 0!important; gap:9px!important;
+      background:var(--tco-user-vela-ui,#121316)!important; border-inline-start:1px solid var(--tco-user-vela-grid,#292b31)!important; color:#a1a1a1!important;
+    }
+    .vela-workspace .vela-sidebar-section { gap:6px!important; }
+    .vela-workspace .vela-sidebar-group { gap:3px!important; }
+    .vela-workspace .vela-sidebar-sep { width:18px!important; margin:3px 0!important; background:var(--tco-user-vela-grid,#292b31)!important; }
+    .vela-workspace .vela-sidebar-btn { width:34px!important; height:34px!important; border-radius:8px!important; color:#a1a1a1!important; font-size:16px!important; }
+    .vela-workspace .vela-sidebar-btn:hover { background:rgba(255,255,255,.065)!important; color:#fafafa!important; }
+    .vela-workspace .vela-sidebar-btn[data-active="1"] { background:rgba(41,98,255,.13)!important; color:#e1eaff!important; box-shadow:inset 0 0 0 1px rgba(77,132,255,.22)!important; }
+    .vela-workspace .vela-sidebar-btn[data-active="1"]::before { inset-inline-end:-6px!important; width:2px!important; height:17px!important; background:#2962ff!important; }
+    .vela-workspace .vela-panel { background:var(--tco-user-vela-panel,#151619)!important; border-color:var(--tco-user-vela-grid,#292b31)!important; color:#e5e7eb!important; box-shadow:none!important; }
+    .vela-workspace .vela-panel-header { min-height:40px!important; padding:0 12px!important; gap:8px!important; background:var(--tco-user-vela-panel,#151619)!important; border-bottom:1px solid var(--tco-user-vela-grid,#292b31)!important; box-shadow:none!important; }
+    .vela-workspace .vela-panel-title { color:#f0f1f4!important; font-size:12px!important; font-weight:650!important; letter-spacing:.01em!important; }
+    .vela-workspace .vela-panel-body { background:var(--tco-user-vela-ui,#121316)!important; color:#d1d5db!important; }
+    .vela-workspace .tco-frame-panel { gap:9px!important; padding:10px!important; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important; }
+    .vela-workspace .tco-frame-card { padding:10px 11px!important; border:1px solid var(--tco-user-vela-grid,#292b31)!important; border-radius:8px!important; background:var(--tco-user-vela-panel,#151619)!important; box-shadow:none!important; }
+    .vela-workspace .tco-frame-button { min-height:28px; border-color:var(--tco-user-vela-grid,#292b31)!important; border-radius:6px!important; background:#1c1d20!important; color:#e5e7eb!important; font:600 10px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important; }
+    .vela-workspace .tco-frame-button:hover { border-color:#454a55!important; background:#25272c!important; }
+    .vela-workspace .tco-frame-button-primary { border-color:rgba(41,98,255,.42)!important; background:rgba(41,98,255,.13)!important; color:#dce6ff!important; }
+
+    /* Watchlist: quote rows stay dense; the inspector reads as one flat utility panel. */
+    .vela-workspace .tco-watchlist-panel { padding:9px!important; gap:7px!important; background:var(--tco-user-vela-ui,#121316)!important; }
+    .vela-workspace .tco-watchlist-meta { min-height:14px!important; padding:0 2px!important; color:#858b96!important; font-size:8px!important; font-weight:650!important; letter-spacing:.065em!important; }
+    .vela-workspace .tco-watchlist-actions { justify-content:flex-end!important; gap:6px!important; }
+    .vela-workspace .tco-watchlist-add { min-height:27px!important; padding:0 9px!important; border:1px solid rgba(41,98,255,.35)!important; border-radius:6px!important; background:rgba(41,98,255,.12)!important; color:#dce6ff!important; font-size:9px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-search { height:34px!important; padding:0 10px!important; border:1px solid rgba(255,255,255,.11)!important; border-radius:7px!important; background:#151619!important; color:#f1f2f4!important; font:11px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important; }
+    .vela-workspace .tco-watchlist-search::placeholder { color:#737983!important; }
+    .vela-workspace .tco-watchlist-search:focus { border-color:rgba(41,98,255,.7)!important; box-shadow:0 0 0 2px rgba(41,98,255,.12)!important; }
+    .vela-workspace .tco-watchlist-filters { gap:4px!important; align-items:center!important; }
+    .vela-workspace .tco-watchlist-filters .tco-watch-filter { padding:5px 8px!important; border:1px solid rgba(255,255,255,.09)!important; border-radius:6px!important; background:#1c1d20!important; color:#a1a1a1!important; font-size:9px!important; }
+    .vela-workspace .tco-watchlist-filters .tco-watch-filter[aria-pressed="true"] { border-color:rgba(41,98,255,.5)!important; background:rgba(41,98,255,.14)!important; color:#e1eaff!important; }
+    .vela-workspace .tco-watchlist-sort { height:27px!important; min-width:0!important; border:1px solid rgba(255,255,255,.1)!important; border-radius:6px!important; background:#151619!important; color:#b9bec8!important; font-size:9px!important; }
+    .vela-workspace .tco-watchlist-list { gap:1px!important; min-height:90px!important; padding:1px 2px 5px 0!important; scrollbar-width:thin!important; scrollbar-color:#363a43 transparent!important; }
+    .vela-workspace .tco-watchlist-row { min-height:44px!important; padding:1px 3px!important; border:1px solid transparent!important; border-bottom:1px solid rgba(255,255,255,.055)!important; border-radius:6px!important; background:transparent!important; box-shadow:none!important; }
+    .vela-workspace .tco-watchlist-row:hover { border-color:rgba(255,255,255,.08)!important; background:rgba(255,255,255,.045)!important; }
+    .vela-workspace .tco-watchlist-row[data-selected="1"] { border-color:rgba(41,98,255,.28)!important; background:rgba(41,98,255,.09)!important; box-shadow:inset 2px 0 0 #2962ff!important; }
+    .vela-workspace .tco-watchlist-select { min-height:40px!important; padding:5px 7px!important; color:#e5e7eb!important; }
+    .vela-workspace .tco-watchlist-ticker { color:#f0f1f4!important; font-size:11px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-instrument-name { color:#858b96!important; font-size:9px!important; }
+    .vela-workspace .tco-watchlist-last { color:#f0f1f4!important; font-size:11px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-change { color:#a1a1a1!important; font-size:9px!important; }
+    .vela-workspace .tco-watchlist-inspector { flex:0 0 224px!important; min-height:174px!important; max-height:54%!important; padding:9px!important; border:1px solid rgba(255,255,255,.1)!important; border-radius:8px!important; background:var(--tco-user-vela-panel,#151619)!important; box-shadow:none!important; }
+    .vela-workspace .tco-watchlist-detail-title { color:#fafafa!important; font-size:12px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-detail-subtitle { color:#858b96!important; font-size:9px!important; }
+    .vela-workspace .tco-watchlist-live-badge { border:1px solid rgba(255,255,255,.12)!important; border-radius:5px!important; background:#1c1d20!important; color:#a1a1a1!important; padding:3px 6px!important; font-size:8px!important; }
+    .vela-workspace .tco-watchlist-metrics { grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:4px!important; }
+    .vela-workspace .tco-watchlist-metric { padding:6px 7px!important; border:1px solid rgba(255,255,255,.075)!important; border-radius:6px!important; background:#121316!important; }
+    .vela-workspace .tco-watchlist-metric-label { color:#858b96!important; font-size:8px!important; }
+    .vela-workspace .tco-watchlist-metric-value { color:#f0f1f4!important; font-size:10px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-detail-hint { display:none!important; }
+    .vela-workspace .tco-watchlist-section { margin-top:5px!important; padding:7px 0 0!important; border:0!important; border-top:1px solid rgba(255,255,255,.09)!important; border-radius:0!important; background:transparent!important; }
+    .vela-workspace .tco-watchlist-section-label,.vela-workspace .tco-watchlist-news-heading { color:#858b96!important; font-size:8px!important; font-weight:700!important; letter-spacing:.075em!important; }
+    .vela-workspace .tco-watchlist-technical-summary { color:#e5e7eb!important; font-size:10px!important; font-weight:650!important; }
+    .vela-workspace .tco-watchlist-technical-values,.vela-workspace .tco-watchlist-news-list a { color:#b0b5be!important; font-size:9px!important; line-height:1.4!important; }
+    .vela-workspace .tco-watchlist-news-list a:hover { color:#dce6ff!important; }
+    .vela-workspace .tco-watch-suggestions { border:1px solid rgba(255,255,255,.12)!important; border-radius:7px!important; background:#151619!important; box-shadow:0 12px 28px rgba(0,0,0,.32)!important; }
+    .vela-workspace .tco-watch-suggestion { color:#e5e7eb!important; font-size:10px!important; }
+    .vela-workspace .tco-watch-suggestion:hover,.vela-workspace .tco-watch-suggestion[aria-selected="true"] { background:rgba(41,98,255,.12)!important; }
+    .vela-workspace :focus-visible { outline:2px solid rgba(41,98,255,.75); outline-offset:1px; }
+
     `;
     style.dataset.tcoInstalled='1';
   }
