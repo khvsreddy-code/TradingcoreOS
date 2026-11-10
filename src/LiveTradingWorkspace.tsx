@@ -937,7 +937,7 @@ const browserRuntimeMetrics = useRef({
             type="button"
             title="Open workspace navigation"
             aria-label="Open workspace navigation"
-            onClick={() => workspaceRef.current?.togglePanel('tco.quant', true)}
+            onClick={() => workspaceRef.current?.togglePanel('tco.workspace-frame', true)}
             className="mr-2 grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#9298a4] transition-colors hover:bg-[#252830] hover:text-white"
           ><Menu size={15}/></button>
           <div className="flex h-full shrink-0 items-center gap-2 border-r border-[#292b31] pr-3">
@@ -1045,7 +1045,7 @@ const browserRuntimeMetrics = useRef({
           <button type="button" title="Watchlist" aria-label="Watchlist" onClick={() => workspaceRef.current?.togglePanel('tco.bookmarks', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Star size={17}/></button>
           <button type="button" title="Research" aria-label="Research" onClick={() => workspaceRef.current?.togglePanel('tco.research', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Search size={17}/></button>
           <button type="button" title="Indicators" aria-label="Indicators" onClick={() => window.dispatchEvent(new CustomEvent('tco:open-indicator-library'))} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Activity size={17}/></button>
-          <button type="button" title="CoreSpirit" aria-label="CoreSpirit" onClick={() => workspaceRef.current?.togglePanel('tco.corespirit', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Code2 size={17}/></button>
+          <button type="button" title="CoreSpirit" aria-label="CoreSpirit" onClick={() => workspaceRef.current?.togglePanel('tco.corespirit-code', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><Code2 size={17}/></button>
           <button type="button" title="Journal" aria-label="Journal" onClick={() => workspaceRef.current?.togglePanel('tco.journal', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><CalendarDays size={17}/></button>
           <button type="button" title="Positions" aria-label="Positions" onClick={() => workspaceRef.current?.togglePanel('tco.positions', true)} className="grid h-9 w-9 place-items-center rounded-md text-[#aeb4bf] hover:bg-[#252a34] hover:text-white"><BriefcaseBusiness size={17}/></button>
           <div className="flex-1"/>
