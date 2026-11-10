@@ -121,7 +121,7 @@ export function createTcoVelaTerminalOptions(
       corespirit:()=>deps.createCoreSpiritEngine(),
     },
     indicators:deps.resolveIndicatorManifest,
-    drawings:true,
+    drawings:{ toolbar:true },
     drawingToolbar:true,
     indicatorPicker:true,
     // Keep TradingCoreOS application panels in Vela's native right sidebar. The chart
