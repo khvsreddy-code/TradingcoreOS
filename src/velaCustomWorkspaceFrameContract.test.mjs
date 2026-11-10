@@ -140,8 +140,8 @@ assert.match(liveWorkspace, /togglePanel\('tco\.bookmarks', true\)/, 'the app ch
 assert.match(liveWorkspace, /togglePanel\('dataWindow', true\)/, 'the app chrome opens Vela Data Window');
 assert.match(liveWorkspace, /togglePanel\('objects', true\)/, 'the app chrome opens Vela Objects Tree');
 assert.match(liveWorkspace, /setVisibleRangePreset\(preset\)/, 'bottom range controls use Vela native visible-range presets');
-assert.match(liveWorkspace, /bottom-\[27px\].*top-\[38px\]/, 'Vela chart surface reserves space for the reference-height app header, navigation rail and range dock');
-assert.match(liveWorkspace, /left-\[48px\] right-0 top-\[38px\]/, 'the native chart starts beside the application navigation rail');
+assert.match(liveWorkspace, /absolute inset-x-0 bottom-\[27px\] top-\[34px\]/, 'the Vela chart uses the full available width below the compact app header');
+assert.doesNotMatch(liveWorkspace, /TradingCoreOS application navigation|left-\[48px\]/, 'the app does not add a second left rail beside Vela drawing tools');
 
 // Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
 const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
