@@ -52,7 +52,7 @@ assert(
 );
 assert(primaryTopbarIds.includes('undo-redo'), 'the native Vela undo/redo controls must remain in the topbar');
 assert(tcoVelaTerminal.includes("'tco.replay'"), 'the live terminal must expose Replay through Vela native topbar action slots');
-assert.equal((tcoVelaTerminal.match(/'tco\.chart-settings'/g) ?? []).length, 1,
+assert((tcoVelaTerminal.match(/'tco\.chart-settings'/g) ?? []).length === 1,
   'the native chart-settings entry must be contributed exactly once, not duplicated as a separate settings model');
 assert.match(tcoVelaTerminal, /right:\s*\[[^\]]*'tco\.chart-settings'/,
   'the chart-settings action must be pinned into the actual right-side topbar composition');
