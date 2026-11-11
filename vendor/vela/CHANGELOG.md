@@ -2,11 +2,126 @@
 
 All notable changes to Vela, newest first.
 
+## [0.10.5]
+
+### Added
+
+- **Line with markers, step line and columns.** Three more chart styles suit series with one
+  value per bar, such as economic data. Line with markers draws the line with a dot on each
+  bar, shown once the bars are far enough apart to tell the dots apart. Step line holds each
+  value flat until the next bar, then steps to it. Columns draw a column per bar from the
+  bottom of the chart up to its value, in the up color when the value is at or above the
+  previous bar's and in the down color when it is lower. Pick them from the chart style menu
+  or with `priceStyle: 'linemarkers'`, `'stepline'` or `'columns'`. The first two take the
+  line's color and width from the chart settings; columns have their own up and down colors,
+  which start as the chart's up and down colors at half opacity.
+- **Data sources can refuse a timeframe they never serve.** A provider can now say that a
+  series does not exist at a timeframe, such as a monthly economic series asked for hourly
+  bars, by throwing a `DataUnavailableError` that names the finest timeframe it serves. The
+  chart then stops loading and polling that market instead of waiting on an empty chart, and
+  fires `data:unavailable` with the provider's suggested timeframes so the page can switch.
+  A script that asks for such a series with `request.security` gets the provider's message
+  instead of empty data. Any other provider error still reads as an empty answer. In the
+  workspace, a chart on such a symbol switches to the timeframe the source suggests and says
+  so. The timeframe you picked stays yours: it is the one saved with the layout and shared
+  with linked charts, and it comes back on the next symbol that serves it.
+- **Data providers can describe what each symbol offers.** `getSymbolInfo` now has typed,
+  documented fields for a symbol's data: the timeframes the source serves for it (the finest
+  one and its natural one, or an exact list), whether it has volume (`volume: false` when it
+  has none), and the market's time zone and trading hours. A chart opened on a symbol without
+  volume, such as a macro-economic series, no longer adds the volume indicator on its own; a
+  volume indicator you added or saved stays. Hosts that save a chart's indicators themselves
+  can read `chart.pendingNativeIndicators()` beside `presentNativeIndicators()`, so a save made
+  while that choice is still loading keeps the volume indicator.
+- **Series with one value per bar are drawn as a line.** A data provider can now say that a
+  symbol has one value per bar at every timeframe, such as an economic series, with
+  `ohlc: false` in `getSymbolInfo`. Candles, bars and Heikin Ashi have nothing to show there,
+  so the chart draws such a symbol as a line whatever style is chosen, and the style menu, the
+  mobile style list and the chart settings show those styles greyed out, with a tooltip saying
+  why. The style you chose stays yours: it is the one saved with the layout, and it comes back
+  on the next symbol that can draw it. Picking another style on such a symbol, such as an
+  area, makes it your style. Nothing is greyed while the symbol's information is still
+  loading. A plugin chart type can declare which symbols it can draw with `supports`, and it is
+  greyed and replaced by a line the same way. Hosts read the drawn style with
+  `chart.renderer.get('shownPriceStyle')`, the symbol's facts with `chart.symbolFacts()` and the
+  `symbol:facts` event, and test a style with `priceStyleApplies`. In the workspace,
+  `cell.priceStyle` is the drawn style and `cell.requestedPriceStyle` the chosen one.
+
+### Changed
+
+- **Vela requires `@luxalgo/vela-ui` 0.4.1.** The kit adds the icons of the new chart
+  styles and lets a menu row or a select option say why it is unavailable, which the
+  chart style pickers use.
+
+### Fixed
+
+- **Month and second timeframes are measured correctly.** A timeframe written with a month
+  count (`1M`, `3M`, `12M`) was measured as that many minutes in places, and a seconds
+  timeframe (`30S`) as one hour. Scripts that ask for monthly or quarterly data now load it
+  in one right-sized request instead of a long run of oversized ones, and on these charts
+  live updates, replay and the drawing tools that read finer-timeframe data work from the
+  true bar length.
+
+## [0.10.4]
+
+### Changed
+
+- **Vela requires `@luxalgo/vela-ui` 0.4.0.** In the kit, the component that shows a value
+  under its label is now the figure (`@luxalgo/vela-ui/figure`, `createFigure`), because
+  content blockers blocked the old stat module. Its
+  [changelog](packages/vela-ui/CHANGELOG.md) explains how to move to it.
+
+### Fixed
+
+- **Open menus stay on top of the chart.** On a fresh install, the timeframe and chart style
+  menus could sink under the chart as soon as the pointer left them, so they seemed to vanish
+  when the pointer crossed the status line. They now stay above the chart until you close
+  them.
+- **Search fields clear with a cross in the theme's color.** The cross that clears a search
+  field shows in the chart's text color, white on a dark theme and black on a light one,
+  instead of the browser's own blue one.
+
+## [0.10.3]
+
+### Added
+
+- **Toasts, cards and treemaps in the kit.** `@luxalgo/vela-ui` 0.3.0, which Vela now requires,
+  adds toasts that stack in a corner and can be raised from anywhere, a card for one subject
+  (a panel of figures, a chart with its title) and a treemap of weighted tiles tinted by a
+  value. Its [changelog](packages/vela-ui/CHANGELOG.md) has the details.
+
+### Changed
+
+- **Script alerts arrive as cards that stack.** When an indicator raises an alert, it now shows
+  as a card in the bottom corner of the charts: the alert's title, then the symbol, timeframe
+  and indicator with its message, under a bell. Alerts that fire close together stack instead
+  of replacing each other; hovering the stack spreads it out and holds it, and a swipe
+  dismisses one. Plugins can raise their own notices there with the toasts of
+  `@luxalgo/vela-ui`.
+
+### Fixed
+
+- **Script box text sits on the box's midpoint and is never cut off.** Text inside a Pine
+  Script® box was drawn slightly above the box's centre, so it no longer lined up with a
+  level drawn through the middle of the box, and a box smaller than its text cut the letters
+  off at its edges. The text is now centred on the midpoint and shows in full, overflowing a
+  box too small for it, as text on a drawn rectangle does. To keep text inside its box, use
+  the automatic text size: it shrinks the text to fit the box, and hides it when the box is
+  too small to hold readable text.
+- **The chart's dialogs name their close button.** Screen readers announced the ✕ of the
+  settings, the symbol search, the timeframe and the other dialogs as an unnamed button; it
+  is now "Close", in the chart's language.
+
 ## [0.10.2]
 
 ### Added
 
-- **Hyperliquid HIP-3 markets.** The provider now enumerates active perpetual markets from builder-deployed dexes, resolves `dex:COIN` tickers and listed coin spellings, and returns dex-aware quote currencies, descriptions and price precision. Existing main-dex perpetuals and spot pairs continue to work as before.
+- **Every Hyperliquid market, HIP-3 dexes included.** The Hyperliquid provider now serves the
+  perpetuals that builder-deployed (HIP-3) dexes list next to the main perps and spot pairs:
+  stocks, commodities, indices and whatever else is deployed, around the clock. Chart one by
+  the name Hyperliquid gives it, with the provider in front (`hyperliquid:xyz:TSLA`). Symbol
+  search finds them with the dex's name in the description, and they load with live candles
+  and the right price precision. Main perps and spot pairs work as before.
 
 ## [0.10.1]
 

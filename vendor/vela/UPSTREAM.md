@@ -1,51 +1,27 @@
 # Vela upstream foundation
 
 - Upstream project: https://github.com/LuxAlgo/Vela
-- Upstream source version: **0.10.2**
-- Upstream tag: `v0.10.2`
-- Upstream source commit: `305521811eabc35c3797e5b6ab58adb25e70c1c7`
-- Previous source base: Vela 0.9.0 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
-- The 0.10.2 release was verified against the exact upstream tag on 2026-11-09.
-- Source lives in `vendor/vela/src`; TradingCoreOS compiles these sources directly.
-- Vela's extracted UI kit is supplied by the explicit `@luxalgo/vela-ui` 0.2.0 dependency.
-- `vendor/vela/CHANGELOG.md` and `README.md` are synchronized with upstream 0.10.2.
-- `vendor/vela/NOTICE` remains present, including the required visible Vela attribution.
+- Upstream source version: **0.10.5**
+- Upstream branch: `main`
+- Upstream source commit: `34d11f1a8a88c7dd5657c9b3a791abf43560218d`
+- Previous source baseline for the TradingCoreOS overlay: Vela 0.10.2 at `305521811eabc35c3797e5b6ab58adb25e70c1c7`.
+- Vela 0.10.5 source is vendored in `vendor/vela/src`; TradingCoreOS compiles it directly.
+- The extracted UI kit is supplied by `@luxalgo/vela-ui` **0.4.1**.
+- `vendor/vela/CHANGELOG.md`, `README.md`, and `ui/CHANGELOG.md` are synchronized with the upstream 0.10.5 source tree.
+- `vendor/vela/NOTICE` remains present; preserve visible Vela attribution as required by Apache-2.0 §4(d).
 
-## Vela 0.10.2 integration notes
+## 0.10.5 changes adopted
 
-Vela 0.10.2 adds Hyperliquid HIP-3 perpetual markets to the bundled provider: `dex:COIN` identifiers are normalized, dex metadata and collateral are resolved, active dex listings are indexed, and symbol info uses dex-aware quote currencies and price precision. TradingCoreOS continues to use its canonical FYERS/Investiny/Yahoo market-data plane; this upstream provider addition does not replace or bypass it. The release also adds Treemap localization keys. The UI-kit package contract remains `@luxalgo/vela-ui` `^0.2.0`, already present in the TradingCoreOS dependency lockfile.
+Vela 0.10.5 adds line-with-markers, step-line, and columns chart styles, and declares symbol facts that gate which chart styles can render. It also introduces a typed permanent-data-unavailable error so a provider can refuse unsupported markets/timeframes explicitly. The new style applicability, data-unavailable, and close-only rendering modules are vendored.
 
-## Vela 0.10.1 integration notes
+TradingCoreOS continues to own market data: FYERS, Investiny, Yahoo fallback, canonical history, provider health, and admission controls remain in TradingCoreOS. The bundled Vela Binance/Coinbase/Hyperliquid providers are not substituted for that pipeline. CoreSpirit continues to emit chart patches through the existing Vela output adapter.
 
-Vela 0.10.0 extracted its component system into `@luxalgo/vela-ui` 0.2.0. The vendored chart source uses the package's scoped dialogs, tabs, menus, icons, styles and controls through the compatibility facade. Construction and ownership of the Vela chart/workspace remain unchanged. The 0.10.1 patch fixes current-price coloring on custom candle styles, isolates UI-kit styling from host-page controls, and restores the timeline-mark popup card.
+## Overlay boundaries
 
-The exact 0.9.0-to-0.10.2 upstream source delta is recorded in `UPSTREAM-RELEASE-DIFF.json`. The resulting TradingCoreOS overlay against 0.10.2 is recorded in `UPSTREAM-DIFF.json`; the manifest generator validates its Git blob hashes and patch ownership.
+Keep TradingCoreOS-owned columnar history, retained scene patches, lazy native-indicator catalog, advanced drawing registries, pane persistence, canonical data provider, and CoreSpirit output adapter. Reconcile every locally modified source file against the upstream 0.10.5 delta; never replace the vendor directory wholesale.
 
-## TradingCoreOS integration overlay
+Vela remains the chart-rendering owner. CoreSpirit owns language semantics and its output adapter; it must not implement a parallel renderer or bypass Vela's retained scene lifecycle.
 
-The upgrade uses a three-way merge from Vela 0.9.0: the old upstream source, the local TradingCoreOS version, and upstream 0.10.2. Patch ownership remains declared in `vendor/vela/patches.json`. Keep TradingCoreOS's columnar history and retained scene patches, lazy native-indicator catalog, advanced drawing registries, pane persistence, canonical shared market-data plane, FYERS provider, India-market UX, and CoreSpirit output adapter.
+## Attribution
 
-Vela remains the chart-rendering owner. CoreSpirit owns language semantics and its output adapter; it does not implement a parallel renderer or bypass Vela's retained scene lifecycle. Market-data subscriptions, history readiness, and provider throttling remain owned by TradingCoreOS, not independent chart widgets.
-
-## UI package boundary
-
-`@luxalgo/vela-ui` is a required production dependency. Do not restore the removed in-tree component implementations as runtime dependencies for new code. Older UI source files retained in `vendor/vela/src/ui` are local compatibility/test fixtures and are marked as local-only in the overlay manifest; the active `src/ui/index.ts` facade exports the 0.10.2 UI API.
-
-## Reproducible source comparison
-
-Use a clean Vela checkout at the pinned commit:
-
-```sh
-git clone https://github.com/LuxAlgo/Vela.git /tmp/vela-upstream
-git -C /tmp/vela-upstream checkout 305521811eabc35c3797e5b6ab58adb25e70c1c7
-node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --write
-node tools/vela-overlay-manifest.mjs --upstream-dir /tmp/vela-upstream --check
-```
-
-The generator verifies the exact upstream HEAD and deterministic Git blob hashes. It fails when a TCO-only or locally modified source file does not have a declared patch owner. Do not replace the vendor directory wholesale.
-
-## Rendering and market-data contracts
-
-Keep retained-scene updates and columnar patches on the live path; do not rebuild every series for each tick. Maintain pane-aware click/crosshair events, sparse future plot slots, overlay order, drawing persistence, history-gated native indicators, and pane-size persistence under the existing conformance suite. Workspace charts for the same instrument must share the canonical TCO market-data plane.
-
-Measure initialization, first usable candle, history completion, tick-to-render latency, frame duration, indicator recomputations, and memory by candle count and visible-chart count. Evaluate full rendering/data-transfer costs instead of assuming WebGL or WASM always makes a workload faster.
+Keep `vendor/vela/NOTICE` and the Vela attribution visible in the chart or an equivalent visible attribution on the same screen.

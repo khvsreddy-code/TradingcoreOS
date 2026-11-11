@@ -54,7 +54,7 @@
     "@zag-js/types": "^1.42.0",
     "@zag-js/vanilla": "^1.42.0",
     "@vercel/queue": "^0.7.0",
-    "@luxalgo/vela-ui": "^0.2.0"
+    "@luxalgo/vela-ui": "^0.4.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
