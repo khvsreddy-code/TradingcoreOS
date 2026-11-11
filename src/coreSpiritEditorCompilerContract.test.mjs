@@ -14,6 +14,7 @@ const bridge=read('src/services/coreSpirit/ideRuntimeBridge.ts');
 const chartRunner=read('src/services/coreSpirit/chartRunner.ts');
 const target=read('src/services/coreSpirit/chartRegistry.ts');
 const controller=read('src/services/core/chart/controllers/ChartCoreSpiritController.ts');
+const lifecycle=read('src/services/coreSpirit/coreSpiritExecutionLifecycle.ts');
 const cache=read('src/services/coreSpirit/artifactCache.ts');
 const pool=read('src/services/coreSpirit/coreSpiritWorkerPool.ts');
 
@@ -67,7 +68,12 @@ assert.match(catchBlock,/publishLifecycle\('error'\)/,
 assert.match(catchBlock,/else publishCoreSpiritLifecycle\(\{stage:'stale'/,
   'superseded worker failures must be classified as stale rather than marking the latest run failed');
 assert.ok(controller.indexOf('const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity===\'error\')')<controller.indexOf('output.scheduleObjects('),'fatal diagnostics must be checked before Vela receives the transactional replacement snapshot');
-assert.match(controller,/validateCoreScriptCapabilitiesAgainstSandbox/,'chart editor deploy must enforce the same chart sandbox as CoreSpirit Coder');
+assert.match(controller,/validateCoreSpiritChartCapabilities\(compilerResult\.ir\)/,
+  'chart compile/deploy must validate required capabilities against the chart sandbox');
+assert.match(lifecycle,/createCoreSpiritSandbox\(\{ layer: 'script', target: 'chart' \}\)/,
+  'chart capability validation must use the script-layer chart sandbox');
+assert.match(lifecycle,/validateCoreScriptCapabilitiesAgainstSandbox\(sandbox, ir\.requiredCapabilities \?\? \[\]\)/,
+  'the chart sandbox must reject capabilities that are not granted to the chart host');
 assert.match(controller,/CHART_CAPABILITY_DENIED/,'chart editor must report capability-policy failures before Run');
 const runStart=editor.indexOf('const runOnChart=async()=>{');
 const copilotStart=editor.indexOf('const generateCopilotDraft=async()=>{');
