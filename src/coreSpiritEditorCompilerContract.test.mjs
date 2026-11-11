@@ -57,7 +57,8 @@ assert.match(controller,/const fatalDiagnostic=diagnosticDetails\.find\(diagnost
   'worker runtime failures must be classified from typed diagnostics, with unclassified messages failing closed');
 assert.match(controller,/if\(fatalDiagnostic\)\{[\s\S]{0,1100}throw new Error\('CoreSpirit replacement rejected/,
   'fatal worker diagnostics must reject the replacement before any chart output commit');
-assert.match(controller,/if\(runId===coreSpiritRunId\.current\)publishLifecycle\('error'\)/,'superseded worker jobs must not mark the latest chart run as failed');
+assert.match(controller,/if\(runId===coreSpiritRunId\.current\)\{[\s\S]{0,900}publishLifecycle\('error'\)\}[\s\S]{0,180}else publishCoreSpiritLifecycle\(\{stage:'stale'/,
+  'only the current chart run may publish an error; superseded worker failures must be classified as stale');
 assert.ok(controller.indexOf('const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity===\'error\')')<controller.indexOf('output.scheduleObjects('),'fatal diagnostics must be checked before Vela receives the transactional replacement snapshot');
 assert.match(controller,/validateCoreScriptCapabilitiesAgainstSandbox/,'chart editor deploy must enforce the same chart sandbox as CoreSpirit Coder');
 assert.match(controller,/CHART_CAPABILITY_DENIED/,'chart editor must report capability-policy failures before Run');
