@@ -63,11 +63,21 @@ export type TcoVelaTerminalDependencies = {
   resolveIndicatorManifest:NonNullable<VelaWorkspaceOptions['indicators']>;
 };
 
+export const TCO_VELA_TOPBAR_COMPOSITION = Object.freeze({
+  // Vela's topbar is an explicit allowlist. Pin contributed actions here so they
+  // render once at a deliberate position; registered-but-unlisted actions stay hidden.
+  left: [
+    'symbol', 'timeframes', 'style', 'layout', 'indicators', 'tco.replay', 'undo-redo',
+  ],
+  right: [
+    'tco.workspace-frame', 'tco.trading', 'tco.save-workspace', 'alerts', 'tco.chart-settings',
+  ],
+});
+
 export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
   shell:'VelaWorkspace',
   sharedSurface:[
     'topbar',
-    'bottombar',
     'objectTree',
     'dataWindow',
     'drawingToolbar',
@@ -81,6 +91,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'TCO renderer layers',
     'TCO drawing/data contributions',
   ],
+  topbar: TCO_VELA_TOPBAR_COMPOSITION,
   docks:[
     'tco.research',
     'tco.automation',
@@ -144,10 +155,7 @@ export function createTcoVelaTerminalOptions(
         'tco.account',
       ],
     },
-    topbar:{
-      left:['symbol','timeframes','style','layout','indicators','tco.replay','undo-redo'],
-      right:['tco.workspace-frame','tco.trading','tco.save-workspace','alerts'],
-    },
+    topbar: TCO_VELA_TOPBAR_COMPOSITION,
     sync:{
       symbol:false,
       timeframe:false,
@@ -159,7 +167,7 @@ export function createTcoVelaTerminalOptions(
     volume:true,
     watermark:true,
     statusline:true,
-    bottombar:true,
+    bottombar:false,
     autofocus:false,
     persist:'tradingcore-live-vela-v5',
     storage,
