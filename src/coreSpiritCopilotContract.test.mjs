@@ -88,7 +88,8 @@ assert.match(runtime,/name==='__market_alignment'/,'the VM must interpret tempor
 assert.match(runtime,/this\.executionContext\.mode!=='realtime'/,'developing values must be blocked outside realtime execution');
 assert.match(runtime,/r\.alignment === 'developing' \? 'developing' : 'last-confirmed'/,'scalar market reads must preserve the selected alignment');
 const dataResolver=read('src/services/coreSpirit/dataResolver.ts');
-assert.match(dataResolver,/this\.context\(\)\.mode!=='realtime'/,'series-based requests must block historical developing data');
+assert.match(dataResolver,/const requestContext = this\.resolutionContext\(index, alignment\)/,'series-based requests must derive their temporal authorization from the active execution context');
+assert.match(dataResolver,/alignment === 'developing' && requestContext\.executionMode !== 'realtime'/,'series-based requests must block developing data outside realtime execution');
 assert.match(dataResolver,/this\.resolutionContext\(index, alignment\)/,'series-based requests must preserve temporal alignment');
 assert.match(editor,/modeDefaults:Partial<Record<CopilotMode,string>>/,'repair and analysis tasks should have mode-specific defaults');
 
