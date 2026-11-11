@@ -42,7 +42,12 @@ export type CoreSpiritKernelSnapshotIdentity = Readonly<Pick<
   'modelVersion' | 'kernelType' | 'kernelVersion' | 'parametersSignature' | 'dataRevision' | 'nextBarIndex' | 'inputDependencies'
 >>;
 
-function sameStringSet(a: readonly string[], b: readonly string[]): boolean {
+function sameStringSet(a: unknown, b: unknown): boolean {
+  // Runtime consumers can call this JS API without TypeScript guarantees.
+  // Malformed/missing dependency identity must fail closed, never throw.
+  if (!Array.isArray(a) || !Array.isArray(b) ||
+      !a.every((value): value is string => typeof value === 'string') ||
+      !b.every((value): value is string => typeof value === 'string')) return false;
   if (a.length !== b.length) return false;
   const left = new Set(a);
   if (left.size !== b.length) return false;

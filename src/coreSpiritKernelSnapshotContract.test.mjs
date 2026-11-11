@@ -66,10 +66,21 @@ const restoredTarget = { cursor:0 };
 const compatibleIdentity = {
   modelVersion:'ir-v1', kernelType:'ema', kernelVersion:2,
   parametersSignature:'period=3', dataRevision:17, nextBarIndex:5,
+  inputDependencies:['close'],
 };
 const copy = (target, source) => { target.cursor = source.cursor; };
 assert.equal(snapshotStore.restoreAt(restoredTarget,'test:ema','ir-v1',['close'],4,copy,compatibleIdentity),true);
 assert.equal(restoredTarget.cursor,42);
+assert.equal(
+  snapshotStore.restoreAt({cursor:0},'test:ema','ir-v1',['close'],4,copy,{...compatibleIdentity,inputDependencies:undefined}),
+  false,
+  'identity without input-dependency metadata must fail closed',
+);
+assert.equal(
+  snapshotStore.restore({cursor:0},'test:ema','ir-v1',['close'],4,copy,{...compatibleIdentity,inputDependencies:undefined}),
+  false,
+  'latest restore with malformed dependency identity must fail closed',
+);
 assert.equal(
   snapshotStore.restoreAt({cursor:0},'test:ema','ir-v1',['close'],4,copy),
   false,
