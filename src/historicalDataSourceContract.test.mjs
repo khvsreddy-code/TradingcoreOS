@@ -47,7 +47,13 @@ assert.match(fyersWindow, /FYERS_HISTORY_WINDOW_DAYS = 7/);
 assert.match(fyersWindow, /FYERS_HISTORY_WINDOW_MS/);
 assert.match(fyersWindow, /toMs <= fromMs/);
 assert.match(fyersClient, /clampFyersHistoryRange\(/);
-assert.match(fyersClient, /base === DATA_BASE && pathOnly === '\/history'/);
+assert.match(fyersClient, /\(base === DATA_BASE \|\| base === API_BASE\) && isHistoricalEndpoint/,
+  'all FYERS API history endpoints with explicit ranges pass through the central range validator');
+assert.match(fyersClient, /combined\.has\('range_from'\) && combined\.has\('range_to'\)/,
+  'history clamping only runs when both range boundaries are present');
+assert.match(fyersClient, /isExpiredFnoEndpoint\s*\?\s*normalizeFyersExpiredFnoRange/);
+assert.match(fyersClient, /:\s*clampFyersHistoryRange\(/,
+  'standard history keeps the seven-day clamp while expired-F&O uses its separate entitlement window');
 assert.match(fyersClient, /combined\.set\('date_format', '0'\)/);
 
 assert.match(brokerAdapter, /const maxLookbackDays = Math\.min\(7,/);
