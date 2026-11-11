@@ -8,6 +8,7 @@ const identity=read('src/services/coreSpirit/artifactIdentity.ts');
 const abi=read('src/services/coreSpirit/artifactAbi.ts');
 const artifact=read('src/services/coreSpirit/artifact.ts');
 const pipeline=read('src/services/coreSpirit/coreSpiritPipeline.ts');
+const lookupIdentity=read('src/services/coreSpirit/artifactLookupIdentity.ts');
 const cache=read('src/services/coreSpirit/artifactCache.ts');
 const runner=read('src/services/coreSpirit/chartRunner.ts');
 const pool=read('src/services/coreSpirit/coreSpiritWorkerPool.ts');
@@ -23,7 +24,14 @@ if(!/runtimeABI/.test(abi)||!/optimizerABI/.test(abi)||!/programHash/.test(abi)|
 }
 if(!/abi:\s*CoreSpiritArtifactAbi/.test(artifact)||!/buildCoreSpiritArtifactAbi/.test(artifact)) throw new Error('Executable artifacts must carry the formal ABI');
 if(!/const artifactCache = new Map/.test(pipeline)||!/CoreSpiritExecutableArtifact/.test(pipeline)) throw new Error('Compile cache must store executable artifacts directly');
-if(!/sourceHash/.test(pipeline)||!/normalizedHash/.test(pipeline)||!/semanticHash/.test(pipeline)) throw new Error('Compile cache key must use hierarchical source/normalized/semantic identity');
+if(!/buildCoreSpiritArtifactLookupIdentity\(source,sourceId,options\)/.test(pipeline)
+  || !/artifactCache\.get\(identity\.key\)/.test(pipeline)
+  || !/sourceHash/.test(lookupIdentity)
+  || !/normalizedHash/.test(lookupIdentity)
+  || !/semanticHash/.test(lookupIdentity)
+  || !/sourceId:\$\{semanticHash\}/.test(lookupIdentity)) {
+  throw new Error('Compile cache must key by source-scoped hierarchical source/normalized/semantic identity from the dedicated lookup module');
+}
 if(!/indexedDB\.open/.test(cache)||!/ARTIFACT_STORE/.test(cache)||!/ALIAS_STORE/.test(cache)) throw new Error('Persistent CoreSpirit artifact cache must use IndexedDB');
 if(!/worker-vm/.test(cache)||!/browser-vm/.test(abi)) throw new Error('Artifact cache must distinguish execution backends');
 if(!/loadOrCompileCoreSpiritArtifact/.test(runner)||!/backend:'worker-vm'/.test(runner)) throw new Error('Chart execution must resolve artifacts from the persistent worker backend cache');
