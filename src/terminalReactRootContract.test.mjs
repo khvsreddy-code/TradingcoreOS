@@ -35,10 +35,24 @@ assert.equal((velaPanelChrome.match(/createRoot\(/g) ?? []).length, 3,
   'only CoreSpirit Studio, Quant and Journal may mount embedded React panel roots');
 assert.equal((velaPanelChrome.match(/\.unmount\(\)/g) ?? []).length, 3,
   'every Vela-owned embedded React panel root must be disposed with its panel');
-assert.match(velaPanelChrome, /const root = createRoot\(body\)[\s\S]{0,1800}destroy\(\)\s*\{\s*cancelled = true;\s*root\.unmount\(\)/,
+const studioStart = velaPanelChrome.indexOf('const coreSpiritCodePanel: SidePanelDescriptor');
+const quantStart = velaPanelChrome.indexOf('const quantPanel: SidePanelDescriptor');
+const bookmarksStart = velaPanelChrome.indexOf('const bookmarksPanel: SidePanelDescriptor');
+const journalStart = velaPanelChrome.indexOf('const journalPanel: SidePanelDescriptor');
+const accountStart = velaPanelChrome.indexOf('const accountPanel: SidePanelDescriptor');
+assert.ok(studioStart >= 0 && quantStart > studioStart && bookmarksStart > quantStart
+  && journalStart > bookmarksStart && accountStart > journalStart,
+  'the three embedded React roots must remain inside their named Vela side-panel descriptors');
+const studioPanelSource = velaPanelChrome.slice(studioStart, quantStart);
+const quantPanelSource = velaPanelChrome.slice(quantStart, bookmarksStart);
+const journalPanelSource = velaPanelChrome.slice(journalStart, accountStart);
+assert.match(studioPanelSource, /const root = createRoot\(body\)/);
+assert.match(studioPanelSource, /destroy\(\)\s*\{[\s\S]*?root\.unmount\(\)/,
   'CoreSpirit Studio mounts into its Vela-owned panel body and unmounts on panel destruction');
-assert.equal((velaPanelChrome.match(/destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/g) ?? []).length, 2,
-  'Quant and Journal release their embedded React roots when Vela destroys those panels');
+assert.match(quantPanelSource, /const reactRoot = createRoot\(root\)[\s\S]*destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/,
+  'Quant releases its embedded React root when Vela destroys the panel');
+assert.match(journalPanelSource, /const reactRoot = createRoot\(root\)[\s\S]*destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/,
+  'Journal releases its embedded React root when Vela destroys the panel');
 
 const moduleScripts = [...index.matchAll(/<script\s+type="module"/g)];
 assert.equal(moduleScripts.length, 1, 'index.html must expose exactly one module entrypoint');
