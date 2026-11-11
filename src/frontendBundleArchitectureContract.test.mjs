@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -18,8 +19,6 @@ const workspaceShell = read('src/components/workspace/WorkspaceModuleShell.tsx')
 const workspaceRoutes = read('src/appShells/TradingWorkspaceShell.tsx');
 const coreSpiritPage = read('src/pages/CoreSpiritEditorPage.tsx');
 const tcoVelaTerminal = read('src/services/core/chart/tcoVelaTerminal.ts');
-
-const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
 assert(app.includes('LandingShell') && app.includes('TradingWorkspaceShell') && app.includes('LiveTradingShell'), 'three application shells are not wired');
 assert(app.includes("const LiveTradingShell = lazy(() => import('./appShells/LiveTradingShell')"), 'live trading must be loaded as a route chunk rather than inflating the dashboard static graph');
@@ -76,7 +75,7 @@ assert(!watchlistPanelSource.includes('Open Vela symbol search'), 'watchlist mus
 assert(tcoVelaChrome.includes('Open chart replay controls'), 'research dock must expose the existing chart replay capability');
 assert(tcoVelaChrome.includes('Open market health & performance'), 'research dock must link to live renderer/market health diagnostics');
 assert(tcoVelaChrome.includes('Renderer metrics are warming up'), 'research dock must communicate when renderer telemetry is not ready');
-assert(tcoVelaChrome.includes(' · LTP ${Number.isFinite(ltp)?ltp.toLocaleString'), 'order-book context must show the active quote and its freshness state');
+assert(tcoVelaChrome.includes(' · LTP ${Number(ltp).toLocaleString'), 'order-book context must show the active quote and its freshness state');
 assert(workspaceShell.includes('Skip to workspace content'), 'workspace shell must provide a keyboard skip link');
 assert(workspaceShell.includes('aria-label="Primary workspace navigation"'), 'workspace navigation must be named for assistive technology');
 assert(/aria-current=\{active\s*===\s*path\s*\?\s*'page'\s*:\s*undefined\}/.test(workspaceShell), 'workspace navigation must expose the current page');
