@@ -20,7 +20,17 @@ const upstream = read('vendor/vela/UPSTREAM.md');
 
 assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.5\*\*/i, 'TCO must continue to use the exact official Vela 0.10.5 foundation pinned by the vendor manifest');
 assert.match(upstream, /Previous source base: Vela 0\.10\.2/, 'the Vela 0.10.5 integration must retain its documented 0.10.2 three-way merge base');
-assert.match(terminal, /topbar:\s*\{/);
+const topbarCompositionStart = terminal.indexOf('export const TCO_VELA_TOPBAR_COMPOSITION');
+const topbarTopologyStart = terminal.indexOf('export const TCO_VELA_TERMINAL_TOPOLOGY');
+assert.ok(topbarCompositionStart >= 0 && topbarTopologyStart > topbarCompositionStart,
+  'the workspace must declare one explicit shared Vela topbar composition');
+const topbarComposition = terminal.slice(topbarCompositionStart, topbarTopologyStart);
+assert.match(topbarComposition, /left:\s*\[[^\]]*'symbol'[^\]]*'timeframes'[^\]]*'style'/,
+  'the primary symbol, timeframe and style controls remain in Vela native order');
+assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.workspace-frame'[^\]]*'tco\.trading'[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
+  'workspace, trading, save, alerts and native chart settings remain in the right topbar composition');
+assert((terminal.match(/topbar:\s*TCO_VELA_TOPBAR_COMPOSITION/g) ?? []).length === 2,
+  'the runtime workspace options and topology must consume the same topbar composition');
 assert.match(terminal, /drawings:\s*\{\s*toolbar:\s*true\s*\}/, 'the full native Vela drawing toolbar is explicitly enabled');
 assert.match(workspaceLoader, /await drawings\.loadAdvancedDrawingCatalog\(\)/, 'all advanced drawing families must hydrate before the workspace is constructed');
 assert.ok(workspaceLoader.indexOf('await drawings.loadAdvancedDrawingCatalog()') < workspaceLoader.indexOf("await import('../../../../vendor/vela/src/workspace')"), 'the drawing registry must be fully hydrated before Vela mounts');
@@ -30,18 +40,15 @@ assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact s
 assert.match(terminal, /sidebar:\s*\{/, 'application panels use Vela native right-sidebar navigation');
 assert.match(terminal, /'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the utility rail keeps daily panels and groups the rest in More panels');
 assert.match(chrome, /id:'tco\.workspace-frame'/, 'workspace customization remains available through the native More panels hub');
-assert.match(
-  terminal,
-  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts'\s*\]/,
-  'Workspace and Trade use Vela native topbar slots before Save and Alerts',
-);
+assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.workspace-frame'[^\]]*'tco\.trading'[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
+  'Workspace, Trade, Save, Alerts and chart settings use the shared Vela native topbar slots');
 const sidebarActions = terminal.match(/sidebar:\s*(\{[\s\S]*?\n\s{4}\}),\s*topbar:/)?.[1] ?? '';
 assert.ok(
   !sidebarActions.includes("'tco.workspace-frame'") && !sidebarActions.includes("'tco.trading'"),
   'Workspace and Trade must not be duplicated in the right sidebar',
 );
-assert.match(terminal, /bottombar:\s*true/, 'the native Vela bottom bar provides range and timezone controls');
-assert.match(workspace, /opts\.bottombar !== false[\s\S]{0,120}new Bottombar/, 'the range and timezone controls are rendered by Vela, not an app-level duplicate');
+assert.match(terminal, /bottombar:\s*false/, 'the live terminal intentionally disables Vela bottom chrome to avoid a redundant second command bar');
+assert.match(workspace, /opts\.bottombar !== false[\s\S]{0,120}new Bottombar/, 'Vela retains ownership of optional range/timezone controls when the native bottom bar is explicitly enabled');
 assert.ok(!terminal.includes("'tco.quant'"), 'Quant must stay out of the Vela topbar and use its right-sidebar action');
 const quantActionAt = chrome.indexOf('const quantAction: WidgetActionDescriptor');
 const indicatorActionAt = chrome.indexOf('const indicatorLibraryAction: WidgetActionDescriptor');
