@@ -85,7 +85,6 @@ function canonicalTimeline(
   const latestByCandle = new Map<string, CoreSpiritDataSnapshot>();
   for (const candidate of snapshots) {
     const timestamp = Number(candidate.timestamp);
-    const close = closeTimestamp(candidate);
     if (candidate.timestamp == null || !Number.isFinite(timestamp) ||
         (candidate.closeTimestamp != null &&
           (!Number.isFinite(Number(candidate.closeTimestamp)) || Number(candidate.closeTimestamp) < timestamp))) continue;
@@ -148,16 +147,24 @@ export function alignSnapshots(
   snapshots: CoreSpiritDataSnapshot[],
   options: { confirmedOnly?: boolean } = {},
 ): CoreSpiritAlignedPoint[] {
-  const ordered = canonicalTimeline(snapshots, options.confirmedOnly === true);
+  const confirmedOnly = options.confirmedOnly === true;
+  const ordered = canonicalTimeline(snapshots, confirmedOnly);
   return targetTimes.map(timestamp => {
     if (!Number.isFinite(timestamp)) return { timestamp, value:null, state:'historical' as const };
+    // The canonical timeline is ordered by candle close when confirmation is
+    // required, and by candle open when developing values are explicitly allowed.
+    // Binary search must use the same ordering key or mixed timeframes can leak
+    // a not-yet-closed higher-timeframe value into a historical target.
     let lo = 0, hi = ordered.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (Number(ordered[mid]!.timestamp) <= timestamp) lo = mid + 1;
+      const snapshot = ordered[mid]!;
+      const availableAt = confirmedOnly
+        ? closeTimestamp(snapshot) ?? Number.POSITIVE_INFINITY
+        : Number(snapshot.timestamp);
+      if (availableAt <= timestamp) lo = mid + 1;
       else hi = mid;
     }
-    const confirmedOnly = options.confirmedOnly === true;
     let index = lo - 1;
     while (index >= 0 && !eligibleAt(ordered[index]!, timestamp, confirmedOnly)) index -= 1;
     const current = index >= 0 ? ordered[index] : undefined;
