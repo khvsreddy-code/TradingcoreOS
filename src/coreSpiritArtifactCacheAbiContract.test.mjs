@@ -29,7 +29,7 @@ if(!/buildCoreSpiritArtifactLookupIdentity\(source,sourceId,options\)/.test(pipe
   || !/sourceHash/.test(lookupIdentity)
   || !/normalizedHash/.test(lookupIdentity)
   || !/semanticHash/.test(lookupIdentity)
-  || !/sourceId:\$\{semanticHash\}/.test(lookupIdentity)) {
+  || !/\$\{sourceId\}:\$\{semanticHash\}/.test(lookupIdentity)) {
   throw new Error('Compile cache must key by source-scoped hierarchical source/normalized/semantic identity from the dedicated lookup module');
 }
 if(!/indexedDB\.open/.test(cache)||!/ARTIFACT_STORE/.test(cache)||!/ALIAS_STORE/.test(cache)) throw new Error('Persistent CoreSpirit artifact cache must use IndexedDB');
