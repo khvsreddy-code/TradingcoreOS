@@ -51,8 +51,8 @@ const compilerLoader = read('src/services/coreSpirit/coreSpiritCompilerLoader.ts
 const liveEngineLoader = read('src/services/coreSpirit/coreSpiritVelaEngineLoader.ts');
 
 if (!app.includes("import { LandingShell } from './appShells/LandingShell';")) throw new Error('App must use the landing application shell');
-if (!app.includes("import { TradingWorkspaceShell } from './appShells/TradingWorkspaceShell';")) throw new Error('App must use the trading workspace application shell');
-if (!app.includes("import { LiveTradingShell } from './appShells/LiveTradingShell';")) throw new Error('App must use the live trading application shell');
+if (!app.includes("const TradingWorkspaceShell = lazy(() => import('./appShells/TradingWorkspaceShell')")) throw new Error('App must lazy-load the trading workspace application shell');
+if (!app.includes("const LiveTradingShell = lazy(() => import('./appShells/LiveTradingShell')")) throw new Error('App must lazy-load the live trading application shell');
 if (!landingShell.includes("lazy(() => import('../pages/LandingPage'")) throw new Error('Landing shell must own the landing route lazy boundary');
 if (!workspaceShell.includes("lazy(() => import('../pages/CoreSpiritEditorPage'")) throw new Error('Trading workspace shell must keep CoreSpirit editor route-lazy');
 if (!liveShell.includes("lazy(() => import('../LiveTradingTerminal'")) throw new Error('Live shell must keep the live terminal route-lazy');
