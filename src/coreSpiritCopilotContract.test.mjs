@@ -58,7 +58,9 @@ assert.match(env,/^GEMINI_API_KEY=/m,'server configuration must document the pri
 assert.match(editor,/\/api\/corespirit\/copilot\/generate/,'editor must use the authenticated server endpoint');
 assert.match(editor,/Authorization:/,'editor must send an authorization header');
 assert.match(editor,/session\.access_token/,'editor must send the signed-in access token');
-assert.match(editor,/Nothing runs automatically/,'UI must state that AI output is not executed automatically');
+assert.ok(editor.includes('Apply reviewed draft'), 'the generated candidate must require an explicit Apply action');
+assert.ok(editor.includes('Review the source and explicitly use Run on chart yourself.'), 'the UI must keep chart execution under the user control');
+assert.ok(editor.includes('This saved revision is not automatically applied, executed, or trusted as a current compiled artifact.'), 'saved Copilot drafts must remain inert until reviewed and revalidated');
 assert.match(editor,/must then pass a bounded read-only historical replay before Run/,'UI must explain the mandatory replay gate');
 const start=editor.indexOf('const generateCopilotDraft=async()=>{');
 const end=editor.indexOf('const save = async () =>',start);
