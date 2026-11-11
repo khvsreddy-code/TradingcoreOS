@@ -62,39 +62,84 @@ function compareRevision(a: CoreSpiritDataSnapshot, b: CoreSpiritDataSnapshot): 
   return String(ar ?? '').localeCompare(String(br ?? ''));
 }
 
+function timeframeIdentity(snapshot: CoreSpiritDataSnapshot): string {
+  const raw = String(snapshot.timeframe ?? '').trim().toLowerCase();
+  const duration = nominalTimeframeSeconds(raw);
+  return duration > 0 ? 'seconds:' + duration : 'raw:' + raw;
+}
+
+function snapshotTieBreak(snapshot: CoreSpiritDataSnapshot): string {
+  return JSON.stringify([
+    snapshot.value, snapshot.source, snapshot.state,
+    snapshot.confirmationPhase, snapshot.closeTimestamp, snapshot.dataRevision,
+  ]);
+}
+
 function canonicalTimeline(
   snapshots: readonly CoreSpiritDataSnapshot[],
   confirmedOnly: boolean,
 ): CoreSpiritDataSnapshot[] {
-  const ordered = snapshots
-    .filter(snapshot =>
-      snapshot.timestamp != null &&
-      Number.isFinite(Number(snapshot.timestamp)) &&
-      (snapshot.closeTimestamp == null ||
-        (Number.isFinite(Number(snapshot.closeTimestamp)) && Number(snapshot.closeTimestamp) >= Number(snapshot.timestamp))),
-    )
-    .slice()
-    .sort((a, b) => {
-      const timestamp = Number(a.timestamp) - Number(b.timestamp);
-      if (timestamp !== 0) return timestamp;
-      const revision = compareRevision(a, b);
-      if (revision !== 0) return revision;
-      // Conflicting payloads with the same revision still have a deterministic
-      // tie-break; data providers should never issue such duplicates.
-      return JSON.stringify([a.value, a.source, a.state, a.confirmationPhase, a.closeTimestamp])
-        .localeCompare(JSON.stringify([b.value, b.source, b.state, b.confirmationPhase, b.closeTimestamp]));
-    });
-
-  // Choose the latest revision at each timestamp BEFORE applying confirmation
-  // policy. This prevents an old confirmed sample from resurfacing when a newer
-  // revision explicitly marks that same candle as developing.
-  const latestAtTimestamp: CoreSpiritDataSnapshot[] = [];
-  for (const candidate of ordered) {
-    const previous = latestAtTimestamp.at(-1);
-    if (previous && Number(previous.timestamp) === Number(candidate.timestamp)) latestAtTimestamp[latestAtTimestamp.length - 1] = candidate;
-    else latestAtTimestamp.push(candidate);
+  // A candle's identity includes its symbol and timeframe. A 1m and 5m candle
+  // can share an open timestamp without being revisions of the same candle.
+  // Canonicalize aliases such as "5" and "5m" before fencing revisions.
+  const latestByCandle = new Map<string, CoreSpiritDataSnapshot>();
+  for (const candidate of snapshots) {
+    const timestamp = Number(candidate.timestamp);
+    const close = closeTimestamp(candidate);
+    if (candidate.timestamp == null || !Number.isFinite(timestamp) ||
+        (candidate.closeTimestamp != null &&
+          (!Number.isFinite(Number(candidate.closeTimestamp)) || Number(candidate.closeTimestamp) < timestamp))) continue;
+    const identity = [
+      String(candidate.symbol ?? '').trim().toUpperCase(),
+      timeframeIdentity(candidate),
+      timestamp,
+    ].join('|');
+    const previous = latestByCandle.get(identity);
+    if (!previous) {
+      latestByCandle.set(identity, candidate);
+      continue;
+    }
+    const revisionOrder = compareRevision(candidate, previous);
+    if (revisionOrder > 0 || (revisionOrder === 0 &&
+        snapshotTieBreak(candidate).localeCompare(snapshotTieBreak(previous)) > 0)) {
+      latestByCandle.set(identity, candidate);
+    }
   }
-  return confirmedOnly ? latestAtTimestamp.filter(confirmed) : latestAtTimestamp;
+
+  // Revision fencing must happen before confirmation filtering, otherwise an
+  // older confirmed revision could reappear after a newer developing update.
+  // Confirmed alignments are ordered by their actual availability/close boundary;
+  // non-confirmed alignments are ordered by candle open so developing values can
+  // be observed from their opening timestamp.
+  const ordered = [...latestByCandle.values()]
+    .filter(snapshot => !confirmedOnly || confirmed(snapshot))
+    .sort((a, b) => {
+      const aOpen = Number(a.timestamp);
+      const bOpen = Number(b.timestamp);
+      if (confirmedOnly) {
+        const aClose = closeTimestamp(a) ?? Number.POSITIVE_INFINITY;
+        const bClose = closeTimestamp(b) ?? Number.POSITIVE_INFINITY;
+        if (aClose < bClose) return -1;
+        if (aClose > bClose) return 1;
+        // If two intervals close together, prefer the longer timeframe: it is
+        // the higher-timeframe value whose finality was just established.
+        const aDuration = Number.isFinite(aClose) ? aClose - aOpen : 0;
+        const bDuration = Number.isFinite(bClose) ? bClose - bOpen : 0;
+        if (aDuration !== bDuration) return aDuration - bDuration;
+      } else {
+        if (aOpen !== bOpen) return aOpen - bOpen;
+        // At one opening boundary, longer intervals sort later and win the
+        // last-value selection while still retaining their developing state.
+        const aClose = closeTimestamp(a) ?? Number.NEGATIVE_INFINITY;
+        const bClose = closeTimestamp(b) ?? Number.NEGATIVE_INFINITY;
+        if (aClose < bClose) return -1;
+        if (aClose > bClose) return 1;
+      }
+      const symbol = String(a.symbol ?? '').localeCompare(String(b.symbol ?? ''));
+      if (symbol !== 0) return symbol;
+      return timeframeIdentity(a).localeCompare(timeframeIdentity(b));
+    });
+  return ordered;
 }
 
 /** Last-value carry-forward alignment. Never selects a future snapshot or invents a prehistory value. */

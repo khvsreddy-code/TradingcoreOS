@@ -21,6 +21,11 @@ const snapshots = [
 ];
 
 const confirmedAligned = alignTimeframeSnapshots([500, 1300, 1800, 3300, 3500], snapshots);
+assert.deepEqual(
+  alignTimeframeSnapshots([1059, 1060, 1299, 1300], snapshots).map(point=>point.value),
+  [null, 11, 11, 10],
+  'mixed 1m/5m observations must retain separate candle identities and the 5m value becomes latest only at its own close',
+);
 assert.equal(confirmedAligned[0]?.value, null, 'alignment must not invent a value before the first confirmed observation');
 assert.equal(confirmedAligned[1]?.value, 10, 'a 5m candle becomes available only at its close boundary');
 assert.equal(confirmedAligned[2]?.value, 10, 'carry-forward uses only the last eligible confirmed observation');
