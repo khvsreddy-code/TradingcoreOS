@@ -33,7 +33,7 @@
     "prebuild": "npm run typecheck && npm run verify:critical-contracts"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
+    "@google/genai": "^2.32.0",
     "@supabase/supabase-js": "^2.112.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/ws": "^8.18.1",

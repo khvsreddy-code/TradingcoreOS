@@ -7,7 +7,7 @@ const liveChart = read('./components/workspace/LiveChart.tsx');
 const assistant = read('./components/workspace/CoreSpiritChartAssistant.tsx');
 const mainServer = read('../server.ts');
 
-assert.match(route, /post\('\\/chat\\/stream'/, 'authenticated in-chart assistant stream route is registered');
+assert.match(route, /post\('\/chat\/stream'/, 'authenticated in-chart assistant stream route is registered');
 assert.match(route, /generateContentStream/, 'assistant replies stream from the configured model provider');
 assert.match(route, /sanitizeCoreSpiritChartAssistantContext/, 'assistant context is reduced through a whitelist sanitizer');
 assert.match(route, /CHART_ASSISTANT_MAX_CONTEXT_BYTES = 16 \* 1024/, 'assistant context has a strict byte bound');
