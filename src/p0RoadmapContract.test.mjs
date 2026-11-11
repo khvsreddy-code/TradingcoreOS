@@ -28,6 +28,7 @@ const facade=read('src/services/core/chart/velaChartFacade.ts');
 const workspace=read('src/LiveTradingWorkspace.tsx');
 const storage=read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 const nativeExtensions=read('src/services/core/chart/tcoVelaNativeExtensions.ts');
+const terminalOptions=read('src/services/core/chart/tcoVelaTerminal.ts');
 
 assert.match(chartState,/velaDrawings[\s,=]/);
 assert.doesNotMatch(liveChart,/createChartDrawingController|drawingControllerRef|drawingInitial/);
@@ -103,7 +104,7 @@ assert.match(watchlist,/subscribeMarketData/);
 assert.match(watchlist,/\+ Add current/);
 assert.match(facade,/registerLegendAction/);
 assert.match(facade,/registerLegendCallout/);
-assert.match(workspace,/\['tco\.watchlist'.*'alerts'.*'panels'/s);
+assert.match(terminalOptions,/top:\s*\[[\s\S]*'tco\.bookmarks'[\s\S]*'tco\.research'[\s\S]*'tco\.corespirit-code'[\s\S]*'tco\.panels'/, 'Vela native sidebar owns the daily-use panel composition');
 assert.match(storage,/resolveBroker/);
 assert.match(nativeExtensions,/registerNativeIndicator/);
 assert.match(nativeExtensions,/registerRendererLayer/);
@@ -114,7 +115,7 @@ assert.match(watchlist,/registerSidePanel\(positionsPanel\)/);
 assert.match(watchlist,/registerSidePanel\(orderBookPanel\)/);
 assert.match(watchlist,/registerSidePanel\(optionsPanel\)/);
 assert.match(watchlist,/registerSidePanel\(riskPanel\)/);
-assert.match(workspace,/'tco\.replay'.*'tco\.positions'.*'tco\.risk'.*'tco\.orderbook'.*'tco\.options'/s);
+assert.match(terminalOptions,/docks:\s*\[[\s\S]*'tco\.research'[\s\S]*'tco\.automation'[\s\S]*'tco\.trading'[\s\S]*'tco\.workspace-frame'[\s\S]*'tco\.panels'/, 'terminal topology owns the native dock inventory');
 assert.match(workspace,/createTcoVelaSupabaseStorage\(\(\) => tradingCoreRuntime\.getPrimaryBrokerId\(\)/);
 
 assert.match(marketClient,/data\?\.transport/);
@@ -127,7 +128,7 @@ assert.match(watchlist,/registerWidgetAttachment/);
 
 assert.match(watchlist,/tco\.market-health/);
 
-assert.match(workspace,/timeframes: \['1'.*'M'\]/s);
+assert.match(terminalOptions,/timeframes:\s*\['1'.*'M'\]/s, 'the canonical Vela terminal options own the supported timeframe list');
 assert.match(workspace,/getCellHealth: async/);
 assert.match(read('tools/verify-authenticated-chart-matrix.mjs'),/getCellHealth/);
 assert.match(read('tools/verify-authenticated-chart-matrix.mjs'),/chartHealth/);
