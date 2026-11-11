@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import type { DomainMarketEvent, Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
 import { marketEventBus } from '../../marketData/MarketEventBus.js';
-import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fyersOrderEventNormalizer.js';
+import { normalizeFyersOrderPayload, stampFyersOrderEvent } from './fyersOrderEventNormalizer.js';
 import { FyersOrderStateEngine } from './FyersOrderStateEngine.js';
 
 type Listener = (event: FyersOrderStreamEvent) => void;
@@ -298,23 +298,19 @@ export class FyersOrderStreamTransport {
     const normalized = normalizeFyersOrderPayload(frame.payload, session.sequence + 1, frame.receivedAt);
     for (const item of normalized) {
       if (!this.isCurrent(session, generation)) return;
-      const sequence = ++session.sequence;
-      const data = { ...item.data, sequence, revision: sequence, receivedAt: frame.receivedAt } as FyersNormalizedOrderEvent['data'];
-      const result = await FyersOrderStateEngine.applyNormalized(userId, { ...item, data } as FyersNormalizedOrderEvent, 'websocket');
+      const stamped = stampFyersOrderEvent(item, ++session.sequence, frame.receivedAt);
+      const result = await FyersOrderStateEngine.applyNormalized(userId, stamped, 'websocket');
       if (!this.isCurrent(session, generation)) return;
       result.events.forEach(event => this.publishDomainEvent(session, event));
     }
   }
 
   private static publishDomainEvent(session: Session, event: DomainMarketEvent): void {
+    // The shared bus consumes the canonical domain union. The legacy order
+    // transport gets its compatibility envelope separately and only at the edge.
     marketEventBus.publish(event);
-    switch (event.type) {
-      case 'OrderUpdate': this.emit(session, { type: 'order', data: event }); break;
-      case 'Fill': this.emit(session, { type: 'trade', data: event }); break;
-      case 'PositionUpdate': this.emit(session, { type: 'position', data: event }); break;
-      case 'FundsUpdate': this.emit(session, { type: 'funds', data: event }); break;
-      default: break;
-    }
+    const streamEvent = toFyersOrderStreamEvent(event);
+    if (streamEvent) this.emit(session, streamEvent);
   }
 
   private static emit(session: Session, event: FyersOrderStreamEvent): void {
@@ -324,12 +320,15 @@ export class FyersOrderStreamTransport {
   }
 }
 
-function resequence(event: FyersNormalizedOrderEvent, sequence: number): FyersOrderStreamEvent {
-  const data = { ...event.data, sequence, revision: sequence };
+type FyersOrderPayloadEvent = Extract<FyersOrderStreamEvent, { type: 'order' | 'trade' | 'position' | 'funds' }>;
+
+/** Map canonical domain events to the legacy NDJSON/WebSocket envelope at the transport edge. */
+export function toFyersOrderStreamEvent(event: DomainMarketEvent): FyersOrderPayloadEvent | undefined {
   switch (event.type) {
-    case 'order': return { type: 'order', data: data as OrderUpdate };
-    case 'trade': return { type: 'trade', data: data as Fill };
-    case 'position': return { type: 'position', data: data as PositionUpdate };
-    case 'funds': return { type: 'funds', data: data as FundsUpdate };
+    case 'OrderUpdate': return { type: 'order', data: event };
+    case 'Fill': return { type: 'trade', data: event };
+    case 'PositionUpdate': return { type: 'position', data: event };
+    case 'FundsUpdate': return { type: 'funds', data: event };
+    default: return undefined;
   }
 }
