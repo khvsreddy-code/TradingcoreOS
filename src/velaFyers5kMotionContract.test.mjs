@@ -5,6 +5,7 @@ const workspace=read('src/LiveTradingWorkspace.tsx');
 const policy=read('src/services/marketData/chartHistoryPolicy.ts');
 const provider=read('src/TcoVelaDataProvider.ts');
 const fyers=read('src/server/routes/fyers-history.routes.ts');
+const brokerAdapters=read('src/server/brokers/adapters/BrokerAdapters.ts');
 const engine=read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const cache=read('vendor/vela/src/data/CachingDataFeed.ts');
 const options=read('vendor/vela/src/core/options.ts');
@@ -17,7 +18,7 @@ assert(policy.includes("'5m': 300"), 'the initial history page must stay viewpor
 assert(policy.includes('MAX_INITIAL_HISTORY_CANDLES = 2_000'), 'initial chart history must remain bounded');
 assert.match(policy, /return Math\.max\(250,\s*Math\.min\(1500,\s*Math\.max\(base,\s*bars\s*\*\s*4\)\)\);/, 'visible-range history requests must remain demand-driven and capped');
 assert(provider.includes("await plane.loadOlderHistory('visible')"));
-assert(fyers.includes("'10minute': '10'"));
+assert.match(brokerAdapters, /'10minute'\s*:\s*'10'/, 'FYERS timeframe resolution must be asserted at the broker adapter boundary');
 assert(fyers.includes('Math.min(5_000'));
 assert(engine.includes('const SINGLE_LOAD_BARS = 5_000'));
 assert(engine.includes('const CHUNK_BARS = 5_000'));
