@@ -20,10 +20,25 @@ const walk = (dir) => {
 };
 walk(path.join(root, 'src'));
 
-const roots = sourceFiles.filter(file => /createRoot\s*\(/.test(fs.readFileSync(file, 'utf8')));
-assert.equal(roots.length, 1, `exactly one React root is allowed; found ${roots.length}`);
-assert.equal(path.relative(root, roots[0]).replaceAll('\\', '/'), 'src/main.tsx');
-assert.match(main, /createRoot\(document\.getElementById\('root'\)!\)/);
+const rootFiles = sourceFiles
+  .filter(file => /createRoot\s*\(/.test(fs.readFileSync(file, 'utf8')))
+  .map(file => path.relative(root, file).replaceAll('\\', '/'))
+  .sort();
+const velaPanelRootFile = 'src/services/core/chart/tcoVelaChrome.ts';
+assert.deepEqual(rootFiles, ['src/main.tsx', velaPanelRootFile].sort(),
+  'one application React root is allowed; the only additional roots may be scoped Vela side-panel mounts');
+assert.match(main, /createRoot\(document\.getElementById\('root'\)!\)/,
+  'src/main.tsx owns the single application root');
+
+const velaPanelChrome = read(velaPanelRootFile);
+assert.equal((velaPanelChrome.match(/createRoot\(/g) ?? []).length, 3,
+  'only CoreSpirit Studio, Quant and Journal may mount embedded React panel roots');
+assert.equal((velaPanelChrome.match(/\.unmount\(\)/g) ?? []).length, 3,
+  'every Vela-owned embedded React panel root must be disposed with its panel');
+assert.match(velaPanelChrome, /const root = createRoot\(body\)[\s\S]{0,1800}destroy\(\)\s*\{\s*cancelled = true;\s*root\.unmount\(\)/,
+  'CoreSpirit Studio mounts into its Vela-owned panel body and unmounts on panel destruction');
+assert.equal((velaPanelChrome.match(/destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/g) ?? []).length, 2,
+  'Quant and Journal release their embedded React roots when Vela destroys those panels');
 
 const moduleScripts = [...index.matchAll(/<script\s+type="module"/g)];
 assert.equal(moduleScripts.length, 1, 'index.html must expose exactly one module entrypoint');
