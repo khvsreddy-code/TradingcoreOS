@@ -7,7 +7,7 @@ assert.equal(vercel.services?.api?.entrypoint, 'api/index.ts');
 assert.equal(vercel.services?.api?.functions?.['api/index.ts']?.maxDuration, 15);
 assert.equal(vercel.services?.realtimegateway?.runtime, 'container');
 assert.equal(vercel.services?.realtimegateway?.entrypoint, 'Dockerfile');
-assert.equal(vercel.services?.realtimegateway?.ignoreCommand, 'node tools/ignore-realtime-build.mjs');
+assert.equal(vercel.services?.realtimegateway?.ignoreCommand, undefined, 'Vercel Services does not honor per-service container ignoreCommand; keep the build-skip helper out of the deployed service config');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimegateway'), 'health route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimegateway'), 'WebSocket route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'api'), 'API routes must target the API service');
