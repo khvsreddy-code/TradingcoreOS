@@ -50,9 +50,9 @@ assert.match(route,/createCoreSpiritSandbox\(\{layer:'script',target:'chart'\}\)
 assert.match(route,/validateCoreScriptCapabilitiesAgainstSandbox/,'required capabilities must be checked against sandbox grants');
 assert.match(route,/validateCoreSpiritSandboxArchitecture\(\)/,'forbidden capabilities must be checked');
 assert.doesNotMatch(route,/runCoreSpiritInWorker|coreSpiritWorkerPool|executeCoreSpirit\(|\.executeIr\(/,'Copilot endpoint must never execute generated source');
-assert.match(route,/nextStep:'Review the structured diff and diagnostics\.'/,'response must direct the user to review the generated diff and diagnostics');
-assert.match(route,/Explicitly apply the draft before your own compile\/replay workflow/,'generated source must require an explicit user apply action');
-assert.match(route,/Nothing was run and no broker\/order action was authorized/,'response must explicitly rule out automatic execution and broker actions');
+assert.ok(route.includes("nextStep:'Review the structured diff and diagnostics."), 'response must direct the user to review the generated diff and diagnostics');
+assert.ok(route.includes('Explicitly apply the draft before your own compile/replay workflow'), 'generated source must require an explicit user apply action');
+assert.ok(route.includes('Nothing was run and no broker/order action was authorized.'), 'response must explicitly rule out automatic execution and broker actions');
 assert.match(server,/app\.use\('\/api\/corespirit\/copilot', coreSpiritCopilotRoutes\)/,'server must mount Copilot endpoint');
 assert.match(env,/^GEMINI_API_KEY=/m,'server configuration must document the private provider key');
 assert.match(editor,/\/api\/corespirit\/copilot\/generate/,'editor must use the authenticated server endpoint');
