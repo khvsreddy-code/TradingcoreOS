@@ -91,7 +91,8 @@ assert.match(mlRuntime, /contract_lookback|required_lookback_bars/, 'production 
 assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
 assert.match(hmmTraining, /validateConfirmedResearchRows/);
 assert.match(hmmTraining, /Dataset snapshot hash mismatch/);
-assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 5000/);
+assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 1_000_000/,
+  'the shared research validator matches the one-million-row hard ceiling used by immutable chunked datasets');
 assert.match(researchValidation, /row\.availableAt > row\.timestamp/, 'research forbids unavailable-at-decision-time features');
 assert.match(researchValidation, /purged boundary bars/);
 assert.match(modelArtifact, /featureSchema:[\s\S]*orderedNames:[\s\S]*types:[\s\S]*hash:/);
