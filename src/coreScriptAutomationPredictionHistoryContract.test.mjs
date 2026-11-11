@@ -94,9 +94,9 @@ assert.match(hmmTraining, /Dataset snapshot hash mismatch/);
 assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 1_000_000/,
   'the shared research validator matches the one-million-row hard ceiling used by immutable chunked datasets');
 assert.match(researchValidation, /row\.availableAt > row\.timestamp/, 'research forbids unavailable-at-decision-time features');
-assert.match(researchValidation, /const boundaryGap = purgeBars \\+ embargoBars/,
+assert.match(researchValidation, /const boundaryGap = purgeBars \+ embargoBars/,
   'purge and embargo counts are combined into an explicit no-train/no-validation boundary');
-assert.match(researchValidation, /validationStart = trainingCount \\+ boundaryGap/,
+assert.match(researchValidation, /validationStart = trainingCount \+ boundaryGap/,
   'the holdout begins only after the purged and embargoed boundary rows');
 assert.match(modelArtifact, /featureSchema:[\s\S]*orderedNames:[\s\S]*types:[\s\S]*hash:/);
 assert.match(modelArtifact, /lookback:[\s\S]*minBars:[\s\S]*preferredBars:[\s\S]*maxBars:/);
