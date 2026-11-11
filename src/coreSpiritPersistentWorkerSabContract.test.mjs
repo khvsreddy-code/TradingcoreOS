@@ -36,7 +36,7 @@ if(!/queued\.contextKey!==contextKey/.test(pool)
   || !/this\.queue\.splice\(index,1\);this\.settleJob\(queued,abortError\('Superseded by a newer snapshot for this context\.'\)\)/.test(pool)) {
   throw new Error('The worker pool must coalesce queued snapshots only within the same context and reject superseded work through the shared settlement path');
 }
-if(!/priority:options\?\.runtimeOptions\?\.executionTarget==='chart'[\s\S]{0,100}executionMode==='realtime'\?1:2/.test(pool))throw new Error('Live chart worker jobs must be prioritized from execution metadata, not generated source IDs');
+if(!/priority:options\?\.runtimeOptions\?\.executionTarget==='chart'\?\(options\.runtimeOptions\.executionMode==='realtime'\?0:1\):sourceId\.includes\('chart'\)\?2:4/.test(pool))throw new Error('Realtime chart jobs must receive the highest worker priority, historical chart jobs the next priority, and non-chart work must use fallback priorities');
 if(pool.includes('queueCursor'))throw new Error('Worker scheduling must not retain a fragile cursor into a queue that is resorted');
 if(!/if\(slot\?\.busy\)continue/.test(pool))throw new Error('A busy chart must not head-of-line block runnable jobs for other contexts');
 
