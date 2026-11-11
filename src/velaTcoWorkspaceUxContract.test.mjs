@@ -132,8 +132,8 @@ assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('
 assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('blockState') && drawingPriceAction.includes('liquidityState'),
   'Vela 0.10.5 price-action analysis must include FVG, order-block and liquidity state');
 assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
-  'the drawing registry must expose all 0.8.4 price-action tools');
-// The unified drawing gear must launch the 0.8.4 panel, not the old split controls.
+  'the drawing registry must expose all native price-action tools');
+// The unified drawing gear must launch the native panel, not the old split controls.
 assert(drawingSettingsPopup.includes('this.iconBtn(this.t(TEXT.settings), GEAR_ICON, () => this.openPanel())'),
   'the localized drawing toolbar settings gear must open the unified native Vela settings panel');
 assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPopup.includes("iconBtn('Position size'"),
