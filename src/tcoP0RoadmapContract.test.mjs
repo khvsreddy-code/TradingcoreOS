@@ -51,7 +51,9 @@ assert.match(dataPlane, /\.\.\.\(this\.state\.columns \? \{ columns: this\.state
 assert.match(dataPlane, /this\.state\.columns = columns/, 'the data plane must retain the validated typed history as its primary representation');
 assert.match(dataPlane, /this\.canonicalPlane\.replaceColumns\(columns/, 'typed OHLCV history must become the canonical market-data plane');
 assert.match(dataPlane, /tradingCoreRuntime\.getHistoricalDataColumns\(/, 'the native Vela cold-start path must request typed broker history first');
-assert.match(dataPlane, /operation: 'replace-history'/, 'historical corrections must reach Vela as an explicit columnar history replacement');
+assert.match(provider, /pendingHistoryReplacement = true/, 'history/recovery snapshots must mark the Vela subscription for a full replacement');
+assert.match(provider, /operation: 'replace-history'/, 'historical corrections must reach Vela as an explicit columnar history replacement');
+assert.match(provider, /onBar\(replacement\)/, 'the explicit historical replacement must cross the Vela provider boundary');
 assert.match(dataPlane, /setColumnarHistory/);
 assert.match(chartController, /seedLiveCandle/);
 assert.doesNotMatch(runtimeController, /seedLiveCandle/, 'runtime must not synthesize one-price candles before broker history arrives');
