@@ -24,7 +24,7 @@ assert.ok(
 );
 assert.match(
   terminal,
-  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts'\s*\]/,
+  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts',\s*'tco\.chart-settings'\s*\]/,
   'keep Workspace and Trade in the native Vela topbar beside Save and Alerts',
 );
 assert.doesNotMatch(terminal, /tco\.brand/, 'remove the redundant TRADINGCOREOS × VELA label');
