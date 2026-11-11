@@ -28,7 +28,12 @@ const toolbarTypes = new Set(toolbar.groups.flatMap(group => group.tools.map(too
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.length >= 70);
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.every(type => registered.has(type)), 'every TCO drawing catalog type must exist in Vela registry');
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.every(type => toolbarTypes.has(type)), 'every TCO drawing catalog type must be reachable from the Vela toolbar');
-assert.equal(toolbar.groups.length, 7);
+assert.equal(toolbar.groups.length, 8, 'the toolbar exposes the dedicated Price Action group');
+const priceActionGroup = toolbar.groups.find(group => group.id === 'price-action');
+assert.ok(priceActionGroup, 'Price Action must be directly accessible as a top-level drawing group');
+for (const type of ['fairvaluegap', 'orderblock', 'liquidity']) {
+  assert.ok(priceActionGroup.tools.some(tool => tool.type === type), `Price Action group is missing ${type}`);
+}
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('fibretracement'));
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('gartley'));
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('elliottimpulse'));
