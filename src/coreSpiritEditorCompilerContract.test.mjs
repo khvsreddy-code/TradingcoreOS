@@ -53,9 +53,12 @@ assert.match(replayWorker,/message\.bars\.length>3000/,'historical preflight mus
 assert.match(pool,/Avoid hashing\/serializing a potentially large IR on the UI thread/,'execution worker dispatch must not re-validate large artifacts synchronously');
 assert.match(target,/updateCode\?/,'active chart target must expose transactional source replacement');
 assert.match(controller,/updateCode:\(source,artifact/,'chart controller must route artifact replacement directly to the worker');
-assert.match(controller,/fatalDiagnostic=result\.diagnostics\.find\(isFatalCoreSpiritDiagnostic\)/,'worker runtime failures must block a replacement chart commit');
+assert.match(controller,/const fatalDiagnostic=diagnosticDetails\.find\(diagnostic=>diagnostic\.severity==='error'\)/,
+  'worker runtime failures must be classified from typed diagnostics, with unclassified messages failing closed');
+assert.match(controller,/if\(fatalDiagnostic\)\{[\s\S]{0,1100}throw new Error\('CoreSpirit replacement rejected/,
+  'fatal worker diagnostics must reject the replacement before any chart output commit');
 assert.match(controller,/if\(runId===coreSpiritRunId\.current\)publishLifecycle\('error'\)/,'superseded worker jobs must not mark the latest chart run as failed');
-assert.ok(controller.indexOf('const fatalDiagnostic=result.diagnostics.find(isFatalCoreSpiritDiagnostic)')<controller.indexOf('output?.reset();'),'fatal diagnostics must be checked before old chart visuals are reset');
+assert.ok(controller.indexOf('const fatalDiagnostic=diagnosticDetails.find(diagnostic=>diagnostic.severity===\'error\')')<controller.indexOf('output.scheduleObjects('),'fatal diagnostics must be checked before Vela receives the transactional replacement snapshot');
 assert.match(controller,/validateCoreScriptCapabilitiesAgainstSandbox/,'chart editor deploy must enforce the same chart sandbox as CoreSpirit Coder');
 assert.match(controller,/CHART_CAPABILITY_DENIED/,'chart editor must report capability-policy failures before Run');
 const runStart=editor.indexOf('const runOnChart=async()=>{');
