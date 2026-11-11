@@ -75,7 +75,7 @@ assert(!watchlistPanelSource.includes('Open Vela symbol search'), 'watchlist mus
 assert(tcoVelaChrome.includes('Open chart replay controls'), 'research dock must expose the existing chart replay capability');
 assert(tcoVelaChrome.includes('Open market health & performance'), 'research dock must link to live renderer/market health diagnostics');
 assert(tcoVelaChrome.includes('Renderer metrics are warming up'), 'research dock must communicate when renderer telemetry is not ready');
-assert(tcoVelaChrome.includes(' · LTP ${Number(ltp).toLocaleString'), 'order-book context must show the active quote and its freshness state');
+assert(tcoVelaChrome.includes(' · LTP ${Number.isFinite(ltp)?ltp.toLocaleString'), 'order-book context must show the active quote and its freshness state');
 assert(workspaceShell.includes('Skip to workspace content'), 'workspace shell must provide a keyboard skip link');
 assert(workspaceShell.includes('aria-label="Primary workspace navigation"'), 'workspace navigation must be named for assistive technology');
 assert(/aria-current=\{active\s*===\s*path\s*\?\s*'page'\s*:\s*undefined\}/.test(workspaceShell), 'workspace navigation must expose the current page');
