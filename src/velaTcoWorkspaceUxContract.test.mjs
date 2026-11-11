@@ -89,8 +89,10 @@ assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
 assert.equal((provider.match(/export class TcoVelaDataProvider implements DataProvider/g) ?? []).length, 1,
   "the Vela data provider must have one canonical implementation");
-assert.equal((provider.match(/else void activeBrokerId\(\)\.then\(attach\)\.catch\(\(\) => undefined\);/g) ?? []).length, 2,
-  "both Vela live-subscription forms must attach if broker restore completes after subscribe");
+assert.equal((provider.match(/const syncBroker = \(\) => \{/g) ?? []).length, 2,
+  "both live-subscription forms must re-resolve broker state when the session changes");
+assert.equal((provider.match(/const sessionCheckTimer = globalThis\.setInterval\(syncBroker, BROKER_SESSION_CHECK_MS\)/g) ?? []).length, 2,
+  "both subscriptions must recover if broker restoration completes without a lifecycle event");
 assert(!provider.includes("if (!brokerId) return () => {};"),
   "a cold-start subscription must not become a permanent no-op before broker restore");
 assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_CONNECTED', syncBroker\)/g) ?? []).length, 2,
@@ -105,10 +107,8 @@ assert(!/await Promise\.all\(\[brokerReady,\s*defaultsPromise\]\)/.test(live),
   "Vela workspace mount must not block first paint on broker session restoration");
 assert(live.includes("void brokerReady.then(() => {"),
   "common-symbol history warm-up should begin after the workspace is already mounted");
-assert.equal((provider.match(/else void activeBrokerId\(\)\.then\(attach\)\.catch\(\(\) => undefined\);/g) ?? []).length, 2,
-  "both columnar and row subscriptions must attach after asynchronous broker restoration");
-assert(!provider.includes("if (!brokerId) return () => {};"),
-  "a subscription created before broker restoration must not become a permanent no-op");
+assert.equal((provider.match(/globalThis\.clearInterval\(sessionCheckTimer\)/g) ?? []).length, 2,
+  "both subscription timers must be released when their chart cells are disposed");
 
 assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
 
