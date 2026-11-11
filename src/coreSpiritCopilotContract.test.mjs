@@ -17,10 +17,10 @@ assert.match(route,/windowMs:60_000/,'Copilot limiter must use a one-minute wind
 assert.match(route,/max:10/,'Copilot needs a 10-request per-minute limit');
 assert.match(route,/tradingCoreUserId/,'Copilot rate limit keys must be user-scoped');
 assert.match(route,/process\.env\.GEMINI_API_KEY/,'provider secret must remain server-side');
-assert.match(route,/responseMimeType:'application\\/json'/,'Copilot must explicitly request JSON output from Gemini');
-assert.match(route,/responseSchema:\\{\\s*type:Type\\.OBJECT/,'Copilot must supply a structured object response schema');
-assert.match(route,/required:\\['source','summary','assumptions','tests','backtestScenarios'\\]/,'the structured response schema must require every draft field');
-assert.match(route,/thinkingConfig:\\{thinkingLevel:ThinkingLevel\\.LOW\\}/,'Copilot should use the low-latency Gemini thinking configuration');
+assert.match(route,/responseMimeType:'application\/json'/,'Copilot must explicitly request JSON output from Gemini');
+assert.match(route,/responseSchema:\{\s*type:Type\.OBJECT/,'Copilot must supply a structured object response schema');
+assert.match(route,/required:\['source','summary','assumptions','tests','backtestScenarios'\]/,'the structured response schema must require every draft field');
+assert.match(route,/thinkingConfig:\{thinkingLevel:ThinkingLevel\.LOW\}/,'Copilot should use the low-latency Gemini thinking configuration');
 assert.doesNotMatch(route,/temperature\s*:/,'Gemini 3.x request must not include unsupported sampling parameters');
 assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key must never be read from a browser-visible environment variable');
 assert.match(route,/compileCoreSpirit\(generated\.source,'corespirit-editor'/,'generated source must go through the canonical compiler with the same artifact identity as the editor');
