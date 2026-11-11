@@ -149,7 +149,7 @@ assert.ok(classifierStart >= 0 && classifierElse > classifierStart, 'classifier 
 const classifierProbabilityBranch = classicalBlock.slice(classifierStart, classifierElse);
 assert.match(classifierProbabilityBranch, /classifier_probability_not_calibrated/);
 assert.doesNotMatch(classifierProbabilityBranch, /expected_return\s*=/, 'direction probabilities must not be converted into an expected return');
-assert.match(classicalBlock, /if target_kind == 'return':\s*expected_return = score/, 'only a model trained for return targets may produce a trained return estimate');
+assert.match(classicalBlock, /if target_kind in \('return', 'expected_return'\):\s*expected_return = score/, 'only a model trained for a return target (including the expected_return alias) may produce a trained return estimate');
 assert.match(mlRuntime, /'production_eligible': release_status == 'approved'/, 'unapproved artifacts must never be marked production eligible');
 assert.match(mlRuntime, /'entry_allowed': False/, 'candidate/revoked artifacts must not produce an execution-allowed gate');
 
