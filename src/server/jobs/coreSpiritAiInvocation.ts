@@ -182,6 +182,7 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
           required: ['result', 'summary'],
         },
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        automaticContinuation: false,
         maxOutputTokens: input.outputTokenLimit,
         abortSignal: AbortSignal.timeout(CORE_SPIRIT_AI_INVOKE_LIMITS.providerTimeoutMs),
       },
