@@ -144,8 +144,13 @@ export {
     createDrawing,
     resetDrawingSettings,
     deserializeDrawing,
+    drawingFamilyForType,
+    loadDrawingFamily,
+    loadDrawingFamiliesForTypes,
     loadAdvancedDrawingCatalog,
+    ADVANCED_DRAWING_FAMILIES,
     type DrawingTypeMeta,
+    type AdvancedDrawingFamily,
 } from './registry';
 export { migrate, isValidSerialized, clonePlain, DRAWINGS_DOC_VERSION, type DrawingsDocument } from './document';
 export { DrawingStore } from './DrawingStore';
