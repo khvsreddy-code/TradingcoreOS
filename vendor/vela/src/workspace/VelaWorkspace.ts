@@ -282,7 +282,7 @@ const TEXT = {
     syncStyle: msg('workspace.sync.style', 'Style'),
     alert: msg('workspace.alerts.untitled', 'Alert'),
     alertToast: msg('workspace.alerts.toast', '{source} — {title} — {message}'),
-    alertToastUntitled: msg('workspace.alerts.toastUntitled', '{source} — {message}'),
+    alertToastDescription: msg('workspace.alerts.toastUntitled', '{source} — {message}'),
     alertRow: msg('workspace.alerts.row', '{source} · {time} · {title}: {message}'),
     alertDrawerTitle: msg('workspace.alerts.drawerTitle', '{source} · {title}'),
     noAlerts: msg('workspace.alerts.none', 'No alerts yet'),
