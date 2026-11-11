@@ -1703,7 +1703,7 @@
     {
       "path": "src/workspace/VelaWorkspace.ts",
       "upstreamBlob": "e57a4f46c5d4cf9438c4c792062d86e1c9cbccf0",
-      "localBlob": "049e1eb84213415b0b1d8887af1b7726242861a0",
+      "localBlob": "891a3941e25b0becaf01d8f540ea2fa8326caecd",
       "patchId": "pane-layout-persistence"
     }
   ],
