@@ -1727,7 +1727,7 @@ export class VelaWorkspace {
         document.documentElement.dataset.tcoActiveTimeframe = /^(?:[DWM])$/i.test(cell.timeframe)
             ? `1${cell.timeframe.toUpperCase()}`
             : /^\d+$/.test(cell.timeframe) ? `${cell.timeframe}m` : cell.timeframe;
-        this.topbar.setPriceStyle(cell.priceStyle);
+        this.topbar.setPriceStyle(cell.priceStyle, cell.unavailablePriceStyles());
         this.topbar.setIndicatorCount(cell.indicatorCount);
         this.topbar.renderActions(); // contributed `when()` gates may depend on the active cell
         this.mobileBar?.renderActions();

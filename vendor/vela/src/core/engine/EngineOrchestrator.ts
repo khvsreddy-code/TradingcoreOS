@@ -1179,6 +1179,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             }
             if (this.generation === gen) this.completeHistory('depth');
         } catch (e) {
+            if (isDataUnavailableError(e)) return this.marketUnavailable(gen, e);
             console.warn('[vela] history backfill failed — keeping ' + this.rawTape.length + ' bars (' + (e instanceof Error ? e.message : String(e)) + ')');
             if (this.generation === gen) this.completeHistory('aborted');
         }

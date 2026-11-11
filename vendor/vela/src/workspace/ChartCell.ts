@@ -519,6 +519,14 @@ export class ChartCell {
             const list = providers.length > 0 ? providers.join(', ') : 'none';
             this.deps.toast(`No registered provider serves "${symbol}" (registered: ${list})`, 'error', 6000);
         });
+        // Permanent source refusals may offer a coarser timeframe; keep the requested value
+        // in persisted state while the chart displays the suggested fallback.
+        this.inner.on('data:unavailable', (event) => this.onDataUnavailable(event));
+        // Symbol facts can change the drawn price style without changing the user's choice.
+        this.inner.on('symbol:facts', () => {
+            this.syncStatuslineColors();
+            this.deps.onPriceStyleShown?.(this.id);
+        });
         // The loading affordance and the watermark never share the canvas.
         this.inner.on('load:start', ({ symbol }) => {
             this.paneRestoreSettled = false;
@@ -1752,7 +1760,7 @@ export class ChartCell {
         this.state.paneHeightWeights = cs.paneHeightWeights;
         this.restoredPaneWeights.clear();
         this.paneRestoreSettled = false;
-        if (cs.priceStyle && cs.priceStyle !== this.priceStyle) this.setPriceStyle(cs.priceStyle);
+        if (cs.priceStyle && cs.priceStyle !== this.requestedPriceStyle) this.setPriceStyle(cs.priceStyle);
         if (cs.watermark !== undefined && cs.watermark !== this.watermarkOn) this.setWatermarkVisible(cs.watermark);
         if (cs.replayWatermark !== undefined && cs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(cs.replayWatermark);
         if (cs.indicatorTitles !== undefined && cs.indicatorTitles !== this.indicatorTitlesOn) this.setIndicatorTitlesVisible(cs.indicatorTitles);
