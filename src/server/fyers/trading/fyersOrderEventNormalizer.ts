@@ -23,6 +23,7 @@ export function stampFyersOrderEvent(
     case 'trade': return { type: 'trade', data: { ...event.data, ...metadata } };
     case 'position': return { type: 'position', data: { ...event.data, ...metadata } };
     case 'funds': return { type: 'funds', data: { ...event.data, ...metadata } };
+    default: throw new Error('Unsupported normalized FYERS order event variant.');
   }
 }
 
