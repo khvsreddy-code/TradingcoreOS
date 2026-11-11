@@ -14,7 +14,11 @@ const tracker = fs.readFileSync(path.join(root, 'docs/CORESPIRIT_BUILD_TRACKER.m
 
 if (!/maxBuckets = (?:32|96)/.test(historyStore) || !/ttlMs = 600_000/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore bounded stale-while-revalidate residency guard missing');
 if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
-if (!/const previousLength = this\.state\.candles\.length/.test(plane) || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) throw new Error('Actual older prepend count missing');
+if (!/const currentRows = this\.state\.candles\.length[\s\S]*?const previousLength = currentRows\.length/.test(plane)
+  || !/const merged = normalizeHistory\(\[\.\.\.rows, \.\.\.currentRows\]\)/.test(plane)
+  || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) {
+  throw new Error('Actual net older prepend count must use the object-or-columnar compatibility history and normalized unique merge');
+}
 if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\.warmHistoryRequested = false/.test(plane)) throw new Error('Warm history viewport/retry contract missing');
 if (!/loadOlderHistory\(Math\.min\(deps\.candles\.current\.length,visibleBars\)/.test(interaction)) throw new Error('Chart interaction controller does not pass visible range demand to older history');
 if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Chart runtime warm-history stage missing');
