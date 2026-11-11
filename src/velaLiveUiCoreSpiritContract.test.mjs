@@ -31,9 +31,13 @@ assert.match(terminal, /gridColor:'#202226'/, 'live chart should use the restrai
 assert.match(terminal, /upColor:'#089981'/, 'live chart should use Vela bullish candle color');
 assert.match(terminal, /downColor:'#f23645'/, 'live chart should use Vela bearish candle color');
 assert.match(terminal, /animations:\{ zoom:true, pan:true, liveBar:false \}/, 'chart interactions should retain Vela eased zoom/pan');
-const topbar = terminal.match(/topbar:\{([\s\S]*?)\n    \},/);
-assert.ok(topbar, 'TCO should explicitly define a compact topbar');
-assert.doesNotMatch(topbar[1], /tco\.chart-settings/, 'native Vela chart settings must not be duplicated by a TCO topbar action');
+const topbar = terminal.match(/export const TCO_VELA_TOPBAR_COMPOSITION = Object\.freeze\(\{([\s\S]*?)\n\}\);/);
+assert.ok(topbar, 'TCO should explicitly define one shared compact Vela topbar composition');
+const leftTopbar = topbar[1].match(/left:\s*\[([\s\S]*?)\]/)?.[1] ?? '';
+const rightTopbar = topbar[1].match(/right:\s*\[([\s\S]*?)\]/)?.[1] ?? '';
+assert.ok(leftTopbar && rightTopbar, 'compact Vela topbar composition must define both pinned sides');
+assert.ok((leftTopbar.match(/'[^']+'/g) ?? []).length <= 7 && (rightTopbar.match(/'[^']+'/g) ?? []).length <= 5, 'keep the native Vela topbar compact rather than adding another toolbar cluster');
+assert.equal((rightTopbar.match(/'tco\.chart-settings'/g) ?? []).length, 1, 'native chart settings must be reachable exactly once in the right-side topbar');
 assert.match(terminal, /sidebar:\s*\{[\s\S]*'tco\.bookmarks'[\s\S]*'tco\.corespirit-code'[\s\S]*'tco\.panels'/, 'TCO application panels are available through the grouped Vela native sidebar');
 assert.match(chrome, /id: 'tco\.journal'[\s\S]*title: 'Journal'/, 'the Trading Journal remains registered as a native side panel');
 assert.match(chrome, /id: 'tco\.positions'[\s\S]*title: 'Positions'/, 'broker Positions remain registered as a native side panel');
