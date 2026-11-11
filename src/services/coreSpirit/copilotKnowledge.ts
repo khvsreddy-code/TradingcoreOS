@@ -4,7 +4,7 @@ import { CORE_SPIRIT_BUILTINS } from './standardLibrary.js';
 import { CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES } from './standardLibraryNamespaces.js';
 
 /** Increment this corpus revision whenever curated safety entries, ranking, or index shape changes. */
-export const CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION = '1.0.1';
+export const CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION = '1.0.2';
 export const CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION =
   'corespirit-knowledge-v' + CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION + ':' + CORE_SCRIPT_LANGUAGE_VERSION + ':' + CORE_SPIRIT_COMPILER_VERSION + ':' + CORE_SPIRIT_RUNTIME_VERSION;
 
@@ -123,6 +123,18 @@ function tokenize(value: string): string[] {
   return identifiers.flatMap(token => [token, ...token.split(/[._-]+/).filter(Boolean)]);
 }
 
+// Generic prompt words and the platform's own name are not useful retrieval signals.
+// Filter them on the query side only; document tokenization remains lossless.
+const QUERY_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'core', 'corespirit',
+  'for', 'from', 'in', 'is', 'it', 'no', 'of', 'on', 'or', 'such', 'the',
+  'this', 'to', 'topic', 'with',
+]);
+
+function tokenizeQuery(value: string): string[] {
+  return tokenize(value).filter(token => token.length > 1 && !QUERY_STOP_WORDS.has(token));
+}
+
 function scoreDocument(queryTokens: readonly string[], document: KnowledgeDocument): number {
   const title = tokenize(document.title);
   const body = tokenize(document.body);
@@ -186,7 +198,7 @@ const KNOWLEDGE_INDEX = buildIndex();
 export function searchCoreSpiritCopilotKnowledge(query: string, limit = 8): readonly CoreSpiritCopilotKnowledgeHit[] {
   const normalizedQuery = String(query ?? '').slice(0, 500).trim();
   const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(12, Math.trunc(limit))) : 8;
-  const queryTokens = tokenize(normalizedQuery);
+  const queryTokens = tokenizeQuery(normalizedQuery);
   const results = KNOWLEDGE_INDEX.map(document => ({
     document,
     score: normalizedQuery ? scoreDocument(queryTokens, document) : 0,

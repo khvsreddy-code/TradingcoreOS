@@ -32,5 +32,6 @@ assert.ok(asyncAi.some(hit => hit.id === 'async-ai-invocation'));
 
 const bounded = searchCoreSpiritCopilotKnowledge('ema', 100);
 assert.ok(bounded.length <= 12, 'search results must be bounded');
+assert.deepEqual(searchCoreSpiritCopilotKnowledge('CoreSpirit topic', 8), [], 'generic platform words must not return unrelated documents');
 assert.deepEqual(searchCoreSpiritCopilotKnowledge('no-such-corespirit-topic', 8), []);
 console.log('CORESPIRIT_COPILOT_KNOWLEDGE_CONTRACT_OK');
