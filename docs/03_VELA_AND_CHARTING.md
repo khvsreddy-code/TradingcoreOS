@@ -4,12 +4,12 @@ Vela is TradingCoreOS's sole charting/rendering engine. Application code crosses
 
 ## Vendor boundary
 
-The vendored source baseline is Vela **0.10.1** (`e77d22325e51c7a10edcc617e666ca1a5fd65e68`). The active UI component kit now comes from `@luxalgo/vela-ui` **0.2.0**; its styling is scoped to Vela hosts so chart controls do not restyle the surrounding React application.
+The vendored upstream source snapshot is Vela **0.10.5** (`34d11f1a8a88c7dd5657c9b3a791abf43560218d`), with the TCO overlay reconciled against that source tree. The active UI component kit is `@luxalgo/vela-ui` **0.4.1**; its styling is scoped to Vela hosts so chart controls do not restyle the surrounding React application. The 0.10.5 snapshot is pinned to upstream `main`; the latest published GitHub release may carry a different tag.
 
 
-## Vela capability architecture — v0.10.1
+## Vela capability architecture — v0.10.5
 
-The Vela 0.10.1 upstream source tree contains **390 files**. TradingCoreOS retains a separate local overlay for its columnar market-data, CoreSpirit, drawing, pane-persistence, India-market and compatibility patches; see `vendor/vela/UPSTREAM-DIFF.json` for exact file-level provenance. The bundle risk is not just file count; the renderer composition root can make optional chart capabilities part of the same JavaScript graph.
+The Vela 0.10.5 upstream source tree contains **393 files**. TradingCoreOS vendors 472 source files in total: 334 byte-identical upstream files, 59 locally adapted upstream files, and 79 TCO-only extensions. TradingCoreOS retains a separate local overlay for its columnar market-data, CoreSpirit, drawing, pane-persistence, India-market and compatibility patches; see `vendor/vela/UPSTREAM-DIFF.json` for exact file-level provenance. The bundle risk is not just file count; the renderer composition root can make optional chart capabilities part of the same JavaScript graph.
 
 The audited hotspots include:
 
