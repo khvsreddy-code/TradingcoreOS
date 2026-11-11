@@ -54,9 +54,16 @@ assert(chrome.includes("id: 'tco.corespirit-code'") && chrome.includes("icon: 'c
 assert(live.includes('className="absolute inset-0"'), 'the Vela workspace uses the full available width without a duplicate React rail');
 assert(!chrome.includes('registerWidgetAttachment(healthAttachment)'), 'do not reserve chart height with the custom bottom health strip');
 assert(topology.includes('animations:{ zoom:true, pan:true, liveBar:false }'), 'Vela zoom and pan animations should follow the supplied reference UI');
-const topbarComposition = topology.slice(topology.indexOf('topbar:{'), topology.indexOf('sync:{'));
+const topbarCompositionStart = topology.indexOf('export const TCO_VELA_TOPBAR_COMPOSITION');
+const topbarCompositionEnd = topology.indexOf('export const TCO_VELA_TERMINAL_TOPOLOGY');
+assert(topbarCompositionStart >= 0 && topbarCompositionEnd > topbarCompositionStart,
+  'the live topbar composition must have one explicit source of truth');
+const topbarComposition = topology.slice(topbarCompositionStart, topbarCompositionEnd);
+assert(topology.includes('topbar: TCO_VELA_TOPBAR_COMPOSITION'),
+  'the runtime workspace and its topology must consume the same topbar composition');
 assert(!topbarComposition.includes("'tco.watchlist'"), 'Watchlist must not occupy a topbar slot');
 assert(!topbarComposition.includes("'tco.corespirit-code'"), 'CoreSpirit must not occupy a topbar slot');
+assert(topbarComposition.includes("'tco.chart-settings'"), 'the native chart-settings command must be pinned into the live topbar');
 assert(chrome.includes("registerSidePanel(journalPanel)"), "journal should remain registered as a dockable panel");
 assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
@@ -76,6 +83,7 @@ assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be 
 assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
 assert(chartCell.includes('chart.addNativeIndicatorAsync(type)'), 'picker-selected lazy Vela indicators must use the async native API');
 assert(topbar.includes("b.dataset.actionId = action.id"));
+assert(topbar.includes('return pinSlot(id, left)'), 'Vela must render allowlisted contributed actions in their pinned topbar slots');
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
 assert.equal((provider.match(/export class TcoVelaDataProvider implements DataProvider/g) ?? []).length, 1,
