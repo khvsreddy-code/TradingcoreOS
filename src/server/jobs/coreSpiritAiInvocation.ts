@@ -204,6 +204,6 @@ export async function runCoreSpiritAiInvocation(ownerUserId: string, rawPayload:
   } catch {
     return unavailable(payload, 'provider-unavailable', 'The asynchronous AI provider timed out or returned an invalid response. No runtime or broker action was taken.');
   } finally {
-    await redis.releaseLock(expectedLockKey, payload.lockOwner, AbortSignal.timeout(900)).catch(() => false);
+    await releaseLease();
   }
 }
