@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { normalizeFyersOrderPayload } from './server/fyers/trading/fyersOrderEventNormalizer.ts';
+import { normalizeFyersOrderPayload, stampFyersOrderEvent } from './server/fyers/trading/fyersOrderEventNormalizer.ts';
+import { toFyersOrderStreamEvent } from './server/fyers/trading/FyersOrderStreamTransport.ts';
 import { MarketEventBus } from './server/marketData/MarketEventBus.ts';
 
 const orderFrame = normalizeFyersOrderPayload({
@@ -47,6 +48,38 @@ assert.equal(funds[0].data.type, 'FundsUpdate');
 assert.equal(funds[0].data.available, 12_000);
 assert.deepEqual(normalizeFyersOrderPayload({ type: 'futureUnknownFrame', payload: { anything: true } }, 5, 5_000), [],
   'unknown broker frames must not leak as arbitrary objects');
+
+// Stamp metadata without losing the discriminated-union relationship between
+// each compatibility tag and its typed canonical domain payload.
+const normalizedOrders = [
+  stampFyersOrderEvent(orderFrame[0], 11, 11_000),
+  stampFyersOrderEvent(trades[0], 12, 12_000),
+  stampFyersOrderEvent(positions[0], 13, 13_000),
+  stampFyersOrderEvent(funds[0], 14, 14_000),
+];
+assert.deepEqual(normalizedOrders.map(item => item.type), ['order', 'trade', 'position', 'funds']);
+assert.deepEqual(normalizedOrders.map(item => item.data.type), ['OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']);
+assert.deepEqual(normalizedOrders.map(item => item.data.sequence), [11, 12, 13, 14]);
+assert.deepEqual(normalizedOrders.map(item => item.data.revision), [11, 12, 13, 14]);
+assert.deepEqual(normalizedOrders.map(item => item.data.receivedAt), [11_000, 12_000, 13_000, 14_000]);
+
+// The shared event bus receives canonical DomainMarketEvent values. The
+// client-facing order stream envelope is a separate, explicit edge mapping.
+const streamEnvelopes = normalizedOrders.map(item => toFyersOrderStreamEvent(item.data));
+assert.deepEqual(streamEnvelopes.map(item => item.type), ['order', 'trade', 'position', 'funds']);
+assert.deepEqual(streamEnvelopes.map(item => item.data), normalizedOrders.map(item => item.data));
+const orderDeliveryBus = new MarketEventBus();
+const executionDomainEvents = [];
+const auditDomainEvents = [];
+orderDeliveryBus.subscribe(event => executionDomainEvents.push(event), { consumers: ['execution'] });
+orderDeliveryBus.subscribe(event => auditDomainEvents.push(event), { consumers: ['audit'] });
+for (const item of normalizedOrders) orderDeliveryBus.publish(item.data);
+const expectedOrderDomainTypes = ['OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate'];
+assert.deepEqual(executionDomainEvents.map(event => event.type), expectedOrderDomainTypes);
+assert.deepEqual(auditDomainEvents.map(event => event.type), expectedOrderDomainTypes);
+assert.ok(executionDomainEvents.every(event => !Object.hasOwn(event, 'data')),
+  'domain consumers receive canonical events, never nested transport envelopes');
+assert.equal(orderDeliveryBus.subscriberCount, 2);
 
 const bus = new MarketEventBus();
 const quoteEvents = [];
@@ -104,7 +137,19 @@ assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
 assert.match(eventBus, /export class MarketEventBus/);
 assert.match(eventBus, /if \(!entry\.consumers \|\| !routesToConsumer\(event, entry\.consumers\)\) continue/,
   'depth fanout must require an explicit eligible consumer class');
-assert.match(orderTransport, /marketEventBus\.publish\(event\.data\)/);
+assert.match(orderTransport, /private static publishDomainEvent\(session: Session, event: DomainMarketEvent\)/);
+assert.match(orderTransport, /marketEventBus\.publish\(event\)/,
+  'durably reduced canonical domain events must be published directly to the shared bus');
+assert.doesNotMatch(orderTransport, /marketEventBus\.publish\(event\.data\)/,
+  'the normalizer compatibility wrapper must never be published as a domain event');
+assert.match(orderTransport, /toFyersOrderStreamEvent\(event\)/,
+  'the client-facing envelope is mapped separately at the transport edge');
+assert.match(orderTransport, /stampFyersOrderEvent\(item, \+\+session\.sequence, frame\.receivedAt\)/);
+assert.match(orderTransport, /FyersOrderStateEngine\.applyNormalized\(userId, stamped, 'websocket'\)/,
+  'broker events must pass through the idempotent state engine before publication');
+assert.doesNotMatch(orderTransport, /as FyersNormalizedOrderEvent/,
+  'the live reducer must preserve discriminated event types without widening casts');
+assert.match(orderNormalizer, /export function stampFyersOrderEvent/);
 assert.doesNotMatch(orderTransport, /as DomainMarketEvent/, 'normalized order events must satisfy the domain union without unsafe casts');
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
