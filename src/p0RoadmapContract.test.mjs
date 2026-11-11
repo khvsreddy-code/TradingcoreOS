@@ -6,6 +6,9 @@ const read=(p)=>fs.readFileSync(p,'utf8');
 const chartState=read('src/services/core/chart/chartRuntimeSupport.ts');
 const liveChart=read('src/components/workspace/LiveChart.tsx');
 const runtime=read('src/CoreSpiritVelaEngine.ts');
+const coreSpiritRuntime=read('src/services/coreSpirit/runtime.ts');
+const marketGraph=read('src/services/core/data/marketDataGraph.ts');
+const multiSymbolTimeframe=read('src/services/coreSpirit/multiSymbolTimeframe.ts');
 const provider=read('src/TcoVelaDataProvider.ts');
 const plane=read('src/services/marketData/chartDataPlane.ts');
 const chartRuntime=read('src/services/core/chart/ChartRuntimeController.ts');
@@ -31,11 +34,22 @@ assert.doesNotMatch(liveChart,/createChartDrawingController|drawingControllerRef
 assert.doesNotMatch(interactions,/hitTestDrawings|moveDrawingHandle|CoreDrawingStore/);
 assert.match(liveChart,/chart\.current\.drawings/);
 
+// Secondary data now travels through a typed CoreSpiritGraphSnapshot. The Vela
+// engine owns fetching/calendar close-times; the shared graph resolver owns
+// alignment, confirmation and optional staleness; the language runtime validates
+// every resolved snapshot before exposing its value to CoreScript.
 assert.match(runtime,/loadSecondaryData\s*=\s*async\s*\(force=false\)/);
-assert.match(runtime,/context\.maxStalenessMs/);
-assert.match(runtime,/context\.alignment\s*===\s*['"]exact['"]/);
-assert.match(runtime,/state:confirmed\?'confirmed':'developing'/);
+assert.match(runtime,/const makeSecondaryGraphSnapshot=/, 'Vela must publish secondary dependencies through the canonical graph snapshot');
+assert.match(runtime,/req\.marketCalendar\?\.resolveBarCloseTime/, 'secondary bars must use exchange-calendar close boundaries when available');
+assert.match(runtime,/closeTime:Float64Array\.from\(temporalRows/, 'the graph snapshot must carry per-bar close timestamps');
 assert.match(runtime,/Secondary market data refresh failed/);
+assert.match(marketGraph,/if\(alignment==='exact'\)return node\.time\[index\]===asOf\?index:-1/, 'exact graph alignment must match the requested decision timestamp');
+assert.match(marketGraph,/alignment==='last-confirmed'\|\|alignment==='nearest-confirmed'/, 'confirmed alignment must walk back past unfinished candles');
+assert.match(marketGraph,/ctx\?\.maxStalenessMs!=null/, 'the graph resolver must enforce an optional caller-supplied freshness budget');
+assert.match(marketGraph,/state:isConfirmed\?'confirmed':'developing'/, 'graph snapshots must label their confirmation state');
+assert.match(multiSymbolTimeframe,/context\.maxStalenessMs/, 'snapshot validation must enforce the same optional freshness budget');
+assert.match(multiSymbolTimeframe,/if \(markedDeveloping && context\.alignment !== 'developing'\) return null/, 'non-developing requests must reject developing graph samples');
+assert.match(coreSpiritRuntime,/validateSynchronizedSnapshot\(snapshot,ctx\)/, 'CoreScript must validate graph samples before exposing their values');
 
 assert.doesNotMatch(provider,/getChartDataPlane\(['"]fyers['"]/);
 assert.match(provider,/activeBrokerId\(\)/);
@@ -66,8 +80,8 @@ assert.match(ticket,/NODE_ENV === 'production'/);
 assert.match(ticket,/REALTIME_GATEWAY_UNAVAILABLE/);
 assert.match(marketClient,/import\.meta\.env\.DEV/);
 assert.match(marketClient,/VITE_REALTIME_LEGACY_FALLBACK/);
-assert.equal(vercel.services?.realtime?.runtime,'container');
-assert.equal(vercel.services?.realtime?.entrypoint,'Dockerfile');
+assert.equal(vercel.services?.realtimegateway?.runtime,'container');
+assert.equal(vercel.services?.realtimegateway?.entrypoint,'Dockerfile');
 assert.match(read('Dockerfile'),/realtime:gateway/);
 
 assert.doesNotMatch(authClient,/DEFAULT_URL|DEFAULT_PUBLISHABLE_KEY/);
