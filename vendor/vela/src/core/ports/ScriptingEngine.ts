@@ -11,7 +11,8 @@ import type { DirtyRange, ScenePatch } from '../model/patch';
  * series it needs — the main series stays in-memory, but secondary series
  * (Pine `request.security` HTF/LTF/cross-symbol) are fetched + cached through
  * this so they get real, correctly-resolved data (no aggregation; timeframes
- * kept separate). Provided by the orchestrator, backed by `MarketDataFeed`.
+ * kept separate). Provided by the orchestrator, backed by `MarketDataFeed`. A permanent
+ * refusal rejects with `DataUnavailableError`; surface its reason rather than retrying forever.
  */
 export type FetchSeries = (symbol: string, timeframe: string, range: BarRange & { signal?: AbortSignal }) => Promise<OHLCV[]>;
 

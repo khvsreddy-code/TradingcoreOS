@@ -679,11 +679,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // axis switches from the zoom formula to the symbol's true precision as soon as it lands.
         this.refreshPriceFormat();
         void this.ensurePriceFormat();
+        // Backstop for symbol facts that could not resolve before the provider index settled.
+        if (this.facts === null) this.syncSymbolFacts();
     }
 
-    /** Start the live tick subscription + the tab-restore catch-up listener. */
+    /** Start the live tick subscription + tab-restore catch-up, unless the source refused this market. */
     private startLive(): void {
-        if (!this.config.live) return;
+        if (!this.config.live || this.unavailableGen === this.generation) return;
         const compactLive = !this.barTransform && typeof this.renderer.updateBarColumns === 'function' && typeof this.feed.subscribeColumns === 'function';
         this.live = new LiveSession(
             this.feed,
@@ -3843,4 +3845,14 @@ function tailDelta<T>(previous: readonly T[], current: readonly T[]): { op: 'app
     }
     if (current.length === previous.length + 1) return { op: 'append', values: [current[current.length - 1]!] };
     return null;
+}
+
+
+/** Extract the style-deciding facts from provider metadata; null means still unknown. */
+function symbolFactsOf(info: SymbolInfo | undefined): SymbolFacts | null {
+    if (!info) return null;
+    const facts: SymbolFacts = {};
+    if (typeof info.ohlc === 'boolean') facts.ohlc = info.ohlc;
+    if (typeof info.volume === 'boolean') facts.volume = info.volume;
+    return facts;
 }

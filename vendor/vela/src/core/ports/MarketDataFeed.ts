@@ -102,7 +102,10 @@ export interface BarRange {
 }
 
 export interface MarketDataFeed {
-    /** Load the initial history (from a provider or the offline `data` array). */
+    /**
+     * Load initial history. A permanent refusal rejects with `DataUnavailableError`; transient
+     * provider failures must stay outside that channel so the chart can retry them normally.
+     */
     load(cfg: MarketConfig): Promise<OHLCV[]>;
     /** Optional columnar fast path. Returning null means the feed cannot provide it. */
     loadColumns?(cfg: MarketConfig): Promise<import('../model/columnar-bars').ColumnarBars | null>;

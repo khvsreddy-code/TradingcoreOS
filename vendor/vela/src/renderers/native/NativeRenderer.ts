@@ -35,6 +35,8 @@ import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
+import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
+import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import type { ScenePatch } from '../../core/model/patch';
 import { SceneDirty } from '../../core/model/sceneGraph';
 import type { HighCardinalityRectBatch, GpuRectBatch } from '../../core/model/instances';
@@ -4288,7 +4290,12 @@ export class NativeRenderer implements IChartRenderer {
                             style,
                             upColor: style === 'bars' ? barsUp : paint.up,
                             downColor: style === 'bars' ? barsDown : paint.down,
-                            lineColor: style === 'area' ? (st.area.lineColor ?? this.theme.upColor) : (st.line.color ?? this.theme.upColor),
+                            lineColor:
+                                style === 'area'
+                                    ? (st.area.lineColor ?? this.theme.upColor)
+                                    : style === 'columns'
+                                      ? withAlpha(st.columns.upColor ?? this.theme.upColor, 1)
+                                      : (st.line.color ?? this.theme.upColor),
                         };
                     },
                     chartBarMs: () => this.coords.barInterval,

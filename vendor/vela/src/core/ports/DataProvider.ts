@@ -137,7 +137,10 @@ export interface DataProvider {
      */
     searchSymbols?(query: string, limit?: number, market?: string): Promise<SymbolDescriptor[]>;
 
-    /** Per-symbol metadata for engine `syminfo.*`. Absent ⇒ the engine synthesizes a fallback. */
+    /**
+     * Per-symbol facts ({@link SymbolInfo}): the chart reads typed facts and engines receive
+     * the whole record as `syminfo.*`. Absent ⇒ the chart assumes usual OHLC/volume behavior.
+     */
     getSymbolInfo?(ticker: string): Promise<SymbolInfo | undefined>;
 
     /**
