@@ -32,7 +32,10 @@ if(!/warmReadOnly=message\.readOnly\|\|\(message\.mode==='incremental'&&!context
 if(!/warmReadOnly=readOnly\|\|\(tailSnapshot&&!context\.initialized\)/.test(pool))throw new Error('SSR fallback must suppress effects while warming a context for an incremental request');
 if(!/runCoreSpiritArtifactInWorker/.test(velaEngine)||/runtime\.executeIr|runtime\.executeBar|createRuntime\(/.test(velaEngine))throw new Error('Vela scripting sessions must evaluate prepared CoreSpirit artifacts through persistent workers, not the terminal thread');
 if(!/cloneGraphSnapshot/.test(pool)||!/graphSnapshotForTransfer/.test(pool))throw new Error('Worker graph transfer must clone transferables so cached secondary-market arrays are not detached');
-if(!/queued\.contextKey!==contextKey/.test(pool)||!/queued\.reject\(new Error\('CoreSpirit worker request superseded/.test(pool))throw new Error('The worker pool must coalesce queued snapshots per context instead of building an unbounded tick backlog');
+if(!/queued\.contextKey!==contextKey/.test(pool)
+  || !/this\.queue\.splice\(index,1\);this\.settleJob\(queued,abortError\('Superseded by a newer snapshot for this context\.'\)\)/.test(pool)) {
+  throw new Error('The worker pool must coalesce queued snapshots only within the same context and reject superseded work through the shared settlement path');
+}
 if(!/priority:options\?\.runtimeOptions\?\.executionTarget==='chart'[\s\S]{0,100}executionMode==='realtime'\?1:2/.test(pool))throw new Error('Live chart worker jobs must be prioritized from execution metadata, not generated source IDs');
 if(pool.includes('queueCursor'))throw new Error('Worker scheduling must not retain a fragile cursor into a queue that is resorted');
 if(!/if\(slot\?\.busy\)continue/.test(pool))throw new Error('A busy chart must not head-of-line block runnable jobs for other contexts');
