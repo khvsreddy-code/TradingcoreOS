@@ -879,10 +879,16 @@ export class CoreSpiritRuntime {
     const instructionIndex = group?.instructions[0] ?? this.compiledIr?.entry.instructions.findIndex((instruction) =>
       instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
     ) ?? -1;
+    const instruction = instructionIndex >= 0 ? this.compiledIr?.entry.instructions[instructionIndex] : undefined;
     const node = instructionIndex >= 0 ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
+    // Match rememberKernelIdentity(): fused kernels fall back to the first call's
+    // semantic series arguments, not the temporary IR register used to wire the group.
+    const fallbackDependencies = group
+      ? (instruction?.op === 'call' ? instruction.seriesArgs ?? [] : [group.inputRegister])
+      : [];
     return {
       nodeId: node?.id ?? `kernel:${family}:${key}`,
-      inputDependencies: Object.freeze([...(node?.inputs?.length ? node.inputs : group ? [group.inputRegister] : [])]),
+      inputDependencies: Object.freeze([...(node?.inputs?.length ? node.inputs : fallbackDependencies)]),
     };
   }
 

@@ -161,6 +161,11 @@ CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
 try {
   const firstBar = bars(1)[0];
   emptyBaselineRuntime.executeBar(firstBar);
+  const emptyBaseline = emptyBaselineRuntime.getKernelStateSnapshots();
+  assert.ok(
+    emptyBaseline.some(entry => entry.barIndex === -1 && entry.inputDependencies.includes('close')),
+    'first live execution must retain an empty baseline checkpoint with semantic input identity',
+  );
   emptyBaselineRuntime.executeBar({ ...firstBar, close: firstBar.close + 1, high: firstBar.high + 1 });
   assert.ok(emptyBaselineRestores >= 1, 'first live bar revisions must restore the empty baseline checkpoint');
   assert.ok(emptyBaselineRuntime.getKernelStateSnapshot('missing') === undefined);
