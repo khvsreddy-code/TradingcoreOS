@@ -5,11 +5,11 @@ const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.
 assert.equal(vercel.services?.api?.framework, 'express');
 assert.equal(vercel.services?.api?.entrypoint, 'api/index.ts');
 assert.equal(vercel.services?.api?.functions?.['api/index.ts']?.maxDuration, 15);
-assert.equal(vercel.services?.realtimefresh?.runtime, 'container');
-assert.equal(vercel.services?.realtimefresh?.entrypoint, 'Dockerfile');
-assert.equal(vercel.services?.realtimefresh?.ignoreCommand, 'node tools/ignore-realtime-build.mjs');
-assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimefresh'), 'health route must target the deployed realtime service');
-assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimefresh'), 'WebSocket route must target the deployed realtime service');
+assert.equal(vercel.services?.realtimegateway?.runtime, 'container');
+assert.equal(vercel.services?.realtimegateway?.entrypoint, 'Dockerfile');
+assert.equal(vercel.services?.realtimegateway?.ignoreCommand, 'node tools/ignore-realtime-build.mjs');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimegateway'), 'health route must target the deployed realtime service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimegateway'), 'WebSocket route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'api'), 'API routes must target the API service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination?.service === 'web'), 'SPA routes must target the web service');
 assert.ok(vercel.services?.web?.rewrites?.some((route) => route.source === '/(.*)' && route.destination === '/index.html'), 'Web service must rewrite deep links to the Vite index.html entrypoint');
