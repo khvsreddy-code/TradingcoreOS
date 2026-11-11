@@ -187,8 +187,8 @@ function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, 
   return { type: 'funds', data: event };
 }
 
-/** Convert untrusted FYERS socket payloads into strict, replay-safe domain events. Unknown
- * payloads are deliberately dropped rather than broadcasting raw broker objects to consumers.
+/** Convert untrusted FYERS socket payloads into strict, replay-safe domain events.
+ * Unknown payloads are deliberately dropped rather than broadcasting raw broker objects to consumers.
  */
 export function normalizeFyersOrderPayload(payload: unknown, sequence: number, receivedAt = Date.now()): FyersNormalizedOrderEvent[] {
   const root = asRow(payload);
