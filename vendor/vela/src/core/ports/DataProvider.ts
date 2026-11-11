@@ -65,7 +65,11 @@ export interface ProviderInfo {
     displayName?: string;
     /** Whether the provider needs `configure()` before use. */
     requiresApiKey?: boolean;
-    /** Timeframes the provider serves (canonical strings); informational. */
+    /**
+     * Timeframes the provider serves, in the uppercase canonical form of
+     * `SymbolInfo.timeframes` (`'1D'`/`'D'`, `'W'`, `'1M'`/`'M'`, bare minutes such as
+     * `'60'`; never lowercase). Informational; a symbol's own `timeframes` overrides it.
+     */
     supportedTimeframes?: readonly string[];
     capabilities: ProviderCapabilities;
 }
@@ -86,6 +90,10 @@ export interface DataProvider {
      * meaning — e.g. Binance `.P` = perpetual). The newest bar is treated as the
      * forming candle. Bars: `{ time (open, epoch ms), open, high, low, close, volume? }`,
      * sorted + de-duplicated by open-time.
+     *
+     * A thrown error is logged and read as an empty answer. To say the series is never
+     * served — a timeframe finer than the series' own — throw a `DataUnavailableError`
+     * instead (`{ reason: 'timeframe', finest, default }`): the chart stops asking for it.
      */
     getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]>;
 
