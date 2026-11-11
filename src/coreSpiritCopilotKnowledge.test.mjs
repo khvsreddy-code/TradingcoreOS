@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from './services/coreSpirit/VERSION.ts';
+import { CORE_SCRIPT_LANGUAGE_VERSION } from './services/coreSpirit/coreScriptLanguagePolicy.ts';
 import {
+  CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION,
   CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,
   searchCoreSpiritCopilotKnowledge,
 } from './services/coreSpirit/copilotKnowledge.ts';
 
-assert.match(CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION, /corespirit-knowledge-v1\.0\.0:1:corespirit-compiler-v100:corespirit-runtime-v100/);
+assert.equal(
+  CORE_SPIRIT_COPILOT_KNOWLEDGE_VERSION,
+  `corespirit-knowledge-v${CORE_SPIRIT_COPILOT_KNOWLEDGE_REVISION}:${CORE_SCRIPT_LANGUAGE_VERSION}:${CORE_SPIRIT_COMPILER_VERSION}:${CORE_SPIRIT_RUNTIME_VERSION}`,
+  'knowledge provenance must bind the corpus revision to the canonical language, compiler and runtime versions',
+);
 
 const ema = searchCoreSpiritCopilotKnowledge('ema', 8);
 assert.ok(ema.length > 0, 'standard-library search should return EMA entries');
