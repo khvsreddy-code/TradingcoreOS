@@ -62,8 +62,12 @@ export interface VelaCoreMessageCatalog {
     'chart.priceStyle.bars': string;
     'chart.priceStyle.baseline': string;
     'chart.priceStyle.candles': string;
+    'chart.priceStyle.columns': string;
     'chart.priceStyle.heikinashi': string;
     'chart.priceStyle.line': string;
+    'chart.priceStyle.linemarkers': string;
+    'chart.priceStyle.stepline': string;
+    'chart.priceStyle.unavailable': string;
     'chart.scrollToLatest.label': string;
     'chart.scrollToLatest.title': string;
     'chart.settings.addInstance': string;
@@ -94,6 +98,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.colorDown': string;
     'chart.settings.colorTheme': string;
     'chart.settings.colorUp': string;
+    'chart.settings.columns': string;
     'chart.settings.countdownToBarClose': string;
     'chart.settings.crosshair': string;
     'chart.settings.dashed': string;
@@ -1968,6 +1973,7 @@ export interface VelaCoreMessageCatalog {
     'ui.datePicker.previousDecade': string;
     'ui.datePicker.previousMonth': string;
     'ui.datePicker.previousYear': string;
+    'ui.dialog.close': string;
     'ui.keys.alt': string;
     'ui.keys.ctrl': string;
     'ui.keys.general': string;
@@ -1980,6 +1986,8 @@ export interface VelaCoreMessageCatalog {
     'ui.numberInput.increase': string;
     'ui.sortButton.ascending': string;
     'ui.sortButton.descending': string;
+    'ui.toast.close': string;
+    'ui.toast.region': string;
     'ui.treemap.all': string;
     'ui.treemap.zoomIn': string;
     'vela.sidebar.label': string;
@@ -2206,9 +2214,10 @@ export interface VelaCoreMessageCatalog {
     'workspace.alerts.drawerTitle': string;
     'workspace.alerts.none': string;
     'workspace.alerts.row': string;
-    'workspace.alerts.toast': string;
     'workspace.alerts.toastUntitled': string;
     'workspace.alerts.untitled': string;
+    'workspace.data.unavailable': string;
+    'workspace.data.unavailableFallback': string;
     'workspace.indicators.builtIn': string;
     'workspace.keys.category.chart': string;
     'workspace.keys.category.drawings': string;
