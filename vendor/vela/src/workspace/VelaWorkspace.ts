@@ -18,6 +18,7 @@ import { sharedBarStore } from '../data/BarStore';
 import { ensureUIHost, registerIcon, svg16 } from '../ui';
 import { isEditableTarget, KeymapManager } from '../ui/keymap';
 import { DropdownMenu } from '@luxalgo/vela-ui/dropdown-menu';
+import { createToaster, toast, type ToasterHandle } from '@luxalgo/vela-ui/toast';
 import type { Vela } from '../Vela';
 import { LocaleState, pickLocalization } from '../core/i18n/translator';
 import type { LocaleChangedEvent, LocalizationOptions, MessageArgs, MessageLike, Translator } from '../core/i18n/types';
@@ -59,6 +60,7 @@ import { buildToolbar, type DrawingTypeKey, type SerializedDrawing, type SnapMod
 import { timeframeToMs } from '../data/timeframe';
 import { timeframeLabel } from '../widget/timeframe';
 import { registerBuiltinChartTypes } from '../chart-types/builtins';
+import { PRICE_STYLE_UNAVAILABLE } from '../chart-types/labels';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
 import { encodeState, decodeState, sanitizeState, type DrawingToolsState, type WorkspaceState, type WorkspaceStorage } from './persist';
@@ -405,6 +407,8 @@ export class VelaWorkspace {
     private readonly tfQuick: TimeframeQuick;
     private shortcutsHelp: ShortcutsHelp | null = null;
     private readonly toastHost: Toast;
+    /** The grid's toaster: alert notices, and whatever a plugin raises with the kit's `toast()`. */
+    private readonly toaster: ToasterHandle;
     private readonly glider = new Glider(() => (this.activeId ? (this.cellsById.get(this.activeId)?.chart ?? null) : null));
     private readonly drawToolbar: DrawingToolbar | null;
     /** The GLOBAL armed tool/magnet/stay (workspace policy) — re-applied to whichever cell
@@ -756,6 +760,7 @@ export class VelaWorkspace {
         this.stripsEl.className = 'vela-ws-strips';
         this.root.appendChild(this.stripsEl);
         this.toastHost = new Toast(this.gridEl);
+        this.toaster = createToaster({ host: this.gridEl, contained: true, i18n: this.localeState });
 
         // ONE attribution mark for the whole grid (bottom-left, floating above the
         // bottom-left cell's time axis) — the cells disable their per-chart marks, and
@@ -1164,6 +1169,7 @@ export class VelaWorkspace {
         this.drawToolbar?.relabel();
         this.drawToolbar?.setShortcuts(toolShortcutHints(this.keymap, this.localeState));
         this.drawingPill?.relocalize();
+        this.toaster.relabel();
         if (this.attributionMark) relabelAttributionMark(this.attributionMark, this.localeState);
     }
 
@@ -1698,6 +1704,7 @@ export class VelaWorkspace {
         this.tfQuick.destroy();
         this.shortcutsHelp?.destroy();
         this.toastHost.destroy();
+        this.toaster.destroy();
         this.alertsMenu?.destroy();
         this.glider.stop();
         sharedBarStore.retain(new Set(), this); // release OUR declaration only — other shells on the page keep theirs
@@ -2047,6 +2054,7 @@ export class VelaWorkspace {
                 dropCell: (id, target) => this.swapCells(id, target),
                 onMarketChanged: (id) => this.onCellMarketChanged(id),
                 onPriceStyleChanged: (id) => this.onCellPriceStyleChanged(id),
+                onPriceStyleShown: (id) => this.projectCellPriceStyle(id),
                 onIndicatorsChanged: (id) => this.onCellIndicatorsChanged(id),
                 onStatusPrefsChanged: (id) => this.propagateStylePrefs(id),
                 onStateDirty: () => this.markStateDirty(),
@@ -2125,8 +2133,7 @@ export class VelaWorkspace {
                 .join(' ');
             this.alerts.unshift({ cellId: cell.id, source, title: alert.title ?? this.t(TEXT.alert), message: alert.message, time: alert.time });
             if (this.alerts.length > this.alertCap) this.alerts.pop();
-            const toast = alert.title ? this.t(TEXT.alertToast, { source, title: alert.title, message: alert.message }) : this.t(TEXT.alertToastUntitled, { source, message: alert.message });
-            this.toastHost.show(toast, 'info', 4000);
+            toast(alert.title ?? this.t(TEXT.alert), { description: this.t(TEXT.alertToastDescription, { source, message: alert.message }), icon: 'bell' });
             this.topbar.setAlertCount(this.alerts.length);
         });
         // Favorites are a WORKSPACE preference: one shared toolbar, one star set — a star
@@ -2551,7 +2558,12 @@ export class VelaWorkspace {
             if (origin.symbol) {
                 for (const id of syncTargets(originId, this.syncOpts.symbol, ids)) this.cellsById.get(id)?.setSymbol(origin.symbol);
             }
-            for (const id of syncTargets(originId, this.syncOpts.timeframe, ids)) this.cellsById.get(id)?.setTimeframe(origin.timeframe);
+            // The REQUESTED timeframe links, never a fallback a symbol's source forced; a
+            // follower that already requests it keeps whatever fallback its own symbol needs.
+            for (const id of syncTargets(originId, this.syncOpts.timeframe, ids)) {
+                const follower = this.cellsById.get(id);
+                if (follower && follower.requestedTimeframe !== origin.requestedTimeframe) follower.setTimeframe(origin.requestedTimeframe);
+            }
         } finally {
             this.syncBusy = false;
         }
@@ -2598,10 +2610,16 @@ export class VelaWorkspace {
      *  renderer actually applied. */
     private onCellPriceStyleChanged(id: string): void {
         this.markStateDirty();
+        this.projectCellPriceStyle(id);
+    }
+
+    /** The topbar style button/menu from the cell, if active: the style it draws and the
+     *  styles its symbol's data cannot draw (greyed). */
+    private projectCellPriceStyle(id: string): void {
         if (id !== this.activeId) return;
         const cell = this.cellsById.get(id);
         if (!cell) return;
-        this.topbar.setPriceStyle(cell.priceStyle);
+        this.topbar.setPriceStyle(cell.priceStyle, cell.unavailablePriceStyles());
     }
 
     /** Trigger ② — a cell's indicator ledger changed: count + picker only if active. */
@@ -2742,7 +2760,11 @@ export class VelaWorkspace {
                 : {}),
             canUndo: () => this.active.history.canUndo,
             canRedo: () => this.active.history.canRedo,
-            priceStyles: () => priceStyleIds().map((id) => ({ id, label: priceStyleLabel(id, this.localeState), icon: priceStyleIcon(id) })),
+            priceStyles: () => {
+                const unavailable = new Set(this.active.unavailablePriceStyles());
+                const why = textOf(this.localeState, PRICE_STYLE_UNAVAILABLE);
+                return priceStyleIds().map((id) => ({ id, label: priceStyleLabel(id, this.localeState), icon: priceStyleIcon(id), ...(unavailable.has(id) ? { unavailable: true, title: why } : {}) }));
+            },
             priceStyle: () => this.active.priceStyle,
             onPriceStyle: (id) => this.active.setPriceStyle(id),
             panels: () => (has('panels') ? [...this.dock.list()] : []),
