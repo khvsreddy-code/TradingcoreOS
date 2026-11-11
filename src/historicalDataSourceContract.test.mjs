@@ -20,8 +20,15 @@ const brokerAdapter = read('src/server/brokers/adapters/BrokerAdapters.ts');
 
 const initialBlock = policy.match(/export const INITIAL_HISTORY_CANDLES:[\s\S]*?\n};/)?.[0] || '';
 const initialValues = [...initialBlock.matchAll(/'[^']+':\s*([0-9_]+)/g)].map(match => Number(match[1].replace(/_/g, '')));
-assert.ok(initialValues.length > 0 && initialValues.every(value => value === 5000), 'the canonical history ceiling remains 5,000 bars');
-assert.match(policy, /HISTORICAL_DATASET_MAX_BARS\s*=\s*5_000/);
+assert.ok(initialValues.length > 0 && initialValues.every(value => value === 300),
+  'the canonical per-timeframe initial history window is a bounded 300-bar first load');
+assert.match(policy, /DEFAULT_INITIAL_HISTORY_CANDLES\s*=\s*300/);
+assert.match(policy, /MAX_INITIAL_HISTORY_CANDLES\s*=\s*2_000/,
+  'the initial history request remains hard-capped at 2,000 candles');
+assert.match(policy, /HISTORICAL_DATASET_MAX_BARS\s*=\s*5_000/,
+  'the full canonical chart dataset remains capped at 5,000 requested bars');
+assert.match(service, /HISTORICAL_MAX_BARS\s*=\s*5_000/,
+  'the historical source service enforces the same 5,000-bar dataset ceiling');
 
 assert.match(service, /HISTORICAL_SOURCE_POLICY\s*=\s*'fyers-primary-7d\+investiny-2to5y-historical-backfill\/v6'/);
 assert.match(service, /FYERS_HISTORY_WINDOW_DAYS/);
