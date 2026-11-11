@@ -4,966 +4,393 @@
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
     "base": {
-      "version": "0.9.0",
-      "commit": "aecb13847dff3c1a50a2f3433e9804d26fc581ed"
+      "version": "0.10.2",
+      "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
     },
     "release": {
-      "version": "0.10.2",
-      "tag": "v0.10.2",
-      "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
+      "version": "0.10.5",
+      "tag": "main",
+      "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
     }
   },
-  "comparison": "Git blob SHA-1 from exact upstream release trees, restricted to src/",
+  "comparison": "Git blob SHA-1 from exact upstream source trees, restricted to src/",
   "counts": {
-    "modified": 97,
-    "added": 5,
-    "removed": 67,
-    "total": 169,
-    "baseFiles": 452,
-    "releaseFiles": 390
+    "modified": 59,
+    "added": 3,
+    "removed": 0,
+    "total": 62,
+    "baseFiles": 390,
+    "releaseFiles": 393
   },
   "files": [
     {
       "path": "src/Vela.ts",
       "status": "modified",
-      "baseBlob": "eb284b20ddfc75ebeea0be1d96ff50137ef84907",
-      "releaseBlob": "f8688f5f0c9cd38ab481825b071b0e9090846079"
+      "baseBlob": "f8688f5f0c9cd38ab481825b071b0e9090846079",
+      "releaseBlob": "6cbfd8f51cb38573279bb7284b4bea623bf3a4e3"
     },
     {
-      "path": "src/browser.ts",
-      "status": "modified",
-      "baseBlob": "fca21f22b773eed7117f8ab8012180a437ba2e37",
-      "releaseBlob": "d8c4e413007a43f79d7a79ec42f1c77c8b9bbd8f"
+      "path": "src/chart-types/applicability.ts",
+      "status": "added",
+      "releaseBlob": "5f98e9c75fd993b90de184b1c2fa39cb0cdd22bb"
     },
     {
-      "path": "src/core/IndicatorHandle.ts",
+      "path": "src/chart-types/builtins.ts",
       "status": "modified",
-      "baseBlob": "d035ac4012618a7b50c5794a1dbe1b5dd0c448d4",
-      "releaseBlob": "32b692c593f2a9960d441b37c15eb52b49f80345"
+      "baseBlob": "506732c013365124628fe3b5aa8e454a96ba52c9",
+      "releaseBlob": "f6eeec70cf204cf13f21f06d44379871efc557a8"
     },
     {
-      "path": "src/core/color.ts",
+      "path": "src/chart-types/labels.ts",
       "status": "modified",
-      "baseBlob": "d01c810718b09e5ab86c97382dba2d43f30adb22",
-      "releaseBlob": "028a4169125d7959c94b94c68b0b14d062097da5"
+      "baseBlob": "d82a0ec87ec71ed45da792e76ad5655debde81ab",
+      "releaseBlob": "7fd28adaeaada951b2fc71740077ae8be6af99a7"
     },
     {
-      "path": "src/core/drawings/Drawing.ts",
+      "path": "src/chart-types/registry.ts",
       "status": "modified",
-      "baseBlob": "13fe0ee769e9e3441ae801d12d809006888c0f01",
-      "releaseBlob": "83a8dd9df914ea6671fc5ad6871985f481774756"
+      "baseBlob": "e1c7d9ca58620228dbb3e155919ac41a1cf2156c",
+      "releaseBlob": "96912c2e9343375d88fd0c7468332e45978a50ff"
     },
     {
-      "path": "src/core/drawings/types/Box.ts",
-      "status": "modified",
-      "baseBlob": "07d9012c9ffb6a74ae67474d095ba5c23237e161",
-      "releaseBlob": "b87a7e954d2dd7f68046078e025b05105c3deb2f"
+      "path": "src/core/data-unavailable.ts",
+      "status": "added",
+      "releaseBlob": "130f4c60ea716234322543b078d2d7e13261ef4f"
     },
     {
       "path": "src/core/engine/EngineOrchestrator.ts",
       "status": "modified",
-      "baseBlob": "06d9d548fd32564526c33127a6530169c474da86",
-      "releaseBlob": "6ceaf659a0780bde03ee9cdb2dded13d19218395"
+      "baseBlob": "6ceaf659a0780bde03ee9cdb2dded13d19218395",
+      "releaseBlob": "7697a5ee3f7e01e83e886bad9295552775b74c45"
     },
     {
-      "path": "src/core/engine/IndicatorHandleImpl.ts",
+      "path": "src/core/events/types.ts",
       "status": "modified",
-      "baseBlob": "340a963652c1f8fd40f7743693a062c06f582731",
-      "releaseBlob": "8c2250f6a59e787f56b4bcf4906b802bfa30293d"
-    },
-    {
-      "path": "src/core/format/types.ts",
-      "status": "modified",
-      "baseBlob": "ba99df6919eaf1f51e844bbac72be72dbfdf38fa",
-      "releaseBlob": "31b150ed9501db5461d302aec73599e05dc89902"
-    },
-    {
-      "path": "src/core/icons.ts",
-      "status": "modified",
-      "baseBlob": "cba4162fba6b9d9c421b18fb87437c3f8c1d0d30",
-      "releaseBlob": "018d2152440ad67f04ceff7c29a5efd71e8a9df8"
-    },
-    {
-      "path": "src/core/model/strategy.ts",
-      "status": "modified",
-      "baseBlob": "02eec64eae9cccac79c7013bba561d029ed35f59",
-      "releaseBlob": "070230f334a6a0d837cbbeaa8577d5e8775670f4"
+      "baseBlob": "91ad0e06e9e77926c096affbfb08f4c0738be375",
+      "releaseBlob": "6834aadc5c4fc3b2f5b0c5bb5766a2929ace97ed"
     },
     {
       "path": "src/core/options.ts",
       "status": "modified",
-      "baseBlob": "d95514dd3a611d05acadf280a8eb437aac976943",
-      "releaseBlob": "c8e7c91acdf7c0fc43acbba490657a64ecbe7105"
+      "baseBlob": "c8e7c91acdf7c0fc43acbba490657a64ecbe7105",
+      "releaseBlob": "07b2b0ba12afbc6f49090413a1a88a2b77e5a159"
     },
     {
-      "path": "src/core/palette.ts",
+      "path": "src/core/ports/DataProvider.ts",
       "status": "modified",
-      "baseBlob": "b43373ad13e4004516d68cd6bfd9df9ae9f8d735",
-      "releaseBlob": "d39f0546c882deaf37aa8a5c127e8d1d7b99d9ab"
+      "baseBlob": "0815037c99dc8d63b0066630b070d63197911d58",
+      "releaseBlob": "1c99b4609ba93dc1a85dcdabc13a8c36ec87fad7"
     },
     {
       "path": "src/core/ports/IChartRenderer.ts",
       "status": "modified",
-      "baseBlob": "859fce6f2cde4d94321910a3c802ef41eae674f5",
-      "releaseBlob": "14dc3b570757b23da1ba43b835ec11f6f5e7493a"
+      "baseBlob": "14dc3b570757b23da1ba43b835ec11f6f5e7493a",
+      "releaseBlob": "71a5d4974d528cc85de58af19323f3fb034b855a"
+    },
+    {
+      "path": "src/core/ports/MarketDataFeed.ts",
+      "status": "modified",
+      "baseBlob": "1254e03f357c0c152b8d607f18490aaab6166408",
+      "releaseBlob": "a62d72bc5497db27fe50253254814921cfdb3724"
     },
     {
       "path": "src/core/ports/ScriptingEngine.ts",
       "status": "modified",
-      "baseBlob": "e4d85a81835eefc0db5e02df680ee0717c089e4b",
-      "releaseBlob": "e0230fbb89fdfadbcdfffdc3e131f19af2230a00"
+      "baseBlob": "e0230fbb89fdfadbcdfffdc3e131f19af2230a00",
+      "releaseBlob": "137cee7c6aa849f5efe884185a55e74de7cc53c7"
     },
     {
-      "path": "src/core/theme.ts",
+      "path": "src/data/MultiProviderFeed.ts",
       "status": "modified",
-      "baseBlob": "e0c485ce939ff0b7fb28d737d0ac258335d1b91e",
-      "releaseBlob": "e7eb6acda84319da382635ce27966821e0a324df"
+      "baseBlob": "c7466a8b86add0a8a526bb1fc444cd1274d20e19",
+      "releaseBlob": "d505f0fa23d912208d4ff8b6e887c1e74b364bbc"
     },
     {
-      "path": "src/core/tokens.ts",
+      "path": "src/data/timeframe.ts",
       "status": "modified",
-      "baseBlob": "8784018e6536651ff15fd4b622230b9a95bf6cb0",
-      "releaseBlob": "39efd276c6893080ab105a42ecefc22f2919669c"
-    },
-    {
-      "path": "src/data/providers/hyperliquid/HyperliquidProvider.ts",
-      "status": "modified",
-      "baseBlob": "92365cdc80895a5d0e21cc040c5d2110e152e3ae",
-      "releaseBlob": "f4d468801e9bbc515cffc3c21f27b0de013bedb3"
-    },
-    {
-      "path": "src/index.ts",
-      "status": "modified",
-      "baseBlob": "927339748fb64bb761426c3f599231999bfd4a96",
-      "releaseBlob": "bb297a6998220fa63fa3811997d998f7a5600e19"
+      "baseBlob": "c5f20a0c367cd5c0223b75fa8e0db6eac6c23230",
+      "releaseBlob": "1d53986a1862b2815cfb82392a0bfc8108efe422"
     },
     {
       "path": "src/locales/ar.json",
       "status": "modified",
-      "baseBlob": "f334751d0821e96db21b869223ba79e3bd89e918",
-      "releaseBlob": "93af88d332fcfa76bb9b6e9e50589dae688a1e53"
+      "baseBlob": "93af88d332fcfa76bb9b6e9e50589dae688a1e53",
+      "releaseBlob": "5623c2c278107243bc8e5b6f68da63a73cce8645"
     },
     {
       "path": "src/locales/catalog.d.ts",
       "status": "modified",
-      "baseBlob": "ad21b6550434b50b382418620e4a53d17749a523",
-      "releaseBlob": "61251aeaec81e67bd240f248967efc0aff061b95"
+      "baseBlob": "61251aeaec81e67bd240f248967efc0aff061b95",
+      "releaseBlob": "2704bbbd8c79f48c5229bf07b0cccc5aa8ff5128"
     },
     {
       "path": "src/locales/de.json",
       "status": "modified",
-      "baseBlob": "aacf93c26d98fe9af69cf69f4e5fba589395b320",
-      "releaseBlob": "560e1dbfbec2cab583ed27195d885dfbe74cb007"
+      "baseBlob": "560e1dbfbec2cab583ed27195d885dfbe74cb007",
+      "releaseBlob": "f06ccf7a1133b6c7518634ecda8fc4bfc65f5d37"
     },
     {
       "path": "src/locales/en.json",
       "status": "modified",
-      "baseBlob": "d91ba9dfc1ed91828ce9d60b6d90f216e8d122a4",
-      "releaseBlob": "140701036567011e98084664a480991912ecfe62"
+      "baseBlob": "140701036567011e98084664a480991912ecfe62",
+      "releaseBlob": "e5808a49ebb1fa34f32d297d2452e8dcc972ab60"
     },
     {
       "path": "src/locales/es.json",
       "status": "modified",
-      "baseBlob": "1612fe96bc3423821813daa4d0cd4e1b18930400",
-      "releaseBlob": "ae98126ed6506dffb6a3bc10691b366937b0a84f"
+      "baseBlob": "ae98126ed6506dffb6a3bc10691b366937b0a84f",
+      "releaseBlob": "53ac42956b9fa91b7e25411295d35632c163babc"
     },
     {
       "path": "src/locales/fr.json",
       "status": "modified",
-      "baseBlob": "e797f402aca997c606bcd7004802f0483a650df4",
-      "releaseBlob": "8516e2b7fa2df7ab93aebb3cdaf9e3999af811b5"
+      "baseBlob": "8516e2b7fa2df7ab93aebb3cdaf9e3999af811b5",
+      "releaseBlob": "914f27139a1b2e7f5ce5458d130e647479961a1e"
     },
     {
       "path": "src/locales/he.json",
       "status": "modified",
-      "baseBlob": "90cce47d1057226a3ca13228a57b234fe8286847",
-      "releaseBlob": "42357b2db375bb79daed40d383bcaffdd87a410f"
+      "baseBlob": "42357b2db375bb79daed40d383bcaffdd87a410f",
+      "releaseBlob": "c7721104afa3b73e949e057574a5db642454a8b0"
     },
     {
       "path": "src/locales/hi.json",
       "status": "modified",
-      "baseBlob": "0137dc856a30650c4b82b30f5280cfa1ebd04c33",
-      "releaseBlob": "ee8b0c44b64068c51055f4120549481f88066398"
+      "baseBlob": "ee8b0c44b64068c51055f4120549481f88066398",
+      "releaseBlob": "173586b1e459891eece5da6f82271ec20c5cd504"
     },
     {
       "path": "src/locales/id.json",
       "status": "modified",
-      "baseBlob": "af3335c053e07748b93e5cedca6248c12aef3174",
-      "releaseBlob": "92869e92e6f65af021ea599de1fefb458d3beca8"
+      "baseBlob": "92869e92e6f65af021ea599de1fefb458d3beca8",
+      "releaseBlob": "adbe187ccc85d61892f859a143fc448089749e46"
     },
     {
       "path": "src/locales/it.json",
       "status": "modified",
-      "baseBlob": "bb7761c15f36085197b5452141b26683fd290a0a",
-      "releaseBlob": "94b965233cc45c5f58f78572f7cdc9bdc393caca"
+      "baseBlob": "94b965233cc45c5f58f78572f7cdc9bdc393caca",
+      "releaseBlob": "5a0b1b75cc5a2975ad7af7a5457c6f593964d017"
     },
     {
       "path": "src/locales/ja.json",
       "status": "modified",
-      "baseBlob": "fb46079cbb1d7818ca162af1154228913f4302c2",
-      "releaseBlob": "3d283364a3f1ccb17c81ddc78c3c06c29fe68744"
+      "baseBlob": "3d283364a3f1ccb17c81ddc78c3c06c29fe68744",
+      "releaseBlob": "93702128c782460c3e57c887cf45e40d46ef9bed"
     },
     {
       "path": "src/locales/ko.json",
       "status": "modified",
-      "baseBlob": "fa6a3a5890b2c35a0a401bfc6499e11a7422a352",
-      "releaseBlob": "b4fc800651e3502b2034f1184e9d8dc0e9677803"
+      "baseBlob": "b4fc800651e3502b2034f1184e9d8dc0e9677803",
+      "releaseBlob": "ea6176d30e643689387d63e17a527bb5abf20d5b"
     },
     {
       "path": "src/locales/ms.json",
       "status": "modified",
-      "baseBlob": "77303f3483051e20e5bc912517944523a20c7548",
-      "releaseBlob": "3780f26f96a8fa5fcb012169a975acf51e212b9e"
+      "baseBlob": "3780f26f96a8fa5fcb012169a975acf51e212b9e",
+      "releaseBlob": "772374c21698462ca8dfaeadaf803b6707adb735"
     },
     {
       "path": "src/locales/pl.json",
       "status": "modified",
-      "baseBlob": "c455a91ba98753d1d14f0a04f8ad644c0da3bf1c",
-      "releaseBlob": "be078e4dca574b40a421dac980269d8a7857c69f"
+      "baseBlob": "be078e4dca574b40a421dac980269d8a7857c69f",
+      "releaseBlob": "5833d9877ba2071173cbf1879b3fb47df989e31b"
     },
     {
       "path": "src/locales/pt-BR.json",
       "status": "modified",
-      "baseBlob": "c86e77ad7448684de7634ca13f39ad6df48db06c",
-      "releaseBlob": "c2806ca48b3b1b762c2f13fce222bfc12a134789"
+      "baseBlob": "c2806ca48b3b1b762c2f13fce222bfc12a134789",
+      "releaseBlob": "3ea2dc346c7de667d198b5975203f4f01cef708a"
     },
     {
       "path": "src/locales/ru.json",
       "status": "modified",
-      "baseBlob": "39838fe0e6a0b3af3bc8f6d90b1025c1af68e3dd",
-      "releaseBlob": "8cb31af184c5f045bc7bc780ec71ed5b176472a3"
+      "baseBlob": "8cb31af184c5f045bc7bc780ec71ed5b176472a3",
+      "releaseBlob": "f3d01935f90a0efc96bdf081c9cf76ee97977b75"
     },
     {
       "path": "src/locales/th.json",
       "status": "modified",
-      "baseBlob": "2e59201a4c655b161caf2808a6369c16252266b5",
-      "releaseBlob": "e9af5406e23f20d69fa67eeb11b5430aaa41a630"
+      "baseBlob": "e9af5406e23f20d69fa67eeb11b5430aaa41a630",
+      "releaseBlob": "f94a111824b9c0563984bc40acbf46cead961263"
     },
     {
       "path": "src/locales/tr.json",
       "status": "modified",
-      "baseBlob": "8ce9b1d1f07aa2cd76b6511da8793ec77c5655a0",
-      "releaseBlob": "d8a41195992b16d373d91e4bddbef3a561a90896"
+      "baseBlob": "d8a41195992b16d373d91e4bddbef3a561a90896",
+      "releaseBlob": "946e32c473260a8397eaeef2a4335893770a6bfe"
     },
     {
       "path": "src/locales/vi.json",
       "status": "modified",
-      "baseBlob": "6c2c769a8727e4e91e0df52d140d869f2b63c700",
-      "releaseBlob": "7b73ceee939875bc5232862037660374f90068e6"
+      "baseBlob": "7b73ceee939875bc5232862037660374f90068e6",
+      "releaseBlob": "2b157babcd3fa358ebce9b0ac8ca0bb3f7b29750"
     },
     {
       "path": "src/locales/zh-Hans.json",
       "status": "modified",
-      "baseBlob": "15d0f89326705586978133d5c009aa63523e1fd8",
-      "releaseBlob": "40d391a0bbba20fd60af79b468a41463eb1da639"
+      "baseBlob": "40d391a0bbba20fd60af79b468a41463eb1da639",
+      "releaseBlob": "072d2b4728286f2a26e42ba043a52c092794e90e"
     },
     {
       "path": "src/locales/zh-Hant.json",
       "status": "modified",
-      "baseBlob": "04b2fbec7f3aba35fde1d27f52a03333dabeb0d4",
-      "releaseBlob": "15c772e7f2952c72d1b99fdc6968850088dec4ac"
+      "baseBlob": "15c772e7f2952c72d1b99fdc6968850088dec4ac",
+      "releaseBlob": "2d72d839b94d297899c11986b4999304591fba21"
     },
     {
       "path": "src/plugin.ts",
       "status": "modified",
-      "baseBlob": "e060d050f82612c1d94fe961ef37d8e3031abc01",
-      "releaseBlob": "032996fd3b34d0d3cab1aff50e4282bbb19eae83"
+      "baseBlob": "032996fd3b34d0d3cab1aff50e4282bbb19eae83",
+      "releaseBlob": "6223287b9a70e81488dc0ffa6ed0785f57f9c926"
     },
     {
       "path": "src/renderers/native/NativeRenderer.ts",
       "status": "modified",
-      "baseBlob": "0f7e68a4635d2f0d7c5d5457c5ef03ff2378bd77",
-      "releaseBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef"
+      "baseBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef",
+      "releaseBlob": "76775a570e3a452f8c0e982e815d33733577e498"
     },
     {
-      "path": "src/renderers/native/backdrop/BackdropRenderer.ts",
+      "path": "src/renderers/native/backend/Canvas2dBackend.ts",
       "status": "modified",
-      "baseBlob": "a0a2f509060a66fe2297c996d7e24ac44d98df0e",
-      "releaseBlob": "061bd357f312f5e1e75b93ba5cb1f3614a4a5799"
+      "baseBlob": "ee1dd36c901259ccecc6f9391a0cc95c8ce9c56b",
+      "releaseBlob": "fd99e19430075439891d00b5db72648dcfe1cd4e"
     },
     {
-      "path": "src/renderers/native/chrome/AttributionMark.ts",
+      "path": "src/renderers/native/backend/WebGL2Backend.ts",
       "status": "modified",
-      "baseBlob": "05421513481b55ad6d2485722468ed261aaf203a",
-      "releaseBlob": "7edcf58329dfc8c3deb51d297e2a093eda2b9a3a"
+      "baseBlob": "6e9003f36104212c609981079f2073e817cf2491",
+      "releaseBlob": "697c16d418dc2e843c240a127006ce56e09d0660"
     },
     {
-      "path": "src/renderers/native/chrome/AxisScaleButtons.ts",
-      "status": "modified",
-      "baseBlob": "67b437dc19e7f8f7e9d79288605dfeeaf70c45ba",
-      "releaseBlob": "36e5d9badb30c29dd1e50125123bcc9f56f2656b"
+      "path": "src/renderers/native/backend/close-styles.ts",
+      "status": "added",
+      "releaseBlob": "8b038aff4cecfd0c6e6ea464899e417ef555d440"
     },
     {
       "path": "src/renderers/native/chrome/ChromeRenderer.ts",
       "status": "modified",
-      "baseBlob": "e0de13e3017919a84a85fc2afe4497a254d57a58",
-      "releaseBlob": "0375bbeda73afe8ee0d2227f1c0df4904135111c"
-    },
-    {
-      "path": "src/renderers/native/chrome/PaneControls.ts",
-      "status": "modified",
-      "baseBlob": "b1ad0ff56177d794c684b148930f00a2350bc17b",
-      "releaseBlob": "e954188a7b49275503381cd76c7c5ca08cf3b443"
+      "baseBlob": "0375bbeda73afe8ee0d2227f1c0df4904135111c",
+      "releaseBlob": "2d03e3c791d1d9f54b8a592b843bbfb08397a063"
     },
     {
       "path": "src/renderers/native/chrome/SettingsDialog.ts",
       "status": "modified",
-      "baseBlob": "55961ff99d6d8457b7fe4998293a41d59b209fb4",
-      "releaseBlob": "33751e599bf046e9b8cf3d3da947a954cae2c819"
+      "baseBlob": "33751e599bf046e9b8cf3d3da947a954cae2c819",
+      "releaseBlob": "dcf9a9631c1e9383dde1333ea2cb68d5a6eba320"
     },
     {
-      "path": "src/renderers/native/chrome/marks/MarkPopover.ts",
+      "path": "src/renderers/native/chrome/settings-visibility.ts",
       "status": "modified",
-      "baseBlob": "1d82f35a93fa402b15750dc5b4f2e6a559ef9a52",
-      "releaseBlob": "021f090c2c972cd15011464de769541e479be57c"
-    },
-    {
-      "path": "src/renderers/native/chrome/ticks.ts",
-      "status": "modified",
-      "baseBlob": "c8ecea2aba71ffe4d2b4bf22b8218b5e085be535",
-      "releaseBlob": "cbb85e9943af27047cce0abce574d24be117fc40"
-    },
-    {
-      "path": "src/renderers/native/chrome/tz.ts",
-      "status": "modified",
-      "baseBlob": "31c1baf9c2f65cbf28095c8b3ed4bb4170c8be96",
-      "releaseBlob": "51e74d50f37fa2f51f65e61373b7f00dbd515aa5"
-    },
-    {
-      "path": "src/renderers/native/core/SceneGraph.ts",
-      "status": "modified",
-      "baseBlob": "41d8c55369da9b2924f69524620d6710be1f4279",
-      "releaseBlob": "275e2ef9286316a8aaed9505b00c60f576208a4c"
+      "baseBlob": "ceea4a510cae88b9d9dc00d28923cff0c22e8df9",
+      "releaseBlob": "3a72e078de60b749002b70f733c6edc111163744"
     },
     {
       "path": "src/renderers/native/core/chartConfig.ts",
       "status": "modified",
-      "baseBlob": "55a3b889fae1dfbc11290a6fe317ac7529955ff1",
-      "releaseBlob": "213bb95c6091aaf752223eb8867b17e9c63960f8"
+      "baseBlob": "213bb95c6091aaf752223eb8867b17e9c63960f8",
+      "releaseBlob": "a48579cd2db410f4d73b40abba6e0d2a79456728"
     },
     {
-      "path": "src/renderers/native/drawings/DrawingInteraction.ts",
+      "path": "src/renderers/native/drawings/DrawingPainter.ts",
       "status": "modified",
-      "baseBlob": "5918620e4165f6b320a2cdfdc777e499c64d3c6e",
-      "releaseBlob": "8617ec645d1517a1d2aa0b28d36d1c0de0a569fa"
+      "baseBlob": "991ddce16d563d60578c4df06460b4aa1383f26a",
+      "releaseBlob": "94d9e2687c729fb34f2f7d2f6a4d98520deef0b7"
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPanel.ts",
       "status": "modified",
-      "baseBlob": "e0f94e2f8a51c1e7f3d12ea212733b167e4031b0",
-      "releaseBlob": "03027f425b4a04cd7ff64e4410a5e6e91f1f7a2d"
+      "baseBlob": "03027f425b4a04cd7ff64e4410a5e6e91f1f7a2d",
+      "releaseBlob": "da1008dccf2df8c420d5e98e88f785bf9b5d367a"
     },
     {
-      "path": "src/renderers/native/drawings/DrawingSettingsPopup.ts",
+      "path": "src/renderers/shared/DrawingSceneRenderer.ts",
       "status": "modified",
-      "baseBlob": "261811618a3139f55fd68ffeeeacb8114f05c84e",
-      "releaseBlob": "23d569e1f0f82f953f5bd584b418edb5712c63ed"
-    },
-    {
-      "path": "src/renderers/native/drawings/DrawingSettingsSections.ts",
-      "status": "modified",
-      "baseBlob": "71e8558367501c712398484960b4c39c1ecf00cf",
-      "releaseBlob": "3563a7f5a86828586f6d83144b38d387711c44c9"
-    },
-    {
-      "path": "src/renderers/native/drawings/DrawingToolbar.ts",
-      "status": "modified",
-      "baseBlob": "21d78353984ba001d065c011923651b31f8dfa31",
-      "releaseBlob": "ffaa88dda1e4148f4ca3edfb47f382375760cf09"
-    },
-    {
-      "path": "src/renderers/native/drawings/UserDrawingController.ts",
-      "status": "modified",
-      "baseBlob": "59146d2385ffcce4954376a3e99462dd470475d8",
-      "releaseBlob": "95d0792531412ae33727c2c08691759ac8a49ae3"
+      "baseBlob": "a64fc688c2cd931ced71d6ac700611ab8c6f30b0",
+      "releaseBlob": "77d9b87893ca45c256344a84dd20919268cd88c1"
     },
     {
       "path": "src/renderers/shared/IndicatorInputsDialog.ts",
       "status": "modified",
-      "baseBlob": "c31a936b5a3b59af5a72b6504dce16177e7d3b78",
-      "releaseBlob": "0f8a84b7c4fc9cbc24628f49516517c0a5efad66"
+      "baseBlob": "0f8a84b7c4fc9cbc24628f49516517c0a5efad66",
+      "releaseBlob": "c3c666de67e96aaf496eb19132daa2540b17c3c6"
     },
     {
-      "path": "src/renderers/shared/InputsUI.ts",
+      "path": "src/renderers/shared/drawing-geometry.ts",
       "status": "modified",
-      "baseBlob": "b15bb84168e9ece0355b469bd7ccd59a84857d5b",
-      "releaseBlob": "6578109fa9bfb7a8cec105f96580d1eb3ba3e75d"
-    },
-    {
-      "path": "src/renderers/shared/theme-tokens.ts",
-      "status": "modified",
-      "baseBlob": "70c9c3f7b2241587ae37a988633c90acc262726b",
-      "releaseBlob": "b5befcb26d824055283f8fc1e2e14b2935fbb120"
-    },
-    {
-      "path": "src/state/document.ts",
-      "status": "modified",
-      "baseBlob": "5834fdd3008fc7059217e0967350736149b2b698",
-      "releaseBlob": "4d7804c5c3a4c06f40db80d396f5ba721079024c"
-    },
-    {
-      "path": "src/ui/chromeStyles.ts",
-      "status": "added",
-      "releaseBlob": "8f68289132e578b954d7ce12d703c31e914958af"
-    },
-    {
-      "path": "src/ui/components/callout-bubble/controller.ts",
-      "status": "removed",
-      "baseBlob": "eb210e9e4e294016cba6e5502b4015d6be29b6cb"
-    },
-    {
-      "path": "src/ui/components/callout-bubble/index.ts",
-      "status": "removed",
-      "baseBlob": "ce53d54b55e83e92b5ed098602cc2384e64fd60b"
-    },
-    {
-      "path": "src/ui/components/callout-bubble/styles.ts",
-      "status": "removed",
-      "baseBlob": "5185913131f0e1b16f9500edaf21ff400e93a09a"
-    },
-    {
-      "path": "src/ui/components/callout-bubble/view.ts",
-      "status": "removed",
-      "baseBlob": "8d311eb38ab31780651f05d1ac88518d1fbbc8bc"
-    },
-    {
-      "path": "src/ui/components/color-picker/controller.ts",
-      "status": "removed",
-      "baseBlob": "52ef5c97476e29bd6e0544a13036e2aaa4ad61e1"
-    },
-    {
-      "path": "src/ui/components/color-picker/index.ts",
-      "status": "removed",
-      "baseBlob": "2672e9ea5631a6cb859a69da09e306b712cc6acc"
-    },
-    {
-      "path": "src/ui/components/color-picker/styles.ts",
-      "status": "removed",
-      "baseBlob": "3d4a97699de338ffce37fb5612d8a0c1fe43e08f"
-    },
-    {
-      "path": "src/ui/components/color-picker/view.ts",
-      "status": "removed",
-      "baseBlob": "ae642ca7d194f636e6353e95257381f88c96910a"
-    },
-    {
-      "path": "src/ui/components/date-picker/controller.ts",
-      "status": "removed",
-      "baseBlob": "6685440e576704b2fe0fc8ff66ee85d95828cb4f"
-    },
-    {
-      "path": "src/ui/components/date-picker/index.ts",
-      "status": "removed",
-      "baseBlob": "d6ff5380c2a2672c51b935226f9f2ad476c7b58f"
-    },
-    {
-      "path": "src/ui/components/date-picker/styles.ts",
-      "status": "removed",
-      "baseBlob": "87d0dacc68f0d08fb79bf6b1ce15639f9a4f0588"
-    },
-    {
-      "path": "src/ui/components/date-picker/view.ts",
-      "status": "removed",
-      "baseBlob": "8d57d9a83b10490eb37e9e9880948748cf7fe35a"
-    },
-    {
-      "path": "src/ui/components/dialog/controller.ts",
-      "status": "removed",
-      "baseBlob": "b3f4c86776280a516f39adffc8cf01cc00890902"
-    },
-    {
-      "path": "src/ui/components/dialog/index.ts",
-      "status": "removed",
-      "baseBlob": "b1c48a12a4eb44deaff22d9c8e86e216188b663b"
-    },
-    {
-      "path": "src/ui/components/dialog/styles.ts",
-      "status": "removed",
-      "baseBlob": "4fc96a82775919b33ca94aaef85f1efb74a9cf4e"
-    },
-    {
-      "path": "src/ui/components/dialog/view.ts",
-      "status": "removed",
-      "baseBlob": "2d0c892fbd798ff00187de121dd16a2dffc4e0f8"
-    },
-    {
-      "path": "src/ui/components/drawer/controller.ts",
-      "status": "removed",
-      "baseBlob": "7e7afa3204b9507c639dcc0b4e74a5f1eadf846f"
-    },
-    {
-      "path": "src/ui/components/drawer/index.ts",
-      "status": "removed",
-      "baseBlob": "d95738edf5a767f02958529d4ce63266c05c6063"
-    },
-    {
-      "path": "src/ui/components/drawer/styles.ts",
-      "status": "removed",
-      "baseBlob": "56441ba3b4e55ef74ea18340eff9a54860660536"
-    },
-    {
-      "path": "src/ui/components/drawer/view.ts",
-      "status": "removed",
-      "baseBlob": "fc4d4dac8966bebcca6a5745b469566948ff2de5"
-    },
-    {
-      "path": "src/ui/components/field/controller.ts",
-      "status": "removed",
-      "baseBlob": "aaf0fa5020a3f766005c1c1843080c5d77dbfd60"
-    },
-    {
-      "path": "src/ui/components/field/index.ts",
-      "status": "removed",
-      "baseBlob": "a6570842158b800272e45c9ece7ca496a6685726"
-    },
-    {
-      "path": "src/ui/components/field/styles.ts",
-      "status": "removed",
-      "baseBlob": "995509b820f2d3eaca1ac03927362f7874c5ab71"
-    },
-    {
-      "path": "src/ui/components/field/view.ts",
-      "status": "removed",
-      "baseBlob": "69173f5f924eaa30bcc4137be1ebe99d309d55f3"
-    },
-    {
-      "path": "src/ui/components/glyph-select/controller.ts",
-      "status": "removed",
-      "baseBlob": "e2c09b9a9141fcc9a01054498311c70b188df43c"
-    },
-    {
-      "path": "src/ui/components/glyph-select/index.ts",
-      "status": "removed",
-      "baseBlob": "9b661232d15d47c0cfa321b9fdab5a1e42cb35aa"
-    },
-    {
-      "path": "src/ui/components/glyph-select/styles.ts",
-      "status": "removed",
-      "baseBlob": "149246cc73b21165912f8819e2034e2b70204fcf"
-    },
-    {
-      "path": "src/ui/components/glyph-select/view.ts",
-      "status": "removed",
-      "baseBlob": "912850ada19f7377e5ab963d0a4cd669934b710a"
-    },
-    {
-      "path": "src/ui/components/menu/controller.ts",
-      "status": "removed",
-      "baseBlob": "26d7d48a0f054bf1ec9a6e9479968289452d40f8"
-    },
-    {
-      "path": "src/ui/components/menu/index.ts",
-      "status": "removed",
-      "baseBlob": "af92aab3ab319ad87e3b8046d59d18a0044f8148"
-    },
-    {
-      "path": "src/ui/components/menu/styles.ts",
-      "status": "removed",
-      "baseBlob": "eeef8d9571b22d85e9296ae5e6a1dc1ace557a00"
-    },
-    {
-      "path": "src/ui/components/menu/view.ts",
-      "status": "removed",
-      "baseBlob": "af08b728736eac63306395f606f269e8d89f68e4"
-    },
-    {
-      "path": "src/ui/components/number-input/controller.ts",
-      "status": "removed",
-      "baseBlob": "c94454736675b77c8cfc03e22e37a93586b31b1b"
-    },
-    {
-      "path": "src/ui/components/number-input/index.ts",
-      "status": "removed",
-      "baseBlob": "0cb11b12ba90b8e329c3efc2e59661627ad292d7"
-    },
-    {
-      "path": "src/ui/components/number-input/styles.ts",
-      "status": "removed",
-      "baseBlob": "31a8927facaa1b707fb4c3fc6531696d17008140"
-    },
-    {
-      "path": "src/ui/components/number-input/view.ts",
-      "status": "removed",
-      "baseBlob": "63604a422f92c1f865b5d9290edaf5b88054f52a"
-    },
-    {
-      "path": "src/ui/components/popover/controller.ts",
-      "status": "removed",
-      "baseBlob": "02eb3ac90cb52a86a65e43578dac4964c571626e"
-    },
-    {
-      "path": "src/ui/components/popover/index.ts",
-      "status": "removed",
-      "baseBlob": "dde8b44bf8ffca804d7bf4498468615fd45c4c98"
-    },
-    {
-      "path": "src/ui/components/popover/styles.ts",
-      "status": "removed",
-      "baseBlob": "9cb256351869c607888a11af16f8f1d0f1ce07ea"
-    },
-    {
-      "path": "src/ui/components/popover/view.ts",
-      "status": "removed",
-      "baseBlob": "fa0617536b9d5d4785aacf0bb540847aa014f749"
-    },
-    {
-      "path": "src/ui/components/select/controller.ts",
-      "status": "removed",
-      "baseBlob": "ec8d1b0417bfeb29fdfa9d63a9ae0daaab30f41e"
-    },
-    {
-      "path": "src/ui/components/select/index.ts",
-      "status": "removed",
-      "baseBlob": "e78db084ffb4fc9480d41f8f762cecc7720a912f"
-    },
-    {
-      "path": "src/ui/components/select/styles.ts",
-      "status": "removed",
-      "baseBlob": "4c4e3dd5c3eaf4add1cce833f6fd255c28a7ba50"
-    },
-    {
-      "path": "src/ui/components/select/view.ts",
-      "status": "removed",
-      "baseBlob": "bc5f8d7c76882990424a6dc4d7232ec74b644b98"
-    },
-    {
-      "path": "src/ui/components/switch/controller.ts",
-      "status": "removed",
-      "baseBlob": "8a1f4ee705c2a6144e6a8cfaf9a9fa247e725e7c"
-    },
-    {
-      "path": "src/ui/components/switch/index.ts",
-      "status": "removed",
-      "baseBlob": "35005020069541a1fccc8ec50b379a25ddf22048"
-    },
-    {
-      "path": "src/ui/components/switch/styles.ts",
-      "status": "removed",
-      "baseBlob": "e1486243598a077c01102266d84c0afab2be9768"
-    },
-    {
-      "path": "src/ui/components/switch/view.ts",
-      "status": "removed",
-      "baseBlob": "e273846a614fc0017245979e64c0d6ee1b028983"
-    },
-    {
-      "path": "src/ui/components/text-area/controller.ts",
-      "status": "removed",
-      "baseBlob": "93e94746773bce1345561475748c1e6e5cdf9a25"
-    },
-    {
-      "path": "src/ui/components/text-area/index.ts",
-      "status": "removed",
-      "baseBlob": "9eecfe2c7d16993a56fd4250594bfaaade788307"
-    },
-    {
-      "path": "src/ui/components/text-area/styles.ts",
-      "status": "removed",
-      "baseBlob": "78800170284c746d8313b337361695b4705cee9b"
-    },
-    {
-      "path": "src/ui/components/text-area/view.ts",
-      "status": "removed",
-      "baseBlob": "e5487a9e7fbec0ce7fb03d83425dd26143661e4f"
-    },
-    {
-      "path": "src/ui/components/text-field/controller.ts",
-      "status": "removed",
-      "baseBlob": "835797df544accb08d569c7ed0f069a685439cd7"
-    },
-    {
-      "path": "src/ui/components/text-field/index.ts",
-      "status": "removed",
-      "baseBlob": "995d5acbb6a3ea341c9d01ea3f13ab4101450b4f"
-    },
-    {
-      "path": "src/ui/components/text-field/styles.ts",
-      "status": "removed",
-      "baseBlob": "2ff8d207b581c5f7e044c13bd58c4e7e8c91b790"
-    },
-    {
-      "path": "src/ui/components/text-field/view.ts",
-      "status": "removed",
-      "baseBlob": "2dd2be62c8fc5a5f3b30749207b3dc1ba52c6e31"
-    },
-    {
-      "path": "src/ui/components/tooltip/controller.ts",
-      "status": "removed",
-      "baseBlob": "9f16404f287d5504f178b61ecdd9d735b6f6e1f9"
-    },
-    {
-      "path": "src/ui/components/tooltip/index.ts",
-      "status": "removed",
-      "baseBlob": "b6594eb792db056e08402eeb3de8525bc048e916"
-    },
-    {
-      "path": "src/ui/components/tooltip/styles.ts",
-      "status": "removed",
-      "baseBlob": "4c019970073743e3342add2c5be5a0a57bab3877"
-    },
-    {
-      "path": "src/ui/components/tooltip/view.ts",
-      "status": "removed",
-      "baseBlob": "3af26bffaba28f20d44ddf0c532189c807237fef"
-    },
-    {
-      "path": "src/ui/icons.ts",
-      "status": "removed",
-      "baseBlob": "0b5a17a7deb5a8c5b3f33f8178c3f683abf90187"
-    },
-    {
-      "path": "src/ui/index.ts",
-      "status": "modified",
-      "baseBlob": "677b2b3714a4fd8411dd1cbcd3f19f798e48ade4",
-      "releaseBlob": "d3b2d7ef4b33364c4b86c05a2361781d7e6b7c71"
-    },
-    {
-      "path": "src/ui/kit-text.ts",
-      "status": "removed",
-      "baseBlob": "0a1470c6c898e1fea52d9f068ab2c2485118736e"
-    },
-    {
-      "path": "src/ui/renamed.ts",
-      "status": "added",
-      "releaseBlob": "1eeb0ca257348bdacd6a8b9b248c2c28b4ff9398"
-    },
-    {
-      "path": "src/ui/styles.ts",
-      "status": "removed",
-      "baseBlob": "b3ca42432295e914b3e2d4a843f77bf172a5a9f3"
-    },
-    {
-      "path": "src/ui/surface-events.ts",
-      "status": "removed",
-      "baseBlob": "dc963cc9f3ce537ca0661416fc8b60b89c83ca1d"
-    },
-    {
-      "path": "src/ui/surface-exit.ts",
-      "status": "removed",
-      "baseBlob": "40587d3a5e06ddd3c9018b654091e51a84460656"
-    },
-    {
-      "path": "src/ui/tokens.ts",
-      "status": "removed",
-      "baseBlob": "103159cdc5fdc0216c3e77e20dbbc0f5a6f41f84"
-    },
-    {
-      "path": "src/ui/zag.ts",
-      "status": "removed",
-      "baseBlob": "b92e3407956390277ce616453ae892e0e2bcaaac"
-    },
-    {
-      "path": "src/widget/VelaWidget.ts",
-      "status": "modified",
-      "baseBlob": "66643e451f2c2bc8d4f837c2e5c8c21c4b53fc55",
-      "releaseBlob": "b98ba750ce1af68984f0b1a8b55f4673be701170"
-    },
-    {
-      "path": "src/widget/bottombar.ts",
-      "status": "modified",
-      "baseBlob": "fd8d48601bfdc1a73022f628f6aac3d394eabc8b",
-      "releaseBlob": "d31549cd2619e813a356b91bc71d7beb6e1c9308"
-    },
-    {
-      "path": "src/widget/cell-controls.ts",
-      "status": "modified",
-      "baseBlob": "0398a558c80d4990f41be9e1a92e5457fce9b3b4",
-      "releaseBlob": "3cc5b7a60bb8690b6f4524a2dce3c6b23c5ea5b9"
-    },
-    {
-      "path": "src/widget/context-menu-model.ts",
-      "status": "modified",
-      "baseBlob": "8431a1e84cf0e276f11a020db166105e4d8e43a3",
-      "releaseBlob": "33dbcbf18070ae6f90a3c26fbe3ad73cfd97beba"
-    },
-    {
-      "path": "src/widget/context-menu.ts",
-      "status": "modified",
-      "baseBlob": "dd38b35e2cc4b9d568e02eeaf0d4e2aa3ba74e73",
-      "releaseBlob": "519a8be06249ea3bcb400354c400c5425ae4516a"
-    },
-    {
-      "path": "src/widget/contributions.ts",
-      "status": "modified",
-      "baseBlob": "256854038e98bd2cdf812052573e8d5a885f9cb1",
-      "releaseBlob": "fccfe2a6bec655e4854bdd4757019d687f0686b6"
-    },
-    {
-      "path": "src/widget/data-window.ts",
-      "status": "modified",
-      "baseBlob": "c8ea0a461d97bad02357d94b6a2a7b0c13f11970",
-      "releaseBlob": "f345ddbb6e6fb13404a2cd122266c81a5d3a2dda"
-    },
-    {
-      "path": "src/widget/drawing-pill.ts",
-      "status": "modified",
-      "baseBlob": "cb42df1052e55a77447d1b3328d23748fb459267",
-      "releaseBlob": "24e00ce25194169a4f1b548f5f0712461924b988"
-    },
-    {
-      "path": "src/widget/drawings-drawer.ts",
-      "status": "modified",
-      "baseBlob": "4f37e6de2d84b0d40b87c7c5064a45763ab26a20",
-      "releaseBlob": "79f40836472b7e27903ee45d42a9c89c359fd47b"
-    },
-    {
-      "path": "src/widget/index.ts",
-      "status": "modified",
-      "baseBlob": "e767b377d7d1009b150c4463f4ec398c47718c22",
-      "releaseBlob": "f51636d88c9a73582d7e2b29ced9ee0367f83e98"
+      "baseBlob": "337b3df3c8b2c445608f1e8e94f26e5c06a4e3c5",
+      "releaseBlob": "26101c1af281b562fcbd3093a0b981a7db76a8de"
     },
     {
       "path": "src/widget/indicator-picker.ts",
       "status": "modified",
-      "baseBlob": "71a7526d92be51f9cdd584a79dfd48bd0733abc2",
-      "releaseBlob": "453a5a175a23ae01fa5a37d805d31a2e315c693f"
+      "baseBlob": "453a5a175a23ae01fa5a37d805d31a2e315c693f",
+      "releaseBlob": "8682161ddbfd8fc5f452dd7b5e34f20f050e0060"
     },
     {
-      "path": "src/widget/layout-picker.ts",
+      "path": "src/widget/indicators.ts",
       "status": "modified",
-      "baseBlob": "2a24620cd5395da2c9f3eaa312f5e888489e9835",
-      "releaseBlob": "0a330fbc5463df2a4f96cec94ee2b0fdcc468d71"
-    },
-    {
-      "path": "src/widget/mobile-bar.ts",
-      "status": "modified",
-      "baseBlob": "f45ee4e8cac9e0e8775abe0fe9e85ede34140754",
-      "releaseBlob": "93479edfe70c9893596249ba51a3b458bb0c8ade"
+      "baseBlob": "ab7960a58fb677bd38cd95ddfb6a4446082d5844",
+      "releaseBlob": "0f32fdf3412dd75ca60b2bd2a4bade528ccb0bb2"
     },
     {
       "path": "src/widget/more-drawer.ts",
       "status": "modified",
-      "baseBlob": "b6d1bec64d35e582cf065008a015ad3a3c71479d",
-      "releaseBlob": "4ee92cb9e1f3e6592ef0ff288b0e617fa45acbfb"
-    },
-    {
-      "path": "src/widget/object-tree-model.ts",
-      "status": "modified",
-      "baseBlob": "a49c3400c5150a8a5a03badac5ba11dcec5c6f3e",
-      "releaseBlob": "aecb8b2772111156f2ff682898c4dc5ae9800ee8"
-    },
-    {
-      "path": "src/widget/object-tree.ts",
-      "status": "modified",
-      "baseBlob": "06c20ae437910fdc30beeb290d855209a578c8f9",
-      "releaseBlob": "ccfddf99753e9c147716638a39190146e92b3d4b"
-    },
-    {
-      "path": "src/widget/panel-dock.ts",
-      "status": "modified",
-      "baseBlob": "b7b274c50f9ec4110880c278610f95229e830768",
-      "releaseBlob": "85d07a8e1e27022095af22af2aa426274c7b5e5a"
-    },
-    {
-      "path": "src/widget/price-scale-drawer.ts",
-      "status": "modified",
-      "baseBlob": "50afccfc356e10bb41f1047bdd7b677ab7f4afab",
-      "releaseBlob": "0de2d7603639988afc491f900ba646941331bb80"
-    },
-    {
-      "path": "src/widget/shell-defaults.ts",
-      "status": "added",
-      "releaseBlob": "d4b43163e423b71eb619de428c272dc0049bb74e"
-    },
-    {
-      "path": "src/widget/shell-options.ts",
-      "status": "modified",
-      "baseBlob": "18d3797cf466c203764e74ed63bff4af7fa4f8ef",
-      "releaseBlob": "1b3edbdb05eb031ce3e5c8ab47ef383944e57b58"
+      "baseBlob": "4ee92cb9e1f3e6592ef0ff288b0e617fa45acbfb",
+      "releaseBlob": "25a7a914c2ec21f5b90d9ebe54e1387d79aca9ce"
     },
     {
       "path": "src/widget/shortcuts-help.ts",
       "status": "modified",
-      "baseBlob": "272cc38274d2eeb8ce03393f207fb8ff9eb48944",
-      "releaseBlob": "ea5825fe45e4a2c8a80336c72db96450b66f8443"
-    },
-    {
-      "path": "src/widget/side-panel.ts",
-      "status": "modified",
-      "baseBlob": "b7f059f7738ae7c16451a0dc54a797be41bc6e01",
-      "releaseBlob": "4e9e6a8270aec193199d48874b045839c691451e"
-    },
-    {
-      "path": "src/widget/sidebar-composition.ts",
-      "status": "added",
-      "releaseBlob": "354cc8ca9a1dfc261336255d8bf9a0a76c6b8388"
-    },
-    {
-      "path": "src/widget/sidebar.ts",
-      "status": "added",
-      "releaseBlob": "b3f5cd203ed51daa48294cbab002a3c030a1036c"
-    },
-    {
-      "path": "src/widget/statusline-model.ts",
-      "status": "modified",
-      "baseBlob": "014288a395eadbc9bf0900cd435eb5e9424a09b1",
-      "releaseBlob": "5851dd3999bc4cbbcf9cb151039aa3d9e0e070f0"
+      "baseBlob": "ea5825fe45e4a2c8a80336c72db96450b66f8443",
+      "releaseBlob": "4a84aeed00c9d62911258ea3c3f1414facfaf883"
     },
     {
       "path": "src/widget/statusline.ts",
       "status": "modified",
-      "baseBlob": "5eca40b99c5d3006c484b83417ece02d1cbc387f",
-      "releaseBlob": "1c473a2df960271730f0e1d1a84559ad0ae4a1b6"
+      "baseBlob": "1c473a2df960271730f0e1d1a84559ad0ae4a1b6",
+      "releaseBlob": "f463e361104c6921b2c07e2b6730a3bdc317ff13"
     },
     {
       "path": "src/widget/symbol-picker.ts",
       "status": "modified",
-      "baseBlob": "57df057c4ebb4958591e299e8a0bc67f6cfaecb1",
-      "releaseBlob": "da9594d7d215cee6f967992af80194b53aabb366"
-    },
-    {
-      "path": "src/widget/timeframe-drawer.ts",
-      "status": "modified",
-      "baseBlob": "9277b9173da31dff1fcf4cfa457b286b67f96ffb",
-      "releaseBlob": "898602b016786b0f0c0d6ba7cea1e0b56cd6780d"
+      "baseBlob": "da9594d7d215cee6f967992af80194b53aabb366",
+      "releaseBlob": "274ac6034d8327890198a6045f7074fa3f2ca869"
     },
     {
       "path": "src/widget/timeframe-quick.ts",
       "status": "modified",
-      "baseBlob": "99daf34582d08c41c80f5daca951a72b5ff66ed3",
-      "releaseBlob": "943d7d9cbeffd37cde059a523aca0d5a6b7699b9"
+      "baseBlob": "943d7d9cbeffd37cde059a523aca0d5a6b7699b9",
+      "releaseBlob": "2d61f624e1cf27a1bc6f65ef92385ff361d3b573"
     },
     {
-      "path": "src/widget/timezone-drawer.ts",
+      "path": "src/widget/timeframe.ts",
       "status": "modified",
-      "baseBlob": "dd8f6ff3120699b6934a8f0efe5e2b4e6ba60531",
-      "releaseBlob": "b3fde8dc4442f103c78c0d99e9c0cf00e9a66f0e"
-    },
-    {
-      "path": "src/widget/toast.ts",
-      "status": "modified",
-      "baseBlob": "984c7f04c8d01cc753da61f94a856dbfddc81cbb",
-      "releaseBlob": "af9549627f5cfb5bdeab381a8e10ce2093b2fe8b"
+      "baseBlob": "b67c5366e7eb7746234ff3788bbb9e18a95c299b",
+      "releaseBlob": "7196caf99c25bf46dfaa13866d95207d4c562906"
     },
     {
       "path": "src/widget/topbar.ts",
       "status": "modified",
-      "baseBlob": "fb29fa91c88c31bb4ce33e45426961468be3b6fd",
-      "releaseBlob": "add75aba1d978924f26aa8ac59593c90f5e290d5"
-    },
-    {
-      "path": "src/widget/watermark.ts",
-      "status": "modified",
-      "baseBlob": "89ca8dbe82f6d9c28b2374ac4a9fba61f37dac54",
-      "releaseBlob": "ba4c2140f51691c90706a0a3036531bf7d1a5ad1"
+      "baseBlob": "add75aba1d978924f26aa8ac59593c90f5e290d5",
+      "releaseBlob": "207c3b82656d71f59f742c4f2378a03f8bd7cdf8"
     },
     {
       "path": "src/workspace/ChartCell.ts",
       "status": "modified",
-      "baseBlob": "7eaee60440cbf30f200a9644eb3898ec005132ae",
-      "releaseBlob": "8330145ebbd285c58aca3ac7db62186d04bdce2d"
+      "baseBlob": "8330145ebbd285c58aca3ac7db62186d04bdce2d",
+      "releaseBlob": "12c346b686a1ba76fc2d65c9c6aed85ebc76b191"
     },
     {
       "path": "src/workspace/VelaWorkspace.ts",
       "status": "modified",
-      "baseBlob": "f9344ee240ec3b66d3cd614a8b519a385f6e9638",
-      "releaseBlob": "d16e6396724a739cef5779fddf80350856fa0c56"
+      "baseBlob": "d16e6396724a739cef5779fddf80350856fa0c56",
+      "releaseBlob": "e57a4f46c5d4cf9438c4c792062d86e1c9cbccf0"
     },
     {
-      "path": "src/workspace/context.ts",
+      "path": "src/workspace/sync.ts",
       "status": "modified",
-      "baseBlob": "1a854b20fd355d15dd49da9e4a7d439fdfc86307",
-      "releaseBlob": "f89f82b22f23432f7d88476deba24fe861973a37"
+      "baseBlob": "99f011c742f3f2a7abe2c63ffe8215bb60420c1d",
+      "releaseBlob": "0ca8845ed6370ca14ab9b83441e82d42cf6257c8"
     }
   ]
 }

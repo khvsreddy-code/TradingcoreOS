@@ -2,7 +2,7 @@
 
 The final upstream source baseline is Vela tag `v0.10.2`, commit
 `305521811eabc35c3797e5b6ab58adb25e70c1c7`. The three-way common ancestor for the
-TradingCoreOS overlay is Vela 0.9.0 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
+TradingCoreOS overlay is Vela 0.10.2 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
 Do not identify a TCO-local edit as an upstream change just because it lives under `vendor/vela/src`.
 
 ## Patch groups
@@ -55,4 +55,4 @@ release cannot be promoted. No source files are replaced by the generator.
   surface for existing imports. New registry integrations should import the specific
   native Vela capability directly when that is the actual dependency.
 - Keep `vendor/vela/NOTICE` and the visible Vela attribution behavior intact. This
-  file's upstream blob matches the notice pinned by Vela 0.9.0.
+  file's upstream blob matches the notice pinned by Vela 0.10.2.
