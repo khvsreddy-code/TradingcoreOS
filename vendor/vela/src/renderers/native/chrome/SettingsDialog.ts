@@ -534,9 +534,11 @@ export class SettingsDialog {
             gear.setAttribute('aria-hidden', 'true');
             headerStart = gear;
         }
+        const i18n = this.i18n?.();
         const ui = new Dialog({
             host: this.container,
             title: this.t(TEXT.chartSettings),
+            ...(i18n ? { i18n } : {}),
             // Non-modal: a live-edit dialog must leave the page interactive — a modal
             // machine locks pointer events on the whole body, killing the chart, the
             // legend, and the body-portaled popovers (color picker, select lists).
@@ -935,19 +937,22 @@ export class SettingsDialog {
         const chartStyleCard = document.createElement('div');
         chartStyleCard.className = 'vela-sd-card vela-sd-card-type';
         chartStyleCard.append(sid(this.sectionTitle('Chart style'), 'symbol.type'));
+        const styles = this.priceStyleState?.() ?? { shown: config.series.style, unavailable: [] };
+        const shownStyle = styles.shown;
+        const unavailable = new Set(styles.unavailable);
         const groups: Partial<Record<string, HTMLElement>> = {};
         const showActive = (style: string): void => {
-            const active = style === 'heikinashi' ? 'candles' : style; // heikin-ashi is candle-drawn
+            const active = SHARED_STYLE_GROUP.get(style) ?? style;
             for (const key of priceStyleIds()) {
                 groups[key]?.classList.toggle('vela-sd-hide', key !== active);
             }
         };
         chartStyleCard.append(
-            sid(this.selectRowLabeled(TEXT.type, config.series.style, priceStyleIds().map((id) => [id, priceStyleMessage(id)] as const), (v) => {
+            sid(this.selectRowLabeled(TEXT.type, shownStyle, priceStyleIds().map((id) => [id, priceStyleMessage(id)] as const), (v) => {
                 this.emit({ series: { style: v } });
                 showActive(v);
                 this.syncTypeTabs?.(v);
-            }), 'symbol.type'),
+            }, { ids: unavailable, title: PRICE_STYLE_UNAVAILABLE }), 'symbol.type'),
         );
         body.append(chartStyleCard);
         // Candles — the reference compact rows: one toggle + an up/down swatch pair each.
@@ -1055,7 +1060,7 @@ export class SettingsDialog {
             groups[def.id] = g;
             body.append(g);
         }
-        showActive(config.series.style);
+        showActive(shownStyle);
 
         // Animation switches and the timezone/host settings stay live; cards only
         // group their existing controls visually.
@@ -1341,9 +1346,9 @@ export class SettingsDialog {
         const wanted =
             section !== undefined
                 ? panes.findIndex((p) => p.title.toLowerCase() === section.toLowerCase())
-                : panes.findIndex((p) => p.style === config.series.style && !p.tab.classList.contains('vela-sd-tab-sub'));
+                : panes.findIndex((p) => p.style === shownStyle && !p.tab.classList.contains('vela-sd-tab-sub'));
         activate(wanted >= 0 ? wanted : 0);
-        this.syncTypeTabs?.(config.series.style);
+        this.syncTypeTabs?.(shownStyle);
 
         const preview = mobile ? null : this.buildAppearancePreview(config);
         if (preview) shell.append(rail, paneHost, preview);

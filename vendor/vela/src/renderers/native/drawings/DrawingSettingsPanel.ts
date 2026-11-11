@@ -358,10 +358,12 @@ export class DrawingSettingsPanel {
             actions.restore?.(snapshot);
             this.close();
         };
+        const i18n = this.env.i18n?.();
         const ui = new Dialog({
             // Escape the active chart's stacking context and overflow clipping in multi-chart layouts.
             host: this.host.ownerDocument.body,
             title: meta?.label ?? this.t(TEXT.settings),
+            ...(i18n ? { i18n } : {}),
             modal: false,
             contained: false,
             align: 'center',
