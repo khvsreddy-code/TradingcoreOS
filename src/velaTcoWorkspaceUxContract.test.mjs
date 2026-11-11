@@ -51,7 +51,7 @@ assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist re
 assert(topology.includes('sidebar:{') && topology.includes("'tco.bookmarks'") && topology.includes("'tco.corespirit-code'") && topology.includes("'tco.panels'"), 'Watchlist, CoreSpirit and application panels use the grouped Vela native right sidebar');
 assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist remains accessible as a Vela dock panel');
 assert(chrome.includes("id: 'tco.corespirit-code'") && chrome.includes("icon: 'corespirit'"), 'CoreSpirit Studio remains accessible in the native sidebar with its dedicated icon');
-assert(live.includes('className="absolute inset-0"'), 'the Vela workspace uses the full available width without a duplicate React rail');
+assert(live.includes('className="tco-live-surface fixed inset-0') && live.includes('className="absolute inset-x-0 bottom-0 top-9"'), 'the Vela chart host must fill the live surface below the fixed application header without a duplicate rail');
 assert(!chrome.includes('registerWidgetAttachment(healthAttachment)'), 'do not reserve chart height with the custom bottom health strip');
 assert(topology.includes('animations:{ zoom:true, pan:true, liveBar:false }'), 'Vela zoom and pan animations should follow the supplied reference UI');
 const topbarCompositionStart = topology.indexOf('export const TCO_VELA_TOPBAR_COMPOSITION');
@@ -77,7 +77,8 @@ assert(topology.includes('bottombar:false'), 'live Vela terminal must use the to
 assert(chrome.includes("id: 'tco.chart-settings'") || chrome.includes("id: 'tco.chart-settings'"), 'native Vela chart settings must be available from the topbar');
 assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchlist'"));
 assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
-assert(!chrome.includes("id: 'tco.panels'"), 'remove redundant panels shortcut');
+assert(chrome.includes('const panelsHubPanel: SidePanelDescriptor') && chrome.includes('registerSidePanel(panelsHubPanel)'), 'the Panels hub must remain a native dock panel');
+assert(!/const \\w+Action: WidgetActionDescriptor = \\{\\s*id: 'tco\\.panels'/.test(chrome), 'remove only the redundant Panels topbar shortcut, not the sidebar hub');
 assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
 assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
 assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
@@ -115,8 +116,8 @@ assert(plane.includes("columns.time.length === 0"));
 
 
 // Vela 0.8.4 provenance and API surface must stay aligned with the official rebase.
-assert(upstream.includes('**0.8.4**') && upstream.includes('850fa1f431e2065e9b0074c4b0555a48a2999eaf'),
-  'the vendored Vela provenance must identify official 0.8.4');
+assert(upstream.includes('**0.10.5**') && upstream.includes('34d11f1a8a88c7dd5657c9b3a791abf43560218d'),
+  'the vendored Vela provenance must identify the current official 0.10.5 source');
 // Keep the Vela 0.8.4 drawing experience: live-edit/cancel panel, reusable styles, and timeframe filtering.
 assert(drawingSettingsPanel.includes('export class DrawingSettingsPanel'), 'Vela 0.8.4 drawing settings panel must be present');
 assert(drawingSettingsPanel.includes('this.showOnFold(b)') && drawingSettingsPanel.includes('saveTemplate?.(name)'),
@@ -133,8 +134,8 @@ assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('b
 assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
   'the drawing registry must expose all 0.8.4 price-action tools');
 // The unified drawing gear must launch the 0.8.4 panel, not the old split controls.
-assert(drawingSettingsPopup.includes("iconBtn('Settings'") && drawingSettingsPopup.includes('this.openPanel()'),
-  'the drawing toolbar settings gear must open the unified Vela 0.8.4 settings panel');
+assert(drawingSettingsPopup.includes('this.iconBtn(this.t(TEXT.settings), GEAR_ICON, () => this.openPanel())'),
+  'the localized drawing toolbar settings gear must open the unified native Vela settings panel');
 assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPopup.includes("iconBtn('Position size'"),
   'the retired split Levels/Position size buttons must not return');
 // Offline bars must remain immutable until a real provider supplies a bar update.
