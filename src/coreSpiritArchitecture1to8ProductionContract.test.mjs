@@ -11,7 +11,7 @@ import { createTcoVelaDataProvider } from './TcoVelaDataProvider.ts';
 
 assert.equal(TCO_VELA_TERMINAL_TOPOLOGY.shell, 'VelaWorkspace');
 assert.ok(TCO_VELA_TERMINAL_TOPOLOGY.sharedSurface.includes('topbar'));
-assert.ok(TCO_VELA_TERMINAL_TOPOLOGY.sharedSurface.includes('bottombar'));
+assert.ok(!TCO_VELA_TERMINAL_TOPOLOGY.sharedSurface.includes('bottombar'), 'the live terminal exposes no duplicate bottom command surface');
 assert.ok(TCO_VELA_TERMINAL_TOPOLOGY.sharedSurface.includes('topbar'));
 
 const velaOptions = createTcoVelaTerminalOptions({
@@ -23,7 +23,7 @@ const velaOptions = createTcoVelaTerminalOptions({
   createCoreSpiritEngine: () => { throw new Error('contract-only factory must not be invoked'); },
   resolveIndicatorManifest: () => [],
 });
-assert.equal(velaOptions.bottombar, true);
+assert.equal(velaOptions.bottombar, false, 'the live TradingCoreOS workspace intentionally uses Vela topbar-only chrome');
 assert.equal(velaOptions.defaultLanguage, 'corespirit');
 assert.equal(velaOptions.live, true);
 
