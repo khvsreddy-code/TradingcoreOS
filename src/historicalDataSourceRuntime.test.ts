@@ -34,8 +34,8 @@ const range = getRecentHistoryRequestRange({
   calendarHolidays: ['2026-10-19'],
   calendarComplete: true,
 }, new Date('2026-10-19T07:00:00.000Z'));
-assert.equal(range.fromDate, '2026-10-14', 'complete calendar should skip the Monday holiday and count three prior sessions');
-assert.equal(new Date(range.fromMs).toISOString(), '2026-10-13T18:30:00.000Z', 'legacy calendar range utility remains deterministic');
+assert.equal(range.fromDate, '2026-10-12', 'complete calendar should skip the Monday holiday and include five prior trading sessions');
+assert.equal(new Date(range.fromMs).toISOString(), '2026-10-11T18:30:00.000Z', 'five-session India-local calendar range remains deterministic');
 
 const pageEnd = new Date('2026-10-19T07:00:00.000Z').getTime();
 const intradayPage = getBoundedHistoryPageRange({
