@@ -143,6 +143,12 @@ export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
         ? unionDirtySpans(anchor, finiteSpan(start, end ?? value.time))
         : finiteSpan(start, end);
 
+    if (output.kind === 'band') {
+        // A band is one timestamp-anchored price interval. Its top/bottom values
+        // are prices, not times, so only its bar/metadata anchors widen dirty time.
+        return metadataSpan;
+    }
+
     // Geometry must widen an object's anchor span. Checking time first used to
     // truncate anchored lines/polylines/footprints to a single bar, leaving stale
     // retained pixels at old geometry endpoints after an incremental update.
