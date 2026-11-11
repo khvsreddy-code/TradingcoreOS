@@ -4,7 +4,7 @@
 - Upstream source version: **0.10.5**
 - Upstream branch: `main`
 - Upstream source commit: `34d11f1a8a88c7dd5657c9b3a791abf43560218d`
-- Previous source baseline for the TradingCoreOS overlay: Vela 0.10.2 at `305521811eabc35c3797e5b6ab58adb25e70c1c7`.
+- Previous source base: Vela 0.10.2 at `305521811eabc35c3797e5b6ab58adb25e70c1c7`.
 - Vela 0.10.5 source is vendored in `vendor/vela/src`; TradingCoreOS compiles it directly.
 - The extracted UI kit is supplied by `@luxalgo/vela-ui` **0.4.1**.
 - `vendor/vela/CHANGELOG.md`, `README.md`, and `ui/CHANGELOG.md` are synchronized with the upstream 0.10.5 source tree.
