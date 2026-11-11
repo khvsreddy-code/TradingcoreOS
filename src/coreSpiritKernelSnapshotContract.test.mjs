@@ -5,7 +5,7 @@ import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritFusedSeriesCursor } from './services/coreSpirit/seriesVector.ts';
 import { CoreSpiritKernelSnapshotStore } from './services/coreSpirit/kernelStateSnapshots.ts';
 
-function bars(count: number) {
+function bars(count) {
   return Array.from({ length: count }, (_, index) => {
     const close = 100 + index;
     return {
@@ -35,12 +35,12 @@ const runtime = new CoreSpiritRuntime({
 });
 
 const history = bars(8);
-runtime.loadIr(compiled.ir!);
-runtime.executeIr(compiled.ir!, history);
+runtime.loadIr(compiled.ir);
+runtime.executeIr(compiled.ir, history);
 
 const snapshots = runtime.getKernelStateSnapshots();
 assert.ok(snapshots.length >= 1, 'expected a confirmed-bar kernel snapshot');
-const snapshot = snapshots[0]!;
+const snapshot = snapshots[0];
 assert.equal(snapshot.barIndex, history.length - 1);
 assert.ok(snapshot.modelVersion.length > 0);
 assert.ok(snapshot.inputDependencies.length >= 1);
@@ -54,7 +54,7 @@ assert.equal(typeof snapshot.dataRevision, 'number', 'snapshot must carry an inp
 
 // Snapshot-store adversarial tests: same bar index is not enough when the kernel
 // configuration or input-history generation has changed.
-const snapshotStore = new CoreSpiritKernelSnapshotStore<{ cursor:number }>(4);
+const snapshotStore = new CoreSpiritKernelSnapshotStore(4);
 const checkpointMetadata = {
   nodeId:'test:ema', revision:0, inputDependencies:['close'],
   barIndex:4, nextBarIndex:5, modelVersion:'ir-v1',
@@ -114,7 +114,7 @@ CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
 };
 
 try {
-  const forming = { ...history.at(-1)!, timestamp: new Date(1_700_000_000_000 + history.length * 300_000).toISOString(), close: 109, high: 110, low: 108 };
+  const forming = { ...history.at(-1), timestamp: new Date(1_700_000_000_000 + history.length * 300_000).toISOString(), close: 109, high: 110, low: 108 };
   const firstRevision = runtime.executeBar(forming);
   assert.equal(runtime.getExecutionFrame().isRealtime, true);
   assert.ok(firstRevision.outputs.some((item) => item.kind === 'series'));
@@ -140,7 +140,7 @@ const emptyBaselineRuntime = new CoreSpiritRuntime({
   sourceId: 'snapshot-empty-baseline',
   executionTier: 'optimized',
 });
-emptyBaselineRuntime.loadIr(compiled.ir!);
+emptyBaselineRuntime.loadIr(compiled.ir);
 const emptyBaselineSpy = CoreSpiritFusedSeriesCursor.prototype.copyFrom;
 let emptyBaselineRestores = 0;
 CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
@@ -148,7 +148,7 @@ CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
   return emptyBaselineSpy.apply(this, args);
 };
 try {
-  const firstBar = bars(1)[0]!;
+  const firstBar = bars(1)[0];
   emptyBaselineRuntime.executeBar(firstBar);
   emptyBaselineRuntime.executeBar({ ...firstBar, close: firstBar.close + 1, high: firstBar.high + 1 });
   assert.ok(emptyBaselineRestores >= 1, 'first live bar revisions must restore the empty baseline checkpoint');
