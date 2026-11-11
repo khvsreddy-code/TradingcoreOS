@@ -7,6 +7,25 @@ export type FyersNormalizedOrderEvent =
   | { type: 'position'; data: PositionUpdate }
   | { type: 'funds'; data: FundsUpdate };
 
+/**
+ * Re-stamp an untrusted broker frame at the moment it enters the serialized
+ * reducer. Keep the discriminant/data relationship intact so callers cannot
+ * accidentally widen the payload union or cast a mismatched event variant.
+ */
+export function stampFyersOrderEvent(
+  event: FyersNormalizedOrderEvent,
+  sequence: number,
+  receivedAt: number,
+): FyersNormalizedOrderEvent {
+  const metadata = { sequence, revision: sequence, receivedAt };
+  switch (event.type) {
+    case 'order': return { type: 'order', data: { ...event.data, ...metadata } };
+    case 'trade': return { type: 'trade', data: { ...event.data, ...metadata } };
+    case 'position': return { type: 'position', data: { ...event.data, ...metadata } };
+    case 'funds': return { type: 'funds', data: { ...event.data, ...metadata } };
+  }
+}
+
 function asRow(value: unknown): Row | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Row : undefined;
 }
