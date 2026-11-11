@@ -66,6 +66,6 @@ if (!indicatorPage.includes("lazy(() => import('../components/indicators/Indicat
 if (!editorPage.includes("../services/coreSpirit/editorModel")) throw new Error('CoreSpirit editor must avoid the barrel import');
 if (editorPage.includes("from '../services/coreSpirit';")) throw new Error('CoreSpirit editor must not import the full CoreSpirit barrel');
 
-if (!vite.includes("return 'tco-live-workspace';")) throw new Error('Live workspace chunk boundary missing');
-if (!vite.includes("return 'tco-corespirit-compiler';")) throw new Error('CoreSpirit compiler chunk boundary missing');
+if (!vite.includes("if (!normalized.includes('node_modules')) return undefined;")) throw new Error('First-party application modules must remain in Rollup graph-aware route chunks');
+if (/return ['\"]tco-(?:live-workspace|corespirit-compiler)['\"]/.test(vite)) throw new Error('First-party live/compiler modules must not be forced into global manual chunks');
 console.log('application shell + CoreSpirit critical-path performance contract: OK');
