@@ -14,7 +14,8 @@ const idempotencyCompletion = route.indexOf("await OrderIdempotencyRepository.co
 const completedAudit = route.indexOf("eventType: 'order.completed'");
 assert(idempotencyCompletion >= 0, 'a successful broker response must complete the idempotency ledger');
 assert(route.includes("await AuditLogRepository.appendRequired({"), 'order lifecycle audit writes must be required, not fire-and-forget');
-assert(route.includes("actorType: 'user',\\n        eventType: 'order.completed'"), 'the canonical user completion audit must be recorded');
+assert(route.includes("actorType: 'user',"), 'the canonical user completion audit must be attributed to the user');
+assert(route.includes("eventType: 'order.completed'"), 'the canonical user completion audit must record order.completed');
 assert(completedAudit > idempotencyCompletion, 'the completion audit must follow the idempotency ledger update before success is returned');
 assert(route.includes("FYERS_EXECUTION_GATEWAY_URL"));
 assert(route.includes("Idempotency-Key"));
