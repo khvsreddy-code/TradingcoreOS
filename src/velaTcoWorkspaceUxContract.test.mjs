@@ -78,7 +78,7 @@ assert(chrome.includes("id: 'tco.chart-settings'") || chrome.includes("id: 'tco.
 assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchlist'"));
 assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
 assert(chrome.includes('const panelsHubPanel: SidePanelDescriptor') && chrome.includes('registerSidePanel(panelsHubPanel)'), 'the Panels hub must remain a native dock panel');
-assert(!/const \\w+Action: WidgetActionDescriptor = \\{\\s*id: 'tco\\.panels'/.test(chrome), 'remove only the redundant Panels topbar shortcut, not the sidebar hub');
+assert(!/const \w+Action: WidgetActionDescriptor = \{\s*id: 'tco\.panels'/.test(chrome), 'remove only the redundant Panels topbar shortcut, not the sidebar hub');
 assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
 assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
 assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
@@ -115,22 +115,22 @@ assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela 
 assert(plane.includes("columns.time.length === 0"));
 
 
-// Vela 0.8.4 provenance and API surface must stay aligned with the official rebase.
+// Vela 0.10.5 provenance and API surface must stay aligned with the official rebase.
 assert(upstream.includes('**0.10.5**') && upstream.includes('34d11f1a8a88c7dd5657c9b3a791abf43560218d'),
   'the vendored Vela provenance must identify the current official 0.10.5 source');
-// Keep the Vela 0.8.4 drawing experience: live-edit/cancel panel, reusable styles, and timeframe filtering.
-assert(drawingSettingsPanel.includes('export class DrawingSettingsPanel'), 'Vela 0.8.4 drawing settings panel must be present');
+// Keep the Vela 0.10.5 drawing experience: live-edit/cancel panel, reusable styles, and timeframe filtering.
+assert(drawingSettingsPanel.includes('export class DrawingSettingsPanel'), 'Vela 0.10.5 drawing settings panel must be present');
 assert(drawingSettingsPanel.includes('this.showOnFold(b)') && drawingSettingsPanel.includes('saveTemplate?.(name)'),
   'drawing settings must retain timeframe visibility and saved-style actions');
 assert(drawingSettingsPanel.includes("actions.preview?.(null)"), 'drawing style preview must be clearable on cancel/close');
 assert(drawingDefaults.includes('captureToolDefaults') && drawingDefaults.includes('sanitizeToolTemplates') && drawingDefaults.includes('builtinToolTemplates'),
-  'drawing defaults and style templates must use Vela 0.8.4 defaults contracts');
+  'drawing defaults and style templates must use Vela 0.10.5 defaults contracts');
 assert(drawingController.includes('setToolDefaults') && drawingController.includes('setToolTemplates'),
   'the drawing controller must expose tool-default and template persistence');
 assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('drawingTools') && workspaceState.includes('defaults') && workspaceState.includes('templates'),
   'drawing defaults/templates must be represented in workspace-persisted state');
 assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('blockState') && drawingPriceAction.includes('liquidityState'),
-  'Vela 0.8.4 price-action analysis must include FVG, order-block and liquidity state');
+  'Vela 0.10.5 price-action analysis must include FVG, order-block and liquidity state');
 assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
   'the drawing registry must expose all 0.8.4 price-action tools');
 // The unified drawing gear must launch the 0.8.4 panel, not the old split controls.
@@ -141,7 +141,7 @@ assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPop
 // Offline bars must remain immutable until a real provider supplies a bar update.
 assert(!multiProviderFeed.includes('Math.random()') && !multiProviderFeed.includes('intervalMs(timeframe)'),
   'Vela offline history must not be mutated by synthetic ticks');
-// Vela 0.8.4 candle-color patches must pass through TCO's custom incremental scene pipeline.
+// Vela 0.10.5 candle-color patches must pass through TCO's custom incremental scene pipeline.
 assert(corePatch.includes('barColors?: Array<CandleBarColor | null>'),
   'series value patches must carry per-bar candle colors together with the changed bars');
 assert(scenePatch.includes('series.barColors = applyArrayDelta'),
