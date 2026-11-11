@@ -44,7 +44,17 @@ if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(wo
 if(!/marketFrame:CoreSpiritMarketFrame/.test(worker)||!/coreSpiritMarketFrameFromColumns/.test(worker)||!/coreSpiritMarketFrameArrayFacade/.test(worker))throw new Error('Worker market inputs must stay columnar with an on-demand compatibility facade');
 if(/function ensureBarArray/.test(worker)||/bar\.timestamp=new Date/.test(worker))throw new Error('Worker must not maintain/rewrite one object for every shared row');
 if(!/getMarketFrame\(\): CoreSpiritMarketFrame/.test(read('src/services/coreSpirit/runtime.ts')))throw new Error('Runtime must expose the zero-copy typed-column boundary for quant/ML feature builders');
-if(!/const frame=this\.marketFrameResolver\?\.\(\)/.test(read('src/services/coreSpirit/runtime.ts'))||!/const column=name==='time'\?frame\.time/.test(read('src/services/coreSpirit/runtime.ts')))throw new Error('Runtime OHLCV series reads must prefer MarketFrame typed columns');
+const runtimeSource=read('src/services/coreSpirit/runtime.ts');
+if(!/const frame = this\.marketFrameResolver\?\.\(\)/.test(runtimeSource)
+  || !/const column = name === 'open' \? frame\.open/.test(runtimeSource)
+  || !/name === 'high' \? frame\.high/.test(runtimeSource)
+  || !/name === 'low' \? frame\.low/.test(runtimeSource)
+  || !/name === 'close' \? frame\.close/.test(runtimeSource)
+  || !/name === 'volume' \? frame\.volume/.test(runtimeSource)
+  || !/if \(name === 'time'\)[\s\S]{0,180}source\.timestamp/.test(runtimeSource)
+  || !/this\.columnarHistory\.valueAt\(name, sourceIndex\)/.test(runtimeSource)) {
+  throw new Error('Runtime must read OHLCV from MarketFrame typed columns, derive time from the exact replay bar, and retain canonical columnar fallback');
+}
 if(!/Cross-Origin-Opener-Policy/.test(vite)||!/Cross-Origin-Embedder-Policy/.test(vite))throw new Error('Vite must expose SAB isolation headers');
 if(!Array.isArray(vercel.headers)||!vercel.headers.some(h=>h.source==='/(.*)'&&h.headers?.some(x=>x.key==='Cross-Origin-Embedder-Policy'&&x.value==='require-corp')))throw new Error('Vercel live route must expose COEP require-corp');
 if(!/sharedMemory/.test(live)||!/crossOriginIsolated/.test(live))throw new Error('Live telemetry must expose shared-memory capability');
