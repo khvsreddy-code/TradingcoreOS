@@ -21,6 +21,19 @@ const outside = {
 assert.deepEqual(outputDirtySpan(inside), { from: 100, to: 100 });
 assert.deepEqual(outputDirtySpan(outside), { from: 50, to: 50 });
 
+const bandOutput = {
+  kind: 'band',
+  id: 'volatility-band:100',
+  time: 100,
+  top: 125,
+  bottom: 95,
+};
+assert.deepEqual(
+  outputDirtySpan(bandOutput),
+  { from: 100, to: 100 },
+  'band price bounds must not be interpreted as market timestamps',
+);
+
 diff.seed([inside, outside]);
 const patches = diff.apply([
   { ...inside, value: 102 },
