@@ -33,13 +33,20 @@ if (!/subscribeSharedSymbol/.test(sharedFeed) || !/chartMarketStore\.publish/.te
 if (!/sharedSymbols = new Map/.test(manager) || !/subscribeSharedSymbol/.test(manager)) throw new Error('Shared symbol subscription registry missing');
 if (!/MAX_ANALYTICS_WORKERS = 2/.test(coordinator) || !/MAX_INDICATOR_WORKERS = 2/.test(coordinator)) throw new Error('Shared compute worker budget is not bounded to 2+2');
 if (!/analyticsCache/.test(coordinator) || !/indicatorCache/.test(coordinator)) throw new Error('Shared compute cache missing');
-if (!/runLocal\(/.test(prediction) || !/runProduction\(/.test(prediction)) throw new Error('Dataset-scoped prediction coordination missing');
+if (!/runProduction\(/.test(prediction)) throw new Error('Production prediction coordination missing');
+if (!/predictionKey\(datasetKey, revision, modelIds\)/.test(prediction)) throw new Error('Prediction cache key is not scoped to dataset identity, revision and model selection');
+if (!/remoteCache\.get\(key\)/.test(prediction) || !/remoteInflight\.get\(key\)/.test(prediction)) throw new Error('Dataset-scoped prediction cache/single-flight coordination missing');
+if (!/remoteInflight\.set\(key, promise\)/.test(prediction)) throw new Error('Concurrent chart views do not share production prediction work');
 if (!/createChartPredictionController/.test(chartRuntime)) throw new Error('Chart runtime controller must wire the prediction controller');
 if (!/createChartRuntimeController/.test(liveChart)) throw new Error('LiveChart must delegate prediction lifecycle to ChartRuntimeController');
 if (!/consumerId/.test(controller) || !/attachConsumer\(consumerId, 'chart'\)/.test(controller)) throw new Error('Chart controller does not identify canonical consumer ownership');
 if (!/upsertLatest\(/.test(history) || !/mutateExisting = false/.test(history)) throw new Error('O(1) forming-candle/history update path missing');
 if (!/getBefore\(/.test(history)) throw new Error('HistoryStore older-page cache lookup missing');
-if (!/'5m': 5000/.test(historyPolicy) || !/historyDemandPageCandles/.test(historyPolicy) || /25_000/.test(historyPolicy)) throw new Error('5k demand-driven history policy is invalid');
+if (!/HISTORICAL_DATASET_MAX_BARS = 5_000/.test(historyPolicy)
+  || !/DEFAULT_INITIAL_HISTORY_CANDLES = 300/.test(historyPolicy)
+  || !/MAX_INITIAL_HISTORY_CANDLES = 2_000/.test(historyPolicy)
+  || !/historyDemandPageCandles/.test(historyPolicy)
+  || /25_000/.test(historyPolicy)) throw new Error('Staged 300-first-paint / 2k-initial / 5k-dataset history policy is invalid');
 if (!/maxConcurrent = 6/.test(historyCoordinator)) throw new Error('Global history request budget missing');
 if (!/chartHistoryCoordinator\.request/.test(dataPlane)) throw new Error('Global history request coordinator is not used');
 if (!/requestWarmHistory\(/.test(dataPlane) || !/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm history stage missing');
