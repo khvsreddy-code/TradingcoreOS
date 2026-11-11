@@ -34,7 +34,15 @@ if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Active-chart wa
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial chart request must provide a bounded limit');
 if (!/bars:2_000/.test(velaTerminal) || !/timeframes:\[[^\]]*'45'/.test(velaTerminal)) throw new Error('Active Vela workspace must request 2,000 candles and expose 45-minute history');
 if (!/supportedTimeframes:\s*\[[^\]]*'45'/.test(velaProvider)) throw new Error('Vela provider must advertise the 45-minute timeframe');
-if (!/const maxPages = Math\.min\(8/.test(velaProvider) || !/await plane\.loadOlderHistory\('warm'/.test(velaProvider)) throw new Error('Vela initial history must continue paginating until the target window is reached');
+if (!/const maxPages = Math\.min\(24,/.test(velaProvider)
+  || !/for \(let page = 0; page < maxPages && loadedCount < requested; page \+= 1\)/.test(velaProvider)
+  || !/await plane\.loadOlderHistory\('warm', \{ visibleBars: Math\.min\(375, requested - loadedCount\) \}\)/.test(velaProvider)) {
+  throw new Error('Vela history must use bounded warm pages and continue until the requested target window is reached');
+}
+if (!/if \(expanded\.length <= loadedCount\)[\s\S]*?if \(!plane\.isOlderHistoryExhausted\(\)\)[\s\S]*?throw new Error/.test(velaProvider)
+  || !/if \(loadedCount < requested && !plane\.isOlderHistoryExhausted\(\)\)[\s\S]*?throw new Error/.test(velaProvider)) {
+  throw new Error('Vela must fail closed when pagination stops before the target or without source-exhaustion confirmation');
+}
 if (!/residentCount >= requestedLimit/.test(dataPlane) || !/fresh\.length >= requestedLimit/.test(dataPlane)) throw new Error('A partial cache must not short-circuit a larger history request');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
 if (!/storeCached\?\.length >= requestedLimit/.test(runtime) || !/columns\.time\.length >= requestedLimit/.test(runtime)) throw new Error('A short cached dataset must not satisfy a larger history request');
