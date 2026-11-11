@@ -18,8 +18,8 @@ const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts'
 const rendererPort = read('vendor/vela/src/core/ports/IChartRenderer.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
-assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.2\*\*/i, 'TCO must continue to use the exact official Vela 0.10.2 foundation pinned by the vendor manifest');
-assert.match(upstream, /Previous source base: Vela 0\.9\.0/, 'the Vela 0.10.2 integration must retain its documented 0.9.0 three-way merge base');
+assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.5\*\*/i, 'TCO must continue to use the exact official Vela 0.10.5 foundation pinned by the vendor manifest');
+assert.match(upstream, /Previous source base: Vela 0\.10\.2/, 'the Vela 0.10.5 integration must retain its documented 0.10.2 three-way merge base');
 assert.match(terminal, /topbar:\s*\{/);
 assert.match(terminal, /drawings:\s*\{\s*toolbar:\s*true\s*\}/, 'the full native Vela drawing toolbar is explicitly enabled');
 assert.match(workspaceLoader, /await drawings\.loadAdvancedDrawingCatalog\(\)/, 'all advanced drawing families must hydrate before the workspace is constructed');
