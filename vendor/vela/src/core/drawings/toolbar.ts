@@ -121,9 +121,15 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
         label: msg('drawing.toolbar.group.fibonacciGann', 'Fibonacci'),
         sections: [
             { label: msg('drawing.toolbar.section.fibonacci', 'Fibonacci'), types: FIBONACCI_TYPES },
-            { label: msg('drawing.toolbar.section.priceAction', 'Price Action'), types: PRICE_ACTION_TYPES },
             { label: msg('drawing.toolbar.section.gann', 'Gann'), types: GANN_TYPES },
             { label: msg('drawing.toolbar.section.geometry', 'Geometry'), types: GEOMETRY_TYPES },
+        ],
+    },
+    {
+        id: 'price-action',
+        label: msg('drawing.toolbar.group.priceAction', 'Price Action'),
+        sections: [
+            { label: msg('drawing.toolbar.section.priceAction', 'Price Action'), types: PRICE_ACTION_TYPES },
         ],
     },
     {
@@ -187,7 +193,7 @@ function resolveSection(source: SectionSource, byGroup: Map<string, ToolSource[]
     return source.types.map((type) => toolMap.get(type)).filter((t): t is ToolSource => t != null);
 }
 
-/** Build the canonical seven-group toolbar, optionally restricted to a type subset. */
+/** Build the canonical toolbar group layout, optionally restricted to a type subset. */
 function assembleToolbar(allowed?: ReadonlySet<DrawingTypeKey>): ToolbarSource {
     const byGroup = toolsByRegistryGroup(allowed);
     const toolMap = new Map<DrawingTypeKey, ToolSource>();
@@ -216,7 +222,7 @@ function assembleToolbar(allowed?: ReadonlySet<DrawingTypeKey>): ToolbarSource {
     return { groups };
 }
 
-/** Group a flat list of type keys into the canonical seven-group layout (drops unregistered types). */
+/** Group a flat list of type keys into the canonical toolbar group layout (drops unregistered types). */
 function groupTools(tools: readonly DrawingTypeKey[]): ToolbarSource {
     const allowed = new Set<DrawingTypeKey>();
     for (const type of tools) {
@@ -257,7 +263,7 @@ export function resolveToolbar(source: ToolbarSource, i18n?: Translator | null):
     };
 }
 
-/** The default toolbar — every registered type, grouped into the canonical seven-button
+/** The default toolbar — every registered type, grouped into the canonical toolbar
  *  layout, labelled in `i18n`'s language (English without one). */
 export function defaultToolbar(i18n?: Translator | null): ToolbarDefinition {
     return resolveToolbar(assembleToolbar(), i18n);
