@@ -25,4 +25,50 @@
     "realtime:gateway": "tsx realtime-gateway/server.ts",
     "latency:contracts": "node src/realtimeArchitectureContract.test.mjs",
     "bundle:budget": "node tools/check-bundle-budget.mjs",
-    "bundle:report": "TCO_MAX_INITIAL_GZIP_KB=100000 TCO_MAX_LANDING_GZIP_KB=100000 TCO_MAX_LOGIN_GZIP_KB=100000 TCO_MAX_WORKSPACE_GZIP_KB=100000 TCO_MAX_CHART_GZIP_KB=100000 TCO_¶»§q«^
+    "bundle:report": "TCO_MAX_INITIAL_GZIP_KB=100000 TCO_MAX_LANDING_GZIP_KB=100000 TCO_MAX_LOGIN_GZIP_KB=100000 TCO_MAX_WORKSPACE_GZIP_KB=100000 TCO_MAX_CHART_GZIP_KB=100000 TCO_MAX_LIVE_GZIP_KB=100000 TCO_MAX_CORESPIRIT_EDITOR_GZIP_KB=100000 TCO_MAX_MODELS_GZIP_KB=100000 TCO_MAX_PREDICTIONS_GZIP_KB=100000 TCO_MAX_AUTOMATIONS_GZIP_KB=100000 TCO_MAX_INDICATORS_GZIP_KB=100000 node tools/check-bundle-budget.mjs",
+    "verify:browser:auth": "node tools/verify-authenticated-chart-performance.mjs",
+    "verify:browser:matrix": "node tools/verify-chart-matrix.mjs",
+    "verify:corespirit:smc:browser": "node tools/verify-core-spirit-smc-browser.mjs",
+    "verify:critical-contracts": "node --check tools/verify-core-spirit-smc-browser.mjs && node src/appStartupReadinessContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/investinyMappingContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/fyersQuotaIdentityContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/fyersCapabilitiesContract.test.mjs && node src/vela101FoundationContract.test.mjs && node src/vela101ConformanceContract.test.mjs && node src/yahooDelayedFallbackContract.test.mjs && node src/sharedBrokerCoordinationContract.test.mjs && node src/corespiritDockContract.test.mjs && node src/velaCustomWorkspaceFrameContract.test.mjs && node src/chartPredictionArtifactOnlyContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/pythonMlModelAdapterContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs &&  node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/sharedMarketBufferContract.test.mjs && node src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/luxAlgoSmcDeterministicAcceptance.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/sessionCalendarContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/retainedZoneIdentityContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/multiBackendKernelExecutorContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/artifactIdentityParityContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/velaOutputAdapterContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/core/chart/coreSpiritVisualAbiContract.test.mjs && node --loader ./tools/nodeTsTranspileLoader.mjs src/services/coreSpirit/numericalKernelsContract.test.mjs && TCO_BENCH_BAR_COUNTS=257 TCO_BENCH_ITERATIONS=3 TCO_BENCH_MIN_WASM_WORK_UNITS=1 node --loader ./tools/nodeTsTranspileLoader.mjs tools/benchmark-core-spirit-backends.mjs",
+    "prebuild": "npm run typecheck && npm run verify:critical-contracts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "@supabase/supabase-js": "^2.112.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3",
+    "ws": "^8.21.3",
+    "@zag-js/core": "^1.42.0",
+    "@zag-js/dialog": "^1.42.0",
+    "@zag-js/dom-query": "^1.42.0",
+    "@zag-js/menu": "^1.42.0",
+    "@zag-js/tooltip": "^1.42.0",
+    "@zag-js/types": "^1.42.0",
+    "@zag-js/vanilla": "^1.42.0",
+    "@vercel/queue": "^0.7.0",
+    "@luxalgo/vela-ui": "^0.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "esbuild": "^0.25.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

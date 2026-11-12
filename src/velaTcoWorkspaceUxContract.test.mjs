@@ -19,4 +19,136 @@ const drawingPriceAction = read('vendor/vela/src/core/drawings/priceAction.ts');
 const drawingController = read('vendor/vela/src/core/drawings/DrawingController.ts');
 const drawingRegistry = read('vendor/vela/src/core/drawings/registry.ts');
 const workspaceState = read('vendor/vela/src/state/document.ts');
-const upstream = read('vendor/ve¶»§q«^
+const upstream = read('vendor/vela/UPSTREAM.md');
+const topbar = read('vendor/vela/src/widget/topbar.ts');
+const wheel = read('vendor/vela/src/widget/alt-wheel.ts');
+const provider = read('src/TcoVelaDataProvider.ts');
+const plane = read('src/services/marketData/chartDataPlane.ts');
+const theme = read('src/theme/theme.ts');
+const picker = read('vendor/vela/src/widget/symbol-picker.ts');
+const chartCell = read('vendor/vela/src/workspace/ChartCell.ts');
+
+assert.match(live, /dismissedChartStatusKey/, 'chart status banners must have a dismiss state');
+assert.match(live, /Dismiss chart status notification/, 'chart status banner must expose an accessible close control');
+assert.ok(live.includes('if (host.current) applySavedTcoVelaAppearance(host.current);'), 'saved live-terminal theme settings must be restored at chart startup');
+
+assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
+assert(/const initialLayout = .*defaults\.layout/.test(live));
+assert(live.includes("layout: initialLayout"));
+assert(!live.includes('tco-live-shell'), 'restore the original TradingCoreOS live page shell instead of wrapping it with a new app header');
+assert(!live.includes('TradingCoreOS navigation'), 'the live page should retain the previous layout without the added navigation rail');
+assert(!live.includes('Workspace options'), 'the live page should not add the new workspace menu to the original UI');
+assert(topology.includes("'tco.chart-settings'"), 'native Vela chart settings must be reachable from the live topbar');
+assert(chrome.includes("renderer.openSettings();"), 'the chart-settings action must open Velaâ€™s native settings dialog');
+assert(settingsDialog.includes('vela-sd-desktop-shell'), 'desktop chart settings should use the wide Vela settings layout');
+assert(settingsDialog.includes('vela-sd-preview-heading') && settingsDialog.includes('Appearance preview'), 'chart settings should include the reference appearance preview');
+assert(settingsDialog.includes("doneBtn.textContent = 'Done'") && settingsDialog.includes('Changes apply instantly'), 'chart settings should provide the native-style footer actions');
+assert(settingsDialog.includes('this.emit({ candles: { upColor: v } })') && settingsDialog.includes('this.emit({ timeScale: { timezone: v } })'), 'the visual redesign must preserve functional Vela setting handlers');
+assert(settingsDialog.includes('vela-sd-symbol-grid') && settingsDialog.includes('vela-sd-card-animation'), 'Symbol settings should use the two-column card layout');
+assert(chrome.includes("label:'Research', icon:'search', iconOnly:false"), 'restore the original TradingCoreOS toolbar labels');
+assert(chrome.includes("label:'Automation', icon:'replay', iconOnly:false"), 'restore the original Automation toolbar action');
+assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist remains registered as a dockable panel');
+assert(topology.includes('sidebar:{') && topology.includes("'tco.bookmarks'") && topology.includes("'tco.corespirit-code'") && topology.includes("'tco.panels'"), 'Watchlist, CoreSpirit and application panels use the grouped Vela native right sidebar');
+assert(chrome.includes("id: 'tco.bookmarks', title: 'Watchlist'"), 'Watchlist remains accessible as a Vela dock panel');
+assert(chrome.includes("id: 'tco.corespirit-code'") && chrome.includes("icon: 'corespirit'"), 'CoreSpirit Studio remains accessible in the native sidebar with its dedicated icon');
+assert(live.includes('className="tco-live-surface fixed inset-0') && live.includes('className="absolute inset-x-0 bottom-0 top-9"'), 'the Vela chart host must fill the live surface below the fixed application header without a duplicate rail');
+assert(!chrome.includes('registerWidgetAttachment(healthAttachment)'), 'do not reserve chart height with the custom bottom health strip');
+assert(topology.includes('animations:{ zoom:true, pan:true, liveBar:false }'), 'Vela zoom and pan animations should follow the supplied reference UI');
+const topbarCompositionStart = topology.indexOf('export const TCO_VELA_TOPBAR_COMPOSITION');
+const topbarCompositionEnd = topology.indexOf('export const TCO_VELA_TERMINAL_TOPOLOGY');
+assert(topbarCompositionStart >= 0 && topbarCompositionEnd > topbarCompositionStart,
+  'the live topbar composition must have one explicit source of truth');
+const topbarComposition = topology.slice(topbarCompositionStart, topbarCompositionEnd);
+assert(topology.includes('topbar: TCO_VELA_TOPBAR_COMPOSITION'),
+  'the runtime workspace and its topology must consume the same topbar composition');
+assert(!topbarComposition.includes("'tco.watchlist'"), 'Watchlist must not occupy a topbar slot');
+assert(!topbarComposition.includes("'tco.corespirit-code'"), 'CoreSpirit must not occupy a topbar slot');
+assert(topbarComposition.includes("'tco.chart-settings'"), 'the native chart-settings command must be pinned into the live topbar');
+assert(chrome.includes("registerSidePanel(journalPanel)"), "journal should remain registered as a dockable panel");
+assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
+assert(!topology.includes("'tco.brand'"));
+assert(!live.includes("'quant'"));
+assert(!chrome.includes("TradingCoreOS Ã— Vela"), 'remove the redundant TradingCoreOS Ã— Vela topbar label');
+assert(topology.includes("shell:'VelaWorkspace'"));
+assert(topology.includes("'tco.research'"));
+assert(topology.includes("'tco.automation'"));
+assert(topology.includes("'tco.trading'"));
+assert(topology.includes('bottombar:false'), 'live Vela terminal must use the topbar-only command surface');
+assert(chrome.includes("id: 'tco.chart-settings'") || chrome.includes("id: 'tco.chart-settings'"), 'native Vela chart settings must be available from the topbar');
+assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchlist'"));
+assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
+assert(chrome.includes('const panelsHubPanel: SidePanelDescriptor') && chrome.includes('registerSidePanel(panelsHubPanel)'), 'the Panels hub must remain a native dock panel');
+assert(!/const \w+Action: WidgetActionDescriptor = \{\s*id: 'tco\.panels'/.test(chrome), 'remove only the redundant Panels topbar shortcut, not the sidebar hub');
+assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
+assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
+assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
+assert(chartCell.includes('chart.addNativeIndicatorAsync(type)'), 'picker-selected lazy Vela indicators must use the async native API');
+assert(topbar.includes("b.dataset.actionId = action.id"));
+assert(topbar.includes('return pinSlot(id, left)'), 'Vela must render allowlisted contributed actions in their pinned topbar slots');
+assert(wheel.includes("#7c5cff"));
+assert(theme.includes("accent: '#d3ebf4'"));
+assert.equal((provider.match(/export class TcoVelaDataProvider implements DataProvider/g) ?? []).length, 1,
+  "the Vela data provider must have one canonical implementation");
+assert.equal((provider.match(/const syncBroker = \(\) => \{/g) ?? []).length, 2,
+  "both live-subscription forms must re-resolve broker state when the session changes");
+assert.equal((provider.match(/const sessionCheckTimer = globalThis\.setInterval\(syncBroker, BROKER_SESSION_CHECK_MS\)/g) ?? []).length, 2,
+  "both subscriptions must recover if broker restoration completes without a lifecycle event");
+assert(!provider.includes("if (!brokerId) return () => {};"),
+  "a cold-start subscription must not become a permanent no-op before broker restore");
+assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_CONNECTED', syncBroker\)/g) ?? []).length, 2,
+  "row and columnar subscriptions must recover when a broker is connected after chart mount");
+assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_DISCONNECTED', syncBroker\)/g) ?? []).length, 2,
+  "row and columnar subscriptions must detach stale broker streams after disconnect");
+
+assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
+assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
+assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
+assert(!/await Promise\.all\(\[brokerReady,\s*defaultsPromise\]\)/.test(live),
+  "Vela workspace mount must not block first paint on broker session restoration");
+assert(live.includes("void brokerReady.then(() => {"),
+  "common-symbol history warm-up should begin after the workspace is already mounted");
+assert.equal((provider.match(/globalThis\.clearInterval\(sessionCheckTimer\)/g) ?? []).length, 2,
+  "both subscription timers must be released when their chart cells are disposed");
+
+assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
+
+assert(plane.includes("columns.time.length === 0"));
+
+
+// Vela 0.10.5 provenance and API surface must stay aligned with the official rebase.
+assert(upstream.includes('**0.10.5**') && upstream.includes('34d11f1a8a88c7dd5657c9b3a791abf43560218d'),
+  'the vendored Vela provenance must identify the current official 0.10.5 source');
+// Keep the Vela 0.10.5 drawing experience: live-edit/cancel panel, reusable styles, and timeframe filtering.
+assert(drawingSettingsPanel.includes('export class DrawingSettingsPanel'), 'Vela 0.10.5 drawing settings panel must be present');
+assert(drawingSettingsPanel.includes('this.showOnFold(b)') && drawingSettingsPanel.includes('saveTemplate?.(name)'),
+  'drawing settings must retain timeframe visibility and saved-style actions');
+assert(drawingSettingsPanel.includes("actions.preview?.(null)"), 'drawing style preview must be clearable on cancel/close');
+assert(drawingDefaults.includes('captureToolDefaults') && drawingDefaults.includes('sanitizeToolTemplates') && drawingDefaults.includes('builtinToolTemplates'),
+  'drawing defaults and style templates must use Vela 0.10.5 defaults contracts');
+assert(drawingController.includes('setToolDefaults') && drawingController.includes('setToolTemplates'),
+  'the drawing controller must expose tool-default and template persistence');
+assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('drawingTools') && workspaceState.includes('defaults') && workspaceState.includes('templates'),
+  'drawing defaults/templates must be represented in workspace-persisted state');
+assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('blockState') && drawingPriceAction.includes('liquidityState'),
+  'Vela 0.10.5 price-action analysis must include FVG, order-block and liquidity state');
+assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
+  'the drawing registry must expose all native price-action tools');
+// The unified drawing gear must launch the native panel, not the old split controls.
+assert(drawingSettingsPopup.includes('this.iconBtn(this.t(TEXT.settings), GEAR_ICON, () => this.openPanel())'),
+  'the localized drawing toolbar settings gear must open the unified native Vela settings panel');
+assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPopup.includes("iconBtn('Position size'"),
+  'the retired split Levels/Position size buttons must not return');
+// Offline bars must remain immutable until a real provider supplies a bar update.
+assert(!multiProviderFeed.includes('Math.random()') && !multiProviderFeed.includes('intervalMs(timeframe)'),
+  'Vela offline history must not be mutated by synthetic ticks');
+// Vela 0.10.5 candle-color patches must pass through TCO's custom incremental scene pipeline.
+assert(corePatch.includes('barColors?: Array<CandleBarColor | null>'),
+  'series value patches must carry per-bar candle colors together with the changed bars');
+assert(scenePatch.includes('series.barColors = applyArrayDelta'),
+  'scene patch application must update candle colors using the same range/append operation as bars');
+assert(velaEngineOrchestrator.includes('barColors: series.barColors ?? []') &&
+  velaEngineOrchestrator.includes('current.barColors.slice(incomingStart, incomingEnd)'),
+  'TCO full, ranged and incremental series patches must preserve correctly aligned Vela candle colors');
+assert(velaCanvasBackend.includes('s.barColors?.[i - off]') && velaWebGLBackend.includes('s.barColors?.[i - off]'),
+  'both native renderers must consume per-bar plotcandle/plotbar colors');
+console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');

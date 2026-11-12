@@ -3,11 +3,11 @@
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
     "base": {
-      "version": "0.10.5",
-      "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
+      "version": "0.10.2",
+      "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
     },
-    "tag": "v0.10.6",
-    "commit": "f6769868c5c0e78ba7977a5c89640df896a8f2f3"
+    "tag": "main",
+    "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
   },
   "patches": [
     {
@@ -36,4 +36,94 @@
         "src/velaIncrementalPatchContract.test.mjs",
         "src/velaRevisionedScenePatchContract.test.mjs",
         "tools/velaColumnarLiveRendererContract.mjs",
-        "¶»§q«^
+        "src/services/coreSpirit/velaOutputAdapterContract.test.ts"
+      ]
+    },
+    {
+      "id": "engine-and-indicator-lifecycle",
+      "pathPatterns": [
+        "src/Vela.ts",
+        "src/core/engine/**",
+        "src/core/IndicatorHandle.ts",
+        "src/core/native-indicators/**",
+        "src/core/script-run.ts"
+      ],
+      "purpose": "Keep TCO's live indicator lifecycle, bounded/lazy native catalog, typed script engine boundary and incremental execution compatibility.",
+      "tests": [
+        "src/velaNativeIndicatorLazyContract.test.mjs",
+        "src/velaLiveUiCoreSpiritContract.test.mjs",
+        "src/coreSpiritVelaCapabilityContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs"
+      ]
+    },
+    {
+      "id": "drawing-registries-and-state",
+      "pathPatterns": [
+        "src/core/drawings/**"
+      ],
+      "purpose": "Retain the TradingCoreOS drawing families and local custom registry extensions while keeping serialized drawings compatible with upstream renderer and workspace state.",
+      "tests": [
+        "src/velaDrawingCapabilityInventoryContract.test.mjs",
+        "src/velaAdvancedDrawingFamilyLazyContract.test.mjs",
+        "src/velaDrawingPersistenceRoundTripContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs"
+      ]
+    },
+    {
+      "id": "native-renderer-and-chart-chrome",
+      "pathPatterns": [
+        "src/renderers/native/**",
+        "src/renderers/shared/**",
+        "src/core/icons.ts",
+        "src/core/theme.ts",
+        "src/core/color.ts",
+        "src/core/palette.ts",
+        "src/core/tokens.ts",
+        "src/ui/**"
+      ],
+      "purpose": "Preserve native chart rendering, pane-aware interaction and TCO visual/chrome integration, including local attribution-compatible branding, price-axis behavior and custom rendering layers.",
+      "tests": [
+        "src/vela085ConformanceContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs",
+        "src/velaLiveUiCoreSpiritContract.test.mjs",
+        "src/velaTcoWorkspaceUxContract.test.mjs",
+        "src/velaIncrementalPatchContract.test.mjs"
+      ]
+    },
+    {
+      "id": "provider-and-sdk-compatibility",
+      "pathPatterns": [
+        "src/core/options.ts",
+        "src/core/ports/**",
+        "src/core/DataControl.ts",
+        "src/core/RendererControl.ts",
+        "src/data/**",
+        "src/plugin.ts",
+        "src/index.ts",
+        "src/browser.ts"
+      ],
+      "purpose": "Retain typed market-provider ports, chart API compatibility and the shared columnar provider pipeline used by the TradingCoreOS FYERS data plane.",
+      "tests": [
+        "src/velaLiveUiCoreSpiritContract.test.mjs",
+        "tools/chartCandleDataPlaneFastSwitchContract.mjs",
+        "tools/velaCandleTimeNormalizationContract.mjs",
+        "src/vela101FoundationContract.test.mjs"
+      ]
+    },
+    {
+      "id": "widget-workspace-and-local-catalog",
+      "pathPatterns": [
+        "src/widget/**",
+        "src/workspace/**",
+        "src/state/**"
+      ],
+      "purpose": "Keep the TradingCoreOS workspace shell, local picker/search behavior, pane/context-menu integration and state serialization extensions compatible with the pinned Vela baseline.",
+      "tests": [
+        "src/velaWorkspaceAutosaveContract.test.mjs",
+        "src/velaPaneLayoutPersistence.test.ts",
+        "src/velaLiveUiCoreSpiritContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs"
+      ]
+    }
+  ]
+}
