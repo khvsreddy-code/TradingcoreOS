@@ -5,7 +5,7 @@
 - Upstream release tag: `v0.10.6`
 - Upstream source commit: `f6769868c5c0e78ba7977a5c89640df896a8f2f3`
 - Direct source upgrade base: Vela **0.10.5** at `34d11f1a8a88c7dd5657c9b3a791abf43560218d`.
-- Historical TCO overlay fork point: Vela **0.10.2** at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`.
+- Previous source base: Vela 0.10.2 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed` (the historical TCO overlay fork point).
 - The reproducible release-inventory comparison retains the previous 0.10.2 baseline commit `305521811eabc35c3797e5b6ab58adb25e70c1c7`.
 - Vela 0.10.6 source is vendored in `vendor/vela/src`; TradingCoreOS compiles it directly.
 - The extracted UI kit is supplied by `@luxalgo/vela-ui` **0.4.1**, which remains the version required by Vela 0.10.6.
