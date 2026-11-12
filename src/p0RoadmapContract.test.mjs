@@ -84,8 +84,8 @@ assert.match(ticket,/NODE_ENV === 'production'/);
 assert.match(ticket,/REALTIME_GATEWAY_UNAVAILABLE/);
 assert.match(marketClient,/import\.meta\.env\.DEV/);
 assert.match(marketClient,/VITE_REALTIME_LEGACY_FALLBACK/);
-assert.equal(vercel.services?.realtimegatewayv2?.runtime,'container');
-assert.equal(vercel.services?.realtimegatewayv2?.entrypoint,'Dockerfile');
+assert.equal(vercel.services?.realtimegatewayfresh?.runtime,'container');
+assert.equal(vercel.services?.realtimegatewayfresh?.entrypoint,'Dockerfile');
 assert.match(read('Dockerfile'),/realtime:gateway/);
 
 assert.doesNotMatch(authClient,/DEFAULT_URL|DEFAULT_PUBLISHABLE_KEY/);
