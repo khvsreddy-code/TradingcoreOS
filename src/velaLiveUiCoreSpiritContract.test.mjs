@@ -23,8 +23,8 @@ const coreSpiritDock = read('./components/corespirit/CoreSpiritDock.tsx');
 const chartController = read('./services/core/chart/controllers/ChartCoreSpiritController.ts');
 const chartRuntime = read('./services/core/chart/ChartRuntimeController.ts');
 
-assert.match(velaProvenance, /Upstream source version: \*\*0\.10\.5\*\*/, 'live chart integration must match the verified Vela 0.10.5 source baseline');
-assert.match(velaReleaseNotes, /^## \[0\.10\.2\]/m, 'the current chart integration must be backed by the vendored Vela 0.10.5 release notes');
+assert.match(velaProvenance, /Upstream source version: \*\*0\.10\.6\*\*/, 'live chart integration must match the verified Vela 0.10.6 source baseline');
+assert.match(velaReleaseNotes, /^## \[0\.10\.2\]/m, 'the current chart integration must be backed by the vendored Vela 0.10.6 release notes');
 assert.match(velaReleaseNotes, /waitsForHistory: true/, 'release notes should cover the history-gated native indicator lifecycle');
 assert.match(terminal, /background:'#050505'/, 'live chart should use the reference-derived near-black Vela graphite canvas');
 assert.match(terminal, /gridColor:'#202226'/, 'live chart should use the restrained Vela graphite grid');

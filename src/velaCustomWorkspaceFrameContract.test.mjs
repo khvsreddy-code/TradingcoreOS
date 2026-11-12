@@ -18,8 +18,8 @@ const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts'
 const rendererPort = read('vendor/vela/src/core/ports/IChartRenderer.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
-assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.5\*\*/i, 'TCO must continue to use the exact official Vela 0.10.5 foundation pinned by the vendor manifest');
-assert.match(upstream, /Previous source base: Vela 0\.10\.2/, 'the Vela 0.10.5 integration must retain its documented 0.10.2 three-way merge base');
+assert.match(upstream, /Upstream source version:\s*\*\*0\.10\.6\*\*/i, 'TCO must continue to use the exact official Vela 0.10.6 foundation pinned by the vendor manifest');
+assert.match(upstream, /Previous source base: Vela 0\.10\.2/, 'the Vela 0.10.6 integration must retain its documented 0.10.2 three-way merge base');
 const topbarCompositionStart = terminal.indexOf('export const TCO_VELA_TOPBAR_COMPOSITION');
 const topbarTopologyStart = terminal.indexOf('export const TCO_VELA_TERMINAL_TOPOLOGY');
 assert.ok(topbarCompositionStart >= 0 && topbarTopologyStart > topbarCompositionStart,
