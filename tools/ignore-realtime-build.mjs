@@ -115,7 +115,7 @@ function realtimeServiceConfigChanged(previousSha, currentSha) {
     const raw = execFileSync('git', ['show', `${sha}:vercel.json`], { encoding: 'utf8' });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') throw new Error('vercel.json is not an object');
-    const service = parsed.services?.['realtimegateway'];
+    const service = parsed.services?.['realtimegatewaynew'];
     if (!service) return null;
     // ignoreCommand only controls whether a new build is needed. Treating that
     // policy change as an image-runtime change creates a loop: if a deployment
@@ -179,7 +179,7 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   // Some Vercel multi-service builds do not expose VERCEL_GIT_PREVIOUS_SHA to a
   // service-level ignore command. For that case, compare the deployed commit with
   // its first parent. This still rebuilds for a runtime change in this commit (or
-  // a realtimegateway service-config change), while frontend-only commits can reuse
+  // a realtimegatewaynew service-config change), while frontend-only commits can reuse
   // the last successful gateway image instead of consuming another registry slot.
   // If the parent cannot be proved locally, fail open and rebuild.
   if (!previousSha) {
@@ -240,7 +240,7 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     }
 
     if (changed.includes('vercel.json') && realtimeServiceConfigChanged(previousSha, currentSha)) {
-      relevant.push('vercel.json (realtimegateway service configuration)');
+      relevant.push('vercel.json (realtimegatewaynew service configuration)');
     }
 
     if (relevant.length) {
