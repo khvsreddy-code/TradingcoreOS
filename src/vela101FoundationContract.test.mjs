@@ -31,9 +31,9 @@ const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseDiff = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
-assert.match(provenance, /Upstream source version: \*\*0\.10\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
+assert.match(provenance, /Upstream source version: \*\*0\.10\.6\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
 assert.match(provenance, /Previous source base: Vela 0\.10\.2/, 'record the 0.10.2 common ancestor of the upstream release');
-assert.match(releaseNotes, /^## \[0\.10\.5\]/m, 'vendored changelog must start with Vela 0.10.6');
+assert.match(releaseNotes, /^## \[0\.10\.6\]/m, 'vendored changelog must start with Vela 0.10.6');
 assert.match(releaseNotes, /^## \[0\.10\.2\]/m, 'vendored changelog must retain the 0.9.0 historical release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
