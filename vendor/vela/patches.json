@@ -6,8 +6,8 @@
       "version": "0.10.2",
       "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
     },
-    "tag": "main",
-    "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
+    "tag": "v0.10.6",
+    "commit": "f6769868c5c0e78ba7977a5c89640df896a8f2f3"
   },
   "patches": [
     {

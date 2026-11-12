@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const json = (path) => JSON.parse(read(path));
+
+const provenance = read('../vendor/vela/UPSTREAM.md');
+const changelog = read('../vendor/vela/CHANGELOG.md');
+const options = read('../vendor/vela/src/core/options.ts');
+const input = read('../vendor/vela/src/renderers/native/core/InputController.ts');
+const renderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
+const chartConfig = read('../vendor/vela/src/renderers/native/core/chartConfig.ts');
+const box = read('../vendor/vela/src/core/drawings/types/Box.ts');
+const drawingSchema = read('../vendor/vela/src/core/drawings/schema.ts');
+const drawingPainter = read('../vendor/vela/src/renderers/native/drawings/DrawingPainter.ts');
+const workspace = read('../vendor/vela/src/workspace/VelaWorkspace.ts');
+const sync = read('../vendor/vela/src/workspace/sync.ts');
+const inputs = read('../vendor/vela/src/renderers/shared/IndicatorInputsDialog.ts');
+const packageJson = json('../package.json');
+
+assert.match(provenance, /Upstream source version: \*\*0\.10\.6\*\*/);
+assert.match(provenance, /v0\.10\.6/);
+assert.match(changelog, /^## \[0\.10\.6\]/m);
+assert.match(options, /export interface FreePanEvent/);
+assert.match(options, /export type FreePanTrigger = boolean \| 'drag' \| 'alt' \| 'shift' \| 'mod'/);
+assert.match(options, /freePan\?: FreePanTrigger/);
+assert.match(input, /export function matchesFreePan/);
+assert.match(input, /this\.freePending = !this\.verticalPan && freeMatch/);
+assert.match(input, /this\.deps\.beginPricePan\(this\.startY, true\)/);
+assert.match(input, /if \(e\.button === 0 && this\.drawings && this\.deps\.drawingsClaim/);
+assert.match(input, /if \(e\.button === 1 && !freeMatch\)/);
+assert.match(input, /this\.middleDeleted = true/);
+assert.match(renderer, /readonly features:[\s\S]*?'freePan'/);
+assert.match(renderer, /private applyFreePan\(value: unknown\)/);
+assert.match(renderer, /private beginPricePan\(y: number, unlock = false\)/);
+assert.match(renderer, /freePan: this\.freePanOn/);
+assert.match(chartConfig, /freePan: isBool\(ps\.freePan\)/);
+assert.match(box, /midline: boolean/);
+assert.match(box, /midColor\?: string/);
+assert.match(box, /midStyle: LineStyle/);
+assert.match(box, /return \{ midline: false, midStyle: 'dashed' \}/);
+assert.match(box, /midline\(proj: Projector\)/);
+assert.match(box, /midline: typeof p\.midline === 'boolean'/);
+assert.match(drawingSchema, /midline/);
+assert.match(drawingPainter, /d instanceof Box \? d\.midline\(proj\) : null/);
+assert.match(drawingPainter, /midlineSegments\(/);
+assert.match(workspace, /private relinkIdenticalDrawings\(\): void/);
+assert.match(workspace, /this\.relinkIdenticalDrawings\(\)/);
+assert.match(sync, /export function pairIdenticalDrawings/);
+assert.match(inputs, /function isFitControl\(type: InputSchema\['type'\]\)/);
+assert.match(inputs, /type === 'color' \|\| type === 'bool' \|\| type === 'session' \|\| type === 'time'/);
+assert.equal(packageJson.dependencies['@luxalgo/vela-ui'], '^0.4.1',
+  'Vela 0.10.6 still targets UI kit 0.4.1; do not introduce an unrelated kit upgrade');
+console.log('VELA_106_RELEASE_CONTRACT_OK');

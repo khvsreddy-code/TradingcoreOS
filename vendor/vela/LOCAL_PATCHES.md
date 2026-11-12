@@ -1,7 +1,7 @@
-# TradingCoreOS overlay on Vela 0.10.5
+# TradingCoreOS overlay on Vela 0.10.6
 
-The vendored upstream source snapshot is Vela 0.10.5 at upstream `main` commit
-`34d11f1a8a88c7dd5657c9b3a791abf43560218d`. The overlay's historical three-way
+The vendored upstream source snapshot is Vela 0.10.6 at upstream release `v0.10.6` commit
+`f6769868c5c0e78ba7977a5c89640df896a8f2f3`. The overlay's historical three-way
 common ancestor is Vela 0.10.2 at `aecb13847dff3c1a50a2f3433e9804d26fc581ed`;
 the 0.10.2 base commit is retained only to reproduce the historical overlay diff.
 Do not identify a TCO-local edit as an upstream change just because it lives under `vendor/vela/src`.

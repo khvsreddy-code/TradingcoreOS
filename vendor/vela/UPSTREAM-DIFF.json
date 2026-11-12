@@ -3,8 +3,8 @@
   "generatedBy": "tools/vela-overlay-manifest.mjs",
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
-    "tag": "main",
-    "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
+    "tag": "v0.10.6",
+    "commit": "f6769868c5c0e78ba7977a5c89640df896a8f2f3"
   },
   "comparison": "Git blob SHA-1; only src/ is compared so local provenance/docs remain separate",
   "counts": {
@@ -96,7 +96,7 @@
     },
     {
       "path": "src/core/drawings/schema.ts",
-      "blob": "2dd5cbdd2d679d68a353d5a3a5e23c732bb16612"
+      "blob": "3835a4d2849f467629a02c246d36d5f328301009"
     },
     {
       "path": "src/core/drawings/series.ts",
@@ -132,7 +132,7 @@
     },
     {
       "path": "src/core/drawings/types/Box.ts",
-      "blob": "b87a7e954d2dd7f68046078e025b05105c3deb2f"
+      "blob": "58b036d33bcc091f469c4f46af8bdf8539f80099"
     },
     {
       "path": "src/core/drawings/types/Butterfly.ts",
@@ -772,7 +772,7 @@
     },
     {
       "path": "src/locales/ar.json",
-      "blob": "5623c2c278107243bc8e5b6f68da63a73cce8645"
+      "blob": "ed9da433972d522c291f52ddc246bac52c65e848"
     },
     {
       "path": "src/locales/ar.ts",
@@ -780,11 +780,11 @@
     },
     {
       "path": "src/locales/catalog.d.ts",
-      "blob": "2704bbbd8c79f48c5229bf07b0cccc5aa8ff5128"
+      "blob": "8c6469a177681258f135f3c9abef8062794db6c4"
     },
     {
       "path": "src/locales/de.json",
-      "blob": "f06ccf7a1133b6c7518634ecda8fc4bfc65f5d37"
+      "blob": "c4b673cc73b43499dc65347377939b3102354376"
     },
     {
       "path": "src/locales/de.ts",
@@ -792,7 +792,7 @@
     },
     {
       "path": "src/locales/en.json",
-      "blob": "e5808a49ebb1fa34f32d297d2452e8dcc972ab60"
+      "blob": "9d500b80653126b16f0a6875c6ed4751a12e6583"
     },
     {
       "path": "src/locales/en.ts",
@@ -800,7 +800,7 @@
     },
     {
       "path": "src/locales/es.json",
-      "blob": "53ac42956b9fa91b7e25411295d35632c163babc"
+      "blob": "97ee1b906c59eea05fc78cba731a4bbccb76c534"
     },
     {
       "path": "src/locales/es.ts",
@@ -808,7 +808,7 @@
     },
     {
       "path": "src/locales/fr.json",
-      "blob": "914f27139a1b2e7f5ce5458d130e647479961a1e"
+      "blob": "27fa1f2474c11748de59e6d8851ed6e6c526a9c4"
     },
     {
       "path": "src/locales/fr.ts",
@@ -816,7 +816,7 @@
     },
     {
       "path": "src/locales/he.json",
-      "blob": "c7721104afa3b73e949e057574a5db642454a8b0"
+      "blob": "5144a26aefd3c21769a5ac8ff1c85a2cf4bbd9ef"
     },
     {
       "path": "src/locales/he.ts",
@@ -824,7 +824,7 @@
     },
     {
       "path": "src/locales/hi.json",
-      "blob": "173586b1e459891eece5da6f82271ec20c5cd504"
+      "blob": "0a3f01dfbea37c6319607c08ae856fabd999a2e8"
     },
     {
       "path": "src/locales/hi.ts",
@@ -832,7 +832,7 @@
     },
     {
       "path": "src/locales/id.json",
-      "blob": "adbe187ccc85d61892f859a143fc448089749e46"
+      "blob": "ce86cebfcbb4b0e8f32e271c902f4814fb545b0d"
     },
     {
       "path": "src/locales/id.ts",
@@ -840,7 +840,7 @@
     },
     {
       "path": "src/locales/it.json",
-      "blob": "5a0b1b75cc5a2975ad7af7a5457c6f593964d017"
+      "blob": "964729b6160dc4f668a9889b5e0469f2c9512f6f"
     },
     {
       "path": "src/locales/it.ts",
@@ -848,7 +848,7 @@
     },
     {
       "path": "src/locales/ja.json",
-      "blob": "93702128c782460c3e57c887cf45e40d46ef9bed"
+      "blob": "8ac786d2e1d5bd7dfd83555a7cc11857e0c7b4e4"
     },
     {
       "path": "src/locales/ja.ts",
@@ -856,7 +856,7 @@
     },
     {
       "path": "src/locales/ko.json",
-      "blob": "ea6176d30e643689387d63e17a527bb5abf20d5b"
+      "blob": "b51258777068adbe0f8c385ee05690fafc1b6468"
     },
     {
       "path": "src/locales/ko.ts",
@@ -864,7 +864,7 @@
     },
     {
       "path": "src/locales/ms.json",
-      "blob": "772374c21698462ca8dfaeadaf803b6707adb735"
+      "blob": "c24aba5e8399ae9d53b0c4ea20af130b63a0c225"
     },
     {
       "path": "src/locales/ms.ts",
@@ -872,7 +872,7 @@
     },
     {
       "path": "src/locales/pl.json",
-      "blob": "5833d9877ba2071173cbf1879b3fb47df989e31b"
+      "blob": "827ee31c7db59fa856dcc6a025f1509df3608b63"
     },
     {
       "path": "src/locales/pl.ts",
@@ -880,7 +880,7 @@
     },
     {
       "path": "src/locales/pt-BR.json",
-      "blob": "3ea2dc346c7de667d198b5975203f4f01cef708a"
+      "blob": "4783a59d43f9eed3cb46521c448caa804c413e3c"
     },
     {
       "path": "src/locales/pt-BR.ts",
@@ -888,7 +888,7 @@
     },
     {
       "path": "src/locales/ru.json",
-      "blob": "f3d01935f90a0efc96bdf081c9cf76ee97977b75"
+      "blob": "0921330be668d4de9eb860e1b378ce66420ca178"
     },
     {
       "path": "src/locales/ru.ts",
@@ -896,7 +896,7 @@
     },
     {
       "path": "src/locales/th.json",
-      "blob": "f94a111824b9c0563984bc40acbf46cead961263"
+      "blob": "dccb7a3165ca1a5c6aa1bf557f8ecaef6914d67f"
     },
     {
       "path": "src/locales/th.ts",
@@ -904,7 +904,7 @@
     },
     {
       "path": "src/locales/tr.json",
-      "blob": "946e32c473260a8397eaeef2a4335893770a6bfe"
+      "blob": "eac0ddb50eb258be2c6f5bdc26e6ee9c46db2aeb"
     },
     {
       "path": "src/locales/tr.ts",
@@ -912,7 +912,7 @@
     },
     {
       "path": "src/locales/vi.json",
-      "blob": "2b157babcd3fa358ebce9b0ac8ca0bb3f7b29750"
+      "blob": "da61f3f1e28ce1a5fe6e076939517ade016862f3"
     },
     {
       "path": "src/locales/vi.ts",
@@ -920,7 +920,7 @@
     },
     {
       "path": "src/locales/zh-Hans.json",
-      "blob": "072d2b4728286f2a26e42ba043a52c092794e90e"
+      "blob": "3291c67c15ac5ff997d017130ba87cfa669c0a14"
     },
     {
       "path": "src/locales/zh-Hans.ts",
@@ -928,7 +928,7 @@
     },
     {
       "path": "src/locales/zh-Hant.json",
-      "blob": "2d72d839b94d297899c11986b4999304591fba21"
+      "blob": "689fc57a2c22077c9b959f547239a115f94d6139"
     },
     {
       "path": "src/locales/zh-Hant.ts",
@@ -1004,7 +1004,7 @@
     },
     {
       "path": "src/renderers/native/chrome/settings-visibility.ts",
-      "blob": "3a72e078de60b749002b70f733c6edc111163744"
+      "blob": "b3400629612d28840ecc164332c90cfd31da566b"
     },
     {
       "path": "src/renderers/native/chrome/tz.ts",
@@ -1060,7 +1060,7 @@
     },
     {
       "path": "src/renderers/native/drawings/DrawingPainter.ts",
-      "blob": "94d9e2687c729fb34f2f7d2f6a4d98520deef0b7"
+      "blob": "2dfd37f49ab95a727f07baf9b2c52c5598c34f7f"
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPopup.ts",
@@ -1120,7 +1120,7 @@
     },
     {
       "path": "src/renderers/shared/IndicatorInputsDialog.ts",
-      "blob": "c3c666de67e96aaf496eb19132daa2540b17c3c6"
+      "blob": "c34214d5dd727b6c4d2bc8c367e29109c5c14030"
     },
     {
       "path": "src/renderers/shared/InputsUI.ts",
@@ -1344,7 +1344,7 @@
     },
     {
       "path": "src/workspace/sync.ts",
-      "blob": "0ca8845ed6370ca14ab9b83441e82d42cf6257c8"
+      "blob": "76d71498ec8df1b62388de3ae5e58a81f233ac84"
     },
     {
       "path": "src/workspace/WorkspaceReplay.ts",
@@ -1361,7 +1361,7 @@
     {
       "path": "src/core/drawings/index.ts",
       "upstreamBlob": "99c367b43de52feb35e18bcf28fe0a3765f839b5",
-      "localBlob": "9dd7c051b18388cada643e0591124e94d7a85e1d",
+      "localBlob": "af31945c1812fe6253d0b924d865c91446abb0b0",
       "patchId": "drawing-registries-and-state"
     },
     {
@@ -1373,7 +1373,7 @@
     {
       "path": "src/core/drawings/toolbar.ts",
       "upstreamBlob": "4f94a478e9b3b299b12e5219a4b4d906a573c5fd",
-      "localBlob": "8b946e6913bf9eb3b380e9f4b0fcf06cb8d65a0f",
+      "localBlob": "80041031c8e76fa2a74d96a3832c522410023fca",
       "patchId": "drawing-registries-and-state"
     },
     {
@@ -1438,8 +1438,8 @@
     },
     {
       "path": "src/core/options.ts",
-      "upstreamBlob": "07b2b0ba12afbc6f49090413a1a88a2b77e5a159",
-      "localBlob": "936147bbded9b53e3325a77effd3d67e06a639c2",
+      "upstreamBlob": "7163a9b427cadbdb9a301f44159828131792864e",
+      "localBlob": "c876d46eb138902a796f62e4656d818433ad88b3",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1504,8 +1504,8 @@
     },
     {
       "path": "src/index.ts",
-      "upstreamBlob": "bb297a6998220fa63fa3811997d998f7a5600e19",
-      "localBlob": "de4c0d456bef34b302846036f2236acbd9456719",
+      "upstreamBlob": "4ce8c06eab46c1a390698b15411ba95b796560a8",
+      "localBlob": "9620a6fffbdb694d10377693ce28deea5d822dd0",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1546,8 +1546,8 @@
     },
     {
       "path": "src/renderers/native/chrome/SettingsDialog.ts",
-      "upstreamBlob": "dcf9a9631c1e9383dde1333ea2cb68d5a6eba320",
-      "localBlob": "ae48648215098379e2dec9d8ac01879b4b9532fd",
+      "upstreamBlob": "31dc238fb73c6d8bf6a3211910a669dfb584a981",
+      "localBlob": "3f6cd1f87bae3cd500daab6901728fe160d73306",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1570,8 +1570,8 @@
     },
     {
       "path": "src/renderers/native/core/chartConfig.ts",
-      "upstreamBlob": "a48579cd2db410f4d73b40abba6e0d2a79456728",
-      "localBlob": "da96cc200ff92f865d7bad35d64e92d91b91d394",
+      "upstreamBlob": "2267df9e03ca60da32470096cf5e4a0172333fd6",
+      "localBlob": "9ec1ca7b064c39770e6ee7f8e89545064852bf1a",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1582,8 +1582,8 @@
     },
     {
       "path": "src/renderers/native/core/InputController.ts",
-      "upstreamBlob": "df0c6b56620fb1d94e138e71ab9597448add29a2",
-      "localBlob": "06d7daa74f53af87888282ff4536e63c3c8c669b",
+      "upstreamBlob": "99e8676083af130523a5bb7a6cd992672ec03aea",
+      "localBlob": "4725b94b90cab7690fa625b04f2ad0ab3b39f4db",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1600,8 +1600,8 @@
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPanel.ts",
-      "upstreamBlob": "da1008dccf2df8c420d5e98e88f785bf9b5d367a",
-      "localBlob": "1ab9dd6de034d1252d96ad73ab746bd345d18ae5",
+      "upstreamBlob": "fcf920328100b43474b99039ca3b0597c8453732",
+      "localBlob": "b2413d983eb81067f8aac654458384746e9de43a",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1624,8 +1624,8 @@
     },
     {
       "path": "src/renderers/native/NativeRenderer.ts",
-      "upstreamBlob": "76775a570e3a452f8c0e982e815d33733577e498",
-      "localBlob": "51ba323c719c88fab8f6001ddd37b60e7bb3bbdf",
+      "upstreamBlob": "608909d012819bbd3c5c255f1db8bb1c5f6d6d7f",
+      "localBlob": "c643b904edfbcc2f8f54f28f6adfa889b83f2873",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1636,8 +1636,8 @@
     },
     {
       "path": "src/Vela.ts",
-      "upstreamBlob": "6cbfd8f51cb38573279bb7284b4bea623bf3a4e3",
-      "localBlob": "baf145893814e36edb3c3770cc3c54d21833c093",
+      "upstreamBlob": "804628744ba1486f0f054619845754106df7af26",
+      "localBlob": "d383a5272a32c46128040f821f6fe77db6187bee",
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
@@ -1696,14 +1696,14 @@
     },
     {
       "path": "src/workspace/ChartCell.ts",
-      "upstreamBlob": "12c346b686a1ba76fc2d65c9c6aed85ebc76b191",
-      "localBlob": "95e0738c9710431ec807d32d660071c6f57a6967",
+      "upstreamBlob": "cd2598ef787a35040e8780dcc7eb4ffd96bb1bf2",
+      "localBlob": "7018b3a92b9a10ac59190ac0fb3f7d7126a6e8f8",
       "patchId": "pane-layout-persistence"
     },
     {
       "path": "src/workspace/VelaWorkspace.ts",
-      "upstreamBlob": "e57a4f46c5d4cf9438c4c792062d86e1c9cbccf0",
-      "localBlob": "891a3941e25b0becaf01d8f540ea2fa8326caecd",
+      "upstreamBlob": "9bbbf33e9d46bd5daf1fcdbd6050cf12b97f7afb",
+      "localBlob": "7b2dd8b0070f65f1b2c074f84c2ed566f39060af",
       "patchId": "pane-layout-persistence"
     }
   ],

@@ -11,7 +11,8 @@ const SNAPSHOT = path.join(VENDOR, 'UPSTREAM-DIFF.json');
 const RELEASE_SNAPSHOT = path.join(VENDOR, 'UPSTREAM-RELEASE-DIFF.json');
 const PATCH_MANIFEST = path.join(VENDOR, 'patches.json');
 const UPSTREAM_BASE_COMMIT = '305521811eabc35c3797e5b6ab58adb25e70c1c7';
-const UPSTREAM_COMMIT = '34d11f1a8a88c7dd5657c9b3a791abf43560218d';
+const UPSTREAM_COMMIT = 'f6769868c5c0e78ba7977a5c89640df896a8f2f3';
+const UPSTREAM_TAG = 'v0.10.6';
 const args = new Set(process.argv.slice(2));
 const upstreamArg = process.argv.slice(2).find((arg) => arg.startsWith('--upstream-dir='));
 const upstreamIndex = process.argv.indexOf('--upstream-dir');
@@ -115,7 +116,7 @@ const releaseSnapshot = {
   upstream: {
     repository: 'https://github.com/LuxAlgo/Vela',
     base: { version: '0.10.2', commit: UPSTREAM_BASE_COMMIT },
-    release: { version: '0.10.5', tag: 'main', commit: UPSTREAM_COMMIT }
+    release: { version: '0.10.6', tag: UPSTREAM_TAG, commit: UPSTREAM_COMMIT }
   },
   comparison: 'Git blob SHA-1 from exact upstream release trees, restricted to src/',
   counts: releaseCounts,
@@ -150,7 +151,7 @@ const snapshot = {
   generatedBy: 'tools/vela-overlay-manifest.mjs',
   upstream: {
     repository: 'https://github.com/LuxAlgo/Vela',
-    tag: 'main',
+    tag: UPSTREAM_TAG,
     commit: UPSTREAM_COMMIT
   },
   comparison: 'Git blob SHA-1; only src/ is compared so local provenance/docs remain separate',

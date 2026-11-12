@@ -20,12 +20,12 @@ const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 
-assert.match(provenance, /Upstream source commit: `34d11f1a8a88c7dd5657c9b3a791abf43560218d`/, 'conformance must target the pinned Vela 0.10.5 source commit');
+assert.match(provenance, /Upstream source commit: `f6769868c5c0e78ba7977a5c89640df896a8f2f3`/, 'conformance must target the pinned Vela 0.10.6 source commit');
 assert.match(provenance, /Previous source base: Vela 0\.10\.2/, 'the overlay uses Vela 0.10.2 as its three-way merge base');
-assert.equal(sourceSnapshot.upstream.commit, '34d11f1a8a88c7dd5657c9b3a791abf43560218d', 'the machine-generated source diff must use the Vela 0.10.2 pin');
+assert.equal(sourceSnapshot.upstream.commit, 'f6769868c5c0e78ba7977a5c89640df896a8f2f3', 'the machine-generated source diff must use the Vela 0.10.2 pin');
 assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
 assert.equal(releaseSnapshot.upstream.base.version, '0.10.2', 'upstream release delta starts at Vela 0.10.2');
-assert.equal(releaseSnapshot.upstream.release.version, '0.10.5', 'upstream release delta ends at Vela 0.10.5');
+assert.equal(releaseSnapshot.upstream.release.version, '0.10.6', 'upstream release delta ends at Vela 0.10.6');
 assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
 
 assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
@@ -72,4 +72,4 @@ assert.match(localizationApi, /export function registerLocale\(/, 'locale packs 
 assert.match(hindiPack, /locale: 'hi'/, 'Hindi locale pack is vendored');
 assert.match(velaApi, /setLocale\(next: string \| LocalizationOptions\)/, 'locale can change at runtime without rerunning indicators');
 assert.ok(hindiPack.length > 0, 'Hindi locale source must be present');
-console.log('VELA_101_CONFORMANCE_CONTRACT_OK');
+console.log('VELA_106_CONFORMANCE_CONTRACT_OK');

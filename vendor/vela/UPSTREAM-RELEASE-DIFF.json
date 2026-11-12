@@ -8,17 +8,17 @@
       "commit": "305521811eabc35c3797e5b6ab58adb25e70c1c7"
     },
     "release": {
-      "version": "0.10.5",
-      "tag": "main",
-      "commit": "34d11f1a8a88c7dd5657c9b3a791abf43560218d"
+      "version": "0.10.6",
+      "tag": "v0.10.6",
+      "commit": "f6769868c5c0e78ba7977a5c89640df896a8f2f3"
     }
   },
-  "comparison": "Git blob SHA-1 from exact upstream source trees, restricted to src/",
+  "comparison": "Git blob SHA-1 from exact upstream release trees, restricted to src/",
   "counts": {
-    "modified": 59,
+    "modified": 63,
     "added": 3,
     "removed": 0,
-    "total": 62,
+    "total": 66,
     "baseFiles": 390,
     "releaseFiles": 393
   },
@@ -27,7 +27,7 @@
       "path": "src/Vela.ts",
       "status": "modified",
       "baseBlob": "f8688f5f0c9cd38ab481825b071b0e9090846079",
-      "releaseBlob": "6cbfd8f51cb38573279bb7284b4bea623bf3a4e3"
+      "releaseBlob": "804628744ba1486f0f054619845754106df7af26"
     },
     {
       "path": "src/chart-types/applicability.ts",
@@ -58,6 +58,18 @@
       "releaseBlob": "130f4c60ea716234322543b078d2d7e13261ef4f"
     },
     {
+      "path": "src/core/drawings/schema.ts",
+      "status": "modified",
+      "baseBlob": "2dd5cbdd2d679d68a353d5a3a5e23c732bb16612",
+      "releaseBlob": "3835a4d2849f467629a02c246d36d5f328301009"
+    },
+    {
+      "path": "src/core/drawings/types/Box.ts",
+      "status": "modified",
+      "baseBlob": "b87a7e954d2dd7f68046078e025b05105c3deb2f",
+      "releaseBlob": "58b036d33bcc091f469c4f46af8bdf8539f80099"
+    },
+    {
       "path": "src/core/engine/EngineOrchestrator.ts",
       "status": "modified",
       "baseBlob": "6ceaf659a0780bde03ee9cdb2dded13d19218395",
@@ -73,7 +85,7 @@
       "path": "src/core/options.ts",
       "status": "modified",
       "baseBlob": "c8e7c91acdf7c0fc43acbba490657a64ecbe7105",
-      "releaseBlob": "07b2b0ba12afbc6f49090413a1a88a2b77e5a159"
+      "releaseBlob": "7163a9b427cadbdb9a301f44159828131792864e"
     },
     {
       "path": "src/core/ports/DataProvider.ts",
@@ -112,130 +124,136 @@
       "releaseBlob": "1d53986a1862b2815cfb82392a0bfc8108efe422"
     },
     {
+      "path": "src/index.ts",
+      "status": "modified",
+      "baseBlob": "bb297a6998220fa63fa3811997d998f7a5600e19",
+      "releaseBlob": "4ce8c06eab46c1a390698b15411ba95b796560a8"
+    },
+    {
       "path": "src/locales/ar.json",
       "status": "modified",
       "baseBlob": "93af88d332fcfa76bb9b6e9e50589dae688a1e53",
-      "releaseBlob": "5623c2c278107243bc8e5b6f68da63a73cce8645"
+      "releaseBlob": "ed9da433972d522c291f52ddc246bac52c65e848"
     },
     {
       "path": "src/locales/catalog.d.ts",
       "status": "modified",
       "baseBlob": "61251aeaec81e67bd240f248967efc0aff061b95",
-      "releaseBlob": "2704bbbd8c79f48c5229bf07b0cccc5aa8ff5128"
+      "releaseBlob": "8c6469a177681258f135f3c9abef8062794db6c4"
     },
     {
       "path": "src/locales/de.json",
       "status": "modified",
       "baseBlob": "560e1dbfbec2cab583ed27195d885dfbe74cb007",
-      "releaseBlob": "f06ccf7a1133b6c7518634ecda8fc4bfc65f5d37"
+      "releaseBlob": "c4b673cc73b43499dc65347377939b3102354376"
     },
     {
       "path": "src/locales/en.json",
       "status": "modified",
       "baseBlob": "140701036567011e98084664a480991912ecfe62",
-      "releaseBlob": "e5808a49ebb1fa34f32d297d2452e8dcc972ab60"
+      "releaseBlob": "9d500b80653126b16f0a6875c6ed4751a12e6583"
     },
     {
       "path": "src/locales/es.json",
       "status": "modified",
       "baseBlob": "ae98126ed6506dffb6a3bc10691b366937b0a84f",
-      "releaseBlob": "53ac42956b9fa91b7e25411295d35632c163babc"
+      "releaseBlob": "97ee1b906c59eea05fc78cba731a4bbccb76c534"
     },
     {
       "path": "src/locales/fr.json",
       "status": "modified",
       "baseBlob": "8516e2b7fa2df7ab93aebb3cdaf9e3999af811b5",
-      "releaseBlob": "914f27139a1b2e7f5ce5458d130e647479961a1e"
+      "releaseBlob": "27fa1f2474c11748de59e6d8851ed6e6c526a9c4"
     },
     {
       "path": "src/locales/he.json",
       "status": "modified",
       "baseBlob": "42357b2db375bb79daed40d383bcaffdd87a410f",
-      "releaseBlob": "c7721104afa3b73e949e057574a5db642454a8b0"
+      "releaseBlob": "5144a26aefd3c21769a5ac8ff1c85a2cf4bbd9ef"
     },
     {
       "path": "src/locales/hi.json",
       "status": "modified",
       "baseBlob": "ee8b0c44b64068c51055f4120549481f88066398",
-      "releaseBlob": "173586b1e459891eece5da6f82271ec20c5cd504"
+      "releaseBlob": "0a3f01dfbea37c6319607c08ae856fabd999a2e8"
     },
     {
       "path": "src/locales/id.json",
       "status": "modified",
       "baseBlob": "92869e92e6f65af021ea599de1fefb458d3beca8",
-      "releaseBlob": "adbe187ccc85d61892f859a143fc448089749e46"
+      "releaseBlob": "ce86cebfcbb4b0e8f32e271c902f4814fb545b0d"
     },
     {
       "path": "src/locales/it.json",
       "status": "modified",
       "baseBlob": "94b965233cc45c5f58f78572f7cdc9bdc393caca",
-      "releaseBlob": "5a0b1b75cc5a2975ad7af7a5457c6f593964d017"
+      "releaseBlob": "964729b6160dc4f668a9889b5e0469f2c9512f6f"
     },
     {
       "path": "src/locales/ja.json",
       "status": "modified",
       "baseBlob": "3d283364a3f1ccb17c81ddc78c3c06c29fe68744",
-      "releaseBlob": "93702128c782460c3e57c887cf45e40d46ef9bed"
+      "releaseBlob": "8ac786d2e1d5bd7dfd83555a7cc11857e0c7b4e4"
     },
     {
       "path": "src/locales/ko.json",
       "status": "modified",
       "baseBlob": "b4fc800651e3502b2034f1184e9d8dc0e9677803",
-      "releaseBlob": "ea6176d30e643689387d63e17a527bb5abf20d5b"
+      "releaseBlob": "b51258777068adbe0f8c385ee05690fafc1b6468"
     },
     {
       "path": "src/locales/ms.json",
       "status": "modified",
       "baseBlob": "3780f26f96a8fa5fcb012169a975acf51e212b9e",
-      "releaseBlob": "772374c21698462ca8dfaeadaf803b6707adb735"
+      "releaseBlob": "c24aba5e8399ae9d53b0c4ea20af130b63a0c225"
     },
     {
       "path": "src/locales/pl.json",
       "status": "modified",
       "baseBlob": "be078e4dca574b40a421dac980269d8a7857c69f",
-      "releaseBlob": "5833d9877ba2071173cbf1879b3fb47df989e31b"
+      "releaseBlob": "827ee31c7db59fa856dcc6a025f1509df3608b63"
     },
     {
       "path": "src/locales/pt-BR.json",
       "status": "modified",
       "baseBlob": "c2806ca48b3b1b762c2f13fce222bfc12a134789",
-      "releaseBlob": "3ea2dc346c7de667d198b5975203f4f01cef708a"
+      "releaseBlob": "4783a59d43f9eed3cb46521c448caa804c413e3c"
     },
     {
       "path": "src/locales/ru.json",
       "status": "modified",
       "baseBlob": "8cb31af184c5f045bc7bc780ec71ed5b176472a3",
-      "releaseBlob": "f3d01935f90a0efc96bdf081c9cf76ee97977b75"
+      "releaseBlob": "0921330be668d4de9eb860e1b378ce66420ca178"
     },
     {
       "path": "src/locales/th.json",
       "status": "modified",
       "baseBlob": "e9af5406e23f20d69fa67eeb11b5430aaa41a630",
-      "releaseBlob": "f94a111824b9c0563984bc40acbf46cead961263"
+      "releaseBlob": "dccb7a3165ca1a5c6aa1bf557f8ecaef6914d67f"
     },
     {
       "path": "src/locales/tr.json",
       "status": "modified",
       "baseBlob": "d8a41195992b16d373d91e4bddbef3a561a90896",
-      "releaseBlob": "946e32c473260a8397eaeef2a4335893770a6bfe"
+      "releaseBlob": "eac0ddb50eb258be2c6f5bdc26e6ee9c46db2aeb"
     },
     {
       "path": "src/locales/vi.json",
       "status": "modified",
       "baseBlob": "7b73ceee939875bc5232862037660374f90068e6",
-      "releaseBlob": "2b157babcd3fa358ebce9b0ac8ca0bb3f7b29750"
+      "releaseBlob": "da61f3f1e28ce1a5fe6e076939517ade016862f3"
     },
     {
       "path": "src/locales/zh-Hans.json",
       "status": "modified",
       "baseBlob": "40d391a0bbba20fd60af79b468a41463eb1da639",
-      "releaseBlob": "072d2b4728286f2a26e42ba043a52c092794e90e"
+      "releaseBlob": "3291c67c15ac5ff997d017130ba87cfa669c0a14"
     },
     {
       "path": "src/locales/zh-Hant.json",
       "status": "modified",
       "baseBlob": "15c772e7f2952c72d1b99fdc6968850088dec4ac",
-      "releaseBlob": "2d72d839b94d297899c11986b4999304591fba21"
+      "releaseBlob": "689fc57a2c22077c9b959f547239a115f94d6139"
     },
     {
       "path": "src/plugin.ts",
@@ -247,7 +265,7 @@
       "path": "src/renderers/native/NativeRenderer.ts",
       "status": "modified",
       "baseBlob": "a50a2d0fc598ce71c33e912f5cdeec8036f7f0ef",
-      "releaseBlob": "76775a570e3a452f8c0e982e815d33733577e498"
+      "releaseBlob": "608909d012819bbd3c5c255f1db8bb1c5f6d6d7f"
     },
     {
       "path": "src/renderers/native/backend/Canvas2dBackend.ts",
@@ -276,31 +294,37 @@
       "path": "src/renderers/native/chrome/SettingsDialog.ts",
       "status": "modified",
       "baseBlob": "33751e599bf046e9b8cf3d3da947a954cae2c819",
-      "releaseBlob": "dcf9a9631c1e9383dde1333ea2cb68d5a6eba320"
+      "releaseBlob": "31dc238fb73c6d8bf6a3211910a669dfb584a981"
     },
     {
       "path": "src/renderers/native/chrome/settings-visibility.ts",
       "status": "modified",
       "baseBlob": "ceea4a510cae88b9d9dc00d28923cff0c22e8df9",
-      "releaseBlob": "3a72e078de60b749002b70f733c6edc111163744"
+      "releaseBlob": "b3400629612d28840ecc164332c90cfd31da566b"
+    },
+    {
+      "path": "src/renderers/native/core/InputController.ts",
+      "status": "modified",
+      "baseBlob": "df0c6b56620fb1d94e138e71ab9597448add29a2",
+      "releaseBlob": "99e8676083af130523a5bb7a6cd992672ec03aea"
     },
     {
       "path": "src/renderers/native/core/chartConfig.ts",
       "status": "modified",
       "baseBlob": "213bb95c6091aaf752223eb8867b17e9c63960f8",
-      "releaseBlob": "a48579cd2db410f4d73b40abba6e0d2a79456728"
+      "releaseBlob": "2267df9e03ca60da32470096cf5e4a0172333fd6"
     },
     {
       "path": "src/renderers/native/drawings/DrawingPainter.ts",
       "status": "modified",
       "baseBlob": "991ddce16d563d60578c4df06460b4aa1383f26a",
-      "releaseBlob": "94d9e2687c729fb34f2f7d2f6a4d98520deef0b7"
+      "releaseBlob": "2dfd37f49ab95a727f07baf9b2c52c5598c34f7f"
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPanel.ts",
       "status": "modified",
       "baseBlob": "03027f425b4a04cd7ff64e4410a5e6e91f1f7a2d",
-      "releaseBlob": "da1008dccf2df8c420d5e98e88f785bf9b5d367a"
+      "releaseBlob": "fcf920328100b43474b99039ca3b0597c8453732"
     },
     {
       "path": "src/renderers/shared/DrawingSceneRenderer.ts",
@@ -312,7 +336,7 @@
       "path": "src/renderers/shared/IndicatorInputsDialog.ts",
       "status": "modified",
       "baseBlob": "0f8a84b7c4fc9cbc24628f49516517c0a5efad66",
-      "releaseBlob": "c3c666de67e96aaf496eb19132daa2540b17c3c6"
+      "releaseBlob": "c34214d5dd727b6c4d2bc8c367e29109c5c14030"
     },
     {
       "path": "src/renderers/shared/drawing-geometry.ts",
@@ -378,19 +402,19 @@
       "path": "src/workspace/ChartCell.ts",
       "status": "modified",
       "baseBlob": "8330145ebbd285c58aca3ac7db62186d04bdce2d",
-      "releaseBlob": "12c346b686a1ba76fc2d65c9c6aed85ebc76b191"
+      "releaseBlob": "cd2598ef787a35040e8780dcc7eb4ffd96bb1bf2"
     },
     {
       "path": "src/workspace/VelaWorkspace.ts",
       "status": "modified",
       "baseBlob": "d16e6396724a739cef5779fddf80350856fa0c56",
-      "releaseBlob": "e57a4f46c5d4cf9438c4c792062d86e1c9cbccf0"
+      "releaseBlob": "9bbbf33e9d46bd5daf1fcdbd6050cf12b97f7afb"
     },
     {
       "path": "src/workspace/sync.ts",
       "status": "modified",
       "baseBlob": "99f011c742f3f2a7abe2c63ffe8215bb60420c1d",
-      "releaseBlob": "0ca8845ed6370ca14ab9b83441e82d42cf6257c8"
+      "releaseBlob": "76d71498ec8df1b62388de3ae5e58a81f233ac84"
     }
   ]
 }
