@@ -5,11 +5,11 @@ const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.
 assert.equal(vercel.services?.api?.framework, 'express');
 assert.equal(vercel.services?.api?.entrypoint, 'api/index.ts');
 assert.equal(vercel.services?.api?.functions?.['api/index.ts']?.maxDuration, 15);
-assert.equal(vercel.services?.realtimegatewaynew?.runtime, 'container');
-assert.equal(vercel.services?.realtimegatewaynew?.entrypoint, 'Dockerfile');
-assert.equal(vercel.services?.realtimegatewaynew?.ignoreCommand, undefined, 'Vercel Services does not honor per-service container ignoreCommand; keep the build-skip helper out of the deployed service config');
-assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimegatewaynew'), 'health route must target the deployed realtime service');
-assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimegatewaynew'), 'WebSocket route must target the deployed realtime service');
+assert.equal(vercel.services?.realtimegatewayv2?.runtime, 'container');
+assert.equal(vercel.services?.realtimegatewayv2?.entrypoint, 'Dockerfile');
+assert.equal(vercel.services?.realtimegatewayv2?.ignoreCommand, undefined, 'Vercel Services does not honor per-service container ignoreCommand; keep the build-skip helper out of the deployed service config');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimegatewayv2'), 'health route must target the deployed realtime service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimegatewayv2'), 'WebSocket route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'api'), 'API routes must target the API service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination?.service === 'web'), 'SPA routes must target the web service');
 assert.ok(vercel.services?.web?.rewrites?.some((route) => route.source === '/(.*)' && route.destination === '/index.html'), 'Web service must rewrite deep links to the Vite index.html entrypoint');
