@@ -504,6 +504,9 @@ export class MarketDataGraph{
     this.symbolPins.set(key,(this.symbolPins.get(key)??0)+1);
     for(const node of this.nodes.values())if(node.descriptor.symbol.trim().toUpperCase()===key)this.touchNode(node);
     if(this.idleSweepTimer){clearTimeout(this.idleSweepTimer);this.idleSweepTimer=undefined;}
+    // Re-arm expiry for other unpinned symbols; one active chart must not
+    // suppress cleanup for every instrument in the shared graph.
+    this.scheduleIdleSweep();
     let released=false;
     return ()=>{
       if(released)return;
