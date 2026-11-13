@@ -309,4 +309,25 @@ releaseIdlePin();
 assert.equal(idleGraph.trimIdleSymbols(futureIdleTime),2,'expired unpinned graph nodes are evicted without capacity pressure');
 assert.equal(idleGraph.listNodes().some(node=>node.symbol==='IDLE'),false);
 
+
+// Live dependency traversal is indexed by source, and no whole-graph capacity
+// trim is performed per market update. Unrelated visited symbols do no work.
+const fanoutGraph=new MarketDataGraph({anchorSecondsUtc:13500},64);
+fanoutGraph.syncBase('HOT-FANOUT','1m',base);
+fanoutGraph.ensureNode('HOT-FANOUT','5m');
+for(let index=0;index<32;index+=1){
+  const symbol='VISITED-'+index;
+  fanoutGraph.syncBase(symbol,'1m',base);
+  fanoutGraph.ensureNode(symbol,'5m');
+}
+const beforeFanout=fanoutGraph.stats();
+fanoutGraph.updateBaseLast('HOT-FANOUT','1m',{
+  timestamp:base.at(-1)!.timestamp,open:103.5,high:106,low:102,close:105,volume:19,
+});
+const afterFanout=fanoutGraph.stats();
+assert.equal(afterFanout.dependencyNodesVisited-beforeFanout.dependencyNodesVisited,1,
+  'a base candle visits only its own direct derived-timeframe children');
+assert.equal(afterFanout.fullAggregationRebuilds,beforeFanout.fullAggregationRebuilds,
+  'unrelated graph history is not rebuilt during a live candle update');
+
 console.log('CORESPIRIT_MARKET_DATA_GRAPH_CONTRACT_OK');
