@@ -643,8 +643,13 @@ export class MarketDataGraph{
     // First-time tick-only symbols still receive an idle-expiry timer. Existing
     // hot updates never pay a whole-graph sweep cost.
     if(created)this.trimIdleSymbols();
+    const previousSession=node.sessionProfile;
+    const nextSession=session?{...node.sessionProfile,...session}:node.sessionProfile;
+    const sessionCalendarChanged=nextSession.anchorSecondsUtc!==node.anchorSecondsUtc||
+      nextSession.calendarId!==previousSession.calendarId||
+      nextSession.sessionAt!==previousSession.sessionAt;
     if(session?.anchorSecondsUtc!=null)node.anchorSecondsUtc=session.anchorSecondsUtc;
-    if (session) node.sessionProfile = { ...node.sessionProfile, ...session };
+    if(session)node.sessionProfile=nextSession;
     const t=Math.floor(Date.parse(candle.timestamp)/1000);
     if(!Number.isFinite(t))return;
     const lastTime=node.plane.market.length?node.plane.market.time[node.plane.market.length-1]:NaN;
@@ -659,7 +664,10 @@ export class MarketDataGraph{
     }
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
     this.touchNode(node);
-    this.rebuildDependentTails(node.descriptor.key);
+    // A changed exchange calendar/anchor invalidates the bucket identity and
+    // therefore requires a full rebuild. Stable calendars keep the O(log n) tail path.
+    if(sessionCalendarChanged)this.rebuildDependents(node.descriptor.key);
+    else this.rebuildDependentTails(node.descriptor.key);
     this.revision+=1;
     // No global LRU scan on each market update. The pre-scheduled idle sweep
     // refreshes its deadline from lastUsedAt; capacity checks run on graph changes.
