@@ -5,7 +5,7 @@ type Bucket = {
   data: HistoricalCandle[]; updatedAt: number; oldestAt: number; newestAt: number;
   target: number; revision: number;
   /** Field-aware object-cache estimate; browser heap telemetry is reported separately. */
-  estimatedBytes: number; dirty: boolean; persistedRevision: number;
+  estimatedBytes: number; dirty: boolean; checkpointRevision: number; persistedRevision: number;
   loading?: Promise<HistoricalCandle[]>;
 };
 export const HISTORY_CHECKPOINT_INTERVAL_MS = 1_500;
@@ -120,7 +120,7 @@ export class HistoryStore {
   }
   private persistDetached(key:string,bucket:Bucket):void{
     const data=this.snapshotConfirmed(bucket);
-    if(data.length)void writePersistedHistory(key,data,bucket.updatedAt,bucket.revision);
+    if(data.length)void writePersistedHistory(key,data,bucket.updatedAt,bucket.checkpointRevision);
   }
   private trimBuckets():void{
     while(this.buckets.size>Math.max(1,this.maxBuckets)){
@@ -161,7 +161,7 @@ export class HistoryStore {
       const bucket:Bucket={
         data,updatedAt:Number.isFinite(Number(saved.updatedAt))?Number(saved.updatedAt):0,
         oldestAt,newestAt,target:PERSISTED_HISTORY_CANDLE_LIMIT,revision,
-        estimatedBytes:estimateCandleRowsBytes(data),dirty:false,persistedRevision:revision,
+        estimatedBytes:estimateCandleRowsBytes(data),dirty:false,checkpointRevision:revision,persistedRevision:revision,
       };
       this.buckets.set(key,bucket);
       this.trimBuckets();
@@ -190,14 +190,14 @@ export class HistoryStore {
     if(!bucket?.data.length||(!force&&!bucket.dirty))return Promise.resolve(true);
     const data=this.snapshotConfirmed(bucket);
     if(!data.length){bucket.dirty=false;return Promise.resolve(true);}
-    const revision=bucket.revision;
+    const revision=bucket.checkpointRevision;
     const task=writePersistedHistory(key,data,bucket.updatedAt,revision).then(result=>{
       if(this.buckets.get(key)!==bucket)return result!==false;
       if(result===null)return true; // In-memory recovery remains owned by HistoryStore.
       const success=result;
       if(success){
         bucket.persistedRevision=Math.max(bucket.persistedRevision,revision);
-        if(bucket.revision===revision)bucket.dirty=false;
+        if(bucket.checkpointRevision===revision)bucket.dirty=false;
         else this.schedulePersist(key,bucket);
       }
       return success;
@@ -230,7 +230,9 @@ export class HistoryStore {
       data,updatedAt:Date.now(),oldestAt,newestAt,target,
       revision:(previous?.revision??0)+1,
       estimatedBytes:estimateCandleRowsBytes(data),
-      dirty:Boolean(previous?.dirty)||persist,persistedRevision:previous?.persistedRevision??0,
+      dirty:Boolean(previous?.dirty)||(persist&&data.some(isConfirmedHistoryCandle)),
+      checkpointRevision:(previous?.checkpointRevision??previous?.persistedRevision??0)+(persist&&data.some(isConfirmedHistoryCandle)?1:0),
+      persistedRevision:previous?.persistedRevision??0,
     };
     this.buckets.delete(key);this.buckets.set(key,bucket);this.trimBuckets();
     if(persist)this.schedulePersist(key,bucket);
@@ -265,7 +267,7 @@ export class HistoryStore {
     bucket.estimatedBytes=Math.max(0,bucket.estimatedBytes);
     bucket.oldestAt=Date.parse(String(bucket.data[0]?.timestamp));
     bucket.newestAt=Date.parse(String(bucket.data[bucket.data.length-1]?.timestamp));
-    if(isConfirmedHistoryCandle(row)){bucket.dirty=true;this.schedulePersist(key,bucket);}
+    if(isConfirmedHistoryCandle(row)){bucket.dirty=true;bucket.checkpointRevision+=1;this.schedulePersist(key,bucket);}
     return bucket.data;
   }
   merge(a:HistoricalCandle[],b:HistoricalCandle[]){
@@ -316,7 +318,7 @@ export class HistoryStore {
     return bucket?{
       oldestAt:bucket.oldestAt,newestAt:bucket.newestAt,count:bucket.data.length,target:bucket.target,
       updatedAt:bucket.updatedAt,revision:bucket.revision,estimatedBytes:bucket.estimatedBytes,
-      dirty:bucket.dirty,persistedRevision:bucket.persistedRevision,
+      dirty:bucket.dirty,checkpointRevision:bucket.checkpointRevision,persistedRevision:bucket.persistedRevision,
     }:undefined;
   }
   getBefore(broker:string,symbol:string,timeframe:string,beforeTimestamp:string,limit=1000):HistoricalCandle[]{
