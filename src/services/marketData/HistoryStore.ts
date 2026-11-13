@@ -113,7 +113,11 @@ function clearPersistedHistory(): void {
 export class HistoryStore {
   private buckets=new Map<string,Bucket>();
   private readonly inFlightCheckpoints=new Map<string,Promise<boolean>>();
-  constructor(private readonly maxCandles=50_000,private readonly ttlMs=600_000,private readonly maxBuckets=96){}
+  constructor(
+    private readonly maxCandles = 50_000,
+    private readonly ttlMs = 600_000,
+    private readonly maxBuckets = 96,
+  ) {}
   private touch(key:string,bucket:Bucket):Bucket{this.buckets.delete(key);this.buckets.set(key,bucket);return bucket;}
   private snapshotConfirmed(bucket:Bucket):HistoricalCandle[]{
     return bucket.data.filter(isConfirmedHistoryCandle).slice(-PERSISTED_HISTORY_CANDLE_LIMIT).map(row=>({...row}));
