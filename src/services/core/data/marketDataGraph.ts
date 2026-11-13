@@ -478,6 +478,8 @@ export function graphSnapshotTransferables(snapshot:CoreSpiritGraphSnapshot):Tra
 
 export class MarketDataGraph{
   private readonly nodes=new Map<MarketDataGraphNodeKey,GraphNode>();
+  /** Reverse dependency index: live source updates touch only their direct timeframe children. */
+  private readonly childrenBySource=new Map<MarketDataGraphNodeKey,Set<MarketDataGraphNodeKey>>();
   private revision=0;
   private readonly instanceId=++marketDataGraphInstanceSequence;
   private readonly symbolPins=new Map<string,number>();
@@ -485,6 +487,7 @@ export class MarketDataGraph{
   private fullAggregationRebuilds=0;
   private incrementalTailUpdates=0;
   private idleEvictions=0;
+  private dependencyNodesVisited=0;
 
   constructor(
     private readonly defaultSession:MarketDataGraphSessionProfile={anchorSecondsUtc:0},
@@ -538,6 +541,12 @@ export class MarketDataGraph{
     if(!matches.length)return 0;
     if(matches.some(([,node])=>node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId)))return 0;
     for(const [key,node] of matches){
+      if(node.sourceKey){
+        const siblings=this.childrenBySource.get(node.sourceKey);
+        siblings?.delete(key);
+        if(siblings?.size===0)this.childrenBySource.delete(node.sourceKey);
+      }
+      this.childrenBySource.delete(key);
       node.plane.detachConsumer(node.consumerLeaseId);
       releaseCanonicalDataPlane(node.plane.timelineKey,node.plane);
       this.nodes.delete(key);
@@ -581,7 +590,7 @@ export class MarketDataGraph{
   }
   stats():Readonly<{
     symbols:number;nodes:number;pinnedSymbols:number;estimatedBytes:number;maxSymbols:number;maxBytes:number;
-    fullAggregationRebuilds:number;incrementalTailUpdates:number;idleEvictions:number;
+    fullAggregationRebuilds:number;incrementalTailUpdates:number;idleEvictions:number;dependencyNodesVisited:number;
   }> {
     const symbols=new Set([...this.nodes.values()].map(node=>node.descriptor.symbol.trim().toUpperCase()));
     let estimatedBytes=0;
@@ -593,6 +602,7 @@ export class MarketDataGraph{
       fullAggregationRebuilds:this.fullAggregationRebuilds,
       incrementalTailUpdates:this.incrementalTailUpdates,
       idleEvictions:this.idleEvictions,
+      dependencyNodesVisited:this.dependencyNodesVisited,
     });
   }
 
@@ -646,7 +656,8 @@ export class MarketDataGraph{
     this.touchNode(node);
     this.rebuildDependentTails(node.descriptor.key);
     this.revision+=1;
-    this.trimIdleSymbols();
+    // No global LRU scan on each market update. The pre-scheduled idle sweep
+    // refreshes its deadline from lastUsedAt; capacity checks run on graph changes.
   }
 
   private chooseSource(symbol:string,targetSeconds:number):GraphNode|undefined{
@@ -672,6 +683,9 @@ export class MarketDataGraph{
     const sessionProfile = source.sessionProfile;
     const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sessionProfile,sourceRevision:0,consumerLeaseId,lastUsedAt:Date.now()};
     this.nodes.set(key,node);
+    const dependentKeys=this.childrenBySource.get(source.descriptor.key)??new Set<MarketDataGraphNodeKey>();
+    dependentKeys.add(key);
+    this.childrenBySource.set(source.descriptor.key,dependentKeys);
     this.fullAggregationRebuilds+=1;
     node.tailAggregate=aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc,node.sessionProfile);
     node.sourceRevision=source.plane.revision;
@@ -708,10 +722,14 @@ export class MarketDataGraph{
       const current=queue.shift()!;
       if(visited.has(current))continue;
       visited.add(current);
-      for(const node of this.nodes.values()){
-        if(node.sourceKey!==current)continue;
-        const source=this.nodes.get(node.sourceKey);
-        if(!source)continue;
+      const children=this.childrenBySource.get(current);
+      if(!children)continue;
+      const source=this.nodes.get(current);
+      if(!source)continue;
+      for(const childKey of children){
+        this.dependencyNodesVisited+=1;
+        const node=this.nodes.get(childKey);
+        if(!node)continue;
         this.rebuildNodeFromSource(node,source);
         queue.push(node.descriptor.key);
       }
@@ -721,8 +739,12 @@ export class MarketDataGraph{
   private rebuildDependentTails(sourceKey:string):void {
     const source=this.nodes.get(sourceKey);
     if(!source||!source.plane.market.length)return;
-    for(const node of this.nodes.values()){
-      if(node.sourceKey!==sourceKey)continue;
+    const children=this.childrenBySource.get(sourceKey);
+    if(!children)return;
+    for(const childKey of children){
+      this.dependencyNodesVisited+=1;
+      const node=this.nodes.get(childKey);
+      if(!node)continue;
       const result=this.updateDependentTail(node,source);
       if(result==='unchanged')continue;
       if(result==='rebuild')this.rebuildNodeFromSource(node,source);
