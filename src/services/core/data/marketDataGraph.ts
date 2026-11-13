@@ -61,6 +61,7 @@ type GraphNode={
   anchorSecondsUtc:number;
   sessionProfile:MarketDataGraphSessionProfile;
   sourceRevision:number;
+  tailAggregate?:AggregateTailState;
   consumerLeaseId:string;
   lastUsedAt:number;
 };
@@ -126,48 +127,125 @@ function bucketStart(
   return Math.floor((timestamp-anchorSecondsUtc)/intervalSeconds)*intervalSeconds+anchorSecondsUtc;
 }
 
+type ExtremaEntry={key:number;value:number};
+
+/** Indexed heaps keep current-bucket extrema reversible when the latest bar is revised. */
+class IndexedExtremaHeap {
+  private readonly entries:ExtremaEntry[]=[];
+  private readonly positions=new Map<number,number>();
+  constructor(private readonly mode:'max'|'min'){}
+  peek():number{return this.entries[0]?.value??Number.NaN;}
+  set(key:number,value:number):void{
+    const existing=this.positions.get(key);
+    if(existing==null){
+      const index=this.entries.length;
+      this.entries.push({key,value});
+      this.positions.set(key,index);
+      this.siftUp(index);
+      return;
+    }
+    this.entries[existing]!.value=value;
+    const parent=(existing-1)>>1;
+    if(existing>0&&this.preferred(this.entries[existing]!,this.entries[parent]!))this.siftUp(existing);
+    else this.siftDown(existing);
+  }
+  private preferred(a:ExtremaEntry,b:ExtremaEntry):boolean{return this.mode==='max'?a.value>b.value:a.value<b.value;}
+  private swap(a:number,b:number):void{
+    const left=this.entries[a]!,right=this.entries[b]!;
+    this.entries[a]=right;this.entries[b]=left;
+    this.positions.set(left.key,b);this.positions.set(right.key,a);
+  }
+  private siftUp(start:number):void{
+    let index=start;
+    while(index>0){
+      const parent=(index-1)>>1;
+      if(!this.preferred(this.entries[index]!,this.entries[parent]!))break;
+      this.swap(index,parent);index=parent;
+    }
+  }
+  private siftDown(start:number):void{
+    let index=start;
+    for(;;){
+      const left=index*2+1,right=left+1;
+      let best=index;
+      if(left<this.entries.length&&this.preferred(this.entries[left]!,this.entries[best]!))best=left;
+      if(right<this.entries.length&&this.preferred(this.entries[right]!,this.entries[best]!))best=right;
+      if(best===index)break;
+      this.swap(index,best);index=best;
+    }
+  }
+}
+
+type AggregateTailState={
+  bucket:number;
+  open:number;
+  close:number;
+  volume:number;
+  count:number;
+  highs:IndexedExtremaHeap;
+  lows:IndexedExtremaHeap;
+  sourceLength:number;
+  lastSourceTime:number;
+  lastSourceIncluded:boolean;
+  lastSourceVolume:number;
+};
+
+function createAggregateTail(
+  bucket:number,timestamp:number,
+  row:{open:number;high:number;low:number;close:number;volume:number},
+  sourceLength:number,
+):AggregateTailState{
+  const state:AggregateTailState={
+    bucket,open:row.open,close:row.close,volume:row.volume,count:1,
+    highs:new IndexedExtremaHeap('max'),lows:new IndexedExtremaHeap('min'),
+    sourceLength,lastSourceTime:timestamp,lastSourceIncluded:true,lastSourceVolume:row.volume,
+  };
+  state.highs.set(timestamp,row.high);
+  state.lows.set(timestamp,row.low);
+  return state;
+}
+
 function aggregateRows(
-  source:CanonicalDataPlane,
-  target:CanonicalDataPlane,
-  intervalSeconds:number,
-  anchorSecondsUtc:number,
+  source:CanonicalDataPlane,target:CanonicalDataPlane,
+  intervalSeconds:number,anchorSecondsUtc:number,
   sessionProfile?:MarketDataGraphSessionProfile,
-):void {
+):AggregateTailState|undefined{
   const view=source.market.views();
   const out:number[]=[];
   let currentBucket=Number.NaN;
   let open=0,high=0,low=0,close=0,volume=0;
-
-  const flush=()=>{
-    if(!Number.isFinite(currentBucket))return;
-    out.push(currentBucket,open,high,low,close,volume);
-  };
+  let tail:AggregateTailState|undefined;
+  let lastSourceTime=Number.NaN,lastSourceBucket=Number.NaN,lastSourceVolume=0;
+  const flush=()=>{if(Number.isFinite(currentBucket))out.push(currentBucket,open,high,low,close,volume);};
 
   for(let i=0;i<view.time.length;i+=1){
-    const t=Number(view.time[i]);
-    if(!Number.isFinite(t))continue;
-    const bucket=bucketStart(t,intervalSeconds,anchorSecondsUtc,sessionProfile);
-    // Ignore off-session observations without splitting immediately. The next
-    // valid bar tells us whether the gap changed the bucket (overnight/holiday)
-    // or merely interrupted the same bucket (a scheduled session break).
-    if (!Number.isFinite(bucket)) continue;
-    if(bucket!==currentBucket){
-      flush();
-      currentBucket=bucket;
-      open=Number(view.open[i]);
-      high=Number(view.high[i]);
-      low=Number(view.low[i]);
-      close=Number(view.close[i]);
-      volume=Number(view.volume[i])||0;
+    const time=Number(view.time[i]);
+    lastSourceTime=time;
+    const bucket=bucketStart(time,intervalSeconds,anchorSecondsUtc,sessionProfile);
+    // Off-session rows are ignored without splitting a daily/session bucket.
+    if(!Number.isFinite(bucket)){
+      lastSourceBucket=Number.NaN;lastSourceVolume=0;
+      if(tail)tail.lastSourceIncluded=false;
       continue;
     }
-    high=Math.max(high,Number(view.high[i]));
-    low=Math.min(low,Number(view.low[i]));
-    close=Number(view.close[i]);
-    volume+=Number(view.volume[i])||0;
+    const row={open:Number(view.open[i]),high:Number(view.high[i]),low:Number(view.low[i]),close:Number(view.close[i]),volume:Number(view.volume[i])||0};
+    if(![row.open,row.high,row.low,row.close].every(Number.isFinite)){
+      lastSourceBucket=Number.NaN;lastSourceVolume=0;
+      if(tail)tail.lastSourceIncluded=false;
+      continue;
+    }
+    if(bucket!==currentBucket){
+      flush();
+      currentBucket=bucket;open=row.open;high=row.high;low=row.low;close=row.close;volume=row.volume;
+      tail=createAggregateTail(bucket,time,row,view.time.length);
+    }else{
+      high=Math.max(high,row.high);low=Math.min(low,row.low);close=row.close;volume+=row.volume;
+      tail?.highs.set(time,row.high);tail?.lows.set(time,row.low);
+      if(tail){tail.close=close;tail.volume=volume;tail.count+=1;}
+    }
+    lastSourceBucket=bucket;lastSourceVolume=row.volume;
   }
   flush();
-
   const rows=out.length/6;
   target.replaceColumns({
     time:Float64Array.from({length:rows},(_,i)=>out[i*6]!),
@@ -178,8 +256,14 @@ function aggregateRows(
     volume:Float64Array.from({length:rows},(_,i)=>out[i*6+5]!),
     timeUnit:'seconds',
   });
+  if(tail){
+    tail.sourceLength=view.time.length;
+    tail.lastSourceTime=lastSourceTime;
+    tail.lastSourceIncluded=Number.isFinite(lastSourceBucket)&&lastSourceBucket===tail.bucket;
+    tail.lastSourceVolume=tail.lastSourceIncluded?lastSourceVolume:0;
+  }
+  return tail;
 }
-
 function cloneSnapshotNode(
   plane:CanonicalDataPlane,
   descriptor:MarketDataGraphNodeDescriptor,
@@ -397,11 +481,16 @@ export class MarketDataGraph{
   private revision=0;
   private readonly instanceId=++marketDataGraphInstanceSequence;
   private readonly symbolPins=new Map<string,number>();
+  private idleSweepTimer?:ReturnType<typeof setTimeout>;
+  private fullAggregationRebuilds=0;
+  private incrementalTailUpdates=0;
+  private idleEvictions=0;
 
   constructor(
     private readonly defaultSession:MarketDataGraphSessionProfile={anchorSecondsUtc:0},
     private readonly maxSymbols=64,
     private readonly maxBytes=128*1024*1024,
+    private readonly maxIdleMs=5*60_000,
   ){}
 
   get graphRevision():number{return this.revision;}
@@ -410,6 +499,8 @@ export class MarketDataGraph{
     const key=String(symbol||'').trim().toUpperCase();
     if(!key)return ()=>{};
     this.symbolPins.set(key,(this.symbolPins.get(key)??0)+1);
+    for(const node of this.nodes.values())if(node.descriptor.symbol.trim().toUpperCase()===key)this.touchNode(node);
+    if(this.idleSweepTimer){clearTimeout(this.idleSweepTimer);this.idleSweepTimer=undefined;}
     let released=false;
     return ()=>{
       if(released)return;
@@ -421,6 +512,24 @@ export class MarketDataGraph{
   }
 
   private touchNode(node:GraphNode):void { node.lastUsedAt=Date.now(); }
+
+  private scheduleIdleSweep():void {
+    if(this.idleSweepTimer){clearTimeout(this.idleSweepTimer);this.idleSweepTimer=undefined;}
+    let nextExpiry=Number.POSITIVE_INFINITY;
+    for(const node of this.nodes.values()){
+      const symbol=node.descriptor.symbol.trim().toUpperCase();
+      if((this.symbolPins.get(symbol)??0)>0)continue;
+      if(node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId))continue;
+      nextExpiry=Math.min(nextExpiry,node.lastUsedAt+Math.max(1,this.maxIdleMs));
+    }
+    if(!Number.isFinite(nextExpiry))return;
+    const delay=Math.max(25,nextExpiry-Date.now());
+    this.idleSweepTimer=setTimeout(()=>{
+      this.idleSweepTimer=undefined;
+      this.trimIdleSymbols();
+    },delay);
+    (this.idleSweepTimer as ReturnType<typeof setTimeout> & {unref?:()=>void}).unref?.();
+  }
 
   evictSymbol(symbol:string):number {
     const normalized=String(symbol||'').trim().toUpperCase();
@@ -437,7 +546,7 @@ export class MarketDataGraph{
     return matches.length;
   }
 
-  trimIdleSymbols():number {
+  trimIdleSymbols(now=Date.now()):number {
     const groups=new Map<string,{lastUsedAt:number;bytes:number}>();
     for(const node of this.nodes.values()){
       const symbol=node.descriptor.symbol.trim().toUpperCase();
@@ -449,23 +558,31 @@ export class MarketDataGraph{
     const limit=Math.max(1,Math.floor(this.maxSymbols));
     const budget=Math.max(0,this.maxBytes);
     let totalBytes=[...groups.values()].reduce((sum,group)=>sum+group.bytes,0);
-    if(groups.size<=limit&&totalBytes<=budget)return 0;
-    const candidates=[...groups.entries()].sort((a,b)=>a[1].lastUsedAt-b[1].lastUsedAt);
     let remaining=groups.size,removed=0;
+    const candidates=[...groups.entries()].sort((a,b)=>a[1].lastUsedAt-b[1].lastUsedAt);
+    // Idle expiry is independent of capacity pressure.
+    for(const [symbol,group] of candidates){
+      if(now-group.lastUsedAt<Math.max(1,this.maxIdleMs)||(this.symbolPins.get(symbol)??0)>0)continue;
+      const count=this.evictSymbol(symbol);
+      if(count>0){
+        remaining-=1;removed+=count;this.idleEvictions+=count;
+        totalBytes=Math.max(0,totalBytes-group.bytes);
+      }
+    }
+    // Existing graph entry/byte budgets remain enforced after idle expiry.
     for(const [symbol,group] of candidates){
       if(remaining<=limit&&totalBytes<=budget)break;
       if((this.symbolPins.get(symbol)??0)>0)continue;
       const count=this.evictSymbol(symbol);
-      if(count>0){
-        remaining-=1;
-        removed+=count;
-        totalBytes=Math.max(0,totalBytes-group.bytes);
-      }
+      if(count>0){remaining-=1;removed+=count;totalBytes=Math.max(0,totalBytes-group.bytes);}
     }
+    this.scheduleIdleSweep();
     return removed;
   }
-
-  stats():Readonly<{symbols:number;nodes:number;pinnedSymbols:number;estimatedBytes:number;maxSymbols:number;maxBytes:number}> {
+  stats():Readonly<{
+    symbols:number;nodes:number;pinnedSymbols:number;estimatedBytes:number;maxSymbols:number;maxBytes:number;
+    fullAggregationRebuilds:number;incrementalTailUpdates:number;idleEvictions:number;
+  }> {
     const symbols=new Set([...this.nodes.values()].map(node=>node.descriptor.symbol.trim().toUpperCase()));
     let estimatedBytes=0;
     for(const node of this.nodes.values())estimatedBytes+=node.plane.estimatedBytes;
@@ -473,6 +590,9 @@ export class MarketDataGraph{
       symbols:symbols.size,nodes:this.nodes.size,
       pinnedSymbols:[...symbols].filter(symbol=>(this.symbolPins.get(symbol)??0)>0).length,
       estimatedBytes,maxSymbols:Math.max(1,Math.floor(this.maxSymbols)),maxBytes:Math.max(0,this.maxBytes),
+      fullAggregationRebuilds:this.fullAggregationRebuilds,
+      incrementalTailUpdates:this.incrementalTailUpdates,
+      idleEvictions:this.idleEvictions,
     });
   }
 
@@ -552,7 +672,9 @@ export class MarketDataGraph{
     const sessionProfile = source.sessionProfile;
     const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sessionProfile,sourceRevision:0,consumerLeaseId,lastUsedAt:Date.now()};
     this.nodes.set(key,node);
-    aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc,node.sessionProfile);
+    this.fullAggregationRebuilds+=1;
+    node.tailAggregate=aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc,node.sessionProfile);
+    node.sourceRevision=source.plane.revision;
     node.descriptor={...node.descriptor,revision:plane.revision,length:plane.length};
     this.revision+=1;
     this.trimIdleSymbols();
@@ -571,9 +693,17 @@ export class MarketDataGraph{
     return this.ensureNode(symbol,timeframe)?.descriptor;
   }
 
-  private rebuildDependents(sourceKey:string):void{
-    const queue=[sourceKey];
-    const visited=new Set<string>();
+  private rebuildNodeFromSource(node:GraphNode,source:GraphNode):void {
+    node.sessionProfile=source.sessionProfile;
+    node.anchorSecondsUtc=source.anchorSecondsUtc;
+    this.fullAggregationRebuilds+=1;
+    node.tailAggregate=aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
+    node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
+    node.sourceRevision=source.plane.revision;
+  }
+
+  private rebuildDependents(sourceKey:string):void {
+    const queue=[sourceKey],visited=new Set<string>();
     while(queue.length){
       const current=queue.shift()!;
       if(visited.has(current))continue;
@@ -582,63 +712,85 @@ export class MarketDataGraph{
         if(node.sourceKey!==current)continue;
         const source=this.nodes.get(node.sourceKey);
         if(!source)continue;
-        node.sessionProfile = source.sessionProfile;
-        node.anchorSecondsUtc = source.anchorSecondsUtc;
-        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
-        node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
-        node.sourceRevision=source.plane.revision;
+        this.rebuildNodeFromSource(node,source);
         queue.push(node.descriptor.key);
       }
     }
   }
 
-  private rebuildDependentTails(sourceKey:string):void{
+  private rebuildDependentTails(sourceKey:string):void {
+    const source=this.nodes.get(sourceKey);
+    if(!source||!source.plane.market.length)return;
     for(const node of this.nodes.values()){
       if(node.sourceKey!==sourceKey)continue;
-      const source=this.nodes.get(sourceKey);
-      if(!source||!source.plane.market.length)continue;
-      node.sessionProfile = source.sessionProfile;
-      node.anchorSecondsUtc = source.anchorSecondsUtc;
-
-      const sourceView=source.plane.market.views();
-      const lastIndex=sourceView.time.length-1;
-      const lastTimestamp=Number(sourceView.time[lastIndex]);
-      const bucket=bucketStart(lastTimestamp,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
-      if (!Number.isFinite(bucket)) continue;
-      let from=lastIndex;
-      while(from>0){
-        const previousTimestamp=Number(sourceView.time[from-1]);
-        if(!Number.isFinite(previousTimestamp)||bucketStart(previousTimestamp,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile)!==bucket)break;
-        from-=1;
-      }
-
-      let open=Number.NaN,high=Number.NaN,low=Number.NaN,close=Number.NaN,volume=0;
-      for(let i=from;i<=lastIndex;i+=1){
-        const o=Number(sourceView.open[i]),h=Number(sourceView.high[i]),l=Number(sourceView.low[i]),c=Number(sourceView.close[i]);
-        if(!Number.isFinite(o)||!Number.isFinite(h)||!Number.isFinite(l)||!Number.isFinite(c))continue;
-        if(!Number.isFinite(open))open=o;
-        high=Number.isFinite(high)?Math.max(high,h):h;
-        low=Number.isFinite(low)?Math.min(low,l):l;
-        close=c;
-        volume+=Number(sourceView.volume[i])||0;
-      }
-      if(!Number.isFinite(open)||!Number.isFinite(high)||!Number.isFinite(low)||!Number.isFinite(close))continue;
-
-      const targetLength=node.plane.market.length;
-      const targetLastTime=targetLength?Number(node.plane.market.time[targetLength-1]):Number.NaN;
-      const row={time:bucket,open,high,low,close,volume};
-      if(Number.isFinite(targetLastTime)&&targetLastTime===bucket)node.plane.updateLast(row);
-      else if(!Number.isFinite(targetLastTime)||bucket>targetLastTime)node.plane.append(row);
-      else {
-        // Out-of-order corrections are rare; rebuild once rather than corrupting alignment.
-        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
-      }
-      node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
-      node.sourceRevision=source.plane.revision;
+      const result=this.updateDependentTail(node,source);
+      if(result==='unchanged')continue;
+      if(result==='rebuild')this.rebuildNodeFromSource(node,source);
       this.rebuildDependentTails(node.descriptor.key);
     }
   }
 
+  private updateDependentTail(node:GraphNode,source:GraphNode):'updated'|'unchanged'|'rebuild' {
+    const view=source.plane.market.views();
+    const lastIndex=view.time.length-1;
+    if(lastIndex<0)return 'unchanged';
+    const timestamp=Number(view.time[lastIndex]);
+    const open=Number(view.open[lastIndex]),high=Number(view.high[lastIndex]);
+    const low=Number(view.low[lastIndex]),close=Number(view.close[lastIndex]);
+    const volume=Number(view.volume[lastIndex])||0;
+    if(!Number.isFinite(timestamp)||![open,high,low,close].every(Number.isFinite))return 'rebuild';
+
+    let state=node.tailAggregate;
+    if(!state)return 'rebuild';
+    const replacingLatest=view.time.length===state.sourceLength&&timestamp===state.lastSourceTime;
+    const appendingLatest=view.time.length===state.sourceLength+1&&timestamp>state.lastSourceTime;
+    if(!replacingLatest&&!appendingLatest)return 'rebuild';
+
+    const bucket=bucketStart(timestamp,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
+    state.sourceLength=view.time.length;
+    state.lastSourceTime=timestamp;
+    if(!Number.isFinite(bucket)){
+      state.lastSourceIncluded=false;
+      state.lastSourceVolume=0;
+      node.sourceRevision=source.plane.revision;
+      return 'unchanged';
+    }
+
+    if(bucket!==state.bucket){
+      state=createAggregateTail(bucket,timestamp,{open,high,low,close,volume},view.time.length);
+      node.tailAggregate=state;
+    }else if(replacingLatest&&state.lastSourceIncluded){
+      state.highs.set(timestamp,high);
+      state.lows.set(timestamp,low);
+      state.volume+=volume-state.lastSourceVolume;
+      if(state.count===1)state.open=open;
+      state.close=close;
+      state.lastSourceVolume=volume;
+      node.tailAggregate=state;
+    }else{
+      state.highs.set(timestamp,high);
+      state.lows.set(timestamp,low);
+      if(state.count===0)state.open=open;
+      state.close=close;
+      state.volume+=volume;
+      state.count+=1;
+      state.lastSourceIncluded=true;
+      state.lastSourceVolume=volume;
+      node.tailAggregate=state;
+    }
+
+    const row={time:bucket,open:state.open,high:state.highs.peek(),low:state.lows.peek(),close:state.close,volume:state.volume};
+    if(![row.open,row.high,row.low,row.close,row.volume].every(Number.isFinite))return 'rebuild';
+    const targetLength=node.plane.market.length;
+    const targetLastTime=targetLength?Number(node.plane.market.time[targetLength-1]):Number.NaN;
+    if(Number.isFinite(targetLastTime)&&targetLastTime===bucket)node.plane.updateLast(row);
+    else if(!Number.isFinite(targetLastTime)||bucket>targetLastTime)node.plane.append(row);
+    else return 'rebuild';
+    node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
+    node.sourceRevision=source.plane.revision;
+    this.incrementalTailUpdates+=1;
+    return 'updated';
+  }
   resolve(symbol:string,timeframe:string):CanonicalDataPlane|undefined{
     const node=this.ensureNode(symbol,timeframe);
     return node?.plane;
@@ -676,10 +828,9 @@ export class MarketDataGraph{
   }
 
   clear():void{
+    if(this.idleSweepTimer){clearTimeout(this.idleSweepTimer);this.idleSweepTimer=undefined;}
     const symbols=[...new Set([...this.nodes.values()].map(node=>node.descriptor.symbol))];
-    let removed=0;
-    for(const symbol of symbols)removed+=this.evictSymbol(symbol);
-    if(removed>0)this.revision+=1;
+    for(const symbol of symbols)this.evictSymbol(symbol);
   }
 }
 
