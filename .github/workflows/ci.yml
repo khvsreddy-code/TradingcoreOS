@@ -71,7 +71,6 @@ jobs:
       TCO_BROWSER_PERF_ENABLED: ${{ vars.TCO_BROWSER_PERF_ENABLED }}
       TCO_BROWSER_BASE_URL: ${{ vars.TCO_BROWSER_BASE_URL }}
       TCO_BROWSER_STATE_BASE64: ${{ secrets.TCO_BROWSER_STATE_BASE64 }}
-      TCO_BROWSER_STATE_FILE: ${{ runner.temp }}/tco-browser-state.json
       TCO_BROWSER_CHROMIUM_ARGS: '--enable-precise-memory-info'
       TCO_BROWSER_SOAK_MS: '30000'
       TCO_BROWSER_SETTLE_MS: '5000'
@@ -107,6 +106,8 @@ jobs:
         run: |
           test -n "$TCO_BROWSER_BASE_URL" || { echo "Set repository variable TCO_BROWSER_BASE_URL to the authenticated /live URL."; exit 1; }
           test -n "$TCO_BROWSER_STATE_BASE64" || { echo "Set repository secret TCO_BROWSER_STATE_BASE64 to agent-browser storage-state JSON."; exit 1; }
+          TCO_BROWSER_STATE_FILE="$RUNNER_TEMP/tco-browser-state.json"
+          echo "TCO_BROWSER_STATE_FILE=$TCO_BROWSER_STATE_FILE" >> "$GITHUB_ENV"
           umask 077
           printf '%s' "$TCO_BROWSER_STATE_BASE64" | base64 --decode > "$TCO_BROWSER_STATE_FILE"
           test -s "$TCO_BROWSER_STATE_FILE"

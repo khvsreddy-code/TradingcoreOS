@@ -21,6 +21,8 @@ assert.ok(runtime.includes('heapSamples.length > 2048'), 'runtime retains >30m o
 assert.ok(ci.includes('name: browser-performance') && ci.includes("TCO_BROWSER_SOAK_MS: '30000'"));
 assert.ok(soak.includes("TCO_BROWSER_SOAK_MS: '1800000'"), 'scheduled soak is 30 minutes');
 assert.ok(soak.includes("TCO_EXPECTED_CELLS: '8'"));
+assert.ok(!ci.includes('TCO_BROWSER_STATE_FILE: ${{ runner.temp }}'), 'runner.temp must not appear in job-level env');
+assert.ok(!soak.includes('TCO_BROWSER_STATE_FILE: ${{ runner.temp }}'), 'runner.temp must not appear in job-level env');
 assert.ok(matrix.includes('authenticated live TradingCoreOS terminal'));
 assert.ok(release.includes('TCO_BROWSER_STATE_BASE64'));
 assert.ok(pullRequestTemplate.includes('Browser performance evidence'));
