@@ -261,4 +261,52 @@ assert.deepEqual(
 assert.ok(allAtOnce.snapshot([{symbol:'TEST',timeframe:'1D',fields:['close']}],'TEST','1m').nodes[0]?.closeTime,
   'session close boundaries must travel with graph snapshots');
 
+
+// Forming source candle replacements update a retained bucket aggregate rather
+// than rescanning source history. The indexed extrema heaps restore displaced
+// prior highs/lows when the latest source bar is revised down.
+const hotGraph=new MarketDataGraph({anchorSecondsUtc:13500});
+hotGraph.syncBase('HOT','1m',base);
+const hotDerived=hotGraph.ensureNode('HOT','5m');
+if(!hotDerived)throw new Error('hot-path 5m derived node missing');
+const beforeHot=hotGraph.stats();
+hotGraph.updateBaseLast('HOT','1m',{
+  timestamp:base.at(-1)!.timestamp,open:103.5,high:120,low:98,close:110,volume:20,
+});
+hotGraph.updateBaseLast('HOT','1m',{
+  timestamp:base.at(-1)!.timestamp,open:103.5,high:103,low:100,close:102,volume:22,
+});
+const afterHot=hotGraph.stats();
+assert.equal(afterHot.fullAggregationRebuilds,beforeHot.fullAggregationRebuilds,
+  'forming source-candle revisions do not trigger a historical aggregate rebuild');
+assert.equal(afterHot.incrementalTailUpdates,beforeHot.incrementalTailUpdates+2,
+  'each forming source-candle revision updates retained aggregate state');
+const hotView=hotDerived.plane.market.views();
+assert.equal(hotView.high[0],104,'revising the latest high reveals the next-highest earlier candle');
+assert.equal(hotView.low[0],99,'revising the latest low reveals the next-lowest earlier candle');
+assert.equal(hotView.close[0],102);
+assert.equal(hotView.volume[0],74,'replacement volume is applied as a delta');
+
+const nextSource={timestamp:'2026-10-06T03:50:00.000Z',open:102,high:106,low:101,close:105,volume:9};
+hotGraph.updateBaseLast('HOT','1m',nextSource);
+hotGraph.updateBaseLast('HOT','1m',{...nextSource,high:104,low:100,close:103,volume:11});
+const hotBoundary=hotDerived.plane.market.views();
+assert.equal(hotBoundary.time.length,2,'new source bucket appends one derived timeframe candle');
+assert.equal(hotBoundary.high[1],104);
+assert.equal(hotBoundary.low[1],100);
+assert.equal(hotBoundary.close[1],103);
+assert.equal(hotBoundary.volume[1],11);
+
+// Time-based idle expiry works even below capacity, and a live symbol pin wins.
+const idleGraph=new MarketDataGraph({anchorSecondsUtc:13500},64,128*1024*1024,30_000);
+idleGraph.syncBase('IDLE','1m',base);
+idleGraph.ensureNode('IDLE','5m');
+const releaseIdlePin=idleGraph.retainSymbol('IDLE');
+const futureIdleTime=Date.now()+60_000;
+assert.equal(idleGraph.trimIdleSymbols(futureIdleTime),0,'pinned graph nodes cannot be evicted');
+assert.equal(idleGraph.listNodes().filter(node=>node.symbol==='IDLE').length,2);
+releaseIdlePin();
+assert.equal(idleGraph.trimIdleSymbols(futureIdleTime),2,'expired unpinned graph nodes are evicted without capacity pressure');
+assert.equal(idleGraph.listNodes().some(node=>node.symbol==='IDLE'),false);
+
 console.log('CORESPIRIT_MARKET_DATA_GRAPH_CONTRACT_OK');
