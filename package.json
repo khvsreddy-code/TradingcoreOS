@@ -16,7 +16,7 @@
     "coreSpirit:normalize": "node tools/corespirit-cli.mjs normalize",
     "coreSpirit:inspect": "node tools/corespirit-cli.mjs inspect",
     "coreSpirit:graph": "node tools/corespirit-cli.mjs graph",
-    "ci": "npm run test:contracts && npm run typecheck && npm run build",
+    "ci": "npm run test:contracts && npm run typecheck && npx vite build && npm run bundle:budget",
     "verify:browser": "node tools/verify-chart-performance.mjs",
     "build:corespirit:wasm": "sh tools/build-core-spirit-wasm.sh",
     "benchmark:corespirit:wasm": "tsx tools/benchmark-core-spirit-wasm.mjs",
