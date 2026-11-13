@@ -145,7 +145,7 @@ export class HistoryStore {
       if(!saved?.data.length)return undefined;
       const rows=saved.data.filter((row):row is HistoricalCandle=>{
         if(!row||typeof row!=='object')return false;
-        if(row.source==='unknown'||!isConfirmedHistoryCandle(row))return false;
+        if (row.source === 'unknown' || !isConfirmedHistoryCandle(row))return false;
         const time=Date.parse(String(row.timestamp));
         const open=Number(row.open),high=Number(row.high),low=Number(row.low),close=Number(row.close),volume=Number(row.volume??0);
         return Number.isFinite(time)&&time>0&&[open,high,low,close].every(Number.isFinite)&&high>=Math.max(open,close)&&low<=Math.min(open,close)&&high>=low&&Number.isFinite(volume)&&volume>=0;
@@ -242,7 +242,7 @@ export class HistoryStore {
   }
   /** Update the live in-memory tail. Forming bars never schedule IndexedDB work. */
   upsertLatest(broker:string,symbol:string,timeframe:string,row:HistoricalCandle,target=25_000){
-    if(row.source==='unknown')return this.getStale(broker,symbol,timeframe)||[];
+    if (row.source === 'unknown')return this.getStale(broker,symbol,timeframe)||[];
     const key=this.key(broker,symbol,timeframe),bucket=this.buckets.get(key);
     if(!bucket)return this.set(broker,symbol,timeframe,[row],target,isConfirmedHistoryCandle(row));
     this.touch(key,bucket);
@@ -269,7 +269,7 @@ export class HistoryStore {
     return bucket.data;
   }
   merge(a:HistoricalCandle[],b:HistoricalCandle[]){
-    const trusted=(rows:HistoricalCandle[])=>rows.filter(row=>row&&row.source!=='unknown');
+    const trusted=(rows:HistoricalCandle[])=>rows.filter(row => row && row.source !== 'unknown');
     return mergeCanonicalCandleRows(trusted(a),trusted(b),this.maxCandles);
   }
   estimatedBytesFor(broker:string,symbol:string,timeframe:string):number{
