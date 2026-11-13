@@ -38,6 +38,8 @@ jobs:
       - name: Typecheck
         if: always()
         run: npm run typecheck
+      - name: Build standalone realtime gateway container
+        run: docker build --file realtime-gateway/Dockerfile --tag tradingcoreos-realtime-gateway:${{ github.sha }} .
       - name: Production build and bundle budgets
         run: npm run build
       - name: Benchmark WASM kernels against CPU references

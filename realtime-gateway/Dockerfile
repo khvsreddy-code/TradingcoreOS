@@ -1,12 +1,19 @@
 FROM node:24-bookworm-slim
 
 WORKDIR /app
-ENV NODE_ENV=production
 
+# The gateway starts its TypeScript entrypoint with tsx. Keep dev dependencies
+# in the image deliberately; installing with NODE_ENV=production would omit it.
 COPY package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm ci --include=dev --no-audit --no-fund
 
 COPY . .
 
+ENV NODE_ENV=production
+
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+
 CMD ["npm", "run", "realtime:gateway"]

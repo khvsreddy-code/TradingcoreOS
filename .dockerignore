@@ -1,0 +1,33 @@
+# VCS and local environment
+.git
+.github
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Installed dependencies are rebuilt inside the image
+node_modules
+**/node_modules
+
+# Build output and local caches
+dist
+**/dist
+build
+coverage
+**/coverage
+.vite
+.turbo
+.vercel
+.cache
+.npm
+
+# Local tooling and reports
+.vscode
+.idea
+.DS_Store
+*.log
+playwright-report
+test-results
+core-spirit-wasm-benchmark.txt
