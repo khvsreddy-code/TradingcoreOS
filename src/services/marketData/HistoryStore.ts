@@ -1,7 +1,46 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { candleTimestampMs, mergeCanonicalCandleRows } from './chartCandleEvents';
 
-type Bucket = { data: HistoricalCandle[]; updatedAt: number; oldestAt: number; newestAt: number; target: number; revision: number; estimatedBytes: number; loading?: Promise<HistoricalCandle[]> };
+type Bucket = {
+  data: HistoricalCandle[]; updatedAt: number; oldestAt: number; newestAt: number;
+  target: number; revision: number;
+  /** Field-aware object-cache estimate; browser heap telemetry is reported separately. */
+  estimatedBytes: number; dirty: boolean; persistedRevision: number;
+  loading?: Promise<HistoricalCandle[]>;
+};
+export const HISTORY_CHECKPOINT_INTERVAL_MS = 1_500;
+const CANDLE_OBJECT_HEADER_ESTIMATE = 40;
+const CANDLE_PROPERTY_SLOT_ESTIMATE = 8;
+type BrowserHeapSnapshot = Readonly<{usedJSHeapSize:number|null;totalJSHeapSize:number|null;jsHeapSizeLimit:number|null}>;
+function isConfirmedHistoryCandle(row: HistoricalCandle): boolean {
+  return row.confirmed !== false && row.phase !== 'developing' && row.phase !== 'realtime' && row.phase !== 'forecast';
+}
+function estimateValueBytes(value: unknown): number {
+  if (typeof value === 'string') return 24 + value.length * 2;
+  if (typeof value === 'number') return 8;
+  if (typeof value === 'boolean') return 4;
+  if (value == null) return 4;
+  return 16;
+}
+/** Shallow, field-aware estimate only; browser heap telemetry is a separate measurement. */
+function estimateCandleObjectBytes(row: HistoricalCandle): number {
+  let bytes=CANDLE_OBJECT_HEADER_ESTIMATE;
+  for(const [key,value] of Object.entries(row as Record<string,unknown>))
+    bytes+=CANDLE_PROPERTY_SLOT_ESTIMATE+key.length*2+estimateValueBytes(value);
+  return bytes;
+}
+function estimateCandleRowsBytes(rows: readonly HistoricalCandle[]): number {
+  return 24+rows.length*8+rows.reduce((total,row)=>total+estimateCandleObjectBytes(row),0);
+}
+function browserHeapSnapshot(): BrowserHeapSnapshot {
+  const memory=(globalThis.performance as (Performance & {memory?:{usedJSHeapSize?:number;totalJSHeapSize?:number;jsHeapSizeLimit?:number}})|undefined)?.memory;
+  const finiteOrNull=(value:unknown)=>value==null||!Number.isFinite(Number(value))?null:Number(value);
+  return Object.freeze({
+    usedJSHeapSize:finiteOrNull(memory?.usedJSHeapSize),
+    totalJSHeapSize:finiteOrNull(memory?.totalJSHeapSize),
+    jsHeapSizeLimit:finiteOrNull(memory?.jsHeapSizeLimit),
+  });
+}
 
 export const PERSISTED_HISTORY_CANDLE_LIMIT = 2_000;
 const HISTORY_DB_NAME = 'tradingcore-history-cache-v1';
@@ -46,22 +85,20 @@ function readPersistedHistory(key: string): Promise<PersistedHistoryBucket | und
   }));
 }
 
-async function writePersistedHistory(key: string, bucket: Bucket): Promise<void> {
-  const db = await openHistoryDb();
-  if (!db) return;
-  const data = bucket.data.slice(-PERSISTED_HISTORY_CANDLE_LIMIT);
-  if (!data.length) return;
-  await new Promise<void>(resolve => {
-    try {
-      const transaction = db.transaction(HISTORY_DB_STORE, 'readwrite');
-      transaction.objectStore(HISTORY_DB_STORE).put({ key, data, updatedAt: bucket.updatedAt, revision: bucket.revision, target: PERSISTED_HISTORY_CANDLE_LIMIT } satisfies PersistedHistoryBucket);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => resolve();
-      transaction.onabort = () => resolve();
-    } catch { resolve(); }
+async function writePersistedHistory(key:string,data:HistoricalCandle[],updatedAt:number,revision:number):Promise<boolean>{
+  const db=await openHistoryDb();
+  if(!db)return false;
+  if(!data.length)return true;
+  return new Promise<boolean>(resolve=>{
+    try{
+      const transaction=db.transaction(HISTORY_DB_STORE,'readwrite');
+      transaction.objectStore(HISTORY_DB_STORE).put({key,data,updatedAt,revision,target:PERSISTED_HISTORY_CANDLE_LIMIT} satisfies PersistedHistoryBucket);
+      transaction.oncomplete=()=>resolve(true);
+      transaction.onerror=()=>resolve(false);
+      transaction.onabort=()=>resolve(false);
+    }catch{resolve(false);}
   });
 }
-
 function clearPersistedHistory(): void {
   void openHistoryDb().then(db => {
     if (!db) return;
@@ -69,196 +106,252 @@ function clearPersistedHistory(): void {
   });
 }
 
-/** Shared in-memory candle store. History is reusable across chart switches and is
- * deliberately independent from React/chart lifecycle. */
+/** Shared in-memory candle store. Live updates stay here; IndexedDB is a bounded
+ * recovery checkpoint and never participates in the live chart mutation path. */
 export class HistoryStore {
-  private buckets = new Map<string, Bucket>();
-  constructor(private readonly maxCandles = 50_000, private readonly ttlMs = 600_000, private readonly maxBuckets = 96) {}
-  private touch(key: string, bucket: Bucket): Bucket { this.buckets.delete(key); this.buckets.set(key, bucket); return bucket; }
-  private trimBuckets(): void { while (this.buckets.size > Math.max(1, this.maxBuckets)) { const oldest = this.buckets.keys().next().value; if (oldest == null) break; this.buckets.delete(oldest); } }
-  key(broker: string, symbol: string, timeframe: string) { return `${broker.toLowerCase()}:${symbol}:${timeframe}`; }
-
-  /** Restore persisted candles before a broker request; stale data can paint immediately. */
-  async hydrate(broker: string, symbol: string, timeframe: string): Promise<HistoricalCandle[] | undefined> {
-    const key = this.key(broker, symbol, timeframe);
-    const resident = this.buckets.get(key);
-    if (resident) return resident.data;
-    const pending = historyHydrations.get(key);
-    if (pending) return pending;
-    const promise = (async () => {
-      const saved = await readPersistedHistory(key);
-      if (!saved?.data.length) return undefined;
-      const rows = saved.data.filter((row): row is HistoricalCandle => {
-        if (!row || typeof row !== 'object') return false;
-        // Retired Yahoo fallback candles were tagged "unknown"; never hydrate them as history.
-        if (row.source === 'unknown') return false;
-        const time = Date.parse(String(row.timestamp));
-        const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
-        const volume = Number(row.volume ?? 0);
-        return Number.isFinite(time) && time > 0 && [open, high, low, close].every(Number.isFinite)
-          && high >= Math.max(open, close) && low <= Math.min(open, close) && high >= low
-          && Number.isFinite(volume) && volume >= 0;
-      }).sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp)));
-      const data = this.merge([], rows).slice(-PERSISTED_HISTORY_CANDLE_LIMIT);
-      if (!data.length) return undefined;
-      const stamps = data.map(row => Date.parse(String(row.timestamp))).filter(Number.isFinite);
-      const oldestAt = Math.min(...stamps), newestAt = Math.max(...stamps);
-      if (!Number.isFinite(oldestAt) || !Number.isFinite(newestAt)) return undefined;
-      const current = this.buckets.get(key);
-      if (current) return current.data;
-      const bucket: Bucket = { data, updatedAt: Number.isFinite(Number(saved.updatedAt)) ? Number(saved.updatedAt) : 0,
-        oldestAt, newestAt, target: PERSISTED_HISTORY_CANDLE_LIMIT, revision: Math.max(1, Number(saved.revision) || 1), estimatedBytes: data.length * 80 };
-      this.buckets.set(key, bucket);
+  private buckets=new Map<string,Bucket>();
+  private readonly inFlightCheckpoints=new Map<string,Promise<boolean>>();
+  constructor(private readonly maxCandles=50_000,private readonly ttlMs=600_000,private readonly maxBuckets=96){}
+  private touch(key:string,bucket:Bucket):Bucket{this.buckets.delete(key);this.buckets.set(key,bucket);return bucket;}
+  private snapshotConfirmed(bucket:Bucket):HistoricalCandle[]{
+    return bucket.data.filter(isConfirmedHistoryCandle).slice(-PERSISTED_HISTORY_CANDLE_LIMIT).map(row=>({...row}));
+  }
+  private persistDetached(key:string,bucket:Bucket):void{
+    const data=this.snapshotConfirmed(bucket);
+    if(data.length)void writePersistedHistory(key,data,bucket.updatedAt,bucket.revision);
+  }
+  private trimBuckets():void{
+    while(this.buckets.size>Math.max(1,this.maxBuckets)){
+      const oldest=this.buckets.entries().next().value as [string,Bucket]|undefined;
+      if(!oldest)break;
+      if(oldest[1].dirty)this.persistDetached(oldest[0],oldest[1]);
+      const timer=historyPersistTimers.get(oldest[0]);
+      if(timer)clearTimeout(timer);
+      historyPersistTimers.delete(oldest[0]);
+      this.buckets.delete(oldest[0]);
+    }
+  }
+  key(broker:string,symbol:string,timeframe:string){return `${broker.toLowerCase()}:${symbol}:${timeframe}`;}
+  async hydrate(broker:string,symbol:string,timeframe:string):Promise<HistoricalCandle[]|undefined>{
+    const key=this.key(broker,symbol,timeframe);
+    const resident=this.buckets.get(key);
+    if(resident)return resident.data;
+    const pending=historyHydrations.get(key);
+    if(pending)return pending;
+    const promise=(async()=>{
+      const saved=await readPersistedHistory(key);
+      if(!saved?.data.length)return undefined;
+      const rows=saved.data.filter((row):row is HistoricalCandle=>{
+        if(!row||typeof row!=='object')return false;
+        if(row.source==='unknown'||!isConfirmedHistoryCandle(row))return false;
+        const time=Date.parse(String(row.timestamp));
+        const open=Number(row.open),high=Number(row.high),low=Number(row.low),close=Number(row.close),volume=Number(row.volume??0);
+        return Number.isFinite(time)&&time>0&&[open,high,low,close].every(Number.isFinite)&&high>=Math.max(open,close)&&low<=Math.min(open,close)&&high>=low&&Number.isFinite(volume)&&volume>=0;
+      }).sort((a,b)=>Date.parse(String(a.timestamp))-Date.parse(String(b.timestamp)));
+      const data=this.merge([],rows).slice(-PERSISTED_HISTORY_CANDLE_LIMIT);
+      if(!data.length)return undefined;
+      const stamps=data.map(row=>Date.parse(String(row.timestamp))).filter(Number.isFinite);
+      const oldestAt=Math.min(...stamps),newestAt=Math.max(...stamps);
+      if(!Number.isFinite(oldestAt)||!Number.isFinite(newestAt))return undefined;
+      const current=this.buckets.get(key);
+      if(current)return current.data;
+      const revision=Math.max(1,Number(saved.revision)||1);
+      const bucket:Bucket={
+        data,updatedAt:Number.isFinite(Number(saved.updatedAt))?Number(saved.updatedAt):0,
+        oldestAt,newestAt,target:PERSISTED_HISTORY_CANDLE_LIMIT,revision,
+        estimatedBytes:estimateCandleRowsBytes(data),dirty:false,persistedRevision:revision,
+      };
+      this.buckets.set(key,bucket);
       this.trimBuckets();
       return data;
-    })().finally(() => historyHydrations.delete(key));
-    historyHydrations.set(key, promise);
+    })().finally(()=>historyHydrations.delete(key));
+    historyHydrations.set(key,promise);
     return promise;
   }
-
-  private schedulePersist(key: string, bucket: Bucket): void {
-    if (typeof indexedDB === 'undefined') return;
-    const old = historyPersistTimers.get(key);
-    if (old) clearTimeout(old);
-    const timer = setTimeout(() => {
+  /** One dirty transition starts a checkpoint window; later ticks don't move its deadline. */
+  private schedulePersist(key:string,bucket:Bucket):void{
+    if(typeof indexedDB==='undefined'||!bucket.dirty||historyPersistTimers.has(key))return;
+    const timer=setTimeout(()=>{
       historyPersistTimers.delete(key);
-      const latest = this.buckets.get(key);
-      if (latest) void writePersistedHistory(key, latest);
-    }, 350);
-    historyPersistTimers.set(key, timer);
+      void this.checkpoint(key);
+    },HISTORY_CHECKPOINT_INTERVAL_MS);
+    historyPersistTimers.set(key,timer);
   }
-
-  get(broker: string, symbol: string, timeframe: string): HistoricalCandle[] | undefined {
-    const key = this.key(broker, symbol, timeframe);
-    const b = this.buckets.get(key);
-    if (!b || Date.now() - b.updatedAt > this.ttlMs) return undefined;
-    return this.touch(key, b).data;
+  private checkpoint(key:string,force=false):Promise<boolean>{
+    const existing=this.inFlightCheckpoints.get(key);
+    if(existing)return existing.then(success=>{
+      const latest=this.buckets.get(key);
+      if(!latest||(!force&&!latest.dirty))return success;
+      return this.checkpoint(key,force);
+    });
+    const bucket=this.buckets.get(key);
+    if(!bucket?.data.length||(!force&&!bucket.dirty))return Promise.resolve(true);
+    const data=this.snapshotConfirmed(bucket);
+    if(!data.length){bucket.dirty=false;return Promise.resolve(true);}
+    const revision=bucket.revision;
+    const task=writePersistedHistory(key,data,bucket.updatedAt,revision).then(success=>{
+      if(this.buckets.get(key)!==bucket)return success;
+      if(success){
+        bucket.persistedRevision=Math.max(bucket.persistedRevision,revision);
+        if(bucket.revision===revision)bucket.dirty=false;
+        else this.schedulePersist(key,bucket);
+      }
+      return success;
+    }).finally(()=>{if(this.inFlightCheckpoints.get(key)===task)this.inFlightCheckpoints.delete(key);});
+    this.inFlightCheckpoints.set(key,task);
+    return task;
   }
-  getStale(broker: string, symbol: string, timeframe: string): HistoricalCandle[] | undefined { const key=this.key(broker,symbol,timeframe); const bucket=this.buckets.get(key); return bucket ? this.touch(key,bucket).data : undefined; }
-  set(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 25_000) {
-    const key = this.key(broker, symbol, timeframe);
-    const previous = this.buckets.get(key);
-    // A shorter or later-arriving response must not erase known non-overlapping history.
-    // Incoming rows remain authoritative when a timestamp is present in both sets.
-    const data = this.merge(previous?.data ?? [], rows).slice(-this.maxCandles);
-    if (!data.length) return data;
-    let oldestAt = Number.POSITIVE_INFINITY;
-    let newestAt = Number.NEGATIVE_INFINITY;
-    for (const row of data) {
-      const timestamp = Date.parse(String(row.timestamp));
-      if (!Number.isFinite(timestamp)) continue;
-      if (timestamp < oldestAt) oldestAt = timestamp;
-      if (timestamp > newestAt) newestAt = timestamp;
+  get(broker:string,symbol:string,timeframe:string):HistoricalCandle[]|undefined{
+    const key=this.key(broker,symbol,timeframe),bucket=this.buckets.get(key);
+    if(!bucket||Date.now()-bucket.updatedAt>this.ttlMs)return undefined;
+    return this.touch(key,bucket).data;
+  }
+  getStale(broker:string,symbol:string,timeframe:string):HistoricalCandle[]|undefined{
+    const key=this.key(broker,symbol,timeframe),bucket=this.buckets.get(key);
+    return bucket?this.touch(key,bucket).data:undefined;
+  }
+  set(broker:string,symbol:string,timeframe:string,rows:HistoricalCandle[],target=25_000,persist=true){
+    const key=this.key(broker,symbol,timeframe),previous=this.buckets.get(key);
+    const data=this.merge(previous?.data??[],rows).slice(-this.maxCandles);
+    if(!data.length)return data;
+    let oldestAt=Number.POSITIVE_INFINITY,newestAt=Number.NEGATIVE_INFINITY;
+    for(const row of data){
+      const timestamp=Date.parse(String(row.timestamp));
+      if(!Number.isFinite(timestamp))continue;
+      if(timestamp<oldestAt)oldestAt=timestamp;
+      if(timestamp>newestAt)newestAt=timestamp;
     }
-    if (!Number.isFinite(oldestAt) || !Number.isFinite(newestAt)) return data;
-    this.buckets.delete(key);
-    const bucket: Bucket = { data, updatedAt: Date.now(), oldestAt, newestAt, target, revision: (previous?.revision ?? 0) + 1, estimatedBytes: data.length * 80 };
-    this.buckets.set(key, bucket);
-    this.trimBuckets();
-    this.schedulePersist(key, bucket);
+    if(!Number.isFinite(oldestAt)||!Number.isFinite(newestAt))return data;
+    const bucket:Bucket={
+      data,updatedAt:Date.now(),oldestAt,newestAt,target,
+      revision:(previous?.revision??0)+1,
+      estimatedBytes:estimateCandleRowsBytes(data),
+      dirty:Boolean(previous?.dirty)||persist,persistedRevision:previous?.persistedRevision??0,
+    };
+    this.buckets.delete(key);this.buckets.set(key,bucket);this.trimBuckets();
+    if(persist)this.schedulePersist(key,bucket);
     return data;
   }
-  mergeInto(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 25_000) {
-    const current = this.getStale(broker, symbol, timeframe) || [];
-    return this.set(broker, symbol, timeframe, this.merge(current, rows), target);
+  mergeInto(broker:string,symbol:string,timeframe:string,rows:HistoricalCandle[],target=25_000){
+    const current=this.getStale(broker,symbol,timeframe)||[];
+    return this.set(broker,symbol,timeframe,this.merge(current,rows),target);
   }
-  upsertLatest(broker: string, symbol: string, timeframe: string, row: HistoricalCandle, target = 25_000) {
-    if (row.source === 'unknown') return this.getStale(broker, symbol, timeframe) || [];
-    const key = this.key(broker, symbol, timeframe);
-    const bucket = this.buckets.get(key);
-    if (!bucket) return this.set(broker, symbol, timeframe, [row], target);
-    this.touch(key, bucket);
-    const timestamp = candleTimestampMs(row.timestamp);
-    if (timestamp == null) return bucket.data;
-    const last = bucket.data[bucket.data.length - 1];
-    const lastTimestamp = last ? candleTimestampMs(last.timestamp) : undefined;
-    if (lastTimestamp != null && Math.floor(timestamp / 1000) === Math.floor(lastTimestamp / 1000)) bucket.data[bucket.data.length - 1] = row;
-    else if (lastTimestamp == null || timestamp > lastTimestamp) bucket.data.push(row);
-    else return bucket.data;
-    if (bucket.data.length > this.maxCandles) bucket.data.splice(0, bucket.data.length - this.maxCandles);
-    bucket.updatedAt = Date.now();
-    bucket.target = target;
-    bucket.revision += 1;
-    bucket.estimatedBytes = bucket.data.length * 80;
-    bucket.oldestAt = Date.parse(String(bucket.data[0]?.timestamp));
-    bucket.newestAt = Date.parse(String(bucket.data[bucket.data.length - 1]?.timestamp));
-    this.schedulePersist(key, bucket);
+  /** Update the live in-memory tail. Forming bars never schedule IndexedDB work. */
+  upsertLatest(broker:string,symbol:string,timeframe:string,row:HistoricalCandle,target=25_000){
+    if(row.source==='unknown')return this.getStale(broker,symbol,timeframe)||[];
+    const key=this.key(broker,symbol,timeframe),bucket=this.buckets.get(key);
+    if(!bucket)return this.set(broker,symbol,timeframe,[row],target,isConfirmedHistoryCandle(row));
+    this.touch(key,bucket);
+    const timestamp=candleTimestampMs(row.timestamp);
+    if(timestamp==null)return bucket.data;
+    const last=bucket.data[bucket.data.length-1],lastTimestamp=last?candleTimestampMs(last.timestamp):undefined;
+    const previousBytes=last?estimateCandleObjectBytes(last):0;
+    if(lastTimestamp!=null&&Math.floor(timestamp/1000)===Math.floor(lastTimestamp/1000)){
+      bucket.data[bucket.data.length-1]=row;
+      bucket.estimatedBytes+=estimateCandleObjectBytes(row)-previousBytes;
+    }else if(lastTimestamp==null||timestamp>lastTimestamp){
+      bucket.data.push(row);
+      bucket.estimatedBytes+=8+estimateCandleObjectBytes(row);
+    }else return bucket.data;
+    if(bucket.data.length>this.maxCandles){
+      const removed=bucket.data.splice(0,bucket.data.length-this.maxCandles);
+      bucket.estimatedBytes-=removed.reduce((sum,candle)=>sum+8+estimateCandleObjectBytes(candle),0);
+    }
+    bucket.updatedAt=Date.now();bucket.target=target;bucket.revision+=1;
+    bucket.estimatedBytes=Math.max(0,bucket.estimatedBytes);
+    bucket.oldestAt=Date.parse(String(bucket.data[0]?.timestamp));
+    bucket.newestAt=Date.parse(String(bucket.data[bucket.data.length-1]?.timestamp));
+    if(isConfirmedHistoryCandle(row)){bucket.dirty=true;this.schedulePersist(key,bucket);}
     return bucket.data;
   }
-  merge(a: HistoricalCandle[], b: HistoricalCandle[]) {
-    const trusted = (rows: HistoricalCandle[]) => rows.filter(row => row && row.source !== 'unknown');
-    return mergeCanonicalCandleRows(trusted(a), trusted(b), this.maxCandles);
+  merge(a:HistoricalCandle[],b:HistoricalCandle[]){
+    const trusted=(rows:HistoricalCandle[])=>rows.filter(row=>row&&row.source!=='unknown');
+    return mergeCanonicalCandleRows(trusted(a),trusted(b),this.maxCandles);
   }
-  estimatedBytesFor(broker: string, symbol: string, timeframe: string): number {
-    return this.buckets.get(this.key(broker, symbol, timeframe))?.estimatedBytes ?? 0;
+  estimatedBytesFor(broker:string,symbol:string,timeframe:string):number{
+    return this.buckets.get(this.key(broker,symbol,timeframe))?.estimatedBytes??0;
   }
-
-  /** Flush confirmed history before its live chart/canonical buffers are evicted. */
-  async persistConfirmedNow(broker: string, symbol: string, timeframe: string): Promise<boolean> {
-    const key = this.key(broker, symbol, timeframe);
-    const bucket = this.buckets.get(key);
-    if (!bucket?.data.length) return true;
-    const pendingTimer = historyPersistTimers.get(key);
-    if (pendingTimer) clearTimeout(pendingTimer);
+  async persistConfirmedNow(broker:string,symbol:string,timeframe:string):Promise<boolean>{
+    const key=this.key(broker,symbol,timeframe),timer=historyPersistTimers.get(key);
+    if(timer)clearTimeout(timer);
     historyPersistTimers.delete(key);
-    const confirmed = bucket.data.filter(row =>
-      row.confirmed !== false && row.phase !== 'developing' && row.phase !== 'realtime' && row.phase !== 'forecast'
-    ).slice(-PERSISTED_HISTORY_CANDLE_LIMIT);
-    if (!confirmed.length) return true;
-    const db = await openHistoryDb();
-    if (!db) return true; // The bounded HistoryStore LRU remains the recovery source.
-    return new Promise<boolean>(resolve => {
-      try {
-        const transaction = db.transaction(HISTORY_DB_STORE, 'readwrite');
-        transaction.objectStore(HISTORY_DB_STORE).put({
-          key, data: confirmed, updatedAt: bucket.updatedAt,
-          revision: bucket.revision, target: PERSISTED_HISTORY_CANDLE_LIMIT,
-        } satisfies PersistedHistoryBucket);
-        transaction.oncomplete = () => resolve(true);
-        transaction.onerror = () => resolve(false);
-        transaction.onabort = () => resolve(false);
-      } catch {
-        resolve(false);
-      }
+    return this.checkpoint(key,true);
+  }
+  /** Best-effort local IndexedDB flush on pagehide/visibility loss; no cloud sync. */
+  async flushDirty():Promise<boolean>{
+    const keys=[...this.buckets.entries()].filter(([,bucket])=>bucket.dirty).map(([key])=>key);
+    if(!keys.length)return true;
+    const results=await Promise.all(keys.map(key=>{
+      const timer=historyPersistTimers.get(key);
+      if(timer)clearTimeout(timer);
+      historyPersistTimers.delete(key);
+      return this.checkpoint(key,true);
+    }));
+    return results.every(Boolean);
+  }
+  stats(){
+    let candleCount=0,objectCacheEstimatedBytes=0,dirtyBuckets=0;
+    for(const bucket of this.buckets.values()){
+      candleCount+=bucket.data.length;
+      objectCacheEstimatedBytes+=bucket.estimatedBytes;
+      if(bucket.dirty)dirtyBuckets+=1;
+    }
+    const heap=browserHeapSnapshot();
+    return Object.freeze({
+      buckets:this.buckets.size,candleCount,
+      estimatedBytes:objectCacheEstimatedBytes,objectCacheEstimatedBytes,
+      typedArrayBytes:0,
+      heapUsedBytes:heap.usedJSHeapSize,heapTotalBytes:heap.totalJSHeapSize,heapLimitBytes:heap.jsHeapSizeLimit,
+      dirtyBuckets,inFlightWrites:this.inFlightCheckpoints.size,
+      checkpointIntervalMs:HISTORY_CHECKPOINT_INTERVAL_MS,
+      maxCandlesPerBucket:this.maxCandles,maxBuckets:this.maxBuckets,
     });
   }
-  stats() {
-    let candleCount = 0; let estimatedBytes = 0;
-    for (const bucket of this.buckets.values()) { candleCount += bucket.data.length; estimatedBytes += bucket.estimatedBytes; }
-    return Object.freeze({ buckets: this.buckets.size, candleCount, estimatedBytes, maxCandlesPerBucket: this.maxCandles, maxBuckets: this.maxBuckets });
+  range(broker:string,symbol:string,timeframe:string){
+    const bucket=this.buckets.get(this.key(broker,symbol,timeframe));
+    return bucket?{
+      oldestAt:bucket.oldestAt,newestAt:bucket.newestAt,count:bucket.data.length,target:bucket.target,
+      updatedAt:bucket.updatedAt,revision:bucket.revision,estimatedBytes:bucket.estimatedBytes,
+      dirty:bucket.dirty,persistedRevision:bucket.persistedRevision,
+    }:undefined;
   }
-  range(broker: string, symbol: string, timeframe: string) {
-    const b = this.buckets.get(this.key(broker, symbol, timeframe));
-    return b ? { oldestAt:b.oldestAt, newestAt:b.newestAt, count:b.data.length, target:b.target, updatedAt:b.updatedAt, revision:b.revision, estimatedBytes:b.estimatedBytes } : undefined;
-  }
-  getBefore(broker: string, symbol: string, timeframe: string, beforeTimestamp: string, limit = 1000): HistoricalCandle[] {
-    const key = this.key(broker, symbol, timeframe);
-    const bucket = this.buckets.get(key);
-    if (!bucket?.data.length) return [];
-    this.touch(key, bucket);
-    const before = Date.parse(String(beforeTimestamp));
-    if (!Number.isFinite(before)) return [];
-    let lo = 0; let hi = bucket.data.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      const ts = Date.parse(String(bucket.data[mid]?.timestamp));
-      if (Number.isFinite(ts) && ts < before) lo = mid + 1;
-      else hi = mid;
+  getBefore(broker:string,symbol:string,timeframe:string,beforeTimestamp:string,limit=1000):HistoricalCandle[]{
+    const key=this.key(broker,symbol,timeframe),bucket=this.buckets.get(key);
+    if(!bucket?.data.length)return [];
+    this.touch(key,bucket);
+    const before=Date.parse(String(beforeTimestamp));
+    if(!Number.isFinite(before))return [];
+    let lo=0,hi=bucket.data.length;
+    while(lo<hi){
+      const mid=(lo+hi)>>1,ts=Date.parse(String(bucket.data[mid]?.timestamp));
+      if(Number.isFinite(ts)&&ts<before)lo=mid+1;else hi=mid;
     }
-    const count = Math.max(1, Math.min(Math.floor(Number(limit) || 1000), 5000));
-    const end = lo;
-    return bucket.data.slice(Math.max(0, end - count), end);
+    const count=Math.max(1,Math.min(Math.floor(Number(limit)||1000),5000));
+    return bucket.data.slice(Math.max(0,lo-count),lo);
   }
-  invalidate(broker?: string) { if (!broker) { this.buckets.clear(); return; } const p=`${broker.toLowerCase()}:`; for (const k of this.buckets.keys()) if(k.startsWith(p)) this.buckets.delete(k); }
-  clear(){
-    this.buckets.clear();
-    for (const timer of historyPersistTimers.values()) clearTimeout(timer);
-    historyPersistTimers.clear();
-    clearPersistedHistory();
+  invalidate(broker?:string){
+    const prefix=broker?`${broker.toLowerCase()}:`:undefined;
+    for(const key of [...this.buckets.keys()]){
+      if(prefix&&!key.startsWith(prefix))continue;
+      const timer=historyPersistTimers.get(key);
+      if(timer)clearTimeout(timer);
+      historyPersistTimers.delete(key);this.buckets.delete(key);
+    }
+  }
+  clear(){this.invalidate();this.inFlightCheckpoints.clear();clearPersistedHistory();}
+}
+export const historyStore = new HistoryStore(50_000, 120_000, 32);
+
+// Start local recovery transactions while the browser is still alive to flush them.
+if (typeof window !== 'undefined') {
+  const flushLocalRecovery = () => { void historyStore.flushDirty(); };
+  window.addEventListener('pagehide', flushLocalRecovery, { capture: true });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushLocalRecovery();
+    }, { capture: true });
   }
 }
-
-export const historyStore = new HistoryStore(50_000, 120_000, 32);
 
 function normalizeTickTimestampSeconds(value: unknown): number {
   if (typeof value === 'number') {
