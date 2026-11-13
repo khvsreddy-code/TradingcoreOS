@@ -156,6 +156,8 @@ const contracts = [
   ['corespirit-visual-object-lifecycle', ['src/services/coreSpirit/visualIdentityProductionContract.test.mjs', true]],
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
   ['tco-vela-performance-telemetry', ['src/tcoVelaPerformanceTelemetryContract.test.mjs', false]],
+  ['browser-performance-release-gates', ['src/browserPerformanceReleaseGateContract.test.mjs', false]],
+  ['vercel-realtime-service-routing', ['src/vercelRealtimeServiceRoutingContract.test.mjs', false]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
   ['fyers-compliance-symbol-catalog', ['src/fyersComplianceSymbolCatalogContract.test.mjs', false]],
   ['realtime-service-build-skip', ['src/realtimeServiceBuildIgnoreContract.test.mjs', false]],

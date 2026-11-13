@@ -68,5 +68,23 @@ if (!workspace.includes("webglcontextlost") || !workspace.includes('webglContext
 if (!verifier.includes('perf.runtime') || !verifier.includes('contextLossCount')) {
   throw new Error('Browser performance verification must include runtime memory, long-task and WebGL telemetry');
 }
+if (!verifier.includes('|| 16.7') || !verifier.includes('|| 8')) {
+  throw new Error('Browser performance defaults must enforce 60 Hz frames and <=8 ms tick-to-compute p95');
+}
+if (!verifier.includes("TCO_REQUIRE_HEAP_METRICS !== 'false'")) {
+  throw new Error('Heap telemetry must be mandatory by default');
+}
+if (!verifier.includes('longTasksDuringSoak > maxLongTasksDuringSoak')) {
+  throw new Error('Any long task during the steady-state measurement window must fail the performance gate');
+}
+if (!verifier.includes('TCO_BROWSER_SOAK_MS') || !verifier.includes('heapTrendDeltaBytes')) {
+  throw new Error('Browser verification must support duration-based soak and heap-trend acceptance');
+}
+if (!verifier.includes("'domcontentloaded'") || verifier.includes("'networkidle'")) {
+  throw new Error('Live browser readiness must not depend on networkidle with persistent market connections');
+}
+if (!workspace.includes('heapTrendDeltaBytes') || !workspace.includes('> 2048')) {
+  throw new Error('Browser runtime must retain 30-minute heap samples and expose a robust heap trend');
+}
 
 console.log('TCO Vela end-to-end performance telemetry contract: OK');

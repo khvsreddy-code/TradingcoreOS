@@ -5,24 +5,34 @@ const urls = (process.env.TCO_BROWSER_URLS || process.env.TCO_BROWSER_URL || 'ht
 const expectedCellsList = (process.env.TCO_EXPECTED_CELLS || '1').split(',').map((value) => Math.max(1, Number(value) || 1));
 const requireAuth = process.env.TCO_REQUIRE_AUTH === 'true';
 const authMarker = String(process.env.TCO_AUTH_MARKER || 'TradingCoreOS').trim();
-const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
+const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 16.7);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
 const settleMs = Math.max(0, Math.min(60000, Number(process.env.TCO_BROWSER_SETTLE_MS || 5000)));
-const maxTickToComputeP95Ms = Number(process.env.TCO_MAX_TICK_TO_COMPUTE_P95_MS || 20);
-const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 25);
-const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 25);
+const maxTickToComputeP95Ms = Number(process.env.TCO_MAX_TICK_TO_COMPUTE_P95_MS || 8);
+const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 16.7);
+const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 16.7);
 const maxMarketUpdateAgeMs = Number(process.env.TCO_MAX_MARKET_UPDATE_AGE_MS || 2000);
 const maxTelemetryAgeMs = Math.max(1000, Number(process.env.TCO_MAX_TELEMETRY_AGE_MS || 15000));
-const maxLongTaskP95Ms = Number(process.env.TCO_MAX_LONG_TASK_P95_MS || 50);
-const requireHeapMetrics = process.env.TCO_REQUIRE_HEAP_METRICS === 'true';
+const maxHeapTrendGrowthBytes = Number(process.env.TCO_MAX_HEAP_TREND_GROWTH_BYTES || 32 * 1024 * 1024);
+const minHeapSampleWindowMs = Math.max(10000, Number(process.env.TCO_MIN_HEAP_SAMPLE_WINDOW_MS || 10000));
+const soakMs = Math.max(0, Math.min(2 * 60 * 60 * 1000, Number(process.env.TCO_BROWSER_SOAK_MS || 15000)));
+const maxLongTasksDuringSoak = Math.max(0, Math.floor(Number(process.env.TCO_MAX_LONG_TASKS_DURING_SOAK || 0)));
+const requireHeapMetrics = process.env.TCO_REQUIRE_HEAP_METRICS !== 'false';
 const failOnWebglContextLoss = process.env.TCO_FAIL_ON_WEBGL_CONTEXT_LOSS !== 'false';
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','lastMarketUpdateAgeMs','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 const requiredStageMs = ['transport','normalization','ingestion','compute','patch','renderer','frame'];
 
+const browserStateFile = String(process.env.TCO_BROWSER_STATE_FILE || '').trim();
+const browserChromiumArgs = String(process.env.TCO_BROWSER_CHROMIUM_ARGS || '').trim();
+const browserGlobalArgs = [
+  ...(browserStateFile ? ['--state', browserStateFile] : []),
+  ...(browserChromiumArgs ? ['--args', browserChromiumArgs] : []),
+];
+
 function run(args) {
-  const result = spawnSync('agent-browser', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const result = spawnSync('agent-browser', [...browserGlobalArgs, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (result.status !== 0) {
     throw new Error(`agent-browser ${args.join(' ')} failed: ${result.stderr || result.stdout || 'unknown error'}`);
   }
@@ -34,7 +44,10 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const url = urls[caseIndex];
   const expectedCells = expectedCellsList[Math.min(caseIndex, expectedCellsList.length - 1)] || 1;
   run(['open', url]);
-  run(['wait', '--load', 'networkidle']);
+  // Live WebSockets and market polling keep the terminal active; networkidle is
+  // not a valid readiness condition for this browser workload.
+  run(['wait', '--load', 'domcontentloaded']);
+  run(['wait', '--fn', 'document.querySelector(".vela-workspace") !== null']);
   if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs));
 
   const content = run(['eval', 'document.body.innerText.trim().length > 0 ? "HAS_CONTENT" : "BLANK"']);
@@ -53,9 +66,18 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const workspace = run(['eval', 'document.querySelector(".vela-workspace") ? "VELA_OK" : "VELA_MISSING"']);
   if (workspace !== 'VELA_OK') throw new Error(`Browser verification: Vela workspace not mounted for ${url}`);
 
+  const initialPerfJson = run(['eval', 'JSON.stringify(window.__TCO_PERF__ || null)']);
+  const initialPerf = JSON.parse(initialPerfJson || 'null');
+  if (!initialPerf || !Array.isArray(initialPerf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
+  const initialLongTaskCount = Number(initialPerf.runtime?.longTasks?.count ?? 0);
+  if (soakMs > 0) await new Promise((resolve) => setTimeout(resolve, soakMs));
   const perfJson = run(['eval', 'JSON.stringify(window.__TCO_PERF__ || null)']);
   const perf = JSON.parse(perfJson || 'null');
-  if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
+  if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ disappeared during steady state for ${url}`);
+  const longTasksDuringSoak = Math.max(0, Number(perf.runtime?.longTasks?.count ?? 0) - initialLongTaskCount);
+  if (longTasksDuringSoak > maxLongTasksDuringSoak) {
+    throw new Error(`Browser verification: ${longTasksDuringSoak} long task(s) >=50ms occurred during steady state; budget ${maxLongTasksDuringSoak}.`);
+  }
   if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
   if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
   const capturedAtMs = typeof perf.capturedAt === 'number' ? perf.capturedAt : Date.parse(perf.capturedAt);
@@ -81,22 +103,23 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     throw new Error(`Browser verification: ${runtime.webgl.contextLossCount} WebGL context-loss event(s) detected for ${url}`);
   }
   if (requireHeapMetrics && !runtime.memory.available) {
-    throw new Error(`Browser verification: JavaScript heap metrics unavailable for ${url}; run Chromium with performance.memory enabled.`);
+    throw new Error(`Browser verification: JavaScript heap metrics are required but unavailable for ${url}; launch Chromium with --enable-precise-memory-info.`);
   }
   if (runtime.memory.available) {
     if (!Number.isFinite(Number(runtime.memory.usedBytes)) ||
         !Number.isFinite(Number(runtime.memory.sampleCount))) {
       throw new Error(`Browser verification: invalid JavaScript heap sample for ${url}`);
     }
-    if (Number(runtime.memory.sampleCount) > 1 &&
-        !Number.isFinite(Number(runtime.memory.windowDeltaBytes))) {
-      throw new Error(`Browser verification: heap growth window is invalid for ${url}`);
+    if (Number(runtime.memory.sampleCount) < 6 || Number(runtime.memory.sampleWindowMs) < minHeapSampleWindowMs) {
+      throw new Error(`Browser verification: heap evidence window is too short (${Number(runtime.memory.sampleWindowMs)||0}ms / ${Number(runtime.memory.sampleCount)||0} samples; required ${minHeapSampleWindowMs}ms and 6 samples).`);
+    }
+    const heapTrend = Number(runtime.memory.heapTrendDeltaBytes);
+    if (!Number.isFinite(heapTrend)) throw new Error(`Browser verification: robust heap trend telemetry is missing for ${url}`);
+    if (heapTrend > maxHeapTrendGrowthBytes) {
+      throw new Error(`Browser verification: heap trend grew ${Math.round(heapTrend/1048576)} MiB, exceeding ${Math.round(maxHeapTrendGrowthBytes/1048576)} MiB for ${url}`);
     }
   }
-  if (Number(runtime.longTasks.recentP95Ms) > maxLongTaskP95Ms) {
-    console.warn(`Browser performance warning: recent long-task p95 ${Number(runtime.longTasks.recentP95Ms).toFixed(2)}ms exceeds ${maxLongTaskP95Ms}ms for ${url}`);
-  }
-  if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
+  if (perf.cells.length !== expectedCells) throw new Error(`Browser verification: expected exactly ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
   if (perf.pipeline.length < 1) throw new Error(`Browser verification: no active Vela chart data-plane telemetry for ${url}`);
   for (const cell of perf.cells) {
     if (!(Number(cell.frames) > 0)) throw new Error(`Browser verification: no rendered-frame samples for cell ${cell.cellId || 'unknown'}`);
@@ -154,7 +177,13 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxTickToRenderP95Ms,
     maxMarketUpdateAgeMs,
     maxTelemetryAgeMs,
-    maxLongTaskP95Ms,
+    maxLongTasksDuringSoak,
+    longTasksDuringSoak,
+    soakMs,
+    maxHeapTrendGrowthBytes,
+    minHeapSampleWindowMs,
+    heapTrendDeltaBytes: runtime.memory.heapTrendDeltaBytes,
+    heapSampleWindowMs: runtime.memory.sampleWindowMs,
     requireHeapMetrics,
     failOnWebglContextLoss,
     telemetryAgeMs,

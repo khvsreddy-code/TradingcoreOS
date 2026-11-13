@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+const verifier = read('../tools/verify-chart-performance.mjs');
+const runtime = read('./LiveTradingWorkspace.tsx');
+const ci = read('../.github/workflows/ci.yml');
+const soak = read('../.github/workflows/browser-performance-soak.yml');
+const matrix = read('../tools/verify-chart-matrix.mjs');
+const release = read('../docs/RELEASE_GATES.md');
+const pullRequestTemplate = read('../.github/pull_request_template.md');
+
+assert.ok(verifier.includes('|| 16.7'), 'frame p95 defaults to the 60Hz budget');
+assert.ok(verifier.includes('|| 8'), 'tick-to-compute p95 defaults to 8ms');
+assert.ok(verifier.includes('TCO_MAX_TICK_TO_PATCH_P95_MS || 16.7'));
+assert.ok(verifier.includes('TCO_MAX_TICK_TO_RENDER_P95_MS || 16.7'));
+assert.ok(verifier.includes("TCO_REQUIRE_HEAP_METRICS !== 'false'"), 'heap metrics are mandatory by default');
+assert.ok(verifier.includes('longTasksDuringSoak > maxLongTasksDuringSoak'), 'long tasks fail instead of warning');
+assert.ok(verifier.includes('heapTrendDeltaBytes'));
+assert.ok(runtime.includes('heapSamples.length > 2048'), 'runtime retains >30m of 1Hz heap data');
+assert.ok(ci.includes('name: browser-performance') && ci.includes("TCO_BROWSER_SOAK_MS: '30000'"));
+assert.ok(soak.includes("TCO_BROWSER_SOAK_MS: '1800000'"), 'scheduled soak is 30 minutes');
+assert.ok(soak.includes("TCO_EXPECTED_CELLS: '8'"));
+assert.ok(matrix.includes('authenticated live TradingCoreOS terminal'));
+assert.ok(release.includes('TCO_BROWSER_STATE_BASE64'));
+assert.ok(pullRequestTemplate.includes('Browser performance evidence'));
+assert.ok(pullRequestTemplate.includes('Vercel service routing'));
+console.log('BROWSER_PERFORMANCE_RELEASE_GATES_OK');

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 
-const base = String(process.env.TCO_BROWSER_BASE_URL || process.env.TCO_BROWSER_URL || 'http://localhost:5173/live').replace(/\/$/, '');
+const base = String(process.env.TCO_BROWSER_BASE_URL || process.env.TCO_BROWSER_URL || '').replace(/\/$/, '');
+if (!base) throw new Error('TCO_BROWSER_BASE_URL or TCO_BROWSER_URL must point to an authenticated live TradingCoreOS terminal.');
 const urls = ['1','4','8'].map(layout => `${base}?velaLayout=${layout}`);
 
 const result = spawnSync(process.execPath, ['tools/verify-chart-performance.mjs'], {

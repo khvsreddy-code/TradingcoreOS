@@ -860,11 +860,27 @@ const browserRuntimeMetrics = useRef({
         const usedHeapBytes = Number.isFinite(Number(memory?.usedJSHeapSize)) ? Number(memory?.usedJSHeapSize) : null;
         if (usedHeapBytes !== null) {
           browserRuntimeMetrics.heapSamples.push({ capturedAt: Date.now(), usedBytes: usedHeapBytes });
-          if (browserRuntimeMetrics.heapSamples.length > 120) browserRuntimeMetrics.heapSamples.shift();
+          // Retain >30 minutes of one-second samples for the scheduled browser soak.
+          if (browserRuntimeMetrics.heapSamples.length > 2048) browserRuntimeMetrics.heapSamples.shift();
         }
         const heapFirst = browserRuntimeMetrics.heapSamples[0];
         const heapLast = browserRuntimeMetrics.heapSamples.at(-1);
         const heapWindowDeltaBytes = heapFirst && heapLast ? heapLast.usedBytes - heapFirst.usedBytes : null;
+        // Compare robust medians at the edges of the rolling sample window. This
+        // filters individual GC spikes while retaining sustained heap drift.
+        const heapTrendWindowSize = Math.min(120, Math.max(1, Math.floor(browserRuntimeMetrics.heapSamples.length / 3)));
+        const medianHeapBytes = (values: Array<{ capturedAt: number; usedBytes: number }>) => {
+          if (!values.length) return null;
+          const sorted = values.map(sample => sample.usedBytes).sort((a, b) => a - b);
+          const middle = Math.floor(sorted.length / 2);
+          return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+        };
+        const heapStartMedianBytes = browserRuntimeMetrics.heapSamples.length >= 6
+          ? medianHeapBytes(browserRuntimeMetrics.heapSamples.slice(0, heapTrendWindowSize)) : null;
+        const heapEndMedianBytes = browserRuntimeMetrics.heapSamples.length >= 6
+          ? medianHeapBytes(browserRuntimeMetrics.heapSamples.slice(-heapTrendWindowSize)) : null;
+        const heapTrendDeltaBytes = heapStartMedianBytes !== null && heapEndMedianBytes !== null
+          ? heapEndMedianBytes - heapStartMedianBytes : null;
         const recentLongTasks = [...browserRuntimeMetrics.longTaskDurations].sort((a, b) => a - b);
         const longTaskP95Ms = recentLongTasks.length
           ? recentLongTasks[Math.min(recentLongTasks.length - 1, Math.ceil(recentLongTasks.length * 0.95) - 1)]!
@@ -895,6 +911,10 @@ const browserRuntimeMetrics = useRef({
               sampleCount: browserRuntimeMetrics.heapSamples.length,
               sampleWindowMs: heapFirst && heapLast ? heapLast.capturedAt - heapFirst.capturedAt : 0,
               windowDeltaBytes: heapWindowDeltaBytes,
+              trendWindowSamples: heapTrendWindowSize,
+              trendStartMedianBytes: heapStartMedianBytes,
+              trendEndMedianBytes: heapEndMedianBytes,
+              heapTrendDeltaBytes,
             },
             webgl: {
               contextLossCount: browserRuntimeMetrics.webglContextLossCount,
