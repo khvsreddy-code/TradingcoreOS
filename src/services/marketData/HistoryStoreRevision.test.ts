@@ -39,8 +39,12 @@ assert.equal(liveStore.getStale('fyers','NSE:LIVE-TEST','5m')?.length,1);
 assert.equal(liveStore.stats().dirtyBuckets,0,'forming-bar updates do not schedule durable persistence');
 liveStore.upsertLatest('fyers','NSE:LIVE-TEST','5m',{...forming,close:106,high:107},20);
 assert.equal(liveStore.stats().dirtyBuckets,0,'forming-bar replacements stay memory-only');
+assert.equal(liveStore.range('fyers','NSE:LIVE-TEST','5m')?.checkpointRevision,0,
+  'forming candles must not advance the durable checkpoint revision');
 liveStore.upsertLatest('fyers','NSE:LIVE-TEST','5m',{...forming,phase:'confirmed',confirmed:true,close:106,high:107},20);
 assert.equal(liveStore.stats().dirtyBuckets,1,'confirmation marks the local checkpoint dirty');
+assert.equal(liveStore.range('fyers','NSE:LIVE-TEST','5m')?.checkpointRevision,1,
+  'only the confirmed transition advances the durable checkpoint revision');
 assert.ok(liveStore.range('fyers','NSE:LIVE-TEST','5m')?.estimatedBytes);
 assert.equal(await liveStore.persistConfirmedNow('fyers','NSE:LIVE-TEST','5m'),true,
   'without IndexedDB the independent bounded HistoryStore remains the recovery copy');
