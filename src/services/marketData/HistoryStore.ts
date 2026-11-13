@@ -25,7 +25,7 @@ function estimateValueBytes(value: unknown): number {
 /** Shallow, field-aware estimate only; browser heap telemetry is a separate measurement. */
 function estimateCandleObjectBytes(row: HistoricalCandle): number {
   let bytes=CANDLE_OBJECT_HEADER_ESTIMATE;
-  for(const [key,value] of Object.entries(row as Record<string,unknown>))
+  for(const [key,value] of Object.entries(row as unknown as Record<string,unknown>))
     bytes+=CANDLE_PROPERTY_SLOT_ESTIMATE+key.length*2+estimateValueBytes(value);
   return bytes;
 }
@@ -85,9 +85,11 @@ function readPersistedHistory(key: string): Promise<PersistedHistoryBucket | und
   }));
 }
 
-async function writePersistedHistory(key:string,data:HistoricalCandle[],updatedAt:number,revision:number):Promise<boolean>{
+async function writePersistedHistory(key:string,data:HistoricalCandle[],updatedAt:number,revision:number):Promise<boolean|null>{
   const db=await openHistoryDb();
-  if(!db)return false;
+  // null means IndexedDB is unavailable; the independent bounded HistoryStore
+  // remains the recovery copy, so chart-plane eviction can still release memory.
+  if(!db)return null;
   if(!data.length)return true;
   return new Promise<boolean>(resolve=>{
     try{
@@ -189,8 +191,10 @@ export class HistoryStore {
     const data=this.snapshotConfirmed(bucket);
     if(!data.length){bucket.dirty=false;return Promise.resolve(true);}
     const revision=bucket.revision;
-    const task=writePersistedHistory(key,data,bucket.updatedAt,revision).then(success=>{
-      if(this.buckets.get(key)!==bucket)return success;
+    const task=writePersistedHistory(key,data,bucket.updatedAt,revision).then(result=>{
+      if(this.buckets.get(key)!==bucket)return result!==false;
+      if(result===null)return true; // In-memory recovery remains owned by HistoryStore.
+      const success=result;
       if(success){
         bucket.persistedRevision=Math.max(bucket.persistedRevision,revision);
         if(bucket.revision===revision)bucket.dirty=false;
