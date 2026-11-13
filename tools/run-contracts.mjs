@@ -27,6 +27,7 @@ const contracts = [
   ['chart-compute-revision-fence', ['src/chartComputeRevisionContract.test.mjs', false]],
   ['indicator-dependency-invalidation', ['src/services/marketData/indicatorDependencyInvalidation.test.ts', true]],
   ['history-store-late-response-merge', ['src/services/marketData/HistoryStoreRevision.test.ts', true]],
+  ['history-store-persistence-recovery', ['src/services/marketData/HistoryStorePersistenceLifecycle.test.ts', true]],
   ['watchlist-technicals-summary', ['src/services/marketData/watchlistTechnicals.test.ts', true]],
   ['vela-history-watchlist-news-markers', ['src/velaHistoryWatchlistEventsContract.test.mjs', false]],
   ['market-feed-lifecycle', ['src/services/marketData/marketFeedLifecycle.test.ts', true]],

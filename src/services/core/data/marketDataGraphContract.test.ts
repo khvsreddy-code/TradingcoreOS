@@ -345,3 +345,22 @@ assert.equal(afterCalendarChange.fullAggregationRebuilds,beforeCalendarChange.fu
   'a calendar identity change must rebuild derived history instead of reusing old bucket state');
 
 console.log('CORESPIRIT_MARKET_DATA_GRAPH_CONTRACT_OK');
+
+
+// Derived timeframes age independently from a hot base timeframe. A live 1m
+// stream must not keep old 5m/15m nodes registered forever.
+const perNodeIdleGraph=new MarketDataGraph({anchorSecondsUtc:13500},64,128*1024*1024,30_000);
+perNodeIdleGraph.syncBase('PER-NODE-IDLE','1m',base);
+perNodeIdleGraph.ensureNode('PER-NODE-IDLE','5m');
+perNodeIdleGraph.ensureNode('PER-NODE-IDLE','15m');
+const internals=perNodeIdleGraph as unknown as {nodes:Map<string,{lastUsedAt:number}>};
+const baseNode=internals.nodes.get('PER-NODE-IDLE::1m');
+const fiveNode=internals.nodes.get('PER-NODE-IDLE::5m');
+const fifteenNode=internals.nodes.get('PER-NODE-IDLE::15m');
+if(!baseNode||!fiveNode||!fifteenNode)throw new Error('per-node idle dependency fixture was not created');
+fiveNode.lastUsedAt=Date.now()-60_000;fifteenNode.lastUsedAt=Date.now()-60_000;baseNode.lastUsedAt=Date.now();
+perNodeIdleGraph.updateBaseLast('PER-NODE-IDLE','1m',{...base.at(-1)!,timestamp:'2026-10-06T03:50:00.000Z',open:104.5,high:106,low:104,close:105,volume:7});
+assert.equal(perNodeIdleGraph.trimIdleSymbols(),2,'idle derived leaves are evicted while the base remains active');
+assert.deepEqual(perNodeIdleGraph.listNodes().map(node=>node.timeframe),['1m']);
+assert.equal(perNodeIdleGraph.stats().idleEvictions,2);
+console.log('CORESPIRIT_MARKET_DATA_GRAPH_PER_NODE_IDLE_OK');

@@ -502,7 +502,8 @@ export class MarketDataGraph{
     const key=String(symbol||'').trim().toUpperCase();
     if(!key)return ()=>{};
     this.symbolPins.set(key,(this.symbolPins.get(key)??0)+1);
-    for(const node of this.nodes.values())if(node.descriptor.symbol.trim().toUpperCase()===key)this.touchNode(node);
+    // This pin protects the symbol during a snapshot but does not refresh every
+    // timeframe's idle clock. ensureNode() touches only requested dependencies.
     if(this.idleSweepTimer){clearTimeout(this.idleSweepTimer);this.idleSweepTimer=undefined;}
     // Re-arm expiry for other unpinned symbols; one active chart must not
     // suppress cleanup for every instrument in the shared graph.
@@ -537,30 +538,52 @@ export class MarketDataGraph{
     (this.idleSweepTimer as ReturnType<typeof setTimeout> & {unref?:()=>void}).unref?.();
   }
 
+  private detachNode(key:string,node:GraphNode):void {
+    if(node.sourceKey){
+      const siblings=this.childrenBySource.get(node.sourceKey);
+      siblings?.delete(key);
+      if(siblings?.size===0)this.childrenBySource.delete(node.sourceKey);
+    }
+    this.childrenBySource.delete(key);
+    node.plane.detachConsumer(node.consumerLeaseId);
+    releaseCanonicalDataPlane(node.plane.timelineKey,node.plane);
+    this.nodes.delete(key);
+  }
+
+  /** Expire idle dependency leaves independently from a still-live base node. */
+  private trimIdleDependencyNodes(now=Date.now()):number {
+    const idleMs=Math.max(1,this.maxIdleMs);
+    let removed=0,changed=true;
+    while(changed){
+      changed=false;
+      const candidates=[...this.nodes.entries()].sort((a,b)=>a[1].lastUsedAt-b[1].lastUsedAt);
+      for(const [key,node] of candidates){
+        if(now-node.lastUsedAt<idleMs)continue;
+        const symbol=node.descriptor.symbol.trim().toUpperCase();
+        if((this.symbolPins.get(symbol)??0)>0)continue;
+        if((this.childrenBySource.get(key)?.size??0)>0)continue;
+        if(node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId))continue;
+        this.detachNode(key,node);removed+=1;this.idleEvictions+=1;changed=true;
+      }
+    }
+    if(removed)this.revision+=removed;
+    return removed;
+  }
+
   evictSymbol(symbol:string):number {
     const normalized=String(symbol||'').trim().toUpperCase();
     if(!normalized||(this.symbolPins.get(normalized)??0)>0)return 0;
     const matches=[...this.nodes.entries()].filter(([,node])=>node.descriptor.symbol.trim().toUpperCase()===normalized);
     if(!matches.length)return 0;
     if(matches.some(([,node])=>node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId)))return 0;
-    for(const [key,node] of matches){
-      if(node.sourceKey){
-        const siblings=this.childrenBySource.get(node.sourceKey);
-        siblings?.delete(key);
-        if(siblings?.size===0)this.childrenBySource.delete(node.sourceKey);
-      }
-      this.childrenBySource.delete(key);
-      node.plane.detachConsumer(node.consumerLeaseId);
-      releaseCanonicalDataPlane(node.plane.timelineKey,node.plane);
-      this.nodes.delete(key);
-    }
+    for(const [key,node] of matches)this.detachNode(key,node);
     this.revision+=1;
     return matches.length;
   }
 
   trimIdleSymbols(now=Date.now()):number {
-    const groups=new Map<string,{lastUsedAt:number;bytes:number}>();
-    for(const node of this.nodes.values()){
+    let removed=this.trimIdleDependencyNodes(now);
+    const groups=new Map<string,{lastUsedAt:number;bytes:number}>();    for(const node of this.nodes.values()){
       const symbol=node.descriptor.symbol.trim().toUpperCase();
       const group=groups.get(symbol)??{lastUsedAt:0,bytes:0};
       group.lastUsedAt=Math.max(group.lastUsedAt,node.lastUsedAt);
@@ -570,7 +593,7 @@ export class MarketDataGraph{
     const limit=Math.max(1,Math.floor(this.maxSymbols));
     const budget=Math.max(0,this.maxBytes);
     let totalBytes=[...groups.values()].reduce((sum,group)=>sum+group.bytes,0);
-    let remaining=groups.size,removed=0;
+    let remaining=groups.size;
     const candidates=[...groups.entries()].sort((a,b)=>a[1].lastUsedAt-b[1].lastUsedAt);
     // Idle expiry is independent of capacity pressure.
     for(const [symbol,group] of candidates){
@@ -687,7 +710,7 @@ export class MarketDataGraph{
     const targetSeconds=timeframeSeconds(normalized);
     if(!targetSeconds)return undefined;
     const existing=this.nodes.get(graphKey(symbol,normalized));
-    if(existing)return existing;
+    if(existing){this.touchNode(existing);return existing;}
     const source=this.chooseSource(symbol,targetSeconds);
     if(!source)return undefined;
     this.touchNode(source);

@@ -9,6 +9,8 @@ type Bucket = {
   loading?: Promise<HistoricalCandle[]>;
 };
 export const HISTORY_CHECKPOINT_INTERVAL_MS = 1_500;
+export const HISTORY_CHECKPOINT_RETRY_BASE_MS = 2_000;
+export const HISTORY_CHECKPOINT_RETRY_MAX_MS = 60_000;
 const CANDLE_OBJECT_HEADER_ESTIMATE = 40;
 const CANDLE_PROPERTY_SLOT_ESTIMATE = 8;
 type BrowserHeapSnapshot = Readonly<{usedJSHeapSize:number|null;totalJSHeapSize:number|null;jsHeapSizeLimit:number|null}>;
@@ -45,10 +47,14 @@ function browserHeapSnapshot(): BrowserHeapSnapshot {
 export const PERSISTED_HISTORY_CANDLE_LIMIT = 2_000;
 const HISTORY_DB_NAME = 'tradingcore-history-cache-v1';
 const HISTORY_DB_STORE = 'datasets';
-type PersistedHistoryBucket = { key: string; data: HistoricalCandle[]; updatedAt: number; revision: number; target: number };
+export type PersistedHistoryBucket = { key: string; data: HistoricalCandle[]; updatedAt: number; revision: number; target: number };
+export type HistoryPersistenceAdapter = Readonly<{
+  available(): boolean;
+  read(key: string): Promise<PersistedHistoryBucket | undefined>;
+  write(key: string, data: HistoricalCandle[], updatedAt: number, revision: number): Promise<boolean | null>;
+  clear(): void;
+}>;
 let historyDbPromise: Promise<IDBDatabase | null> | undefined;
-const historyHydrations = new Map<string, Promise<HistoricalCandle[] | undefined>>();
-const historyPersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function openHistoryDb(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
@@ -108,32 +114,85 @@ function clearPersistedHistory(): void {
   });
 }
 
+const indexedDbHistoryPersistence: HistoryPersistenceAdapter = Object.freeze({
+  available: () => typeof indexedDB !== 'undefined',
+  read: readPersistedHistory,
+  write: writePersistedHistory,
+  clear: clearPersistedHistory,
+});
+
 /** Shared in-memory candle store. Live updates stay here; IndexedDB is a bounded
  * recovery checkpoint and never participates in the live chart mutation path. */
 export class HistoryStore {
   private buckets=new Map<string,Bucket>();
   private readonly inFlightCheckpoints=new Map<string,Promise<boolean>>();
+  private readonly persistenceWrites=new Map<string,Promise<boolean|null>>();
+  private readonly hydrations=new Map<string,Promise<HistoricalCandle[]|undefined>>();
+  private readonly checkpointTimers=new Map<string,ReturnType<typeof setTimeout>>();
+  private readonly retryAttempts=new Map<string,number>();
+  private readonly pendingDetachedCheckpoints=new Map<string,{bucket:Bucket;timer?:ReturnType<typeof setTimeout>}>();
+  private checkpointFailures=0;
   constructor(
     private readonly maxCandles = 50_000,
     private readonly ttlMs = 600_000,
     private readonly maxBuckets = 96,
+    private readonly persistence: HistoryPersistenceAdapter = indexedDbHistoryPersistence,
   ) {}
   private touch(key:string,bucket:Bucket):Bucket{this.buckets.delete(key);this.buckets.set(key,bucket);return bucket;}
   private snapshotConfirmed(bucket:Bucket):HistoricalCandle[]{
     return bucket.data.filter(isConfirmedHistoryCandle).slice(-PERSISTED_HISTORY_CANDLE_LIMIT).map(row=>({...row}));
   }
+  private queueDetachedCheckpoint(key:string,bucket:Bucket,delayMs=0):void{
+    if(!bucket.dirty||!this.persistence.available())return;
+    const existing=this.pendingDetachedCheckpoints.get(key);
+    if(existing&&existing.bucket.updatedAt>bucket.updatedAt)return;
+    if(existing?.timer)clearTimeout(existing.timer);
+    const pending:{bucket:Bucket;timer?:ReturnType<typeof setTimeout>}={bucket};
+    pending.timer=setTimeout(()=>{
+      this.pendingDetachedCheckpoints.delete(key);
+      void this.writeDetachedSnapshot(key,bucket);
+    },Math.max(0,delayMs));
+    this.pendingDetachedCheckpoints.set(key,pending);
+  }
   private persistDetached(key:string,bucket:Bucket):void{
+    // Snapshotting the persisted window is deferred until after the live
+    // mutation/eviction stack has returned.
+    this.queueDetachedCheckpoint(key,bucket);
+  }
+  private enqueuePersistenceWrite(key:string,data:HistoricalCandle[],updatedAt:number,revision:number):Promise<boolean|null>{
+    const previous=this.persistenceWrites.get(key);
+    const task=(previous??Promise.resolve(null)).catch(()=>null)
+      .then(()=>this.persistence.write(key,data,updatedAt,revision)).catch(()=>false);
+    this.persistenceWrites.set(key,task);
+    void task.then(()=>{if(this.persistenceWrites.get(key)===task)this.persistenceWrites.delete(key);});
+    return task;
+  }
+  private writeDetachedSnapshot(key:string,bucket:Bucket):Promise<boolean>{
+    if(!this.persistence.available()){
+      this.pendingDetachedCheckpoints.set(key,{bucket});
+      return Promise.resolve(false);
+    }
     const data=this.snapshotConfirmed(bucket);
-    if(data.length)void writePersistedHistory(key,data,bucket.updatedAt,bucket.checkpointRevision);
+    if(!data.length)return Promise.resolve(true);
+    return this.enqueuePersistenceWrite(key,data,bucket.updatedAt,bucket.checkpointRevision).then(result=>{
+      if(result===true){this.retryAttempts.delete(key);return true;}
+      if(result===null){this.pendingDetachedCheckpoints.set(key,{bucket});return false;}
+      this.checkpointFailures+=1;
+      const attempts=(this.retryAttempts.get(key)??0)+1;
+      this.retryAttempts.set(key,attempts);
+      const delay=Math.min(HISTORY_CHECKPOINT_RETRY_MAX_MS,HISTORY_CHECKPOINT_RETRY_BASE_MS*2**Math.min(8,attempts-1));
+      this.queueDetachedCheckpoint(key,bucket,delay);
+      return false;
+    });
   }
   private trimBuckets():void{
     while(this.buckets.size>Math.max(1,this.maxBuckets)){
       const oldest=this.buckets.entries().next().value as [string,Bucket]|undefined;
       if(!oldest)break;
       if(oldest[1].dirty)this.persistDetached(oldest[0],oldest[1]);
-      const timer=historyPersistTimers.get(oldest[0]);
+      const timer=this.checkpointTimers.get(oldest[0]);
       if(timer)clearTimeout(timer);
-      historyPersistTimers.delete(oldest[0]);
+      this.checkpointTimers.delete(oldest[0]);
       this.buckets.delete(oldest[0]);
     }
   }
@@ -142,10 +201,10 @@ export class HistoryStore {
     const key=this.key(broker,symbol,timeframe);
     const resident=this.buckets.get(key);
     if(resident)return resident.data;
-    const pending=historyHydrations.get(key);
+    const pending=this.hydrations.get(key);
     if(pending)return pending;
     const promise=(async()=>{
-      const saved=await readPersistedHistory(key);
+      const saved=await this.persistence.read(key);
       if(!saved?.data.length)return undefined;
       const rows=saved.data.filter((row):row is HistoricalCandle=>{
         if(!row||typeof row!=='object')return false;
@@ -170,18 +229,18 @@ export class HistoryStore {
       this.buckets.set(key,bucket);
       this.trimBuckets();
       return data;
-    })().finally(()=>historyHydrations.delete(key));
-    historyHydrations.set(key,promise);
+    })().finally(()=>this.hydrations.delete(key));
+    this.hydrations.set(key,promise);
     return promise;
   }
   /** One dirty transition starts a checkpoint window; later ticks don't move its deadline. */
-  private schedulePersist(key:string,bucket:Bucket):void{
-    if(typeof indexedDB==='undefined'||!bucket.dirty||historyPersistTimers.has(key))return;
+  private schedulePersist(key:string,bucket:Bucket,delayMs=HISTORY_CHECKPOINT_INTERVAL_MS):void{
+    if(!this.persistence.available()||!bucket.dirty||this.checkpointTimers.has(key))return;
     const timer=setTimeout(()=>{
-      historyPersistTimers.delete(key);
+      this.checkpointTimers.delete(key);
       void this.checkpoint(key);
-    },HISTORY_CHECKPOINT_INTERVAL_MS);
-    historyPersistTimers.set(key,timer);
+    },Math.max(0,delayMs));
+    this.checkpointTimers.set(key,timer);
   }
   private checkpoint(key:string,force=false):Promise<boolean>{
     const existing=this.inFlightCheckpoints.get(key);
@@ -195,16 +254,22 @@ export class HistoryStore {
     const data=this.snapshotConfirmed(bucket);
     if(!data.length){bucket.dirty=false;return Promise.resolve(true);}
     const revision=bucket.checkpointRevision;
-    const task=writePersistedHistory(key,data,bucket.updatedAt,revision).then(result=>{
+    const task=this.enqueuePersistenceWrite(key,data,bucket.updatedAt,revision).then(result=>{
       if(this.buckets.get(key)!==bucket)return result!==false;
-      if(result===null)return true; // In-memory recovery remains owned by HistoryStore.
-      const success=result;
-      if(success){
+      if(result===null)return true; // IndexedDB is unavailable; memory remains the recovery owner.
+      if(result===true){
+        this.retryAttempts.delete(key);
         bucket.persistedRevision=Math.max(bucket.persistedRevision,revision);
         if(bucket.checkpointRevision===revision)bucket.dirty=false;
         else this.schedulePersist(key,bucket);
+        return true;
       }
-      return success;
+      this.checkpointFailures+=1;
+      const attempts=(this.retryAttempts.get(key)??0)+1;
+      this.retryAttempts.set(key,attempts);
+      const delay=Math.min(HISTORY_CHECKPOINT_RETRY_MAX_MS,HISTORY_CHECKPOINT_RETRY_BASE_MS*2**Math.min(8,attempts-1));
+      this.schedulePersist(key,bucket,delay);
+      return false;
     }).finally(()=>{if(this.inFlightCheckpoints.get(key)===task)this.inFlightCheckpoints.delete(key);});
     this.inFlightCheckpoints.set(key,task);
     return task;
@@ -282,21 +347,30 @@ export class HistoryStore {
     return this.buckets.get(this.key(broker,symbol,timeframe))?.estimatedBytes??0;
   }
   async persistConfirmedNow(broker:string,symbol:string,timeframe:string):Promise<boolean>{
-    const key=this.key(broker,symbol,timeframe),timer=historyPersistTimers.get(key);
+    const key=this.key(broker,symbol,timeframe),timer=this.checkpointTimers.get(key);
     if(timer)clearTimeout(timer);
-    historyPersistTimers.delete(key);
+    this.checkpointTimers.delete(key);
     return this.checkpoint(key,true);
   }
   /** Best-effort local IndexedDB flush on pagehide/visibility loss; no cloud sync. */
   async flushDirty():Promise<boolean>{
+    // Detached LRU buckets are part of local recovery. Drain them before
+    // resident buckets so same-key writes remain ordered.
+    const detached=[...this.pendingDetachedCheckpoints.entries()];
+    for(const [key,pending] of detached){
+      if(pending.timer)clearTimeout(pending.timer);
+      this.pendingDetachedCheckpoints.delete(key);
+    }
+    const detachedResults=detached.map(([key,pending])=>this.writeDetachedSnapshot(key,pending.bucket));
     const keys=[...this.buckets.entries()].filter(([,bucket])=>bucket.dirty).map(([key])=>key);
-    if(!keys.length)return true;
-    const results=await Promise.all(keys.map(key=>{
-      const timer=historyPersistTimers.get(key);
+    const residentResults=keys.map(key=>{
+      const timer=this.checkpointTimers.get(key);
       if(timer)clearTimeout(timer);
-      historyPersistTimers.delete(key);
+      this.checkpointTimers.delete(key);
       return this.checkpoint(key,true);
-    }));
+    });
+    if(!detachedResults.length&&!residentResults.length)return true;
+    const results=await Promise.all([...detachedResults,...residentResults]);
     return results.every(Boolean);
   }
   stats(){
@@ -313,6 +387,9 @@ export class HistoryStore {
       typedArrayBytes:0,
       heapUsedBytes:heap.usedJSHeapSize,heapTotalBytes:heap.totalJSHeapSize,heapLimitBytes:heap.jsHeapSizeLimit,
       dirtyBuckets,inFlightWrites:this.inFlightCheckpoints.size,
+      scheduledCheckpoints:this.checkpointTimers.size,
+      detachedCheckpoints:this.pendingDetachedCheckpoints.size,
+      checkpointRetries:this.retryAttempts.size,checkpointFailures:this.checkpointFailures,
       checkpointIntervalMs:HISTORY_CHECKPOINT_INTERVAL_MS,
       maxCandlesPerBucket:this.maxCandles,maxBuckets:this.maxBuckets,
     });
@@ -343,12 +420,17 @@ export class HistoryStore {
     const prefix=broker?`${broker.toLowerCase()}:`:undefined;
     for(const key of [...this.buckets.keys()]){
       if(prefix&&!key.startsWith(prefix))continue;
-      const timer=historyPersistTimers.get(key);
+      const timer=this.checkpointTimers.get(key);
       if(timer)clearTimeout(timer);
-      historyPersistTimers.delete(key);this.buckets.delete(key);
+      this.checkpointTimers.delete(key);this.buckets.delete(key);this.retryAttempts.delete(key);
+    }
+    for(const [key,pending] of [...this.pendingDetachedCheckpoints]){
+      if(prefix&&!key.startsWith(prefix))continue;
+      if(pending.timer)clearTimeout(pending.timer);
+      this.pendingDetachedCheckpoints.delete(key);this.retryAttempts.delete(key);
     }
   }
-  clear(){this.invalidate();this.inFlightCheckpoints.clear();clearPersistedHistory();}
+  clear(){this.invalidate();this.inFlightCheckpoints.clear();this.persistence.clear();}
 }
 export const historyStore = new HistoryStore(50_000, 120_000, 32);
 
