@@ -190,11 +190,27 @@ export class ChartDataPlane {
   get consumerCount(): number { return this.state.consumers; }
   get isDisposed(): boolean { return this.disposed; }
   get estimatedBytes(): number {
-    const compatibilityBytes = (this.state.candles.length + this.state.compatibilityCandles.length) * 112;
-    const metadataBytes = this.state.columns
-      ? this.state.columns.time.length * 32
-      : 0;
-    return this.canonicalPlane.estimatedBytes + compatibilityBytes + metadataBytes;
+    const retainedRows = new Set<HistoricalCandle[]>();
+    if (this.state.candles.length) retainedRows.add(this.state.candles);
+    if (this.state.compatibilityCandles.length) retainedRows.add(this.state.compatibilityCandles);
+    let compatibilityBytes = 0;
+    for (const rows of retainedRows) compatibilityBytes += rows.length * 112;
+
+    const retainedColumns = new Set<object>();
+    let columnBytes = 0;
+    if (this.state.columns) {
+      const columns = this.state.columns as ChartColumnarSnapshot;
+      for (const key of ['time', 'open', 'high', 'low', 'close', 'volume', 'source', 'phase', 'confirmed', 'availableAt', 'revision', 'exchangeTime', 'ingestedAt'] as const) {
+        const values = columns[key];
+        if (!values || typeof values !== 'object' || retainedColumns.has(values as object)) continue;
+        retainedColumns.add(values as object);
+        const view = values as ArrayLike<unknown> & { byteLength?: number };
+        columnBytes += Number.isFinite(view.byteLength)
+          ? Number(view.byteLength)
+          : view.length * (key === 'source' || key === 'phase' ? 16 : 8);
+      }
+    }
+    return this.canonicalPlane.estimatedBytes + compatibilityBytes + columnBytes;
   }
 
   /** Persist the confirmed tail before releasing live/canonical memory. */
@@ -1348,6 +1364,18 @@ export function getChartDataPlane(brokerId: string, instrumentKey: string, timef
   return plane;
 }
 
+function evictUnownedGraphSymbol(instrumentKey: string): void {
+  const normalized = String(instrumentKey || '').trim().toUpperCase();
+  if (!normalized) return;
+  const retainedChartDataset = [...registry.values()].some(plane =>
+    !plane.isDisposed && plane.instrumentKey.trim().toUpperCase() === normalized
+  );
+  // A graph symbol is shared across broker/timeframe chart datasets. Retire its
+  // complete base+derived family only after the final chart dataset is gone;
+  // independent CoreSpirit graph leases still make evictSymbol fail closed.
+  if (!retainedChartDataset) marketDataGraph.evictSymbol(instrumentKey);
+}
+
 export async function trimChartDataPlaneRegistry(options: {
   maxEntries?: number;
   maxBytes?: number;
@@ -1377,6 +1405,7 @@ export async function trimChartDataPlaneRegistry(options: {
       registry.delete(key);
       registryLastUsedAt.delete(key);
       chartMarketStore.evictIfUnused(chartMarketKey(plane.brokerId, plane.instrumentKey));
+      evictUnownedGraphSymbol(plane.instrumentKey);
       totalBytes = Math.max(0, totalBytes - bytes);
       removed += 1;
       if (excess > 0) excess -= 1;
@@ -1415,6 +1444,7 @@ export async function clearChartDataPlaneRegistry(): Promise<void> {
     registry.delete(key);
     registryLastUsedAt.delete(key);
     chartMarketStore.evictIfUnused(chartMarketKey(plane.brokerId, plane.instrumentKey));
+    evictUnownedGraphSymbol(plane.instrumentKey);
   }
   trimCanonicalDataPlaneRegistry();
 }
