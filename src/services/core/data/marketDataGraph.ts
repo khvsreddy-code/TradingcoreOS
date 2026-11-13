@@ -526,6 +526,9 @@ export class MarketDataGraph{
     for(const node of this.nodes.values()){
       const symbol=node.descriptor.symbol.trim().toUpperCase();
       if((this.symbolPins.get(symbol)??0)>0)continue;
+      // Source nodes with dependents are reclaimed after their final child ages
+      // out; scheduling their old deadline would otherwise create a 25 ms loop.
+      if((this.childrenBySource.get(node.descriptor.key)?.size??0)>0)continue;
       if(node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId))continue;
       nextExpiry=Math.min(nextExpiry,node.lastUsedAt+Math.max(1,this.maxIdleMs));
     }
@@ -583,7 +586,8 @@ export class MarketDataGraph{
 
   trimIdleSymbols(now=Date.now()):number {
     let removed=this.trimIdleDependencyNodes(now);
-    const groups=new Map<string,{lastUsedAt:number;bytes:number}>();    for(const node of this.nodes.values()){
+    const groups=new Map<string,{lastUsedAt:number;bytes:number}>();
+    for(const node of this.nodes.values()){
       const symbol=node.descriptor.symbol.trim().toUpperCase();
       const group=groups.get(symbol)??{lastUsedAt:0,bytes:0};
       group.lastUsedAt=Math.max(group.lastUsedAt,node.lastUsedAt);
