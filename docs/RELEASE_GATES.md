@@ -36,7 +36,7 @@ Before enabling the browser CI gate, configure these repository settings:
 
 Use a dedicated least-privilege test account. Refresh the state when its authentication expires. Do not commit storage-state files, Supabase tokens, broker credentials, or session cookies. The browser runner adds Chromium's `--enable-precise-memory-info` flag and fails when heap metrics are unavailable.
 
-Until those repository variables/secrets are configured, the browser jobs are intentionally skipped. That means live-browser acceptance is not yet enforced by the hosted CI check; it must not be represented as a passing browser run.
+Until those repository variables/secrets are configured, the browser workflows run an explicit gate step and skip the browser execution steps. The check will be visible, but a gate-disabled success is not live-browser evidence and must not be required or represented as a passing browser run.
 
 ## Main branch protection
 

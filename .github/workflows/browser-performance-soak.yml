@@ -15,10 +15,10 @@ concurrency:
 jobs:
   browser-performance-soak:
     name: browser-performance-soak
-    if: vars.TCO_BROWSER_PERF_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      TCO_BROWSER_PERF_ENABLED: ${{ vars.TCO_BROWSER_PERF_ENABLED }}
       TCO_BROWSER_BASE_URL: ${{ vars.TCO_BROWSER_BASE_URL }}
       TCO_BROWSER_STATE_BASE64: ${{ secrets.TCO_BROWSER_STATE_BASE64 }}
       TCO_BROWSER_STATE_FILE: ${{ runner.temp }}/tco-browser-state.json
@@ -38,13 +38,24 @@ jobs:
       TCO_MIN_HEAP_SAMPLE_WINDOW_MS: '1800000'
       TCO_REQUIRE_SHARED_MEMORY: 'true'
     steps:
+      - name: Evaluate soak gate
+        id: gate
+        shell: bash
+        run: |
+          if [ "$TCO_BROWSER_PERF_ENABLED" = "true" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Soak gate is not enabled
+        if: steps.gate.outputs.enabled != 'true'
+        run: echo "Set TCO_BROWSER_PERF_ENABLED=true and configure browser URL/state before enabling the 30-minute soak."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.enabled == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.gate.outputs.enabled == 'true'
         with:
           node-version: 24
       - name: Validate authenticated market-session browser state
+        if: steps.gate.outputs.enabled == 'true'
         shell: bash
         run: |
           test -n "$TCO_BROWSER_BASE_URL" || { echo "Set repository variable TCO_BROWSER_BASE_URL to the authenticated /live URL."; exit 1; }
@@ -53,13 +64,15 @@ jobs:
           printf '%s' "$TCO_BROWSER_STATE_BASE64" | base64 --decode > "$TCO_BROWSER_STATE_FILE"
           test -s "$TCO_BROWSER_STATE_FILE"
       - name: Install agent-browser and Chromium
+        if: steps.gate.outputs.enabled == 'true'
         run: |
           npm install --global agent-browser@0.38.2
           agent-browser install --with-deps
       - name: Verify 30-minute 8-chart steady state
+        if: steps.gate.outputs.enabled == 'true'
         run: node tools/verify-chart-performance.mjs 2>&1 | tee browser-performance-soak.json
       - name: Archive browser performance evidence
-        if: always()
+        if: always() && steps.gate.outputs.enabled == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-performance-soak-${{ github.sha }}
