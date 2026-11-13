@@ -637,7 +637,12 @@ export class MarketDataGraph{
   }
 
   updateBaseLast(symbol:string,timeframe:string,candle:{timestamp:string;open:number;high:number;low:number;close:number;volume:number},session?:MarketDataGraphSessionProfile):void{
+    const baseKey=graphKey(symbol,timeframe);
+    const created=!this.nodes.has(baseKey);
     const node=this.ensureBase(symbol,timeframe);
+    // First-time tick-only symbols still receive an idle-expiry timer. Existing
+    // hot updates never pay a whole-graph sweep cost.
+    if(created)this.trimIdleSymbols();
     if(session?.anchorSecondsUtc!=null)node.anchorSecondsUtc=session.anchorSecondsUtc;
     if (session) node.sessionProfile = { ...node.sessionProfile, ...session };
     const t=Math.floor(Date.parse(candle.timestamp)/1000);
