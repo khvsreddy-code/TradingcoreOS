@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { URL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
@@ -11,6 +12,7 @@ import { FyersOrderStreamTransport, type FyersOrderStreamEvent } from '../src/se
 import type { MarketFeedEvent } from '../src/types/market.js';
 import { verifyRealtimeTicket } from '../src/server/realtime/ticket.js';
 import { resolveFyersQuotaIdentity } from '../src/server/fyers/core/FyersQuotaIdentity.js';
+import { SocketOutboundQueue, gatewayOutboundMetrics } from './outbound.js';
 
 const PORT = Number(process.env.REALTIME_GATEWAY_PORT || process.env.PORT || 8080);
 const INSTANCE_ID = String(process.env.REALTIME_GATEWAY_INSTANCE_ID || crypto.randomUUID());
@@ -22,6 +24,7 @@ const SUB_TTL_MS = 35_000;
 const SUB_TOUCH_MS = 10_000;
 const OWNER_WATCH_MS = 5_000;
 const COORDINATION_CHANNEL = 'tco:realtime:coordination';
+const OUTBOUND_SOFT_BUFFER_BYTES = 512 * 1024;
 
 type RealtimeKind = 'market' | 'orders' | 'both';
 type ConnectionRecord = {
@@ -34,6 +37,7 @@ type ConnectionRecord = {
 type LocalConnection = ConnectionRecord & {
   socket: WebSocket;
   subscriptionKey: string;
+  outbound: SocketOutboundQueue;
   heartbeat: NodeJS.Timeout;
   ownerWatch: NodeJS.Timeout;
 };
@@ -60,6 +64,20 @@ function ownerValue(userId:string):string{return `${INSTANCE_ID}:${userId}`;}
 function subscriptionKey(record:ConnectionRecord):string{return `tco:realtime:sub:${record.userId}:${INSTANCE_ID}:${record.connectionId}`;}
 function parseKind(value:string):RealtimeKind{const kind=value.toLowerCase();return kind==='orders'||kind==='both'?kind:'market';}
 function parseSymbols(value:string):string[]{return[...new Set(String(value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,100))];}
+function observabilityUserKey(userId:string):string {
+  return crypto.createHmac('sha256',String(process.env.REALTIME_GATEWAY_SHARED_SECRET||''))
+    .update(userId).digest('hex').slice(0,16);
+}
+function observabilityConnectionKey(connectionId:string):string {
+  return crypto.createHash('sha256').update(connectionId).digest('hex').slice(0,12);
+}
+function isLatestPriceTick(event:MarketFeedEvent):event is Extract<MarketFeedEvent,{type:'tick'}> {
+  if(event.type!=='tick')return false;
+  const domainType=event.domainEvent?.type;
+  // MarketTick/Quote are latest-value snapshots. Trade/fill/order/position/
+  // funds and depth-domain events, if ever carried here, remain lossless.
+  return !domainType||domainType==='MarketTick'||domainType==='Quote';
+}
 
 type GatewayBroadcastEnvelope =
   | { type: 'market'; userId: string; event: MarketFeedEvent }
@@ -182,17 +200,40 @@ async function ensureOwnership(userId:string):Promise<void>{
 function broadcastEvent(payload:GatewayBroadcastEnvelope):void{
   const userId=String(payload?.userId||'');if(!userId)return;
   const ids=connectionsByUser.get(userId);if(!ids?.size)return;
+
+  // Serialize once per logical event, not once per recipient socket.
+  const serializedEvent = (() => {
+    try { return JSON.stringify(payload.event); }
+    catch(error) {
+      console.error('[TradingCore realtime serialization]',error);
+      return undefined;
+    }
+  })();
+  if(typeof serializedEvent!=='string')return;
+  const serializedBytes=Buffer.byteLength(serializedEvent,'utf8');
+  const fanoutStarted=performance.now();
+  const marketTick=payload.type==='market'&&isLatestPriceTick(payload.event)?payload.event:undefined;
+  const marketSymbol=String(marketTick?.tick.instrumentKey||'');
+
   for(const connectionId of ids){
     const connection=localConnections.get(connectionId);
     if(!connection||connection.socket.readyState!==WebSocket.OPEN)continue;
     if(payload.type==='market'&&connection.kind==='orders')continue;
-    if(payload.type==='market'&&payload.event?.type==='tick'){
-      const symbol=String(payload.event?.tick?.instrumentKey||'');
+    if(payload.type==='market'&&payload.event.type==='tick'){
+      const symbol=String(payload.event.tick.instrumentKey||'');
       if(symbol&&connection.symbols.length&&!connection.symbols.includes(symbol))continue;
     }
     if(payload.type==='order'&&connection.kind==='market')continue;
-    try{connection.socket.send(JSON.stringify(payload.event));}catch{}
+
+    if(marketTick&&marketSymbol){
+      connection.outbound.enqueueMarket(marketSymbol,serializedEvent,serializedBytes);
+    }else{
+      // Status, errors, order updates, executions, positions, funds and control
+      // events preserve the original arrival order and are never coalesced.
+      connection.outbound.enqueueReliable(serializedEvent,serializedBytes);
+    }
   }
+  gatewayOutboundMetrics.recordFanoutDispatch(observabilityUserKey(userId),performance.now()-fanoutStarted);
 }
 
 function serializableConnection(connection:LocalConnection|ConnectionRecord):ConnectionRecord{
@@ -238,20 +279,31 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
   const connectionId=crypto.randomUUID();
   const record:ConnectionRecord={userId:ticket.sub,connectionId,kind,symbols,updatedAt:Date.now()};
   const key=await writeSubscription(record);
-  const local:LocalConnection={...record,socket,subscriptionKey:key,
-    heartbeat:setInterval(()=>{void touchSubscription(local).catch(()=>undefined);if(socket.readyState===WebSocket.OPEN)try{socket.ping();}catch{}},SUB_TOUCH_MS),
+  const userObservabilityKey=observabilityUserKey(record.userId);
+  const outbound=new SocketOutboundQueue(socket,gatewayOutboundMetrics,{
+    onDisconnect:(reason)=>console.warn('[TradingCore realtime outbound disconnect]',{
+      connection:observabilityConnectionKey(connectionId),user:userObservabilityKey,reason,
+    }),
+    onFrameWritten:(_lane,queueDelayMs)=>gatewayOutboundMetrics.recordSocketWrite(userObservabilityKey,queueDelayMs),
+  });
+  const local:LocalConnection={...record,socket,subscriptionKey:key,outbound,
+    heartbeat:setInterval(()=>{
+      void touchSubscription(local).catch(()=>undefined);
+      if(socket.readyState===WebSocket.OPEN&&socket.bufferedAmount<OUTBOUND_SOFT_BUFFER_BYTES)try{socket.ping();}catch{}
+    },SUB_TOUCH_MS),
     ownerWatch:setInterval(()=>{void ensureOwnership(local.userId).catch(err=>console.error('[TradingCore realtime ownership]',err));},OWNER_WATCH_MS)};
   localConnections.set(connectionId,local);
   let ids=connectionsByUser.get(record.userId);if(!ids){ids=new Set();connectionsByUser.set(record.userId,ids);}ids.add(connectionId);
 
   socket.on('pong',()=>{void touchSubscription(local).catch(()=>undefined);});
   socket.on('message',async(raw)=>{
-    let message:any;try{message=JSON.parse(raw.toString());}catch{socket.send(JSON.stringify({type:'error',error:'Invalid realtime message.'}));return;}
+    let message:any;try{message=JSON.parse(raw.toString());}catch{local.outbound.enqueueReliable(JSON.stringify({type:'error',error:'Invalid realtime message.'}));return;}
     if(message?.type!=='subscribe')return;
     const nextKind=parseKind(String(message.kind||local.kind));
     const nextSymbols=parseSymbols(String(message.symbols||local.symbols.join(',')));
-    if((nextKind==='market'||nextKind==='both')&&!nextSymbols.length){socket.send(JSON.stringify({type:'error',error:'At least one market symbol is required.'}));return;}
+    if((nextKind==='market'||nextKind==='both')&&!nextSymbols.length){local.outbound.enqueueReliable(JSON.stringify({type:'error',error:'At least one market symbol is required.'}));return;}
     local.kind=nextKind;local.symbols=nextSymbols;local.updatedAt=Date.now();
+    local.outbound.retainMarketKeys(nextKind==='orders'?[]:nextSymbols);
     await writeSubscription(local);
     await broadcast('control',serializableConnection(local));
     await ensureOwnership(local.userId);
@@ -259,6 +311,7 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
 
   socket.on('close',async()=>{
     clearInterval(local.heartbeat);clearInterval(local.ownerWatch);
+    local.outbound.dispose();
     localConnections.delete(connectionId);
     const current=connectionsByUser.get(local.userId);current?.delete(connectionId);
     if(current&&!current.size)connectionsByUser.delete(local.userId);
@@ -271,7 +324,7 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
     }
   });
 
-  socket.send(JSON.stringify({type:'status',status:'connected',instanceId:INSTANCE_ID}));
+  local.outbound.enqueueReliable(JSON.stringify({type:'status',status:'connected',instanceId:INSTANCE_ID}));
   await broadcast('control',serializableConnection(local));
   await ensureOwnership(local.userId);
 }
@@ -279,8 +332,27 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
 const server=http.createServer((request,response)=>{
   const pathname = new URL(request.url || '/', 'http://localhost').pathname;
   if(pathname==='/healthz'||pathname==='/api/realtime/healthz'){
+    const clients=[...localConnections.values()].map(connection=>({
+      connection:observabilityConnectionKey(connection.connectionId),
+      kind:connection.kind,
+      ...connection.outbound.snapshot(),
+    }));
+    const totals=clients.reduce((state,client)=>({
+      queuedFrames:state.queuedFrames+client.queueDepth,
+      reliableQueuedFrames:state.reliableQueuedFrames+client.reliableQueueDepth,
+      marketQueuedFrames:state.marketQueuedFrames+client.marketQueueDepth,
+      bufferedAmount:state.bufferedAmount+client.bufferedAmount,
+      maxClientQueueDepth:Math.max(state.maxClientQueueDepth,client.queueDepth),
+      maxClientBufferedAmount:Math.max(state.maxClientBufferedAmount,client.bufferedAmount),
+      slowClients:state.slowClients+(client.slowForMs>0?1:0),
+    }),{queuedFrames:0,reliableQueuedFrames:0,marketQueuedFrames:0,bufferedAmount:0,maxClientQueueDepth:0,maxClientBufferedAmount:0,slowClients:0});
     response.writeHead(coordinationReady?200:503,{'content-type':'application/json','cache-control':'no-store'});
-    response.end(JSON.stringify({status:coordinationReady?'ok':'degraded',instanceId:INSTANCE_ID,localConnections:localConnections.size,ownedUsers:ownedUsers.size,timestamp:new Date().toISOString()}));
+    response.end(JSON.stringify({
+      status:coordinationReady?'ok':'degraded',instanceId:INSTANCE_ID,
+      localConnections:localConnections.size,ownedUsers:ownedUsers.size,
+      outbound:{...totals,clients:clients.slice(0,200),clientsTruncated:clients.length>200,metrics:gatewayOutboundMetrics.snapshot()},
+      timestamp:new Date().toISOString(),
+    }));
     return;
   }
   response.writeHead(404,{'content-type':'application/json'});

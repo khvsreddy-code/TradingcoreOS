@@ -183,6 +183,7 @@ const contracts = [
   ['historical-data-source-runtime', ['src/historicalDataSourceRuntime.test.ts', true]],
   ['chart-history-indicator', ['src/chartHistoryIndicatorGraphV106Contract.test.mjs', false]],
   ['indicator-dependency-field-index', ['src/indicatorDependencyFieldIndexContract.test.mjs', false]],
+  ['realtime-gateway-outbound-backpressure', ['realtime-gateway/outboundBackpressure.test.ts', true]],
   ['realtime-architecture', ['src/realtimeArchitectureContract.test.mjs', false]],
   ['realtime-three-rate-ring-buffer', ['src/realtimeThreeRateArchitectureContract.test.mjs', false]],
   ['corespirit-persistent-worker-sab', ['src/coreSpiritPersistentWorkerSabContract.test.mjs', false]],
