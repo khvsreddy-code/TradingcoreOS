@@ -797,15 +797,21 @@ const browserRuntimeMetrics = useRef({
 
 
   useEffect(() => {
-    // Read the quote already being maintained by the active chart's market-data path.
-    // This is a presentation-only projection: it creates no extra broker subscription.
+    // Project the already-maintained chart quote into the header. TICK_UPDATE is
+    // emitted by the shared runtime feed, so this adds neither a broker socket nor
+    // a polling timer. Ignore ticks for instruments that are not currently active.
+    const activeSymbol = chartStatus.symbol.trim().toUpperCase();
     const refreshHeaderQuote = () => {
       const next = tradingCoreRuntime.getMarketSnapshot(chartStatus.symbol) ?? null;
       setHeaderQuote((previous) => previous === next ? previous : next);
     };
     refreshHeaderQuote();
-    const timer = window.setInterval(refreshHeaderQuote, 1000);
-    return () => window.clearInterval(timer);
+    const stop = tradingCoreRuntime.on('TICK_UPDATE', (tick: NormalizedMarketTick) => {
+      const tickSymbol = String(tick?.instrumentKey || '').trim().toUpperCase();
+      if (tickSymbol !== activeSymbol) return;
+      setHeaderQuote((previous) => previous === tick ? previous : tick);
+    });
+    return stop;
   }, [chartStatus.symbol]);
 
   useEffect(() => {
