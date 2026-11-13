@@ -14,6 +14,7 @@ import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
 import { marketLatencyTrace } from '../core/performance/marketLatencyTrace';
 import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutationKind } from './chartCandleEvents';
 import { chartComputeCoordinator } from './chartComputeCoordinator';
+import { patchImmutableArrayLike } from './persistentArrayLike';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -287,28 +288,43 @@ export class ChartDataPlane {
       });
     }
     const previousCount = Math.max(0, count - (bucketChanged ? 1 : 0));
-    const mergeSidecar = <T,>(values: ArrayLike<T> | undefined, fallback: (index: number) => T, latestValue: T): T[] => {
-      const next = values ? Array.from(values).slice(0, previousCount) : Array.from({ length: previousCount }, (_, index) => fallback(index));
-      while (next.length < previousCount) next.push(fallback(next.length));
-      if (bucketChanged) next.push(latestValue);
-      else if (count > 0) next[count - 1] = latestValue;
-      next.length = count;
-      return next;
-    };
+    const latestIndex = count - 1;
+    const previousTailIndex = previousCount - 1;
+    const previousTailWasDeveloping = bucketChanged && previousTailIndex >= 0
+      && previous?.phase?.[previousTailIndex] === 'developing';
     const exchangeTimestamp = Date.parse(String(latest.exchangeTimestamp ?? latest.timestamp));
     const ingestedAt = Date.parse(String(latest.ingestedAt ?? ''));
-    const exchangeTime = mergeSidecar(previous?.exchangeTime, index => Number(market.time[index]) * 1000,
-      Number.isFinite(exchangeTimestamp) ? exchangeTimestamp : Number.NaN);
-    const ingestedTimes = mergeSidecar(previous?.ingestedAt, () => Number.NaN, Number.isFinite(ingestedAt) ? ingestedAt : Number.NaN);
-    const phases = mergeSidecar(previous?.phase, () => 'historical', latest.phase ?? 'developing');
-    const confirmations = mergeSidecar(previous?.confirmed, () => true, latest.confirmed ?? false);
-    if (bucketChanged && previousCount > 0 && phases[previousCount - 1] === 'developing') {
-      phases[previousCount - 1] = 'confirmed';
-      confirmations[previousCount - 1] = true;
+    const exchangeTime = patchImmutableArrayLike(previous?.exchangeTime, count, [
+      { index: latestIndex, value: Number.isFinite(exchangeTimestamp) ? exchangeTimestamp : Number.NaN },
+    ], index => Number(market.time[index]) * 1000);
+    const ingestedTimes = patchImmutableArrayLike(previous?.ingestedAt, count, [
+      { index: latestIndex, value: Number.isFinite(ingestedAt) ? ingestedAt : Number.NaN },
+    ], () => Number.NaN);
+    const phasePatches: Array<{ index: number; value: string }> = [];
+    const confirmationPatches: Array<{ index: number; value: boolean }> = [];
+    if (previousTailWasDeveloping) {
+      phasePatches.push({ index: previousTailIndex, value: 'confirmed' });
+      confirmationPatches.push({ index: previousTailIndex, value: true });
     }
-    const source = previous?.source ? mergeSidecar(previous.source, () => 'unknown', latest.source ?? 'unknown') : undefined;
-    const availableAt = previous?.availableAt ? mergeSidecar(previous.availableAt, () => Number.NaN, Number.NaN) : undefined;
-    const revision = previous?.revision ? mergeSidecar(previous.revision, () => Number.NaN, Number(latest.revision ?? Number.NaN)) : undefined;
+    phasePatches.push({ index: latestIndex, value: latest.phase ?? 'developing' });
+    confirmationPatches.push({ index: latestIndex, value: latest.confirmed ?? false });
+    const phases = patchImmutableArrayLike(previous?.phase, count, phasePatches, () => 'historical');
+    const confirmations = patchImmutableArrayLike(previous?.confirmed, count, confirmationPatches, () => true);
+    const source = previous?.source
+      ? patchImmutableArrayLike(previous.source, count, [
+          { index: latestIndex, value: latest.source ?? 'unknown' },
+        ], () => 'unknown')
+      : undefined;
+    const availableAt = previous?.availableAt
+      ? patchImmutableArrayLike(previous.availableAt, count, [
+          { index: latestIndex, value: Number.NaN },
+        ], () => Number.NaN)
+      : undefined;
+    const revision = previous?.revision
+      ? patchImmutableArrayLike(previous.revision, count, [
+          { index: latestIndex, value: Number(latest.revision ?? Number.NaN) },
+        ], () => Number.NaN)
+      : undefined;
     return Object.freeze({ time: market.time, open: market.open, high: market.high, low: market.low, close: market.close, volume: market.volume,
       timeUnit: 'seconds', exchangeTime, ingestedAt: ingestedTimes, phase: phases, confirmed: confirmations,
       timeframe: latest.timeframe || CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,

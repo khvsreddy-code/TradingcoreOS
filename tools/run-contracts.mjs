@@ -10,6 +10,7 @@ const contracts = [
   ['frontend-bundle-architecture', ['src/frontendBundleArchitectureContract.test.mjs', false]],
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
+  ['chart-data-plane-persistent-sidecars', ['src/services/marketData/chartDataPlanePersistentSidecars.test.ts', true]],
   ['chart-history-normalization', ['src/services/marketData/chartHistoryNormalization.test.ts', true]],
   ['chart-history-cold-start', ['src/services/marketData/chartHistoryColdStartContract.test.mjs', true]],
   ['stitch-workspace-wiring', ['src/stitchWorkspaceWiringContract.test.mjs', false]],
