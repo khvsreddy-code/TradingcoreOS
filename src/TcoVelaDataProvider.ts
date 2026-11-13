@@ -273,6 +273,37 @@ type CanonicalHistorySource = 'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'ca
 type CanonicalHistoryPayload = { success?: boolean; error?: string; data?: unknown; metadata?: { sourceStatus?: Record<string, unknown> } };
 const MAX_CANONICAL_HISTORY_BARS = 5_000;
 const BROKER_SESSION_CHECK_MS = 5_000;
+
+// All Vela subscriptions share one broker-session watchdog. Broker lifecycle
+// events provide immediate transitions; the single watchdog is only a safety
+// net for expiry/restore changes that do not emit an event.
+const brokerSessionListeners = new Set<() => void>();
+let brokerSessionWatchdog: ReturnType<typeof setInterval> | undefined;
+let brokerSessionRuntimeDisposers: Array<() => void> = [];
+function publishBrokerSessionState(): void {
+  for (const listener of [...brokerSessionListeners]) listener();
+}
+function subscribeBrokerSessionState(listener: () => void): () => void {
+  brokerSessionListeners.add(listener);
+  if (!brokerSessionWatchdog) {
+    brokerSessionRuntimeDisposers = [
+      tradingCoreRuntime.on('BROKER_CONNECTED', publishBrokerSessionState),
+      tradingCoreRuntime.on('BROKER_DISCONNECTED', publishBrokerSessionState),
+      tradingCoreRuntime.on('SESSION_REFRESHED', publishBrokerSessionState),
+      tradingCoreRuntime.on('STATUS_CHANGED', publishBrokerSessionState),
+    ];
+    brokerSessionWatchdog = globalThis.setInterval(publishBrokerSessionState, BROKER_SESSION_CHECK_MS);
+  }
+  listener();
+  return () => {
+    brokerSessionListeners.delete(listener);
+    if (brokerSessionListeners.size) return;
+    if (brokerSessionWatchdog) globalThis.clearInterval(brokerSessionWatchdog);
+    brokerSessionWatchdog = undefined;
+    for (const dispose of brokerSessionRuntimeDisposers) dispose();
+    brokerSessionRuntimeDisposers = [];
+  };
+}
 function canonicalHistorySource(payload: CanonicalHistoryPayload): CanonicalHistorySource {
   const route = payload.metadata?.sourceStatus?.route;
   const active = route && typeof route === 'object' ? String((route as Record<string, unknown>).activeSource || '').toLowerCase() : '';
@@ -943,16 +974,11 @@ export class TcoVelaDataProvider implements DataProvider {
         if (brokerId) attach(brokerId); else detach();
       } else if (plane || attachedBrokerId) detach();
     };
-    const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
-    const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
-    const sessionCheckTimer = globalThis.setInterval(syncBroker, BROKER_SESSION_CHECK_MS);
-    syncBroker();
+    const stopSessionWatch = subscribeBrokerSessionState(syncBroker);
 
     return () => {
       cancelled = true;
-      offBrokerConnected();
-      offBrokerDisconnected();
-      globalThis.clearInterval(sessionCheckTimer);
+      stopSessionWatch();
       detach();
     };
   }
@@ -1041,16 +1067,11 @@ export class TcoVelaDataProvider implements DataProvider {
         if (brokerId) attach(brokerId); else detach();
       } else if (plane || attachedBrokerId) detach();
     };
-    const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
-    const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
-    const sessionCheckTimer = globalThis.setInterval(syncBroker, BROKER_SESSION_CHECK_MS);
-    syncBroker();
+    const stopSessionWatch = subscribeBrokerSessionState(syncBroker);
 
     return () => {
       cancelled = true;
-      offBrokerConnected();
-      offBrokerDisconnected();
-      globalThis.clearInterval(sessionCheckTimer);
+      stopSessionWatch();
       detach();
     };
   }
