@@ -4,7 +4,7 @@ export type { HistoricalCandle } from '../brokers/BrokerAdapter';
 import type { MarketFeedStatus, NormalizedMarketTick } from '../../types/market';
 import { LiveCandleStateMachine, liveTradeTimestampMs, type LiveCandleTransitionKind } from './liveCandleStateMachine';
 import { tradingCoreRuntime } from '../runtime/TradingCoreRuntime';
-import { getCanonicalDataPlane, type CanonicalDataPlane } from '../core/data/canonicalDataPlane';
+import { getCanonicalDataPlane, releaseCanonicalDataPlane, trimCanonicalDataPlaneRegistry, type CanonicalDataPlane } from '../core/data/canonicalDataPlane';
 import { chartMarketKey, chartMarketStore } from './chartMarketStore';
 import { historyStore } from './HistoryStore';
 import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
@@ -56,6 +56,9 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
 
 const MAX_HISTORY_CANDLES = 50_000;
 const IDLE_HOLD_MS = 30_000;
+const MAX_IDLE_CHART_PLANE_MS = 10 * 60_000;
+export const MAX_CHART_DATA_PLANES = 48;
+export const MAX_CHART_DATA_PLANE_BYTES = 256 * 1024 * 1024;
 const CANONICAL_MAX = 50_000;
 
 export type ChartDataPlaneKey = string;
@@ -113,6 +116,7 @@ type PlaneState = {
   feedStop?: () => void;
   marketStop?: () => void;
   idleTimer?: ReturnType<typeof setTimeout>;
+  evictionTimer?: ReturnType<typeof setTimeout>;
   subscribers: Set<Subscriber>;
   consumers: number;
   lastHistoryLoadAt: number;
@@ -129,6 +133,17 @@ type PlaneState = {
 };
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
+const registryLastUsedAt = new Map<ChartDataPlaneKey, number>();
+let registryTrimPromise: Promise<number> | undefined;
+
+export type ChartDataPlaneRegistryStats = Readonly<{
+  entries: number;
+  active: number;
+  warm: number;
+  estimatedBytes: number;
+  maxEntries: number;
+  maxBytes: number;
+}>;
 
 /** Only a valid exchange trade timestamp may create or advance a candle. Packet arrival time is not trade time. */
 function tradeTimestamp(tick: NormalizedMarketTick): string | undefined {
@@ -158,6 +173,8 @@ export class ChartDataPlane {
   };
   
 
+  private readonly canonicalConsumerId: string;
+
   constructor(
     readonly brokerId: string,
     readonly instrumentKey: string,
@@ -165,7 +182,49 @@ export class ChartDataPlane {
   ) {
     this.key = chartDataPlaneKey(brokerId, instrumentKey, timeframe);
     this.canonicalPlane = getCanonicalDataPlane(this.key);
+    this.canonicalConsumerId = `chart-data-plane:${this.key}`;
+    this.canonicalPlane.attachConsumer(this.canonicalConsumerId, 'chart');
     this.liveCandle = new LiveCandleStateMachine(this.instrumentKey, this.timeframe);
+  }
+
+  get consumerCount(): number { return this.state.consumers; }
+  get isDisposed(): boolean { return this.disposed; }
+  get estimatedBytes(): number {
+    const compatibilityBytes = (this.state.candles.length + this.state.compatibilityCandles.length) * 112;
+    const metadataBytes = this.state.columns
+      ? this.state.columns.time.length * 32
+      : 0;
+    return this.canonicalPlane.estimatedBytes + compatibilityBytes + metadataBytes;
+  }
+
+  /** Persist the confirmed tail before releasing live/canonical memory. */
+  async persistConfirmedHistoryForEviction(): Promise<boolean> {
+    if (this.disposed || this.state.consumers > 0) return false;
+    // Quiesce this timeframe before taking the persistence snapshot. Another
+    // timeframe may still own the shared symbol ring/feed, so those are only
+    // removed later by chartMarketStore.evictIfUnused().
+    if (this.state.idleTimer) clearTimeout(this.state.idleTimer);
+    if (this.state.evictionTimer) clearTimeout(this.state.evictionTimer);
+    if (this.state.recoveryRetryTimer) clearTimeout(this.state.recoveryRetryTimer);
+    this.state.idleTimer = undefined;
+    this.state.evictionTimer = undefined;
+    this.state.recoveryRetryTimer = undefined;
+    this.state.marketStop?.();
+    this.state.marketStop = undefined;
+    this.state.feedStop?.();
+    this.state.feedStop = undefined;
+
+    const pending = [this.state.historyPromise, this.state.olderHistoryPromise].filter(
+      (task): task is Promise<HistoricalCandle[]> => Boolean(task),
+    );
+    if (pending.length) await Promise.allSettled(pending);
+    if (this.disposed || this.state.consumers > 0) return false;
+
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    let rows = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
+    if (!rows?.length) rows = this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
+    if (rows.length) historyStore.set(this.brokerId, this.instrumentKey, interval, rows, MAX_HISTORY_CANDLES);
+    return historyStore.persistConfirmedNow(this.brokerId, this.instrumentKey, interval);
   }
 
   private snapshot(): ChartDataPlaneSnapshot {
@@ -695,6 +754,8 @@ export class ChartDataPlane {
 
   private start(): void {
     if (this.state.idleTimer) { clearTimeout(this.state.idleTimer); this.state.idleTimer = undefined; }
+    if (this.state.evictionTimer) { clearTimeout(this.state.evictionTimer); this.state.evictionTimer = undefined; }
+    if (this.disposed) return;
     if (!this.state.marketStop) {
       const marketKey = chartMarketKey(this.brokerId, this.instrumentKey);
       const syncMarketSnapshot = () => {
@@ -738,19 +799,40 @@ export class ChartDataPlane {
       this.state.marketStop = undefined;
       this.state.feedStop?.();
       this.state.feedStop = undefined;
+      if (this.state.evictionTimer) clearTimeout(this.state.evictionTimer);
+      this.state.evictionTimer = setTimeout(() => {
+        this.state.evictionTimer = undefined;
+        void trimChartDataPlaneRegistry({ maxEntries: MAX_CHART_DATA_PLANES, maxIdleMs: MAX_IDLE_CHART_PLANE_MS });
+      }, MAX_IDLE_CHART_PLANE_MS);
+      void trimChartDataPlaneRegistry({ maxEntries: MAX_CHART_DATA_PLANES });
     }, IDLE_HOLD_MS);
   }
 
-  acquire(): () => void {
+  /** Hold dataset memory without starting a market transport subscription. */
+  retain(): () => void {
+    if (this.disposed) throw new Error(`ChartDataPlane '${this.key}' has been evicted`);
     this.state.consumers += 1;
-    this.start();
+    const releaseGraphPin = marketDataGraph.retainSymbol(this.instrumentKey);
     let released = false;
     return () => {
       if (released) return;
       released = true;
+      releaseGraphPin();
       this.state.consumers = Math.max(0, this.state.consumers - 1);
+      registryLastUsedAt.set(this.key, Date.now());
       if (this.state.consumers === 0) this.stopAfterIdle();
     };
+  }
+
+  acquire(): () => void {
+    const release = this.retain();
+    try {
+      this.start();
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   subscribe(listener: Subscriber): () => void {
@@ -1214,11 +1296,14 @@ export class ChartDataPlane {
     // target-sized multi-page crawl.
   }
 
-  dispose(): void {
-    this.state.consumers = 0;
+  dispose(): boolean {
+    if (this.state.consumers > 0 || this.disposed) return false;
     this.state.subscribers.clear();
     if (this.state.idleTimer) clearTimeout(this.state.idleTimer);
+    if (this.state.evictionTimer) clearTimeout(this.state.evictionTimer);
     if (this.state.recoveryRetryTimer) clearTimeout(this.state.recoveryRetryTimer);
+    this.state.idleTimer = undefined;
+    this.state.evictionTimer = undefined;
     this.state.recoveryRetryTimer = undefined;
     this.disposed = true;
     // Invalidate every in-flight load/recovery before tearing down subscriptions.
@@ -1229,6 +1314,14 @@ export class ChartDataPlane {
     this.state.feedStop = undefined;
     this.state.historyPromise = undefined;
     this.state.olderHistoryPromise = undefined;
+    this.state.candles = [];
+    this.state.compatibilityCandles = [];
+    this.state.columns = undefined;
+    this.state.latestTick = undefined;
+    this.state.lastAcceptedTradeTimestampMs = undefined;
+    this.canonicalPlane.detachConsumer(this.canonicalConsumerId);
+    releaseCanonicalDataPlane(this.key, this.canonicalPlane);
+    return true;
   }
 }
 
@@ -1239,20 +1332,89 @@ export function chartDataPlaneKey(brokerId: string, instrumentKey: string, timef
 export function getChartDataPlane(brokerId: string, instrumentKey: string, timeframe: string): ChartDataPlane {
   const key = chartDataPlaneKey(brokerId, instrumentKey, timeframe);
   let plane = registry.get(key);
-  if (!plane) {
+  if (!plane || plane.isDisposed) {
     plane = new ChartDataPlane(
       String(brokerId || 'unknown').toLowerCase(),
       String(instrumentKey || '').trim(),
       String(timeframe || '5m'),
     );
     registry.set(key, plane);
+  } else {
+    // Map insertion order plus this timestamp forms the chart dataset LRU.
+    registry.delete(key);
+    registry.set(key, plane);
   }
+  registryLastUsedAt.set(key, Date.now());
   return plane;
 }
 
-export function clearChartDataPlaneRegistry(): void {
-  registry.forEach(plane => plane.dispose());
-  registry.clear();
+export async function trimChartDataPlaneRegistry(options: {
+  maxEntries?: number;
+  maxBytes?: number;
+  maxIdleMs?: number;
+  now?: number;
+} = {}): Promise<number> {
+  if (registryTrimPromise) return registryTrimPromise;
+  registryTrimPromise = (async () => {
+    const maxEntries = Math.max(1, Math.floor(options.maxEntries ?? MAX_CHART_DATA_PLANES));
+    const maxBytes = Math.max(0, options.maxBytes ?? MAX_CHART_DATA_PLANE_BYTES);
+    const maxIdleMs = Math.max(0, options.maxIdleMs ?? Number.POSITIVE_INFINITY);
+    const now = Number.isFinite(options.now) ? Number(options.now) : Date.now();
+    const candidates = [...registry.entries()]
+      .filter(([, plane]) => plane.consumerCount === 0)
+      .sort((a, b) => (registryLastUsedAt.get(a[0]) ?? 0) - (registryLastUsedAt.get(b[0]) ?? 0));
+    let totalBytes = [...registry.values()].reduce((sum, plane) => sum + plane.estimatedBytes, 0);
+    let excess = Math.max(0, registry.size - maxEntries);
+    let removed = 0;
+    for (const [key, plane] of candidates) {
+      const idleFor = now - (registryLastUsedAt.get(key) ?? 0);
+      if (excess <= 0 && totalBytes <= maxBytes && idleFor < maxIdleMs) continue;
+      if (registry.get(key) !== plane || plane.consumerCount > 0) continue;
+      const persisted = await plane.persistConfirmedHistoryForEviction();
+      if (!persisted || registry.get(key) !== plane || plane.consumerCount > 0) continue;
+      const bytes = plane.estimatedBytes;
+      if (!plane.dispose()) continue;
+      registry.delete(key);
+      registryLastUsedAt.delete(key);
+      chartMarketStore.evictIfUnused(chartMarketKey(plane.brokerId, plane.instrumentKey));
+      totalBytes = Math.max(0, totalBytes - bytes);
+      removed += 1;
+      if (excess > 0) excess -= 1;
+    }
+    trimCanonicalDataPlaneRegistry();
+    marketDataGraph.trimIdleSymbols();
+    return removed;
+  })().finally(() => { registryTrimPromise = undefined; });
+  return registryTrimPromise;
+}
+
+export function chartDataPlaneRegistryStats(): ChartDataPlaneRegistryStats {
+  let active = 0;
+  let estimatedBytes = 0;
+  for (const plane of registry.values()) {
+    if (plane.consumerCount > 0) active += 1;
+    estimatedBytes += plane.estimatedBytes;
+  }
+  return Object.freeze({
+    entries: registry.size,
+    active,
+    warm: registry.size - active,
+    estimatedBytes,
+    maxEntries: MAX_CHART_DATA_PLANES,
+    maxBytes: MAX_CHART_DATA_PLANE_BYTES,
+  });
 }
 
 export function chartDataPlaneRegistrySize(): number { return registry.size; }
+
+export async function clearChartDataPlaneRegistry(): Promise<void> {
+  for (const [key, plane] of [...registry.entries()]) {
+    if (plane.consumerCount > 0) continue;
+    await plane.persistConfirmedHistoryForEviction();
+    if (!plane.dispose()) continue;
+    registry.delete(key);
+    registryLastUsedAt.delete(key);
+    chartMarketStore.evictIfUnused(chartMarketKey(plane.brokerId, plane.instrumentKey));
+  }
+  trimCanonicalDataPlaneRegistry();
+}

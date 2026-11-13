@@ -46,6 +46,19 @@ export class TimelineSeriesStore {
   has(name: string): boolean { return this.fields.has(String(name)); }
   names(): readonly string[] { return [...this.fields.keys()]; }
 
+  get allocatedBytes(): number {
+    let bytes = 0;
+    for (const values of this.fields.values()) bytes += values.byteLength;
+    return bytes;
+  }
+
+  /** Release derived columns with their owning canonical dataset. */
+  releaseMemory(): void {
+    this.fields.clear();
+    this.capacity = 0;
+    this._revision += 1;
+  }
+
   syncLength(): void {
     if (this.capacity >= this.timeline.length) return;
     const next = Math.max(64, this.timeline.length, this.capacity * 2);

@@ -192,6 +192,36 @@ export class HistoryStore {
   estimatedBytesFor(broker: string, symbol: string, timeframe: string): number {
     return this.buckets.get(this.key(broker, symbol, timeframe))?.estimatedBytes ?? 0;
   }
+
+  /** Flush confirmed history before its live chart/canonical buffers are evicted. */
+  async persistConfirmedNow(broker: string, symbol: string, timeframe: string): Promise<boolean> {
+    const key = this.key(broker, symbol, timeframe);
+    const bucket = this.buckets.get(key);
+    if (!bucket?.data.length) return true;
+    const pendingTimer = historyPersistTimers.get(key);
+    if (pendingTimer) clearTimeout(pendingTimer);
+    historyPersistTimers.delete(key);
+    const confirmed = bucket.data.filter(row =>
+      row.confirmed !== false && row.phase !== 'developing' && row.phase !== 'realtime' && row.phase !== 'forecast'
+    ).slice(-PERSISTED_HISTORY_CANDLE_LIMIT);
+    if (!confirmed.length) return true;
+    const db = await openHistoryDb();
+    if (!db) return true; // The bounded HistoryStore LRU remains the recovery source.
+    return new Promise<boolean>(resolve => {
+      try {
+        const transaction = db.transaction(HISTORY_DB_STORE, 'readwrite');
+        transaction.objectStore(HISTORY_DB_STORE).put({
+          key, data: confirmed, updatedAt: bucket.updatedAt,
+          revision: bucket.revision, target: PERSISTED_HISTORY_CANDLE_LIMIT,
+        } satisfies PersistedHistoryBucket);
+        transaction.oncomplete = () => resolve(true);
+        transaction.onerror = () => resolve(false);
+        transaction.onabort = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  }
   stats() {
     let candleCount = 0; let estimatedBytes = 0;
     for (const bucket of this.buckets.values()) { candleCount += bucket.data.length; estimatedBytes += bucket.estimatedBytes; }

@@ -91,6 +91,12 @@ export class TickRingBuffer {
     return this.count;
   }
 
+  /** Approximate retained memory for this fixed-capacity ring. */
+  get estimatedBytes(): number {
+    return this.timestamp.byteLength + this.price.byteLength + this.quantity.byteLength
+      + this.bid.byteLength + this.ask.byteLength + this.flags.byteLength;
+  }
+
   forEachSince(sequenceExclusive: number, visitor: (sequence: number, timestamp: number, price: number, quantity: number, bid: number, ask: number, flags: number) => void): number {
     if (!this.count) return 0;
     const firstSequence = Math.max(sequenceExclusive + 1, this.sequence - this.count + 1);
@@ -123,3 +129,5 @@ export class TickRingBuffer {
     return result;
   }
 }
+
+// Dataset lifecycle: byte accounting is used by the registry's LRU budget.

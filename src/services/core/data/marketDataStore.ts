@@ -90,6 +90,11 @@ export class MarketDataStore {
   get revision() { return this._revision; }
   get dirtyRange(): ChartDataRange { return { from: this._dirtyFrom, to: this._dirtyTo }; }
 
+  /** Approximate retained typed-array storage, including spare capacity. */
+  get allocatedBytes(): number {
+    return this.capacity * 13 * Float64Array.BYTES_PER_ELEMENT;
+  }
+
   get time() { return this._time.subarray(0, this._length); }
   get open() { return this._open.subarray(0, this._length); }
   get high() { return this._high.subarray(0, this._length); }
@@ -311,6 +316,27 @@ export class MarketDataStore {
 
   clear(): void {
     this._length = 0;
+    this.markDirty(0, 0);
+  }
+
+  /** Release backing buffers when the owning canonical dataset is evicted. */
+  releaseMemory(): void {
+    this._time = new Float64Array(0);
+    this._open = new Float64Array(0);
+    this._high = new Float64Array(0);
+    this._low = new Float64Array(0);
+    this._close = new Float64Array(0);
+    this._volume = new Float64Array(0);
+    this._oi = new Float64Array(0);
+    this._bid = new Float64Array(0);
+    this._ask = new Float64Array(0);
+    this._bidVolume = new Float64Array(0);
+    this._askVolume = new Float64Array(0);
+    this._trades = new Float64Array(0);
+    this._session = new Float64Array(0);
+    this.capacity = 0;
+    this._length = 0;
+    this._metadata = Object.freeze({});
     this.markDirty(0, 0);
   }
 

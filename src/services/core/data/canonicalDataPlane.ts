@@ -12,7 +12,7 @@ import {
   StructureStore,
 } from './derivedDataStores';
 
-export type CanonicalConsumerKind = 'indicator' | 'model' | 'chart' | 'structure' | 'liquidity' | 'orderflow' | 'replay' | 'scanner';
+export type CanonicalConsumerKind = 'indicator' | 'model' | 'chart' | 'structure' | 'liquidity' | 'orderflow' | 'replay' | 'scanner' | 'graph';
 
 export type CanonicalConsumer = Readonly<{
   id: string;
@@ -51,6 +51,23 @@ export class CanonicalDataPlane {
 
   get revision(): number { return this.market.revision; }
   get length(): number { return this.market.length; }
+  get consumerCount(): number { return this.consumers.size; }
+  get estimatedBytes(): number {
+    return this.market.allocatedBytes
+      + this.indicators.allocatedBytes + this.models.allocatedBytes
+      + this.structure.allocatedBytes + this.liquidity.allocatedBytes
+      + this.orderFlow.allocatedBytes;
+  }
+  dispose(): boolean {
+    if (this.consumers.size > 0) return false;
+    this.market.releaseMemory();
+    this.indicators.releaseMemory();
+    this.models.releaseMemory();
+    this.structure.releaseMemory();
+    this.liquidity.releaseMemory();
+    this.orderFlow.releaseMemory();
+    return true;
+  }
 
   replace(rows: readonly MarketDataPoint[]): void { this.market.replace(rows); }
   /** Direct typed-column ingress used by the Vela native history fast path. */
@@ -130,6 +147,58 @@ export class CanonicalDataPlane {
 }
 
 const registry = new Map<string, CanonicalDataPlane>();
+const lastAccessAt = new Map<string, number>();
+export const MAX_UNOWNED_CANONICAL_DATASETS = 128;
+export const MAX_CANONICAL_DATASET_BYTES = 256 * 1024 * 1024;
+
+export type CanonicalDataPlaneRegistryStats = Readonly<{
+  entries: number; pinned: number; unowned: number; estimatedBytes: number; maxUnowned: number; maxBytes: number;
+}>;
+
+export function releaseCanonicalDataPlane(timelineKey: string, expected?: CanonicalDataPlane): boolean {
+  const key = String(timelineKey).trim();
+  const plane = registry.get(key);
+  if (!plane || (expected && plane !== expected) || !plane.dispose()) return false;
+  registry.delete(key);
+  lastAccessAt.delete(key);
+  return true;
+}
+
+export function trimCanonicalDataPlaneRegistry(options: {
+  maxUnowned?: number; maxBytes?: number; now?: number; protectKeys?: readonly string[];
+} = {}): number {
+  const maxUnowned = Math.max(0, Math.floor(options.maxUnowned ?? MAX_UNOWNED_CANONICAL_DATASETS));
+  const maxBytes = Math.max(0, options.maxBytes ?? MAX_CANONICAL_DATASET_BYTES);
+  const protectedKeys = new Set(options.protectKeys ?? []);
+  const candidates = [...registry.entries()]
+    .filter(([key, plane]) => plane.consumerCount === 0 && !protectedKeys.has(key))
+    .sort((a, b) => (lastAccessAt.get(a[0]) ?? 0) - (lastAccessAt.get(b[0]) ?? 0));
+  let totalBytes = [...registry.values()].reduce((sum, plane) => sum + plane.estimatedBytes, 0);
+  let excess = Math.max(0, candidates.length - maxUnowned);
+  let removed = 0;
+  for (const [key, plane] of candidates) {
+    if (excess <= 0 && totalBytes <= maxBytes) break;
+    const bytes = plane.estimatedBytes;
+    if (releaseCanonicalDataPlane(key, plane)) {
+      removed += 1;
+      if (excess > 0) excess -= 1;
+      totalBytes = Math.max(0, totalBytes - bytes);
+    }
+  }
+  return removed;
+}
+
+export function canonicalDataPlaneRegistryStats(): CanonicalDataPlaneRegistryStats {
+  let pinned = 0, estimatedBytes = 0;
+  for (const plane of registry.values()) {
+    if (plane.consumerCount > 0) pinned += 1;
+    estimatedBytes += plane.estimatedBytes;
+  }
+  return Object.freeze({
+    entries: registry.size, pinned, unowned: registry.size - pinned, estimatedBytes,
+    maxUnowned: MAX_UNOWNED_CANONICAL_DATASETS, maxBytes: MAX_CANONICAL_DATASET_BYTES,
+  });
+}
 
 /** Shared host registry. A symbol/timeframe dataset should resolve here once. */
 export function getCanonicalDataPlane(timelineKey: string): CanonicalDataPlane {
@@ -139,8 +208,16 @@ export function getCanonicalDataPlane(timelineKey: string): CanonicalDataPlane {
   if (!plane) {
     plane = new CanonicalDataPlane(key);
     registry.set(key, plane);
+  } else {
+    registry.delete(key);
+    registry.set(key, plane);
   }
+  lastAccessAt.set(key, Date.now());
+  trimCanonicalDataPlaneRegistry({ protectKeys: [key] });
   return plane;
 }
 
-export function clearCanonicalDataPlaneRegistry(): void { registry.clear(); }
+/** Clear unowned entries only; live consumers retain their canonical dataset. */
+export function clearCanonicalDataPlaneRegistry(): void {
+  for (const [key, plane] of [...registry.entries()]) releaseCanonicalDataPlane(key, plane);
+}

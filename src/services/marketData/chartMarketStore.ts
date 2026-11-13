@@ -14,11 +14,14 @@ export type ChartMarketSnapshot = {
 type Listener = () => void;
 
 const DEFAULT_TICK_RING_SIZE = 8192;
+export const MAX_CHART_MARKET_STORE_ENTRIES = 64;
+const MAX_IDLE_MARKET_ENTRY_MS = 10 * 60_000;
 
 type Entry = ChartMarketSnapshot & {
   snapshot: ChartMarketSnapshot;
   tickRing: TickRingBuffer;
   reactNotifyScheduled: boolean;
+  lastUsedAt: number;
 };
 
 const EMPTY_SNAPSHOT: ChartMarketSnapshot = { revision: 0, marketSequence: 0, statusRevision: 0 };
@@ -40,9 +43,11 @@ class ChartMarketStore {
         snapshot: { tick, revision: 0, marketSequence: 0, statusRevision: 0 },
         tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE, key),
         reactNotifyScheduled: false,
+        lastUsedAt: Date.now(),
       };
       this.entries.set(key, entry);
     }
+    this.touchEntry(key, entry);
     entry.tick = tick;
     entry.revision += 1;
     entry.marketSequence = entry.tickRing.push(tick);
@@ -51,6 +56,7 @@ class ChartMarketStore {
     this.listeners.get(key)?.forEach(listener => listener());
     if (this.reactListeners.get(key)?.size) chartPerformanceTelemetry.recordReactNotificationRequest(key);
     this.scheduleReactNotification(key, entry);
+    this.trim();
   }
 
   /** Publish transport lifecycle separately from tick revisions. Status edges are never inferred from quote silence. */
@@ -63,10 +69,12 @@ class ChartMarketStore {
         statusRevision: 0,
         tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE, key),
         reactNotifyScheduled: false,
+        lastUsedAt: Date.now(),
         snapshot: { revision: 0, marketSequence: 0, statusRevision: 0 },
       };
       this.entries.set(key, entry);
     }
+    this.touchEntry(key, entry);
     if (entry.status === status) return;
     entry.status = status;
     entry.statusRevision = (entry.statusRevision ?? 0) + 1;
@@ -80,6 +88,7 @@ class ChartMarketStore {
     this.listeners.get(key)?.forEach(listener => listener());
     if (this.reactListeners.get(key)?.size) chartPerformanceTelemetry.recordReactNotificationRequest(key);
     this.scheduleReactNotification(key, entry);
+    this.trim();
   }
 
   clear(key?: ChartMarketKey): void {
@@ -89,27 +98,38 @@ class ChartMarketStore {
 
   getSnapshot(key: ChartMarketKey): ChartMarketSnapshot {
     const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
     return entry ? entry.snapshot : EMPTY_SNAPSHOT;
   }
 
   getTick(key: ChartMarketKey): NormalizedMarketTick | undefined {
-    return this.entries.get(key)?.tick;
+    const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
+    return entry?.tick;
   }
 
   getSequence(key: ChartMarketKey): number {
-    return this.entries.get(key)?.marketSequence || 0;
+    const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
+    return entry?.marketSequence || 0;
   }
 
   forEachTickSince(key: ChartMarketKey, sequenceExclusive: number, visitor: Parameters<TickRingBuffer['forEachSince']>[1]): number {
-    return this.entries.get(key)?.tickRing.forEachSince(sequenceExclusive, visitor) || 0;
+    const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
+    return entry?.tickRing.forEachSince(sequenceExclusive, visitor) || 0;
   }
 
   getRecentTicks(key: ChartMarketKey): NormalizedMarketTick[] {
-    return this.entries.get(key)?.tickRing.toArray() || [];
+    const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
+    return entry?.tickRing.toArray() || [];
   }
 
   getRevision(key: ChartMarketKey): number {
-    return this.entries.get(key)?.revision || 0;
+    const entry = this.entries.get(key);
+    if (entry) this.touchEntry(key, entry);
+    return entry?.revision || 0;
   }
 
   getPerformanceSnapshot(key: ChartMarketKey) {
@@ -124,6 +144,43 @@ class ChartMarketStore {
     return this.addListener(this.reactListeners, key, listener);
   }
 
+  /** Remove an unused ring; active chart/React consumers pin their instrument key. */
+  evictIfUnused(key: ChartMarketKey): boolean {
+    if ((this.listeners.get(key)?.size ?? 0) > 0 || (this.reactListeners.get(key)?.size ?? 0) > 0) return false;
+    const removed = this.entries.delete(key);
+    if (removed) chartPerformanceTelemetry.reset(key);
+    return removed;
+  }
+
+  trim(now = Date.now()): number {
+    const candidates = [...this.entries.entries()]
+      .filter(([key]) => (this.listeners.get(key)?.size ?? 0) === 0 && (this.reactListeners.get(key)?.size ?? 0) === 0)
+      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
+    let removed = 0;
+    for (const [key, entry] of candidates) {
+      const expired = now - entry.lastUsedAt >= MAX_IDLE_MARKET_ENTRY_MS;
+      if (!expired && this.entries.size <= MAX_CHART_MARKET_STORE_ENTRIES) break;
+      if (this.entries.get(key) === entry && this.evictIfUnused(key)) removed += 1;
+    }
+    return removed;
+  }
+
+  stats(): Readonly<{ entries: number; activeEntries: number; estimatedBytes: number; maxEntries: number }> {
+    let activeEntries = 0;
+    let estimatedBytes = 0;
+    for (const [key, entry] of this.entries) {
+      if ((this.listeners.get(key)?.size ?? 0) > 0 || (this.reactListeners.get(key)?.size ?? 0) > 0) activeEntries += 1;
+      estimatedBytes += entry.tickRing.estimatedBytes;
+    }
+    return Object.freeze({ entries: this.entries.size, activeEntries, estimatedBytes, maxEntries: MAX_CHART_MARKET_STORE_ENTRIES });
+  }
+
+  private touchEntry(key: ChartMarketKey, entry: Entry): void {
+    entry.lastUsedAt = Date.now();
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+  }
+
   private addListener(registry: Map<ChartMarketKey, Set<Listener>>, key: ChartMarketKey, listener: Listener): () => void {
     let bucket = registry.get(key);
     if (!bucket) {
@@ -136,6 +193,7 @@ class ChartMarketStore {
       if (!current) return;
       current.delete(listener);
       if (current.size === 0) registry.delete(key);
+      this.trim();
     };
   }
 

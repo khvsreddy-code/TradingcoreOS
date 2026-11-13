@@ -1,4 +1,4 @@
-import { getCanonicalDataPlane, type CanonicalDataPlane } from './canonicalDataPlane';
+import { getCanonicalDataPlane, releaseCanonicalDataPlane, type CanonicalDataPlane } from './canonicalDataPlane';
 import type { CoreSpiritDataAlignment, CoreSpiritDataRequest, CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataSnapshot } from '../../coreSpirit/types';
 
 export const CORE_SPIRIT_DATA_GRAPH_VERSION = 1 as const;
@@ -61,7 +61,11 @@ type GraphNode={
   anchorSecondsUtc:number;
   sessionProfile:MarketDataGraphSessionProfile;
   sourceRevision:number;
+  consumerLeaseId:string;
+  lastUsedAt:number;
 };
+
+let marketDataGraphInstanceSequence = 0;
 
 const TIMEFRAME_SECONDS:Record<string,number>={
   '1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,
@@ -391,23 +395,101 @@ export function graphSnapshotTransferables(snapshot:CoreSpiritGraphSnapshot):Tra
 export class MarketDataGraph{
   private readonly nodes=new Map<MarketDataGraphNodeKey,GraphNode>();
   private revision=0;
+  private readonly instanceId=++marketDataGraphInstanceSequence;
+  private readonly symbolPins=new Map<string,number>();
 
-  constructor(private readonly defaultSession:MarketDataGraphSessionProfile={anchorSecondsUtc:0}){}
+  constructor(
+    private readonly defaultSession:MarketDataGraphSessionProfile={anchorSecondsUtc:0},
+    private readonly maxSymbols=64,
+    private readonly maxBytes=128*1024*1024,
+  ){}
 
   get graphRevision():number{return this.revision;}
+
+  retainSymbol(symbol:string):()=>void {
+    const key=String(symbol||'').trim().toUpperCase();
+    if(!key)return ()=>{};
+    this.symbolPins.set(key,(this.symbolPins.get(key)??0)+1);
+    let released=false;
+    return ()=>{
+      if(released)return;
+      released=true;
+      const count=Math.max(0,(this.symbolPins.get(key)??0)-1);
+      if(count===0)this.symbolPins.delete(key);else this.symbolPins.set(key,count);
+      this.trimIdleSymbols();
+    };
+  }
+
+  private touchNode(node:GraphNode):void { node.lastUsedAt=Date.now(); }
+
+  evictSymbol(symbol:string):number {
+    const normalized=String(symbol||'').trim().toUpperCase();
+    if(!normalized||(this.symbolPins.get(normalized)??0)>0)return 0;
+    const matches=[...this.nodes.entries()].filter(([,node])=>node.descriptor.symbol.trim().toUpperCase()===normalized);
+    if(!matches.length)return 0;
+    if(matches.some(([,node])=>node.plane.listConsumers().some(consumer=>consumer.id!==node.consumerLeaseId)))return 0;
+    for(const [key,node] of matches){
+      node.plane.detachConsumer(node.consumerLeaseId);
+      releaseCanonicalDataPlane(node.plane.timelineKey,node.plane);
+      this.nodes.delete(key);
+    }
+    this.revision+=1;
+    return matches.length;
+  }
+
+  trimIdleSymbols():number {
+    const groups=new Map<string,{lastUsedAt:number;bytes:number}>();
+    for(const node of this.nodes.values()){
+      const symbol=node.descriptor.symbol.trim().toUpperCase();
+      const group=groups.get(symbol)??{lastUsedAt:0,bytes:0};
+      group.lastUsedAt=Math.max(group.lastUsedAt,node.lastUsedAt);
+      group.bytes+=node.plane.estimatedBytes;
+      groups.set(symbol,group);
+    }
+    const limit=Math.max(1,Math.floor(this.maxSymbols));
+    const budget=Math.max(0,this.maxBytes);
+    let totalBytes=[...groups.values()].reduce((sum,group)=>sum+group.bytes,0);
+    if(groups.size<=limit&&totalBytes<=budget)return 0;
+    const candidates=[...groups.entries()].sort((a,b)=>a[1].lastUsedAt-b[1].lastUsedAt);
+    let remaining=groups.size,removed=0;
+    for(const [symbol,group] of candidates){
+      if(remaining<=limit&&totalBytes<=budget)break;
+      if((this.symbolPins.get(symbol)??0)>0)continue;
+      const count=this.evictSymbol(symbol);
+      if(count>0){
+        remaining-=1;
+        removed+=count;
+        totalBytes=Math.max(0,totalBytes-group.bytes);
+      }
+    }
+    return removed;
+  }
+
+  stats():Readonly<{symbols:number;nodes:number;pinnedSymbols:number;estimatedBytes:number;maxSymbols:number;maxBytes:number}> {
+    const symbols=new Set([...this.nodes.values()].map(node=>node.descriptor.symbol.trim().toUpperCase()));
+    let estimatedBytes=0;
+    for(const node of this.nodes.values())estimatedBytes+=node.plane.estimatedBytes;
+    return Object.freeze({
+      symbols:symbols.size,nodes:this.nodes.size,
+      pinnedSymbols:[...symbols].filter(symbol=>(this.symbolPins.get(symbol)??0)>0).length,
+      estimatedBytes,maxSymbols:Math.max(1,Math.floor(this.maxSymbols)),maxBytes:Math.max(0,this.maxBytes),
+    });
+  }
 
   private ensureBase(symbol:string,timeframe:string):GraphNode{
     const normalized=normalizeTimeframe(timeframe);
     const key=graphKey(symbol,normalized);
     const existing=this.nodes.get(key);
-    if(existing)return existing;
-    const plane=getCanonicalDataPlane(`graph:${key}`);
+    if(existing){this.touchNode(existing);return existing;}
+    const plane=getCanonicalDataPlane(`graph:${this.instanceId}:${key}`);
+    const consumerLeaseId=`market-data-graph:${this.instanceId}:${key}`;
+    plane.attachConsumer(consumerLeaseId,'graph');
     const descriptor:MarketDataGraphNodeDescriptor={id:`graph:${key}`,key,symbol:String(symbol).trim(),timeframe:normalized,kind:'base',revision:0,length:0};
     const sessionProfile:MarketDataGraphSessionProfile = {
       ...this.defaultSession,
       anchorSecondsUtc:this.defaultSession.anchorSecondsUtc??0,
     };
-    const node:GraphNode={descriptor,plane,intervalSeconds:timeframeSeconds(normalized),anchorSecondsUtc:sessionProfile.anchorSecondsUtc??0,sessionProfile,sourceRevision:0};
+    const node:GraphNode={descriptor,plane,intervalSeconds:timeframeSeconds(normalized),anchorSecondsUtc:sessionProfile.anchorSecondsUtc??0,sessionProfile,sourceRevision:0,consumerLeaseId,lastUsedAt:Date.now()};
     this.nodes.set(key,node);
     return node;
   }
@@ -416,10 +498,12 @@ export class MarketDataGraph{
     const node=this.ensureBase(symbol,timeframe);
     if(session?.anchorSecondsUtc!=null)node.anchorSecondsUtc=session.anchorSecondsUtc;
     if (session) node.sessionProfile = { ...node.sessionProfile, ...session };
+    this.touchNode(node);
     node.plane.replaceHistoricalCandleRows(candles);
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
     this.rebuildDependents(node.descriptor.key);
     this.revision+=1;
+    this.trimIdleSymbols();
   }
 
   updateBaseLast(symbol:string,timeframe:string,candle:{timestamp:string;open:number;high:number;low:number;close:number;volume:number},session?:MarketDataGraphSessionProfile):void{
@@ -439,8 +523,10 @@ export class MarketDataGraph{
       return;
     }
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
+    this.touchNode(node);
     this.rebuildDependentTails(node.descriptor.key);
     this.revision+=1;
+    this.trimIdleSymbols();
   }
 
   private chooseSource(symbol:string,targetSeconds:number):GraphNode|undefined{
@@ -457,22 +543,28 @@ export class MarketDataGraph{
     if(existing)return existing;
     const source=this.chooseSource(symbol,targetSeconds);
     if(!source)return undefined;
+    this.touchNode(source);
     const key=graphKey(symbol,normalized);
-    const plane=getCanonicalDataPlane(`graph:${key}`);
+    const plane=getCanonicalDataPlane(`graph:${this.instanceId}:${key}`);
+    const consumerLeaseId=`market-data-graph:${this.instanceId}:${key}`;
+    plane.attachConsumer(consumerLeaseId,'graph');
     const descriptor:MarketDataGraphNodeDescriptor={id:`graph:${key}`,key,symbol:String(symbol).trim(),timeframe:normalized,sourceKey:source.descriptor.key,kind:'derived',revision:0,length:0};
     const sessionProfile = source.sessionProfile;
-    const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sessionProfile,sourceRevision:0};
+    const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sessionProfile,sourceRevision:0,consumerLeaseId,lastUsedAt:Date.now()};
     this.nodes.set(key,node);
     aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc,node.sessionProfile);
     node.descriptor={...node.descriptor,revision:plane.revision,length:plane.length};
     this.revision+=1;
+    this.trimIdleSymbols();
     return node;
   }
 
   ensureNode(symbol:string,timeframe:string):GraphNode|undefined{
     const normalized=normalizeTimeframe(timeframe);
     const key=graphKey(symbol,normalized);
-    return this.nodes.get(key)??this.ensureDerived(symbol,normalized)??((normalized==='chart')?this.nodes.get(graphKey(symbol,'chart')):undefined);
+    const existing=this.nodes.get(key);
+    if(existing){this.touchNode(existing);return existing;}
+    return this.ensureDerived(symbol,normalized)??((normalized==='chart')?this.nodes.get(graphKey(symbol,'chart')):undefined);
   }
 
   getNodeDescriptor(symbol:string,timeframe:string):MarketDataGraphNodeDescriptor|undefined{
@@ -557,15 +649,22 @@ export class MarketDataGraph{
     baseSymbol='current',
     baseTimeframe='chart',
   ):CoreSpiritGraphSnapshot{
-    const unique=new Map<string,GraphNode>();
-    for(const request of requests){
-      const symbol=request.symbol==='current'?baseSymbol:request.symbol;
-      const timeframe=request.timeframe==='chart'?baseTimeframe:request.timeframe;
-      const node=this.ensureNode(symbol,timeframe);
-      if(node)unique.set(node.descriptor.key,node);
+    const symbols=[...new Set(requests.map(request=>String(request.symbol==='current'?baseSymbol:request.symbol).trim().toUpperCase()).filter(Boolean))];
+    const releases=symbols.map(symbol=>this.retainSymbol(symbol));
+    try {
+      const unique=new Map<string,GraphNode>();
+      for(const request of requests){
+        const symbol=request.symbol==='current'?baseSymbol:request.symbol;
+        const timeframe=request.timeframe==='chart'?baseTimeframe:request.timeframe;
+        const node=this.ensureNode(symbol,timeframe);
+        if(node)unique.set(node.descriptor.key,node);
+      }
+      const nodes=[...unique.values()].map(node=>cloneSnapshotNode(node.plane,node.descriptor,node));
+      return Object.freeze({version:CORE_SPIRIT_DATA_GRAPH_VERSION,revision:this.revision,nodes:Object.freeze(nodes)});
+    } finally {
+      for(const release of releases)release();
+      this.trimIdleSymbols();
     }
-    const nodes=[...unique.values()].map(node=>cloneSnapshotNode(node.plane,node.descriptor,node));
-    return Object.freeze({version:CORE_SPIRIT_DATA_GRAPH_VERSION,revision:this.revision,nodes:Object.freeze(nodes)});
   }
 
   resolverSnapshot(snapshot:CoreSpiritGraphSnapshot,baseSymbol='current',baseTimeframe='chart'):CoreSpiritDataResolver{
@@ -577,8 +676,10 @@ export class MarketDataGraph{
   }
 
   clear():void{
-    this.nodes.clear();
-    this.revision+=1;
+    const symbols=[...new Set([...this.nodes.values()].map(node=>node.descriptor.symbol))];
+    let removed=0;
+    for(const symbol of symbols)removed+=this.evictSymbol(symbol);
+    if(removed>0)this.revision+=1;
   }
 }
 
