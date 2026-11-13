@@ -330,4 +330,18 @@ assert.equal(afterFanout.dependencyNodesVisited-beforeFanout.dependencyNodesVisi
 assert.equal(afterFanout.fullAggregationRebuilds,beforeFanout.fullAggregationRebuilds,
   'unrelated graph history is not rebuilt during a live candle update');
 
+
+// Session calendar identity/anchor changes invalidate retained aggregation
+// state and deliberately take the full rebuild path.
+const calendarChangeGraph=new MarketDataGraph(sessionProfile);
+calendarChangeGraph.syncBase('CALENDAR-CHANGE','1m',calendarRows,sessionProfile);
+const calendarDerived=calendarChangeGraph.ensureNode('CALENDAR-CHANGE','1D');
+if(!calendarDerived)throw new Error('session-calendar derived node missing');
+const beforeCalendarChange=calendarChangeGraph.stats();
+const nextSessionProfile={...sessionProfile,calendarId:'fixture-exchange-calendar-v2'};
+calendarChangeGraph.updateBaseLast('CALENDAR-CHANGE','1m',calendarRows.at(-1)!,nextSessionProfile);
+const afterCalendarChange=calendarChangeGraph.stats();
+assert.equal(afterCalendarChange.fullAggregationRebuilds,beforeCalendarChange.fullAggregationRebuilds+1,
+  'a calendar identity change must rebuild derived history instead of reusing old bucket state');
+
 console.log('CORESPIRIT_MARKET_DATA_GRAPH_CONTRACT_OK');
