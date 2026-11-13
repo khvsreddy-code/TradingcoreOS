@@ -42,6 +42,8 @@ assert.equal(liveStore.stats().dirtyBuckets,0,'forming-bar replacements stay mem
 liveStore.upsertLatest('fyers','NSE:LIVE-TEST','5m',{...forming,phase:'confirmed',confirmed:true,close:106,high:107},20);
 assert.equal(liveStore.stats().dirtyBuckets,1,'confirmation marks the local checkpoint dirty');
 assert.ok(liveStore.range('fyers','NSE:LIVE-TEST','5m')?.estimatedBytes);
-assert.equal(await liveStore.persistConfirmedNow('fyers','NSE:LIVE-TEST','5m'),false,
-  'without IndexedDB the eviction caller is warned not to discard in-memory recovery state');
+assert.equal(await liveStore.persistConfirmedNow('fyers','NSE:LIVE-TEST','5m'),true,
+  'without IndexedDB the independent bounded HistoryStore remains the recovery copy');
+assert.equal(liveStore.stats().dirtyBuckets,1,
+  'lack of IndexedDB must not falsely mark an in-memory-only checkpoint as durable');
 console.log('HISTORY_STORE_LATE_RESPONSE_MERGE_OK');
