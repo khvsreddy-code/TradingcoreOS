@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Clock3, Code2, Maximize2, Minimize2, Minus, Plus, X, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
+import { Check, Maximize2, Minimize2, Minus, Plus, X, Play, Save, UploadCloud, PencilLine } from 'lucide-react';
 import type { CoreSpiritEditorModel } from '../../services/coreSpirit/editorModel';
 import type { CoreSpiritMonacoAdapter } from '../../services/coreSpirit/monacoAdapter';
 import type { CoreSpiritOffThreadCompileResult } from '../../services/coreSpirit/coreSpiritCompilerClient';
