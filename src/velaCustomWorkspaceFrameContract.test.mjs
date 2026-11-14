@@ -184,6 +184,15 @@ assert.match(workspace, /downloadScreenshot\(\): void/, 'the screenshot action u
 assert.match(liveWorkspace, /requestFullscreen\(\)/, 'Fullscreen uses the browser Fullscreen API on the live terminal surface');
 assert.match(liveWorkspace, /data-tco-header-action="screenshot"/, 'the reference screenshot control is present and accessible');
 assert.match(liveWorkspace, /data-tco-header-action="fullscreen"/, 'the fullscreen control has a dedicated accessible action');
+for (const action of ['workspace', 'trade', 'share', 'fullscreen', 'screenshot']) {
+  assert.match(liveWorkspace, new RegExp(`type="button"\\s+disabled=\\{workspaceLoadState\\.phase !== 'ready'\\}\\s+data-tco-header-action="${action}"`),
+    `${action} stays disabled until the native Vela workspace is ready`);
+}
+assert.match(liveWorkspace, /workspaceLoadState\.phase !== 'ready'/, 'terminal header actions cannot silently no-op while Vela is mounting');
+assert.match(read('src/liveTradingVelaSkin.css'), /\.tco-live-header-action:disabled[\s\S]*opacity: \.48/, 'disabled header actions have a visible, accessible readiness state');
+assert.match(chrome, /chartBackground: '#090a0d'/, 'the saved Graphite preset uses the reference chart canvas');
+assert.match(chrome, /gridColor: '#1b1d24'/, 'the saved Graphite preset uses the reference grid color');
+assert.match(chrome, /legacyGraphiteDefaults[\s\S]{0,800}chartBackground: '#090a0d'/, 'untouched older Graphite preferences migrate to the reference palette');
 
 // Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
 const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
