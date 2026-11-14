@@ -70,7 +70,7 @@ export const TCO_VELA_TOPBAR_COMPOSITION = Object.freeze({
     'symbol', 'timeframes', 'style', 'layout', 'indicators', 'tco.replay', 'undo-redo',
   ],
   right: [
-    'tco.workspace-frame', 'tco.trading', 'tco.save-workspace', 'alerts', 'tco.chart-settings',
+    'tco.save-workspace', 'alerts', 'tco.chart-settings',
   ],
 });
 
