@@ -582,7 +582,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         </div>
         <span className="hidden shrink-0 text-[9px] text-[#7e899b] md:inline" title={marketHealth.reason}>
           <span className={'mr-1 inline-block h-1.5 w-1.5 rounded-full ' + (marketHealth.state === 'live' ? 'bg-[#26a69a]' : marketHealth.state === 'stale' || marketHealth.state === 'disconnected' ? 'bg-[#ef5350]' : marketHealth.state === 'delayed' ? 'bg-[#f0a35a]' : 'bg-[#718096]')}/>
-          {marketHealth.label.toUpperCase()}
+          DATA {marketHealth.label}
         </span>
         {versions.length > 0 && (
           <select
@@ -779,6 +779,5 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
         </>
       )}
     </section>
-  );
   );
 }
