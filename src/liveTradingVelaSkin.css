@@ -1364,6 +1364,11 @@
   outline: 1px solid #7aa7ff;
   outline-offset: 1px;
 }
+.tco-live-surface .tco-live-header-action:disabled,
+.tco-live-surface .tco-live-header-icon:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
 .tco-live-surface .tco-live-header-action-primary {
   border-color: #2b4a3b;
   background: #12241d;
