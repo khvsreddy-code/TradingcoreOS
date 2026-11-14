@@ -601,7 +601,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
             onClick={() => void runCurrent()}
             disabled={busy !== null}
             className="inline-flex h-7 items-center gap-1.5 rounded bg-[#2962ff] px-2.5 text-[10px] font-semibold text-white hover:bg-[#3974ff] disabled:cursor-not-allowed disabled:opacity-50"
-            title="Compile and run the current CoreScript"
+            title="Compile & Run the current CoreScript"
           >
             <Play size={12}/> Run
           </button>
