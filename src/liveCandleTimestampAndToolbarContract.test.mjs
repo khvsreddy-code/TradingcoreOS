@@ -22,11 +22,6 @@ assert.ok(
     .every((panel) => nativeSidebar.includes(panel)),
   'TCO application navigation is exposed through Vela native right-sidebar composition',
 );
-assert.match(
-  terminal,
-  /right:\s*\[\s*'tco\.workspace-frame',\s*'tco\.trading',\s*'tco\.save-workspace',\s*'alerts',\s*'tco\.chart-settings',?\s*\]/,
-assert.match(
-  terminal,
   /right:\s*\[\s*'tco\.save-workspace',\s*'alerts',\s*'tco\.chart-settings',?\s*\]/,
   'Vela keeps chart-specific Save, Alerts and Settings controls while Workspace and Trade live in the application header',
 );
