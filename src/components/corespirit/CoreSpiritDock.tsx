@@ -626,7 +626,7 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
                 {CORE_SPIRIT_AUTHORING_LEVELS.map(option => <option key={option} value={option}>{getCoreSpiritAuthoringProfileForLevel(option).label}</option>)}
               </select>
               <div className="px-2 pb-1 text-[9px] leading-4 text-[#8995a8]">{authoringProfile.description}</div>
-              <div className="px-2 pb-1 text-[8px] leading-4 text-[#77869b]">Guidance only. This selector never changes compiler or runtime permissions.</div>
+              <div className="px-2 pb-1 text-[8px] leading-4 text-[#77869b]">Guidance only; this selector never changes compiler or runtime permissions.</div>
               <div className="px-2 pb-1 text-[8px] text-[#657287]">Building blocks: {authoringProfile.features.slice(0, 8).join(' · ')}</div>
               {compiledRequiredLevel && <div className="px-2 pb-1 text-[8px] text-[#83aef3]">Compiler-required: {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}</div>}
             </div>
