@@ -22,13 +22,14 @@ assert.ok(
     .every((panel) => nativeSidebar.includes(panel)),
   'TCO application navigation is exposed through Vela native right-sidebar composition',
 );
+assert.match(
+  terminal,
   /right:\s*\[\s*'tco\.save-workspace',\s*'alerts',\s*'tco\.chart-settings',?\s*\]/,
   'Vela keeps chart-specific Save, Alerts and Settings controls while Workspace and Trade live in the application header',
 );
 const appWorkspace = read('./LiveTradingWorkspace.tsx');
 assert.match(appWorkspace, /data-tco-header-action="workspace"[\s\S]{0,260}openTerminalPanel\('tco\.workspace-frame'\)/, 'the application header owns the native Workspace panel action');
 assert.match(appWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}openTerminalPanel\('tco\.trading'\)/, 'the application header owns the broker-aware Trade panel action');
-);
 assert.doesNotMatch(terminal, /tco\.brand/, 'remove the redundant TRADINGCOREOS × VELA label');
 assert.doesNotMatch(terminal, /'panels'|tco\.profile|tco\.broker-connection|'screenshot'/, 'remove the unused icon-only toolbar cluster and extras');
 const topbar = terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '';
