@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { X, UserRound, Plus } from 'lucide-react';
+import { X, UserRound, Plus, Share2, Maximize2, Minimize2, Camera, LayoutGrid, ArrowLeftRight } from 'lucide-react';
 import { loadVelaWorkspace, registerVelaWorkspaceLayouts } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -36,6 +36,22 @@ type ChartStatusView = Readonly<{
 }>;
 
 const CHART_QUOTE_STALE_MS = 15_000;
+const TCO_SHAREABLE_TIMEFRAMES = new Set(['1', '3', '5', '10', '15', '30', '45', '60', '120', '240', 'D', 'W', 'M']);
+type TcoSharedChartContext = Readonly<{ symbol?: string; timeframe?: string }>;
+
+function readTcoSharedChartContext(): TcoSharedChartContext {
+  if (typeof window === 'undefined') return {};
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawSymbol = String(params.get('symbol') || '').trim().toUpperCase();
+    const rawTimeframe = String(params.get('timeframe') || '').trim().toUpperCase();
+    const symbol = /^(?:NSE|BSE|NFO|MCX|CDS):[A-Z0-9._-]{1,64}$/.test(rawSymbol) ? rawSymbol : undefined;
+    const timeframe = TCO_SHAREABLE_TIMEFRAMES.has(rawTimeframe) ? rawTimeframe : undefined;
+    return { ...(symbol ? { symbol } : {}), ...(timeframe ? { timeframe } : {}) };
+  } catch {
+    return {};
+  }
+}
 
 const WORKSPACE_AUTOSAVE_STATUS_EVENT = 'tco:workspace-autosave-status';
 type WorkspaceAutosaveStatusState = 'saving' | 'saved' | 'local' | 'error';
@@ -145,7 +161,9 @@ const browserRuntimeMetrics = useRef({
       heapSamples: [] as Array<{ capturedAt: number; usedBytes: number }>,
     }).current;
 
+  const liveSurfaceRef = useRef<HTMLDivElement | null>(null);
   const host = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
   const [velaAppTabs, setVelaAppTabs] = useState<VelaAppTab[]>([]);
@@ -161,6 +179,13 @@ const browserRuntimeMetrics = useRef({
     symbol: 'NSE:NIFTY50-INDEX',
     timeframe: '5',
   });
+  useEffect(() => {
+    const syncFullscreenState = () => setIsFullscreen(document.fullscreenElement === liveSurfaceRef.current);
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    syncFullscreenState();
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
+
   const chartStatusSnapshotRef = useRef<TcoVelaChartStatusSnapshot | null>(null);
   const retryChartHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const activeChartStatusKeyRef = useRef('');
@@ -258,6 +283,7 @@ const browserRuntimeMetrics = useRef({
 
     const mount = async () => {
       try {
+      const sharedChartContext = readTcoSharedChartContext();
       // Start session restoration immediately, but don't block Vela's first
       // mount on broker/network retries. The TCO provider's async bars/subscription
       // paths attach to the broker when this shared restore promise resolves.
@@ -292,8 +318,8 @@ const browserRuntimeMetrics = useRef({
 
       workspace = new VelaWorkspaceClass(host.current, createTcoVelaTerminalOptions({
         layout: initialLayout,
-        symbol: 'NSE:NIFTY50-INDEX',
-        timeframe: defaults.timeframe || '5',
+        symbol: sharedChartContext.symbol || 'NSE:NIFTY50-INDEX',
+        timeframe: sharedChartContext.timeframe || defaults.timeframe || '5',
         storage: workspaceStorage,
         createDataProvider: createTcoVelaDataProvider,
         createCoreSpiritEngine: () => new LazyCoreSpiritVelaEngine(),
@@ -303,6 +329,23 @@ const browserRuntimeMetrics = useRef({
 
       // The application tab strip is a projection of Vela's actual chart cells,
       // not a parallel tab/session model. Clicking a tab only activates that cell.
+      // The URL mirrors the active chart so the Share action produces a restorable deep link.
+      const syncActiveChartShareUrl = () => {
+        if (cancelled || workspaceRef.current !== workspace) return;
+        try {
+          const active = workspace.active;
+          const nextUrl = new URL(window.location.href);
+          const symbol = String(active.symbol || '').trim().toUpperCase();
+          const timeframe = String(active.timeframe || '').trim().toUpperCase();
+          if (!symbol || !TCO_SHAREABLE_TIMEFRAMES.has(timeframe)) return;
+          if (nextUrl.searchParams.get('symbol') === symbol && nextUrl.searchParams.get('timeframe') === timeframe) return;
+          nextUrl.searchParams.set('symbol', symbol);
+          nextUrl.searchParams.set('timeframe', timeframe);
+          window.history.replaceState(window.history.state, '', nextUrl.toString());
+        } catch {
+          // A URL-sync failure must never interfere with Vela chart state or persistence.
+        }
+      };
       const refreshVelaAppTabs = () => {
         if (cancelled || workspaceRef.current !== workspace) return;
         const context = workspace.context();
@@ -312,6 +355,7 @@ const browserRuntimeMetrics = useRef({
           timeframe: cell.timeframe,
         })));
         setActiveVelaAppTabId(context.activeCellId);
+        syncActiveChartShareUrl();
       };
       refreshVelaAppTabs();
       workspaceListenerDisposers.push(workspace.on('cell:active', refreshVelaAppTabs));
@@ -325,6 +369,19 @@ const browserRuntimeMetrics = useRef({
       void initialWorkspaceRestore.then(() => {
         window.setTimeout(() => {
           if (cancelled || workspaceRef.current !== workspace) return;
+          // A shared-chart URL intentionally wins over the recipient's saved active cell,
+          // while the rest of their workspace layout, drawings and panels stay intact.
+          try {
+            if (sharedChartContext.symbol && workspace.active.symbol !== sharedChartContext.symbol) {
+              workspace.active.setSymbol(sharedChartContext.symbol);
+            }
+            if (sharedChartContext.timeframe && workspace.active.timeframe !== sharedChartContext.timeframe) {
+              workspace.active.setTimeframe(sharedChartContext.timeframe);
+            }
+          } catch {
+            // Preserve the saved workspace if the instrument cannot be applied by Vela.
+          }
+          syncActiveChartShareUrl();
           if (!workspace.getState().panels?.open) {
             workspace.togglePanel('tco.bookmarks', true);
           }
@@ -989,9 +1046,87 @@ const browserRuntimeMetrics = useRef({
     };
   }, []);
 
+  const openTerminalPanel = (panelId: string) => {
+    try {
+      workspaceRef.current?.togglePanel(panelId, true);
+    } catch {
+      // A panel action during chart teardown is a harmless no-op.
+    }
+  };
+
+  const toggleTerminalFullscreen = async () => {
+    const surface = liveSurfaceRef.current;
+    if (!surface) return;
+    try {
+      if (document.fullscreenElement === surface) {
+        await document.exitFullscreen();
+      } else {
+        await surface.requestFullscreen();
+      }
+    } catch (error) {
+      try {
+        workspaceRef.current?.context().toast(
+          error instanceof Error ? error.message : 'Fullscreen is unavailable in this browser context.',
+          'error',
+        );
+      } catch {
+        // Keep the trading workspace usable if browser fullscreen is denied.
+      }
+    }
+  };
+
+  const shareActiveChart = async () => {
+    const currentWorkspace = workspaceRef.current;
+    if (!currentWorkspace) return;
+    const active = currentWorkspace.active;
+    const symbol = String(active.symbol || '').trim().toUpperCase();
+    const timeframe = String(active.timeframe || '').trim().toUpperCase();
+    if (!symbol || !TCO_SHAREABLE_TIMEFRAMES.has(timeframe)) return;
+    const shareUrl = new URL(window.location.href);
+    shareUrl.searchParams.set('symbol', symbol);
+    shareUrl.searchParams.set('timeframe', timeframe);
+    const url = shareUrl.toString();
+    const label = timeframe === 'D' || timeframe === 'W' || timeframe === 'M' ? '1' + timeframe : timeframe + 'm';
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: 'TradingCoreOS Live Chart',
+          text: symbol + ' · ' + label,
+          url,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      currentWorkspace.context().toast('Active chart link copied', 'success');
+    } catch {
+      window.prompt('Copy this active chart link', url);
+    }
+  };
+
+  const downloadChartScreenshot = () => {
+    try {
+      const currentWorkspace = workspaceRef.current;
+      if (!currentWorkspace) return;
+      currentWorkspace.downloadScreenshot();
+    } catch (error) {
+      try {
+        workspaceRef.current?.context().toast(
+          error instanceof Error ? error.message : 'Chart screenshot could not be created.',
+          'error',
+        );
+      } catch {
+        // Screenshot export errors must not unmount the live terminal.
+      }
+    }
+  };
+
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-      <div className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#121316] text-[#e5e7eb]">
+      <div ref={liveSurfaceRef} className="tco-live-surface fixed inset-0 z-[100] overflow-hidden bg-[#121316] text-[#e5e7eb]">
         <header
           aria-label="TradingCoreOS workspace header"
           className="absolute inset-x-0 top-0 z-[130] flex h-9 items-center gap-2 border-b border-[#2a2b30] bg-[#151619] px-3 text-[12px] text-[#d1d4dc]"
@@ -1066,6 +1201,59 @@ const browserRuntimeMetrics = useRef({
               <span className={`size-1.5 rounded-full ${chartStatus.phase === 'live' ? 'bg-emerald-400' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'bg-red-400' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'bg-amber-400' : 'bg-[#89909b]'}`} aria-hidden="true"/>
               {chartStatus.phase === 'live' ? 'LIVE' : ['failed','auth','empty'].includes(chartStatus.phase) ? 'OFFLINE' : ['stale','reconnecting','reconciling','waiting-tick'].includes(chartStatus.phase) ? 'DELAYED' : 'HISTORY'}
             </span>
+            <button
+              type="button"
+              data-tco-header-action="workspace"
+              title="Open workspace layouts and saved setups"
+              aria-label="Open workspace layouts and saved setups"
+              onClick={() => openTerminalPanel('tco.workspace-frame')}
+              className="tco-live-header-action"
+            >
+              <LayoutGrid size={13} strokeWidth={1.8}/>
+              <span>Workspace</span>
+            </button>
+            <button
+              type="button"
+              data-tco-header-action="trade"
+              title="Open trading, positions and risk tools"
+              aria-label="Open trading, positions and risk tools"
+              onClick={() => openTerminalPanel('tco.trading')}
+              className="tco-live-header-action tco-live-header-action-primary"
+            >
+              <ArrowLeftRight size={13} strokeWidth={1.8}/>
+              <span>Trade</span>
+            </button>
+            <button
+              type="button"
+              data-tco-header-action="share"
+              title="Share the active symbol and timeframe"
+              aria-label="Share the active chart"
+              onClick={() => void shareActiveChart()}
+              className="tco-live-header-icon"
+            >
+              <Share2 size={14} strokeWidth={1.8}/>
+            </button>
+            <button
+              type="button"
+              data-tco-header-action="fullscreen"
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              aria-pressed={isFullscreen}
+              onClick={() => void toggleTerminalFullscreen()}
+              className="tco-live-header-icon"
+            >
+              {isFullscreen ? <Minimize2 size={14} strokeWidth={1.8}/> : <Maximize2 size={14} strokeWidth={1.8}/>}
+            </button>
+            <button
+              type="button"
+              data-tco-header-action="screenshot"
+              title="Download a PNG screenshot of the Vela chart layout"
+              aria-label="Download chart screenshot"
+              onClick={downloadChartScreenshot}
+              className="tco-live-header-icon"
+            >
+              <Camera size={14} strokeWidth={1.8}/>
+            </button>
             <button
               type="button"
               title="Account and broker settings"
