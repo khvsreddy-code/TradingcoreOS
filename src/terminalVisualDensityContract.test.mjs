@@ -7,7 +7,7 @@ const terminalOptions = fs.readFileSync(path.join(root, 'src', 'services/core/ch
 assert.ok(workspace.includes('VelaWorkspace'));
 assert.ok(/layout:\s*(?:initialLayout|defaults\.layout\s*\|\|\s*['\"]1['\"])/.test(workspace));
 assert.ok(terminalOptions.includes('bars:2_000'), 'the Vela configuration owns the bounded 2,000-candle workspace history target');
-assert.ok(terminalOptions.includes("background:'#050505'"), 'the native Vela chart uses the TradingCoreOS near-black chart surface');
+assert.ok(terminalOptions.includes("background:'#090a0d'"), 'the native Vela chart matches the supplied near-black reference canvas');
 assert.ok(terminalOptions.includes('drawingToolbar:true'), 'Vela owns and enables the native drawing toolbar');
 assert.ok(terminalOptions.includes('watermark:true'), 'the native Vela chart watermark remains enabled');
 assert.equal(/\.tc4\b|tct-|tco-terminal-shell|liveTerminalPolish\.css/.test(workspace), false);
