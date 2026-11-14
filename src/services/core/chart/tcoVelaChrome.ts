@@ -2511,78 +2511,251 @@ const replayPanel: SidePanelDescriptor = {
   title: 'Replay',
   icon: 'play',
   order: 15,
-  width: 320,
+  width: 340,
   resizable: true,
-  minWidth: 280,
-  maxWidth: 460,
+  minWidth: 300,
+  maxWidth: 480,
   mount(ctx, body, header) {
     header.setTitle('Vela Replay');
-    const replay: {
-      state: { active: boolean; playing: boolean; cursorTime: number | null };
+    type ReplaySurface = {
+      state: {
+        active: boolean;
+        playing: boolean;
+        cursorTime: number | null;
+        remaining: number;
+        nextTime: number | null;
+        intervalMs: number;
+      };
+      bounds: { first: number; last: number } | null;
       start(opts: { from: number; cell?: string }): Promise<void>;
       step(): boolean;
+      stepUpdate(): boolean;
       play(intervalMs?: number): unknown;
       pause(): unknown;
       stop(): unknown;
       on?: (event: string, handler: () => void) => () => void;
-    } = ctx.chart.replay as any;
-    const replayOn = (event: string, handler: () => void): (() => void) =>
-      typeof replay.on === 'function' ? replay.on(event, handler) : () => undefined;
+    };
+
+    // VelaWorkspace contributes a shared replay clock as ctx.replay. Using
+    // ctx.chart.replay here would replay only one chart and desynchronize layouts.
+    const workspaceContext = ctx as typeof ctx & { replay?: ReplaySurface };
+    const replay = (workspaceContext.replay ?? ctx.chart.replay) as ReplaySurface;
     const root = panelRoot(body);
-    const status = document.createElement('div');
-    status.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:8px;';
-    root.appendChild(status);
+    root.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding:12px;min-height:0;';
 
-    const controls = document.createElement('div');
-    controls.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;';
-    root.appendChild(controls);
+    const heading = document.createElement('div');
+    heading.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    const phase = document.createElement('div');
+    phase.style.cssText = 'display:flex;align-items:center;gap:7px;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;color:#d1d5db;';
+    const phaseDot = document.createElement('span');
+    phaseDot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#64748b;flex:0 0 auto;';
+    const phaseText = document.createElement('span');
+    phase.append(phaseDot, phaseText);
+    const contextText = document.createElement('span');
+    contextText.style.cssText = 'font:9px Inter,ui-sans-serif,system-ui,sans-serif;color:#64748b;white-space:nowrap;';
+    heading.append(phase, contextText);
+    root.appendChild(heading);
 
+    const timeline = document.createElement('div');
+    timeline.style.cssText = 'border:1px solid #272b35;border-radius:8px;background:#111319;padding:10px;';
+    const cursorLabel = document.createElement('div');
+    cursorLabel.style.cssText = 'font:600 12px Inter,ui-sans-serif,system-ui,sans-serif;color:#e5e7eb;font-variant-numeric:tabular-nums;';
+    const progressTrack = document.createElement('div');
+    progressTrack.style.cssText = 'height:4px;margin-top:9px;border-radius:4px;background:#252a34;overflow:hidden;';
+    const progressFill = document.createElement('div');
+    progressFill.style.cssText = 'height:100%;width:0%;border-radius:4px;background:#2962ff;transition:width 120ms linear;';
+    progressTrack.appendChild(progressFill);
+    const progressMeta = document.createElement('div');
+    progressMeta.style.cssText = 'display:flex;justify-content:space-between;gap:8px;margin-top:7px;font:9px Inter,ui-sans-serif,system-ui,sans-serif;color:#727b8b;';
+    timeline.append(cursorLabel, progressTrack, progressMeta);
+    root.appendChild(timeline);
+
+    const startGroup = document.createElement('div');
+    startGroup.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end;';
+    const startField = document.createElement('label');
+    startField.style.cssText = 'display:flex;flex-direction:column;gap:5px;min-width:0;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif;color:#8c95a5;';
+    const startCaption = document.createElement('span');
+    startCaption.textContent = 'START FROM';
     const input = document.createElement('input');
     input.type = 'datetime-local';
-    input.title = 'Replay start';
-    input.style.cssText = 'grid-column:1/-1;border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:7px 8px;background:#0c111a;color:#cbd5e1;font:10px ui-monospace;box-sizing:border-box;';
-    root.insertBefore(input, controls);
+    input.title = 'Replay start date and time';
+    input.setAttribute('aria-label', 'Replay start date and time');
+    input.style.cssText = 'width:100%;min-width:0;box-sizing:border-box;border:1px solid #303644;border-radius:6px;padding:8px;background:#0d1016;color:#d1d5db;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color-scheme:dark;';
+    input.addEventListener('input', () => { input.dataset.userEdited = '1'; });
+    startField.append(startCaption, input);
 
-    const makeButton = (label: string, handler: () => void): HTMLButtonElement => {
+    const speedField = document.createElement('label');
+    speedField.style.cssText = 'display:flex;flex-direction:column;gap:5px;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif;color:#8c95a5;';
+    const speedCaption = document.createElement('span');
+    speedCaption.textContent = 'SPEED';
+    const speed = document.createElement('select');
+    speed.setAttribute('aria-label', 'Replay speed');
+    speed.style.cssText = 'border:1px solid #303644;border-radius:6px;padding:8px 9px;background:#0d1016;color:#d1d5db;font:10px Inter,ui-sans-serif,system-ui,sans-serif;color-scheme:dark;';
+    for (const [value, label] of [['1000','1×'],['500','2×'],['200','5×'],['100','10×'],['50','20×']]) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      if (value === '200') option.selected = true;
+      speed.appendChild(option);
+    }
+    speedField.append(speedCaption, speed);
+    startGroup.append(startField, speedField);
+    root.appendChild(startGroup);
+
+    const buttonRow = document.createElement('div');
+    buttonRow.style.cssText = 'display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr;gap:6px;';
+    root.appendChild(buttonRow);
+    const makeButton = (label: string, primary = false): HTMLButtonElement => {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
-      button.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:7px 6px;background:#0c111a;color:#cbd5e1;font:10px ui-monospace;cursor:pointer;';
-      button.addEventListener('click', handler);
-      controls.appendChild(button);
+      button.style.cssText = primary
+        ? 'border:1px solid #376ce0;border-radius:6px;padding:8px 6px;background:#2962ff;color:#fff;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;'
+        : 'border:1px solid #303644;border-radius:6px;padding:8px 6px;background:#171b23;color:#c5cad4;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
+      buttonRow.appendChild(button);
       return button;
     };
+    const startButton = makeButton('Start', true);
+    const stepButton = makeButton('Step');
+    const playButton = makeButton('Play');
+    const stopButton = makeButton('Stop');
 
-    makeButton('Start', () => {
-      const raw = input.value ? new Date(input.value).getTime() : Date.now() - 60 * 60 * 1000;
-      void replay.start({ from: Number.isFinite(raw) ? raw : Date.now() - 60 * 60 * 1000 }).catch(error => {
-        ctx.toast(error instanceof Error ? error.message : String(error), 'error');
-      });
-    });
-    makeButton('Step', () => { if (!replay.step()) ctx.toast('Replay has reached the end.', 'info'); });
-    makeButton('Play', () => { replay.play(250); });
-    makeButton('Pause', () => { replay.pause(); });
-    makeButton('Stop', () => { replay.stop(); });
+    const detail = document.createElement('div');
+    detail.style.cssText = 'border-top:1px solid #252a34;padding-top:9px;font:9px/1.6 Inter,ui-sans-serif,system-ui,sans-serif;color:#798293;';
+    root.appendChild(detail);
 
+    const timeframeMs = (value: string): number => {
+      const normalized = String(value || '60').trim().toUpperCase();
+      const minutes = Number(normalized);
+      if (Number.isFinite(minutes) && minutes > 0) return minutes * 60_000;
+      if (normalized === 'D') return 86_400_000;
+      if (normalized === 'W') return 7 * 86_400_000;
+      if (normalized === 'M') return 30 * 86_400_000;
+      return 60 * 60_000;
+    };
+    const toLocalInput = (timestamp: number): string => {
+      const local = new Date(timestamp - new Date(timestamp).getTimezoneOffset() * 60_000);
+      return local.toISOString().slice(0, 16);
+    };
+    const suggestedStart = (): number | null => {
+      const bounds = replay.bounds;
+      if (!bounds || !Number.isFinite(bounds.first) || !Number.isFinite(bounds.last) || bounds.last <= bounds.first) return null;
+      const interval = timeframeMs(ctx.timeframe);
+      const candidate = bounds.last - interval * 60;
+      return Math.max(bounds.first, Math.min(bounds.last - 1, candidate));
+    };
+    const syncSuggestedStart = () => {
+      if (input.dataset.userEdited === '1' || replay.state.active) return;
+      const suggested = suggestedStart();
+      if (suggested != null) input.value = toLocalInput(suggested);
+    };
+    const selectedStart = (): number | null => {
+      const selected = input.value ? new Date(input.value).getTime() : suggestedStart();
+      return selected != null && Number.isFinite(selected) ? selected : null;
+    };
     const refresh = () => {
       const state = replay.state;
-      status.textContent = state.active
-        ? `ACTIVE · ${state.playing ? 'PLAYING' : 'PAUSED'} · ${state.cursorTime ? new Date(state.cursorTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}`
-        : 'READY · multi-chart replay follows one Vela clock';
+      const bounds = replay.bounds;
+      syncSuggestedStart();
+      phaseDot.style.background = state.playing ? '#22c55e' : state.active ? '#eab308' : bounds ? '#64748b' : '#f97316';
+      phaseText.textContent = state.playing ? 'PLAYING' : state.active ? 'PAUSED' : bounds ? 'READY' : 'WAITING FOR HISTORY';
+      contextText.textContent = String(ctx.symbol || 'Active chart') + ' · ' + String(ctx.timeframe || '—');
+      cursorLabel.textContent = state.cursorTime
+        ? new Date(state.cursorTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })
+        : bounds ? 'Choose a starting candle' : 'Waiting for chart history';
+      const total = state.remaining + (state.active ? 1 : 0);
+      const progress = state.active && bounds && bounds.last > bounds.first && state.cursorTime != null
+        ? Math.max(0, Math.min(100, ((state.cursorTime - bounds.first) / (bounds.last - bounds.first)) * 100))
+        : 0;
+      progressFill.style.width = progress + '%';
+      progressMeta.innerHTML = '';
+      const remainingLabel = document.createElement('span');
+      remainingLabel.textContent = state.active ? state.remaining.toLocaleString('en-IN') + ' bars remaining' : bounds ? 'Loaded range available' : 'No replay range yet';
+      const speedLabel = document.createElement('span');
+      speedLabel.textContent = state.active ? String(state.intervalMs) + ' ms / bar' : 'Default start: 60 bars back';
+      progressMeta.append(remainingLabel, speedLabel);
+      detail.textContent = bounds
+        ? 'History: ' + new Date(bounds.first).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' → ' + new Date(bounds.last).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + (total > 0 ? ' · ' + total.toLocaleString('en-IN') + ' visible/remaining bars' : '')
+        : 'Replay becomes available once the active chart has loaded historical candles. Choose a candle before the newest loaded bar.';
+      startButton.disabled = !bounds || !selectedStart() || state.playing;
+      stepButton.disabled = !state.active || state.playing || state.remaining <= 0;
+      playButton.disabled = !bounds || state.active && state.playing;
+      playButton.textContent = state.playing ? 'Pause' : 'Play';
+      stopButton.disabled = !state.active;
+      startButton.style.opacity = startButton.disabled ? '.45' : '1';
+      stepButton.style.opacity = stepButton.disabled ? '.45' : '1';
+      playButton.style.opacity = playButton.disabled ? '.45' : '1';
+      stopButton.style.opacity = stopButton.disabled ? '.45' : '1';
+      startButton.style.cursor = startButton.disabled ? 'not-allowed' : 'pointer';
+      stepButton.style.cursor = stepButton.disabled ? 'not-allowed' : 'pointer';
+      playButton.style.cursor = playButton.disabled ? 'not-allowed' : 'pointer';
+      stopButton.style.cursor = stopButton.disabled ? 'not-allowed' : 'pointer';
     };
-    refresh();
-    const timer = window.setInterval(refresh, 250);
+
+    let starting = false;
+    const startReplay = async (autoplay: boolean) => {
+      if (starting) return;
+      const bounds = replay.bounds;
+      const from = selectedStart();
+      if (!bounds || from == null) {
+        ctx.toast('Replay is unavailable until historical candles have loaded.', 'error');
+        return;
+      }
+      if (from >= bounds.last) {
+        ctx.toast('Choose a candle before the newest loaded candle so replay has bars to reveal.', 'error');
+        return;
+      }
+      starting = true;
+      startButton.disabled = true;
+      startButton.textContent = 'Loading…';
+      try {
+        await replay.start({ from });
+        if (autoplay) replay.play(Number(speed.value) || 200);
+        refresh();
+      } catch (error) {
+        ctx.toast(error instanceof Error ? error.message : String(error), 'error');
+      } finally {
+        starting = false;
+        startButton.textContent = 'Start';
+        refresh();
+      }
+    };
+
+    startButton.addEventListener('click', () => { void startReplay(false); });
+    stepButton.addEventListener('click', () => {
+      if (!replay.step()) ctx.toast('Replay has reached the end of loaded history.', 'info');
+      refresh();
+    });
+    playButton.addEventListener('click', () => {
+      if (replay.state.playing) {
+        replay.pause();
+        refresh();
+      } else if (replay.state.active) {
+        replay.play(Number(speed.value) || 200);
+        refresh();
+      } else {
+        void startReplay(true);
+      }
+    });
+    stopButton.addEventListener('click', () => { replay.stop(); refresh(); });
+
+    const replayOn = (event: string, handler: () => void): (() => void) =>
+      typeof replay.on === 'function' ? replay.on(event, handler) : () => undefined;
+    const timer = window.setInterval(refresh, 300);
     const offStart = replayOn('replay:start', refresh);
     const offStep = replayOn('replay:step', refresh);
+    const offTick = replayOn('replay:tick', refresh);
     const offPlay = replayOn('replay:play', refresh);
     const offPause = replayOn('replay:pause', refresh);
     const offEnd = replayOn('replay:end', refresh);
+    refresh();
+
     return {
       onOpen: refresh,
       onChart: refresh,
       destroy() {
         window.clearInterval(timer);
-        offStart(); offStep(); offPlay(); offPause(); offEnd();
+        offStart(); offStep(); offTick(); offPlay(); offPause(); offEnd();
       },
     };
   },
