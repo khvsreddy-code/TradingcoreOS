@@ -5,13 +5,13 @@
  */
 
 .tco-live-surface {
-  --tco-terminal-bg: #111317;
-  --tco-terminal-panel: #141517;
-  --tco-terminal-raised: #1b1d22;
-  --tco-terminal-border: #26292f;
-  --tco-terminal-muted: #858b96;
-  --tco-terminal-text: #d1d4dc;
-  --tco-terminal-bright: #f4f5f7;
+  --tco-terminal-bg: #0c0d10;
+  --tco-terminal-panel: #101115;
+  --tco-terminal-raised: #191b22;
+  --tco-terminal-border: #1b1d24;
+  --tco-terminal-muted: #7a8190;
+  --tco-terminal-text: #d1d5db;
+  --tco-terminal-bright: #f3f4f6;
   --tco-terminal-accent: #2962ff;
   --tco-terminal-up: #089981;
   --tco-terminal-down: #f23645;
@@ -26,15 +26,15 @@
   min-height: 36px;
   padding-inline: 10px;
   gap: 8px;
-  background: #111317 !important;
-  border-bottom: 1px solid #25282f !important;
+  background: #0e1014 !important;
+  border-bottom: 1px solid #1b1d24 !important;
   color: var(--tco-terminal-text);
   box-shadow: 0 1px 0 rgba(0, 0, 0, .16);
 }
 .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:first-child {
   gap: 7px;
   padding-inline-end: 11px;
-  border-color: #292c33;
+  border-color: #1b1d24;
 }
 .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] [role="tab"] {
   height: 28px;
@@ -62,9 +62,9 @@
   font-variant-numeric: tabular-nums;
 }
 .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:last-child {
-  gap: 8px;
-  padding-inline-start: 10px;
-  border-color: #292c33;
+  gap: 5px;
+  padding-inline-start: 9px;
+  border-color: #1b1d24;
 }
 .tco-live-surface > header[aria-label="TradingCoreOS workspace header"] > div:last-child > span {
   min-height: 21px;
@@ -87,8 +87,8 @@
   height: 27px;
   min-height: 27px;
   padding-inline: 10px;
-  background: #111317 !important;
-  border-top: 1px solid #25282f !important;
+  background: #0c0d11 !important;
+  border-top: 1px solid #1b1d24 !important;
   color: #858b96;
   font-size: 10px;
 }
@@ -1324,5 +1324,67 @@
   }
   .tco-live-surface .vela-alt-wheel[data-open="1"] .vela-alt-wheel-orbit {
     transform: translate(-50%, -50%) scale(.94);
+  }
+}
+
+
+/* Global header actions mirror the supplied terminal reference, but every action
+   delegates to Vela's real workspace/panel/export APIs. */
+.tco-live-surface .tco-live-header-action,
+.tco-live-surface .tco-live-header-icon {
+  display: inline-flex;
+  height: 27px;
+  min-height: 27px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #232733;
+  border-radius: 5px;
+  background: #14161c;
+  color: #aeb4bf;
+  font: 600 10px/1 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: background-color 110ms ease, border-color 110ms ease, color 110ms ease;
+}
+.tco-live-surface .tco-live-header-action {
+  padding: 0 8px;
+}
+.tco-live-surface .tco-live-header-icon {
+  width: 27px;
+  padding: 0;
+}
+.tco-live-surface .tco-live-header-action:hover,
+.tco-live-surface .tco-live-header-icon:hover {
+  border-color: #3a414e;
+  background: #1b1e26;
+  color: #f3f4f6;
+}
+.tco-live-surface .tco-live-header-action:focus-visible,
+.tco-live-surface .tco-live-header-icon:focus-visible {
+  outline: 1px solid #7aa7ff;
+  outline-offset: 1px;
+}
+.tco-live-surface .tco-live-header-action-primary {
+  border-color: #2b4a3b;
+  background: #12241d;
+  color: #62c99c;
+}
+.tco-live-surface .tco-live-header-action-primary:hover {
+  border-color: #377557;
+  background: #173126;
+  color: #8de0b8;
+}
+.tco-live-surface:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #0c0d10;
+}
+@media (max-width: 900px) {
+  .tco-live-surface .tco-live-header-action span {
+    display: none;
+  }
+  .tco-live-surface .tco-live-header-action {
+    width: 27px;
+    padding: 0;
   }
 }
