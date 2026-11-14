@@ -2664,6 +2664,7 @@ const replayPanel: SidePanelDescriptor = {
         ? new Date(state.cursorTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })
         : bounds ? 'Choose a starting candle' : 'Waiting for chart history';
       const total = state.remaining + (state.active ? 1 : 0);
+      if (bounds) input.max = toLocalInput(bounds.last - 1);
       const progress = state.active && bounds && bounds.last > bounds.first && state.cursorTime != null
         ? Math.max(0, Math.min(100, ((state.cursorTime - bounds.first) / (bounds.last - bounds.first)) * 100))
         : 0;
@@ -2677,7 +2678,8 @@ const replayPanel: SidePanelDescriptor = {
       detail.textContent = bounds
         ? 'History: ' + new Date(bounds.first).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' → ' + new Date(bounds.last).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + (total > 0 ? ' · ' + total.toLocaleString('en-IN') + ' visible/remaining bars' : '')
         : 'Replay becomes available once the active chart has loaded historical candles. Choose a candle before the newest loaded bar.';
-      startButton.disabled = !bounds || !selectedStart() || state.playing || starting;
+      const from = selectedStart();
+      startButton.disabled = !bounds || from == null || from >= bounds.last || state.playing || starting;
       stepButton.disabled = !state.active || state.playing || state.remaining <= 0;
       playButton.disabled = !bounds || starting;
       playButton.textContent = state.playing ? 'Pause' : 'Play';
