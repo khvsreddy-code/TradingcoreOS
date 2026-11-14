@@ -89,17 +89,18 @@ assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
 assert.equal((provider.match(/export class TcoVelaDataProvider implements DataProvider/g) ?? []).length, 1,
   "the Vela data provider must have one canonical implementation");
-assert.equal((provider.match(/const syncBroker = \(\) => \{/g) ?? []).length, 2,
-  "both live-subscription forms must re-resolve broker state when the session changes");
-assert.equal((provider.match(/const sessionCheckTimer = globalThis\.setInterval\(syncBroker, BROKER_SESSION_CHECK_MS\)/g) ?? []).length, 2,
-  "both subscriptions must recover if broker restoration completes without a lifecycle event");
-assert(!provider.includes("if (!brokerId) return () => {};"),
-  "a cold-start subscription must not become a permanent no-op before broker restore");
-assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_CONNECTED', syncBroker\)/g) ?? []).length, 2,
-  "row and columnar subscriptions must recover when a broker is connected after chart mount");
-assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_DISCONNECTED', syncBroker\)/g) ?? []).length, 2,
-  "row and columnar subscriptions must detach stale broker streams after disconnect");
-
+assert.equal((provider.match(/const syncBroker = \\(\\) => \\{/g) ?? []).length, 2,
+  "row and columnar subscriptions must each re-resolve broker state when notified");
+assert.equal((provider.match(/const stopSessionWatch = subscribeBrokerSessionState\\(syncBroker\\);/g) ?? []).length, 2,
+  "both row and columnar subscriptions must join the shared broker-session observer");
+assert.equal((provider.match(/brokerSessionWatchdog = globalThis\\.setInterval\\(publishBrokerSessionState, BROKER_SESSION_CHECK_MS\\)/g) ?? []).length, 1,
+  "all Vela subscriptions must share exactly one fallback watchdog for session expiry");
+assert.equal((provider.match(/tradingCoreRuntime\\.on\\('BROKER_CONNECTED', publishBrokerSessionState\\)/g) ?? []).length, 1,
+  "a broker connection must notify every live chart subscriber through the shared observer");
+assert.equal((provider.match(/tradingCoreRuntime\\.on\\('BROKER_DISCONNECTED', publishBrokerSessionState\\)/g) ?? []).length, 1,
+  "a broker disconnect must notify every live chart subscriber through the shared observer");
+assert.match(provider, /if \\(brokerSessionListeners\\.size\\) return;[\\s\\S]*globalThis\\.clearInterval\\(brokerSessionWatchdog\\)/,
+  "the single watchdog must remain active until the final chart cell unsubscribes");
 assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
 assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
 assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
