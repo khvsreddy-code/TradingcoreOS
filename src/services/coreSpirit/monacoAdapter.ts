@@ -33,6 +33,43 @@ export async function mountCoreSpiritMonaco(container: HTMLElement, model: CoreS
   monaco.languages.setMonarchTokensProvider('corespirit',{
     tokenizer:{root:[[/\/\/.*$/,'comment'],[/\b(let|if|else|type|true|false|and|or)\b/,'keyword'],[/\b(open|high|low|close|volume|time)\b/,'variable'],[/\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()/,'function'],[/\b\d+(?:\.\d+)?\b/,'number'],[/'(?:[^'\\]|\\.)*'/,'string'],[/"(?:[^"\\]|\\.)*"/,'string'],[/[A-Za-z_][A-Za-z0-9_]*/,'identifier']]}
   });
+
+  monaco.editor.defineTheme('corespirit-luxalgo-dark',{
+    base:'vs-dark',
+    inherit:true,
+    rules:[
+      {token:'comment',foreground:'7D899B',fontStyle:'italic'},
+      {token:'keyword',foreground:'C792EA'},
+      {token:'variable',foreground:'82AAFF'},
+      {token:'function',foreground:'89B4FA'},
+      {token:'number',foreground:'F78C6C'},
+      {token:'string',foreground:'C3E88D'},
+      {token:'identifier',foreground:'D6DEEB'},
+    ],
+    colors:{
+      'editor.background':'#131722',
+      'editor.foreground':'#D6DEEB',
+      'editorGutter.background':'#131722',
+      'editorLineNumber.foreground':'#647188',
+      'editorLineNumber.activeForeground':'#C1CBD9',
+      'editorCursor.foreground':'#A9C7FF',
+      'editor.lineHighlightBackground':'#1B2232',
+      'editor.selectionBackground':'#283D5E',
+      'editor.inactiveSelectionBackground':'#212F45',
+      'editorWhitespace.foreground':'#344055',
+      'editorIndentGuide.background1':'#2B3444',
+      'editorIndentGuide.activeBackground1':'#455570',
+      'editorBracketMatch.background':'#26354C',
+      'editorBracketMatch.border':'#5878A5',
+      'editorWidget.background':'#1B2230',
+      'editorWidget.border':'#303D52',
+      'editorSuggestWidget.background':'#1B2230',
+      'editorSuggestWidget.border':'#39475D',
+      'editorSuggestWidget.selectedBackground':'#293C57',
+      'editorError.foreground':'#F17078',
+      'editorWarning.foreground':'#E5B567',
+    },
+  });
   let symbolInfo:readonly CoreSpiritCompileSymbol[]=[];
   const completionProvider=monaco.languages.registerCompletionItemProvider('corespirit',{triggerCharacters:['.','('],provideCompletionItems:(m:any,p:any)=>{
     const offset=m.getOffsetAt(p); const result=model.completionAt(offset);
@@ -59,7 +96,7 @@ export async function mountCoreSpiritMonaco(container: HTMLElement, model: CoreS
     if(!definition)return;
     return {uri:m.uri,range:new monaco.Range(definition.line,definition.column,definition.line,definition.column+definition.name.length)};
   }});
-  const editor=monaco.editor.create(container,{value:model.getSource(),language:'corespirit',theme:'vs-dark',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineNumbers:'on',wordWrap:'on',tabSize:2,quickSuggestions:true,suggestOnTriggerCharacters:true,scrollBeyondLastLine:false,bracketPairColorization:{enabled:true}});
+  const editor=monaco.editor.create(container,{value:model.getSource(),language:'corespirit',theme:'corespirit-luxalgo-dark',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:22,fontFamily:"'JetBrains Mono','SFMono-Regular',Consolas,monospace",padding:{top:10,bottom:10},lineNumbers:'on',wordWrap:'on',tabSize:2,quickSuggestions:true,suggestOnTriggerCharacters:true,scrollBeyondLastLine:false,scrollbar:{verticalScrollbarSize:8,horizontalScrollbarSize:8},cursorBlinking:'smooth',renderLineHighlight:'line',smoothScrolling:true,bracketPairColorization:{enabled:true},guides:{indentation:true,highlightActiveIndentation:true}});
   let suppressProgrammaticChange=false;
   const disposable=editor.onDidChangeModelContent(()=>{
     if(suppressProgrammaticChange){suppressProgrammaticChange=false;return;}
