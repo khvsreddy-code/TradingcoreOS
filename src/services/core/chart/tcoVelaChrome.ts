@@ -2677,9 +2677,9 @@ const replayPanel: SidePanelDescriptor = {
       detail.textContent = bounds
         ? 'History: ' + new Date(bounds.first).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' → ' + new Date(bounds.last).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) + (total > 0 ? ' · ' + total.toLocaleString('en-IN') + ' visible/remaining bars' : '')
         : 'Replay becomes available once the active chart has loaded historical candles. Choose a candle before the newest loaded bar.';
-      startButton.disabled = !bounds || !selectedStart() || state.playing;
+      startButton.disabled = !bounds || !selectedStart() || state.playing || starting;
       stepButton.disabled = !state.active || state.playing || state.remaining <= 0;
-      playButton.disabled = !bounds || state.active && state.playing;
+      playButton.disabled = !bounds || starting;
       playButton.textContent = state.playing ? 'Pause' : 'Play';
       stopButton.disabled = !state.active;
       startButton.style.opacity = startButton.disabled ? '.45' : '1';
@@ -2738,6 +2738,11 @@ const replayPanel: SidePanelDescriptor = {
       }
     });
     stopButton.addEventListener('click', () => { replay.stop(); refresh(); });
+
+    speed.addEventListener('change', () => {
+      if (replay.state.playing) replay.play(Number(speed.value) || 200);
+      refresh();
+    });
 
     const replayOn = (event: string, handler: () => void): (() => void) =>
       typeof replay.on === 'function' ? replay.on(event, handler) : () => undefined;
