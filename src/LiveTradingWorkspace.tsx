@@ -1203,6 +1203,7 @@ const browserRuntimeMetrics = useRef({
             </span>
             <button
               type="button"
+              disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="workspace"
               title="Open workspace layouts and saved setups"
               aria-label="Open workspace layouts and saved setups"
@@ -1214,6 +1215,7 @@ const browserRuntimeMetrics = useRef({
             </button>
             <button
               type="button"
+              disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="trade"
               title="Open trading, positions and risk tools"
               aria-label="Open trading, positions and risk tools"
@@ -1225,6 +1227,7 @@ const browserRuntimeMetrics = useRef({
             </button>
             <button
               type="button"
+              disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="share"
               title="Share the active symbol and timeframe"
               aria-label="Share the active chart"
@@ -1235,6 +1238,7 @@ const browserRuntimeMetrics = useRef({
             </button>
             <button
               type="button"
+              disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="fullscreen"
               title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
@@ -1246,6 +1250,7 @@ const browserRuntimeMetrics = useRef({
             </button>
             <button
               type="button"
+              disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="screenshot"
               title="Download a PNG screenshot of the Vela chart layout"
               aria-label="Download chart screenshot"
