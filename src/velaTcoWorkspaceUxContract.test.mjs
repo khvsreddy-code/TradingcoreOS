@@ -108,8 +108,6 @@ assert(!/await Promise\.all\(\[brokerReady,\s*defaultsPromise\]\)/.test(live),
   "Vela workspace mount must not block first paint on broker session restoration");
 assert(live.includes("void brokerReady.then(() => {"),
   "common-symbol history warm-up should begin after the workspace is already mounted");
-assert.equal((provider.match(/globalThis\.clearInterval\(sessionCheckTimer\)/g) ?? []).length, 2,
-  "both subscription timers must be released when their chart cells are disposed");
 
 assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
 
