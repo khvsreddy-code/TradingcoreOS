@@ -16,7 +16,6 @@ const contracts = [
   ['chart-history-cold-start', ['src/services/marketData/chartHistoryColdStartContract.test.mjs', true]],
   ['stitch-workspace-wiring', ['src/stitchWorkspaceWiringContract.test.mjs', false]],
   ['tco-custom-workspace-frame', ['src/velaCustomWorkspaceFrameContract.test.mjs', false]],
-  ['vela-workspace-ux', ['src/velaTcoWorkspaceUxContract.test.mjs', false]],
   ['terminal-visual-density', ['src/terminalVisualDensityContract.test.mjs', false]],
   ['yahoo-delayed-fallback', ['src/yahooDelayedFallbackContract.test.mjs', false]],
   ['shared-broker-coordination', ['src/sharedBrokerCoordinationContract.test.mjs', false]],
@@ -175,6 +174,7 @@ const contracts = [
   ['corespirit-kernel-snapshots', ['src/coreSpiritKernelSnapshotContract.test.mjs', true]],
 
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],
+  ['vela-workspace-ux', ['src/velaTcoWorkspaceUxContract.test.mjs', false]],
   ['terminal-shell', ['src/terminalShellContract.test.mjs', false]],
   ['terminal-dock-system', ['src/terminalDockSystemContract.test.mjs', false]],
   ['terminal-dock-architecture', ['src/terminalDockArchitectureContract.test.mjs', false]],
