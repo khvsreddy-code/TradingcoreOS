@@ -139,7 +139,9 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   const [lifecycleStage, setLifecycleStage] = useState<CoreSpiritLifecycleStage>('editing');
   const [lifecycleDiagnostics, setLifecycleDiagnostics] = useState<CoreSpiritLifecycleDiagnostic[]>([]);
   const [chartIndicators, setChartIndicators] = useState<readonly CoreSpiritChartManagedIndicator[]>([]);
-  const [chartManagerOpen, setChartManagerOpen] = useState(true);
+  const [chartManagerOpen, setChartManagerOpen] = useState(false);
+  const [bottomTab, setBottomTab] = useState<'console' | 'problems' | 'chart'>('console');
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
   const [managerError, setManagerError] = useState('');
   const sourceVersion = useRef(0);
   const setEditorSource = (next: string) => {
@@ -513,6 +515,31 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
 
   const busyText = busy === 'compile' ? 'Compiling…' : busy === 'save' ? 'Saving…' : busy === 'rename' ? 'Renaming…' : busy === 'publish' ? 'Publishing…' : busy === 'add' ? 'Adding…' : '';
 
+  const runCurrent = async () => {
+    const cleanName = nameDraft.trim() || name || 'CoreSpirit Script';
+    setBusy('compile');
+    reportStage('compiling', 'Compiling CoreSpirit and preparing chart output…');
+    try {
+      const compiled = await compileSource(source);
+      const artifact = compiled.artifact;
+      if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.');
+      reportStage('applying-chart-output', 'Submitting the validated artifact to the active Vela chart…');
+      await onAddToChart(cleanName, source, artifact, scriptId);
+      setName(cleanName);
+      persistLocalSource(source, cleanName, scriptId);
+      reportStage('rendered', 'Rendered · “' + cleanName + '” is running on the active Vela chart.');
+      setBottomTab('console');
+    } catch (error) {
+      const stage = coreSpiritLifecycleStageForError(error, lifecycleStage);
+      const diagnostic = coreSpiritLifecycleDiagnostic(error, stage, { previousOutputPreserved: true });
+      setLifecycleDiagnostics([diagnostic]);
+      setBottomTab('problems');
+      reportStage(stage, diagnostic.message, diagnostic);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const closeTerminal = () => {
     if (fullscreen) {
       setFullscreen(false);
@@ -527,176 +554,231 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
   };
 
   return (
-    <section className={embedded
-      ? "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[#0b101a] text-slate-100"
-      : "absolute right-14 top-2 bottom-2 z-[125] flex w-[min(560px,calc(100vw-68px))] flex-col overflow-hidden rounded-xl border border-[#293244] bg-[#0b101a]/[0.98] text-slate-100 shadow-[0_28px_80px_rgba(0,0,0,.7)] backdrop-blur-2xl"} aria-label="CoreSpirit coding terminal">
-      <header className="flex items-center justify-between gap-3 border-b border-[#293244] px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-orange-500/30 bg-orange-500/10">
-            <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
-              <defs><linearGradient id="corespirit-fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#ef4444"/><stop offset="1" stopColor="#fbbf24"/></linearGradient></defs>
-              <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="url(#corespirit-fire)" strokeWidth="2.2" strokeLinejoin="round"/>
-              <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#101827" stroke="#67e8f9" strokeWidth="1.3" strokeLinejoin="round"/>
-              <circle cx="16" cy="17" r="3.2" fill="none" stroke="#a5f3fc" strokeWidth="1.4"/>
-              <circle cx="16" cy="17" r="1" fill="#f8fafc"/>
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <div className="text-[11px] font-black tracking-[.18em] text-slate-100">CORESPIRIT</div>
-            <div className="mt-1 truncate text-[10px] text-slate-400">Script terminal · live chart engine</div>
-            <div className={marketHealth.state === "live" ? "mt-1 text-[9px] font-semibold text-emerald-300" : marketHealth.state === "stale" || marketHealth.state === "disconnected" ? "mt-1 text-[9px] font-semibold text-rose-300" : marketHealth.state === "delayed" ? "mt-1 text-[9px] font-semibold text-amber-300" : "mt-1 text-[9px] font-semibold text-slate-500"} title={marketHealth.reason}>DATA {marketHealth.label} · {marketHealth.source.toUpperCase()}</div>
-          </div>
+    <section
+      className={embedded
+        ? "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-[#131722] text-[#d1d4dc]"
+        : "absolute right-14 top-2 bottom-2 z-[125] flex w-[min(720px,calc(100vw-68px))] flex-col overflow-hidden rounded-lg border border-[#2a3040] bg-[#131722] text-[#d1d4dc] shadow-[0_24px_70px_rgba(0,0,0,.65)]"}
+      aria-label="CoreSpirit coding terminal"
+      data-editor-surface="corespirit-luxalgo-inspired"
+    >
+      <header className="flex h-11 min-h-11 items-center gap-2 border-b border-[#252b39] bg-[#171b26] px-3">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#354258] bg-[#202a3a]">
+          <svg width="19" height="19" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="#f0a35a" strokeWidth="2" strokeLinejoin="round"/>
+            <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#182235" stroke="#77a9ff" strokeWidth="1.3" strokeLinejoin="round"/>
+            <circle cx="16" cy="17" r="2.5" fill="none" stroke="#c6d8fa" strokeWidth="1.2"/>
+          </svg>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button type="button" onClick={() => setMinimized(value => !value)} aria-label={minimized ? "Restore CoreSpirit editor" : "Minimize CoreSpirit editor"} title={minimized ? "Restore editor" : "Minimize editor"} className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
-            {minimized ? <Plus size={15}/> : <Minus size={15}/>}
+        <div className="min-w-0 flex items-center gap-2">
+          <span className="shrink-0 text-[10px] font-bold tracking-[.12em] text-[#e5e9f2]">CORESPIRIT</span>
+          <span className="hidden text-[9px] text-[#68758a] sm:inline">/</span>
+          <input
+            id="corespirit-script-name"
+            value={nameDraft}
+            onChange={event => setNameDraft(event.target.value)}
+            aria-label="Script name"
+            className="h-7 min-w-0 w-[min(250px,30vw)] border-0 border-b border-transparent bg-transparent px-1 text-[11px] font-medium text-[#dce3ef] outline-none focus:border-[#4778ca]"
+          />
+        </div>
+        <span className="hidden shrink-0 text-[9px] text-[#7e899b] md:inline" title={marketHealth.reason}>
+          <span className={'mr-1 inline-block h-1.5 w-1.5 rounded-full ' + (marketHealth.state === 'live' ? 'bg-[#26a69a]' : marketHealth.state === 'stale' || marketHealth.state === 'disconnected' ? 'bg-[#ef5350]' : marketHealth.state === 'delayed' ? 'bg-[#f0a35a]' : 'bg-[#718096]')}/>
+          {marketHealth.label.toUpperCase()}
+        </span>
+        {versions.length > 0 && (
+          <select
+            value={selectedVersion}
+            onChange={event => selectVersion(event.target.value)}
+            className="hidden h-7 max-w-[135px] rounded border border-[#30394a] bg-[#1b2230] px-1.5 text-[9px] text-[#bac5d6] outline-none focus:border-[#4778ca] sm:block"
+            aria-label="Script version history"
+            title="Script version history"
+          >
+            {versions.map(version => <option key={version.id} value={version.id}>v{version.version} · {new Date(version.created_at).toLocaleDateString()}</option>)}
+          </select>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void runCurrent()}
+            disabled={busy !== null}
+            className="inline-flex h-7 items-center gap-1.5 rounded bg-[#2962ff] px-2.5 text-[10px] font-semibold text-white hover:bg-[#3974ff] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Compile and run the current CoreScript"
+          >
+            <Play size={12}/> Run
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label={fullscreen ? "Restore CoreSpirit panel size" : "Fullscreen CoreSpirit editor"} title={fullscreen ? "Restore" : "Fullscreen"} className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
-            {fullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy !== null}
+            className="inline-flex h-7 items-center gap-1 rounded border border-[#354052] bg-[#202736] px-2 text-[10px] font-medium text-[#c8d0de] hover:bg-[#293448] disabled:opacity-50"
+            title="Save script"
+          >
+            <Save size={12}/> Save
           </button>
-          <button type="button" onClick={closeTerminal} aria-label="Close CoreSpirit terminal" title="Close terminal" className="rounded-md p-2 text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
-            <X size={16}/>
+          <details className="relative">
+            <summary className="flex h-7 cursor-pointer list-none items-center rounded border border-[#354052] bg-[#202736] px-2 text-[10px] text-[#c8d0de] hover:bg-[#293448]">More</summary>
+            <div className="absolute right-0 top-8 z-[150] flex w-48 flex-col gap-1 rounded-md border border-[#374154] bg-[#1b2230] p-1.5 shadow-xl">
+              <button type="button" onClick={() => void rename()} disabled={busy !== null} className="rounded px-2.5 py-2 text-left text-[10px] text-[#d1d8e4] hover:bg-[#2a3446] disabled:opacity-50"><PencilLine size={12} className="mr-2 inline"/>Rename</button>
+              <button type="button" onClick={() => void publish()} disabled={busy !== null} className="rounded px-2.5 py-2 text-left text-[10px] text-[#d1d8e4] hover:bg-[#2a3446] disabled:opacity-50"><UploadCloud size={12} className="mr-2 inline"/>Publish</button>
+              <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="rounded px-2.5 py-2 text-left text-[10px] text-[#d1d8e4] hover:bg-[#2a3446] disabled:opacity-50"><Check size={12} className="mr-2 inline"/>Add to chart</button>
+              <div className="my-1 border-t border-[#30394a]"/>
+              <label className="px-2 pt-1 text-[8px] font-semibold uppercase tracking-wider text-[#78869b]">Authoring guidance</label>
+              <select value={level} onChange={event => setLevel(event.target.value as AuthoringLevel)} className="mx-1 mb-1 rounded border border-[#354052] bg-[#111722] px-2 py-1.5 text-[9px] text-[#c8d0de]" aria-label="CoreSpirit authoring guidance view">
+                {CORE_SPIRIT_AUTHORING_LEVELS.map(option => <option key={option} value={option}>{getCoreSpiritAuthoringProfileForLevel(option).label}</option>)}
+              </select>
+              <div className="px-2 pb-1 text-[9px] leading-4 text-[#8995a8]">{authoringProfile.description}</div>
+              <div className="px-2 pb-1 text-[8px] text-[#657287]">Building blocks: {authoringProfile.features.slice(0, 8).join(' · ')}</div>
+              {compiledRequiredLevel && <div className="px-2 pb-1 text-[8px] text-[#83aef3]">Compiler-required: {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}</div>}
+            </div>
+          </details>
+          <button type="button" onClick={() => setMinimized(value => !value)} aria-label={minimized ? "Restore CoreSpirit editor" : "Minimize CoreSpirit editor"} title={minimized ? "Restore editor" : "Minimize editor"} className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#293244] hover:text-white">
+            {minimized ? <Plus size={14}/> : <Minus size={14}/>}
+          </button>
+          <button type="button" onClick={toggleFullscreen} aria-label={fullscreen ? "Restore CoreSpirit panel size" : "Fullscreen CoreSpirit editor"} title={fullscreen ? "Restore" : "Fullscreen"} className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#293244] hover:text-white">
+            {fullscreen ? <Minimize2 size={14}/> : <Maximize2 size={14}/>}
+          </button>
+          <button type="button" onClick={closeTerminal} aria-label="Close CoreSpirit terminal" title="Close terminal" className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#3b2830] hover:text-[#f58b8b]">
+            <X size={14}/>
           </button>
         </div>
       </header>
 
-      {!minimized && (<>
-      <div className="flex items-center gap-2 border-b border-[#293244] px-3 py-2">
-        <label className="sr-only" htmlFor="corespirit-script-name">Script name</label>
-        <input id="corespirit-script-name" value={nameDraft} onChange={event => setNameDraft(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[#303b4f] bg-[#101827] px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-sky-500" aria-label="Script name"/>
-        <button type="button" onClick={() => void rename()} disabled={busy !== null} className="inline-flex items-center gap-1 rounded-md border border-[#303b4f] px-2.5 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50" title="Rename script"><PencilLine size={13}/> Rename</button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#293244] px-3 py-2">
-        <span className="text-[10px] text-slate-400">VIEW</span>
-        <select value={level} onChange={event => setLevel(event.target.value as AuthoringLevel)} className="rounded-md border border-[#303b4f] bg-[#101827] px-2 py-1.5 text-[10px] text-slate-200" aria-label="CoreSpirit authoring guidance view">
-          {CORE_SPIRIT_AUTHORING_LEVELS.map(option => <option key={option} value={option}>{getCoreSpiritAuthoringProfileForLevel(option).label}</option>)}
-        </select>
-        <span className="ml-auto text-[10px] text-slate-500">{scriptId ? 'CLOUD VERSIONING' : 'LOCAL DRAFT'}</span>
-        {versions.length > 0 && (
-          <div className="flex items-center gap-1">
-            <Clock3 size={13} className="text-slate-400"/>
-            <select value={selectedVersion} onChange={event => selectVersion(event.target.value)} className="max-w-[180px] rounded-md border border-[#303b4f] bg-[#101827] px-2 py-1.5 text-[10px] text-slate-200" aria-label="Script version history">
-              {versions.map(version => <option key={version.id} value={version.id}>v{version.version} · {new Date(version.created_at).toLocaleString()}</option>)}
-            </select>
+      {!minimized && (
+        <>
+          <div className="flex h-8 min-h-8 items-center gap-3 border-b border-[#252b39] bg-[#131722] px-3">
+            <span className="text-[9px] font-semibold tracking-wide text-[#9ba6b8]">CORE SCRIPT</span>
+            <span className="text-[9px] text-[#596579]">UTF-8</span>
+            <span className="text-[9px] text-[#596579]">{source.split('\n').length} lines</span>
+            <span className="ml-auto text-[9px] text-[#657286]">{scriptId ? 'CLOUD VERSIONING' : 'LOCAL DRAFT'}</span>
+            <span className="text-[9px] text-[#8c97aa]">{busyText || status}</span>
           </div>
-        )}
-      </div>
 
-      <div className="mx-3 mt-2 rounded-lg border border-[#263249] bg-[#0a1018] px-3 py-2" aria-label="CoreSpirit authoring guidance">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{authoringProfile.label} view · one CoreScript language</span>
-          <span className="text-[9px] text-slate-500">Guidance only</span>
-        </div>
-        <p className="mt-1 text-[9px] leading-4 text-slate-300">{authoringProfile.description}</p>
-        <div className="mt-1 text-[8px] leading-4 text-slate-500">Building blocks: {authoringProfile.features.slice(0, 8).join(' · ')}</div>
-        {compiledRequiredLevel && <div className="mt-1 text-[9px] text-sky-200">Compiler-required level: {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}</div>}
-        {compiledRequiredLevel && CORE_SPIRIT_AUTHORING_LEVELS.indexOf(level) < CORE_SPIRIT_AUTHORING_LEVELS.indexOf(compiledRequiredLevel) && <p className="mt-1 text-[9px] leading-4 text-amber-200">This source uses {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}-level concepts. Switch views for more relevant guidance; this selector never changes compiler or runtime permissions.</p>}
-        {!compiledRequiredLevel && <p className="mt-1 text-[8px] text-slate-500">Compile the current source to infer its required authoring level.</p>}
-      </div>
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-[#131722]">
+            <div ref={monacoContainerRef} aria-label="CoreSpirit Monaco editor" className={'absolute inset-0 ' + (editorStatus === 'ready' ? 'block' : 'hidden')}/>
+            {editorStatus !== 'ready' && (
+              <div className="flex h-full min-h-0 flex-col">
+                {editorStatus === 'loading' && <div role="status" className="border-b border-[#252b39] px-3 py-1.5 text-[9px] text-[#78869b]">Loading CoreSpirit editor services…</div>}
+                <textarea
+                  value={source}
+                  onChange={event => changeSource(event.target.value)}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-label="CoreSpirit source editor"
+                  className="min-h-0 flex-1 resize-none bg-[#131722] px-4 py-3 font-mono text-[12px] leading-[1.7] text-[#d6deeb] outline-none selection:bg-[#334b70]"
+                />
+              </div>
+            )}
+          </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[10px] text-slate-400"><Code2 size={13}/> CoreSpirit Script</div>
-          <span className="text-[10px] text-slate-500">UTF-8 · {source.split('\n').length} lines</span>
-        </div>
-        <div className="relative min-h-[200px] flex-1 overflow-hidden rounded-lg border border-[#263249] bg-[#070b12]">
-          <div ref={monacoContainerRef} aria-label="CoreSpirit Monaco editor" className={'absolute inset-0 ' + (editorStatus === 'ready' ? 'block' : 'hidden')} />
-          {editorStatus !== 'ready' && (
-            <div className="flex h-full min-h-[200px] flex-col">
-              {editorStatus === 'loading' && <div role="status" className="border-b border-[#263249] px-3 py-1 text-[9px] text-slate-500">Loading CoreSpirit editor services…</div>}
-              <textarea value={source} onChange={event => changeSource(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-label="CoreSpirit source editor" className="min-h-[200px] flex-1 resize-none bg-transparent p-3 font-mono text-[12px] leading-[1.65] text-[#c6ddf8] outline-none focus:border-sky-500/70" />
+          <section className="shrink-0 border-t border-[#2a3040] bg-[#171b26]">
+            <div className="flex h-9 items-center gap-1 border-b border-[#252b39] px-2" role="tablist" aria-label="CoreSpirit output panels">
+              <button type="button" role="tab" aria-selected={bottomTab === 'console'} onClick={() => {setBottomTab('console');setBottomPanelOpen(true);}} className={'h-full border-b-2 px-3 text-[10px] ' + (bottomTab === 'console' ? 'border-[#4778ca] text-[#e0e7f2]' : 'border-transparent text-[#8591a4] hover:text-[#c5cede]')}>Console</button>
+              <button type="button" role="tab" aria-selected={bottomTab === 'problems'} onClick={() => {setBottomTab('problems');setBottomPanelOpen(true);}} className={'flex h-full items-center gap-1.5 border-b-2 px-3 text-[10px] ' + (bottomTab === 'problems' ? 'border-[#4778ca] text-[#e0e7f2]' : 'border-transparent text-[#8591a4] hover:text-[#c5cede]')}>Problems <span className="rounded bg-[#293244] px-1.5 py-0.5 text-[8px] tabular-nums">{diagnostics.length + lifecycleDiagnostics.length}</span></button>
+              <button type="button" role="tab" aria-selected={bottomTab === 'chart'} onClick={() => {setBottomTab('chart');setBottomPanelOpen(true);setChartIndicators(chartManagerFromWindow()?.list() ?? []);}} className={'flex h-full items-center gap-1.5 border-b-2 px-3 text-[10px] ' + (bottomTab === 'chart' ? 'border-[#4778ca] text-[#e0e7f2]' : 'border-transparent text-[#8591a4] hover:text-[#c5cede]')}>Chart <span className="rounded bg-[#293244] px-1.5 py-0.5 text-[8px] tabular-nums">{chartIndicators.length}</span></button>
+              <button type="button" onClick={() => setBottomPanelOpen(value => !value)} aria-label={bottomPanelOpen ? 'Collapse output panel' : 'Expand output panel'} className="ml-auto grid h-7 w-7 place-items-center rounded text-[#8591a4] hover:bg-[#293244] hover:text-white">{bottomPanelOpen ? '⌄' : '⌃'}</button>
             </div>
-          )}
-        </div>
-      </div>
 
-      <div className="mx-3 mb-2 rounded-lg border border-[#263249] bg-[#0a101a] px-3 py-2" aria-label="CoreSpirit execution lifecycle">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Execution pipeline</span>
-          <span className="text-[9px] text-slate-300">{coreSpiritLifecycleLabel(lifecycleStage)}</span>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {CORE_SPIRIT_LIFECYCLE_STEPS.map((stage, index) => {
-            const currentIndex = CORE_SPIRIT_LIFECYCLE_STEPS.indexOf(lifecycleStage);
-            const terminalError = ['compile-failed','capability-denied','execution-failed','output-rejected','rendering-failed'].includes(lifecycleStage);
-            const active = stage === lifecycleStage;
-            const complete = currentIndex >= 0 && index < currentIndex || lifecycleStage === 'rendered';
-            return <span key={stage} className={'rounded border px-1.5 py-1 text-[8px] ' + (active ? (terminalError ? 'border-rose-500/50 text-rose-200' : 'border-sky-400/50 text-sky-200') : complete ? 'border-emerald-500/30 text-emerald-200' : 'border-[#293244] text-slate-600')}>{coreSpiritLifecycleLabel(stage)}</span>;
-          })}
-        </div>
-      </div>
-      {lifecycleDiagnostics.length > 0 && (
-        <div className="mx-3 mb-2 max-h-28 overflow-auto rounded-lg border border-rose-900/70 bg-rose-950/30 px-3 py-2" role="log" aria-label="CoreSpirit structured diagnostics" aria-live="polite">
-          {lifecycleDiagnostics.map((item, index) => <div key={item.code + ':' + index} className="mb-2 last:mb-0">
-            <div className="font-mono text-[9px] text-rose-200">[{item.code}] {item.line == null ? '' : 'Line ' + item.line + (item.column == null ? '' : ':' + item.column) + ' · '}{item.outputId ? 'Output ' + item.outputId + ' · ' : ''}{item.message}</div>
-            {item.suggestedCorrection && <div className="mt-1 text-[9px] text-slate-300">Suggested correction: {item.suggestedCorrection}</div>}
-            {item.previousOutputPreserved != null && <div className="mt-1 text-[8px] text-slate-500">Previous chart state {item.previousOutputPreserved ? 'preserved' : 'not preserved'}.</div>}
-          </div>)}
-        </div>
-      )}
-      {diagnostics.length > 0 && (
-        <div className="mx-3 mb-2 max-h-20 overflow-auto rounded-lg border border-[#263249] bg-[#090d14] px-3 py-2 text-[10px] text-slate-300" role="status" aria-live="polite">
-          {diagnostics.map((message, index) => <div key={index}>{message}</div>)}
-        </div>
-      )}
-      <div className="mx-3 mb-2 truncate text-[10px] text-slate-400" role="status" aria-live="polite">{busyText || status}</div>
-      <div className="mx-3 mb-2 rounded-lg border border-[#263249] bg-[#0a1018]">
-        <button type="button" onClick={() => { setChartManagerOpen(value => !value); setChartIndicators(chartManagerFromWindow()?.list() ?? []); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-[9px] font-semibold uppercase tracking-wider text-slate-300" aria-expanded={chartManagerOpen}>
-          <span>Chart-side indicator manager · {chartIndicators.length}</span><span>{chartManagerOpen ? '−' : '+'}</span>
-        </button>
-        {chartManagerOpen && <div className="max-h-64 space-y-2 overflow-auto px-3 pb-3">
-          {managerError && <div className="text-[9px] text-rose-300">{managerError}</div>}
-          {chartIndicators.length === 0 && <div className="py-2 text-[9px] text-slate-500">No CoreSpirit scripts are attached to the active Vela chart.</div>}
-          {chartIndicators.map(instance => {
-            const editorDiffers = instance.name === (nameDraft.trim() || name) && instance.source !== source;
-            const renderField = (field: CoreSpiritChartManagedField, prop: boolean) => {
-              const value = field.value;
-              const controlClass = 'min-w-0 rounded border border-[#29364a] bg-[#070b12] px-2 py-1 text-[9px] text-slate-200';
-              const onValue = (raw: string | boolean) => {
-                let next: CoreSpiritChartManagedValue;
-                if (typeof raw === 'boolean') next = raw;
-                else if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') {
-                  if (!raw.trim()) { setManagerError(field.title + ' requires a numeric value.'); return; }
-                  const numeric = Number(raw);
-                  if (!Number.isFinite(numeric)) { setManagerError(field.title + ' must be finite.'); return; }
-                  if (field.type === 'int' && !Number.isInteger(numeric)) { setManagerError(field.title + ' must be a whole number.'); return; }
-                  if (field.min != null && numeric < field.min) { setManagerError(field.title + ' must be at least ' + field.min + '.'); return; }
-                  if (field.max != null && numeric > field.max) { setManagerError(field.title + ' must be no greater than ' + field.max + '.'); return; }
-                  next = numeric;
-                } else next = raw;
-                setManagerError('');
-                updateManagedField(instance, field, next, prop);
-              };
-              if (field.type === 'bool') return <label key={field.key} className="flex items-center gap-2 text-[9px] text-slate-300"><input type="checkbox" checked={Boolean(value)} onChange={event => onValue(event.target.checked)}/>{field.title}</label>;
-              if (field.options?.length) return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><select className={controlClass} value={String(value)} onChange={event => onValue(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
-              if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type="number" defaultValue={Number(value)} min={field.min} max={field.max} step={field.step ?? (field.type === 'int' ? 1 : 'any')} onBlur={event => { if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value); }}/></label>;
-              return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-slate-300"><span>{field.title}</span><input className={controlClass} type={field.type === 'color' ? 'color' : 'text'} defaultValue={String(value)} onBlur={event => { if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value); }}/></label>;
-            };
-            return <div key={instance.id} className="rounded-md border border-[#263249] bg-[#0c121d] p-2">
-              <div className="flex items-start gap-2">
-                <button type="button" onClick={() => loadManagedSource(instance)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[10px] font-semibold text-slate-100">{instance.name}</span>
-                  <span className="mt-0.5 block text-[8px] text-slate-500">{editorDiffers ? 'Editor differs · chart still runs this saved source' : 'Editor matches running source'}</span>
-                </button>
-                <button type="button" onClick={() => toggleManagedVisibility(instance)} className="rounded border border-[#29364a] px-2 py-1 text-[8px] text-slate-300">{instance.visible ? 'Hide' : 'Show'}</button>
-                <button type="button" onClick={() => removeManagedInstance(instance)} className="rounded border border-rose-900/60 px-2 py-1 text-[8px] text-rose-200">Remove</button>
+            {bottomPanelOpen && (
+              <div className="h-36 min-h-0 overflow-auto px-3 py-2.5">
+                {bottomTab === 'console' && (
+                  <div className="space-y-2" aria-label="CoreSpirit execution lifecycle">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-[#8b97aa]">Execution pipeline</span>
+                      <span className="text-[9px] text-[#c7d1e0]">{coreSpiritLifecycleLabel(lifecycleStage)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {CORE_SPIRIT_LIFECYCLE_STEPS.map((stage, index) => {
+                        const currentIndex = CORE_SPIRIT_LIFECYCLE_STEPS.indexOf(lifecycleStage);
+                        const terminalError = ['compile-failed','capability-denied','execution-failed','output-rejected','rendering-failed'].includes(lifecycleStage);
+                        const active = stage === lifecycleStage;
+                        const complete = currentIndex >= 0 && index < currentIndex || lifecycleStage === 'rendered';
+                        return <span key={stage} className={'rounded border px-1.5 py-1 text-[8px] ' + (active ? (terminalError ? 'border-[#8d4248] bg-[#3b2028] text-[#ffadad]' : 'border-[#3f659f] bg-[#1c2b42] text-[#a9cbff]') : complete ? 'border-[#285747] text-[#83c9a6]' : 'border-[#30394a] text-[#67748a]')}>{coreSpiritLifecycleLabel(stage)}</span>;
+                      })}
+                    </div>
+                    <div className="border-t border-[#2a3040] pt-2 text-[10px] leading-5 text-[#9ba7ba]" role="status" aria-live="polite">{busyText || status}</div>
+                    {compiledRequiredLevel && <div className="text-[9px] text-[#8aaee5]">Compiler-required authoring level: {getCoreSpiritAuthoringProfileForLevel(compiledRequiredLevel).label}</div>}
+                  </div>
+                )}
+
+                {bottomTab === 'problems' && (
+                  <div className="space-y-2" role="log" aria-label="CoreSpirit compiler and runtime problems" aria-live="polite">
+                    {lifecycleDiagnostics.length === 0 && diagnostics.length === 0 && <div className="py-3 text-[10px] text-[#77849a]">No problems detected for the current source revision.</div>}
+                    {lifecycleDiagnostics.map((item, index) => (
+                      <div key={item.code + ':' + index} className="rounded border border-[#44323b] bg-[#211a24] px-2.5 py-2">
+                        <div className="font-mono text-[9px] text-[#f0b5bb]">[{item.code}] {item.line == null ? '' : 'Line ' + item.line + (item.column == null ? '' : ':' + item.column) + ' · '}{item.outputId ? 'Output ' + item.outputId + ' · ' : ''}{item.message}</div>
+                        {item.suggestedCorrection && <div className="mt-1 text-[9px] text-[#c6cbd5]">Suggested correction: {item.suggestedCorrection}</div>}
+                        {item.previousOutputPreserved != null && <div className="mt-1 text-[8px] text-[#8792a4]">Previous chart state {item.previousOutputPreserved ? 'preserved' : 'not preserved'}.</div>}
+                      </div>
+                    ))}
+                    {diagnostics.map((message, index) => <div key={'diagnostic:' + index} className="border-b border-[#252b39] py-1.5 font-mono text-[9px] text-[#d3a7ab]">{message}</div>)}
+                  </div>
+                )}
+
+                {bottomTab === 'chart' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] font-medium text-[#d4dcea]">Chart-side indicator manager</div>
+                        <div className="text-[9px] text-[#758198]">Manage the CoreSpirit instances attached to the active Vela chart.</div>
+                      </div>
+                      <button type="button" onClick={() => {setChartManagerOpen(value => !value);setChartIndicators(chartManagerFromWindow()?.list() ?? []);}} aria-expanded={chartManagerOpen} className="rounded border border-[#354052] px-2 py-1 text-[9px] text-[#b7c3d5] hover:bg-[#273144]">{chartManagerOpen ? 'Hide' : 'Show'} · {chartIndicators.length}</button>
+                    </div>
+                    {managerError && <div className="text-[9px] text-[#f19ca4]">{managerError}</div>}
+                    {chartManagerOpen && (
+                      <div className="space-y-2">
+                        {chartIndicators.length === 0 && <div className="py-2 text-[9px] text-[#758198]">No CoreSpirit scripts are attached to the active Vela chart.</div>}
+                        {chartIndicators.map(instance => {
+                          const editorDiffers = instance.name === (nameDraft.trim() || name) && instance.source !== source;
+                          const renderField = (field: CoreSpiritChartManagedField, prop: boolean) => {
+                            const value = field.value;
+                            const controlClass = 'min-w-0 rounded border border-[#354052] bg-[#111722] px-2 py-1 text-[9px] text-[#d0d8e5]';
+                            const onValue = (raw: string | boolean) => {
+                              let next: CoreSpiritChartManagedValue;
+                              if (typeof raw === 'boolean') next = raw;
+                              else if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') {
+                                if (!raw.trim()) { setManagerError(field.title + ' requires a numeric value.'); return; }
+                                const numeric = Number(raw);
+                                if (!Number.isFinite(numeric)) { setManagerError(field.title + ' must be finite.'); return; }
+                                if (field.type === 'int' && !Number.isInteger(numeric)) { setManagerError(field.title + ' must be a whole number.'); return; }
+                                if (field.min != null && numeric < field.min) { setManagerError(field.title + ' must be at least ' + field.min + '.'); return; }
+                                if (field.max != null && numeric > field.max) { setManagerError(field.title + ' must be no greater than ' + field.max + '.'); return; }
+                                next = numeric;
+                              } else next = raw;
+                              setManagerError('');
+                              updateManagedField(instance, field, next, prop);
+                            };
+                            if (field.type === 'bool') return <label key={field.key} className="flex items-center gap-2 text-[9px] text-[#c0cbdc]"><input type="checkbox" checked={Boolean(value)} onChange={event => onValue(event.target.checked)}/>{field.title}</label>;
+                            if (field.options?.length) return <label key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-[#c0cbdc]"><span>{field.title}</span><select className={controlClass} value={String(value)} onChange={event => onValue(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+                            if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-[#c0cbdc]"><span>{field.title}</span><input className={controlClass} type="number" defaultValue={Number(value)} min={field.min} max={field.max} step={field.step ?? (field.type === 'int' ? 1 : 'any')} onBlur={event => {if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value);}}/></label>;
+                            return <label key={field.key + ':' + displayManagerValue(value)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 text-[9px] text-[#c0cbdc]"><span>{field.title}</span><input className={controlClass} type={field.type === 'color' ? 'color' : 'text'} defaultValue={String(value)} onBlur={event => {if (event.currentTarget.value !== String(value)) onValue(event.currentTarget.value);}}/></label>;
+                          };
+                          return (
+                            <div key={instance.id} className="rounded border border-[#30394a] bg-[#1a202d] p-2">
+                              <div className="flex items-start gap-2">
+                                <button type="button" onClick={() => loadManagedSource(instance)} className="min-w-0 flex-1 text-left">
+                                  <span className="block truncate text-[10px] font-semibold text-[#e0e6ef]">{instance.name}</span>
+                                  <span className="mt-0.5 block text-[8px] text-[#8490a3]">{editorDiffers ? 'Editor differs · chart still runs this saved source' : 'Editor matches running source'}</span>
+                                </button>
+                                <button type="button" onClick={() => toggleManagedVisibility(instance)} className="rounded border border-[#3a4558] px-2 py-1 text-[8px] text-[#c4cede]">{instance.visible ? 'Hide' : 'Show'}</button>
+                                <button type="button" onClick={() => removeManagedInstance(instance)} className="rounded border border-[#6c3c45] px-2 py-1 text-[8px] text-[#f0a8ad]">Remove</button>
+                              </div>
+                              <div className="mt-2 space-y-1">
+                                {instance.inputs.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-[#8290a6]">Inputs · {instance.inputs.length}</summary><div className="mt-2 space-y-2">{instance.inputs.map(field => renderField(field, false))}</div></details>}
+                                {instance.props.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-[#8290a6]">Appearance · {instance.props.length}</summary><div className="mt-2 space-y-2">{instance.props.map(field => renderField(field, true))}</div></details>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="mt-2 space-y-1">
-                {instance.inputs.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-slate-500">Inputs · {instance.inputs.length}</summary><div className="mt-2 space-y-2">{instance.inputs.map(field => renderField(field, false))}</div></details>}
-                {instance.props.length > 0 && <details><summary className="cursor-pointer text-[8px] uppercase tracking-wider text-slate-500">Appearance · {instance.props.length}</summary><div className="mt-2 space-y-2">{instance.props.map(field => renderField(field, true))}</div></details>}
-              </div>
-            </div>;
-          })}
-        </div>}
-      </div>
-      <footer className="flex flex-wrap gap-2 border-t border-[#293244] p-3">
-        <button type="button" onClick={() => { const cleanName = nameDraft.trim() || name || 'CoreSpirit Script'; setBusy('compile'); reportStage('compiling', 'Compiling CoreSpirit and preparing chart output…'); void compileSource(source).then(async compiled => { const artifact = compiled.artifact; if (!artifact) throw new Error('CoreSpirit compiled without an executable artifact.'); reportStage('applying-chart-output', 'Submitting the validated artifact to the active Vela chart…'); await onAddToChart(cleanName, source, artifact, scriptId); setName(cleanName); persistLocalSource(source, cleanName, scriptId); reportStage('rendered', 'Rendered · “' + cleanName + '” is running on the active Vela chart.'); }).catch(error => { const stage = coreSpiritLifecycleStageForError(error, lifecycleStage); const diagnostic = coreSpiritLifecycleDiagnostic(error, stage, { previousOutputPreserved: true }); setLifecycleDiagnostics([diagnostic]); reportStage(stage, diagnostic.message, diagnostic); }).finally(() => setBusy(null)); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Play size={13}/> Compile & Run</button>
-        <button type="button" onClick={() => void save()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><Save size={13}/> Save</button>
-        <button type="button" onClick={() => void publish()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-md border border-[#303b4f] px-3 py-2 text-[10px] font-semibold hover:bg-white/5 disabled:opacity-50"><UploadCloud size={13}/> Publish</button>
-        <button type="button" onClick={() => void addToChart()} disabled={busy !== null} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-orange-400 disabled:opacity-50"><Check size={13}/> Add to chart</button>
-      </footer>
-      </>)}
+            )}
+          </section>
+        </>
+      )}
     </section>
+  );
   );
 }
