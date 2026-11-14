@@ -115,10 +115,11 @@ export function createTcoVelaTerminalOptions(
     live:true,
     // Match Vela's near-black plotting surface while keeping UI chrome separate.
     theme:{
-      background:'#050505',
-      textColor:'#a1a1a1',
-      gridColor:'#202226',
-      borderColor:'#292b31',
+      // Match the near-black reference canvas while keeping separators visible at low brightness.
+      background:'#090a0d',
+      textColor:'#7a8190',
+      gridColor:'#1b1d24',
+      borderColor:'#1b1d24',
       upColor:'#089981',
       downColor:'#f23645',
       fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
