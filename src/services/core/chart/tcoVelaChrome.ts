@@ -232,8 +232,8 @@ const appliedTcoVelaThemeSignatures = new WeakMap<object, string>();
 let pendingTcoChartThemeTimer: number | null = null;
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
-    uiBackground: '#111317', topbarBackground: '#111317', panelBackground: '#141517', chartBackground: '#050505',
-    chartTextColor: '#a1a1a1', gridColor: '#202226', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
+    uiBackground: '#0c0d10', topbarBackground: '#0e1014', panelBackground: '#101115', chartBackground: '#090a0d',
+    chartTextColor: '#7a8190', gridColor: '#1b1d24', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
   } },
   { id: 'tradingview-dark', label: 'TradingView Dark', colors: {
     uiBackground: '#131722', topbarBackground: '#131722', panelBackground: '#171b26', chartBackground: '#131722',
@@ -269,12 +269,12 @@ const DEFAULT_FRAME_PREFERENCES: TcoFramePreferences = {
   sidebar: 'right',
   density: 'compact',
   themePreset: 'graphite',
-  uiBackground: '#111317',
-  topbarBackground: '#111317',
-  panelBackground: '#141517',
-  chartBackground: '#050505',
-  chartTextColor: '#a1a1a1',
-  gridColor: '#202226',
+  uiBackground: '#0c0d10',
+  topbarBackground: '#0e1014',
+  panelBackground: '#101115',
+  chartBackground: '#090a0d',
+  chartTextColor: '#7a8190',
+  gridColor: '#1b1d24',
   accent: '#2962ff',
   upColor: '#089981',
   downColor: '#f23645',
@@ -303,16 +303,26 @@ function normalizeTcoFramePreferences(value: unknown): TcoFramePreferences {
     ? value as Partial<TcoFramePreferences> & { accent?: string }
     : {};
   const legacyAccent: Record<string, string> = { violet: '#8b7cff', teal: '#14b8a6', blue: '#60a5fa', amber: '#f59e0b' };
-  // Migrate only the untouched v1 Graphite defaults. Explicit user color edits and
-  // other saved theme presets remain intact.
-  const legacyGraphiteDefaults = raw.themePreset === 'graphite'
-    && raw.uiBackground === '#121316'
-    && raw.topbarBackground === '#151619'
-    && raw.panelBackground === '#151619'
-    && raw.chartBackground === '#121316'
-    && raw.gridColor === '#292b31';
+  // Migrate only untouched historical Graphite defaults. Explicit user color edits
+  // and other saved theme presets remain intact.
+  const legacyGraphiteDefaults = raw.themePreset === 'graphite' && (
+    (
+      raw.uiBackground === '#121316'
+      && raw.topbarBackground === '#151619'
+      && raw.panelBackground === '#151619'
+      && raw.chartBackground === '#121316'
+      && raw.gridColor === '#292b31'
+    ) || (
+      raw.uiBackground === '#111317'
+      && raw.topbarBackground === '#111317'
+      && raw.panelBackground === '#141517'
+      && raw.chartBackground === '#050505'
+      && raw.chartTextColor === '#a1a1a1'
+      && raw.gridColor === '#202226'
+    )
+  );
   const normalizedRaw = legacyGraphiteDefaults
-    ? { ...raw, uiBackground: '#111317', topbarBackground: '#111317', panelBackground: '#141517', chartBackground: '#050505', chartTextColor: '#a1a1a1', gridColor: '#202226' }
+    ? { ...raw, uiBackground: '#0c0d10', topbarBackground: '#0e1014', panelBackground: '#101115', chartBackground: '#090a0d', chartTextColor: '#7a8190', gridColor: '#1b1d24' }
     : raw;
   const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === normalizedRaw.themePreset) ? String(normalizedRaw.themePreset) : 'custom';
   const topbarRaw = normalizedRaw.topbar && typeof normalizedRaw.topbar === 'object' ? normalizedRaw.topbar : {};
