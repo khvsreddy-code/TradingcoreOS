@@ -27,8 +27,8 @@ assert.ok(topbarCompositionStart >= 0 && topbarTopologyStart > topbarComposition
 const topbarComposition = terminal.slice(topbarCompositionStart, topbarTopologyStart);
 assert.match(topbarComposition, /left:\s*\[[^\]]*'symbol'[^\]]*'timeframes'[^\]]*'style'/,
   'the primary symbol, timeframe and style controls remain in Vela native order');
-assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.workspace-frame'[^\]]*'tco\.trading'[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
-  'workspace, trading, save, alerts and native chart settings remain in the right topbar composition');
+assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
+  'save, alerts and native chart settings remain in the right Vela topbar composition');
 assert((terminal.match(/topbar:\s*TCO_VELA_TOPBAR_COMPOSITION/g) ?? []).length === 2,
   'the runtime workspace options and topology must consume the same topbar composition');
 assert.match(terminal, /drawings:\s*\{\s*toolbar:\s*true\s*\}/, 'the full native Vela drawing toolbar is explicitly enabled');
@@ -40,8 +40,8 @@ assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact s
 assert.match(terminal, /sidebar:\s*\{/, 'application panels use Vela native right-sidebar navigation');
 assert.match(terminal, /'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the utility rail keeps daily panels and groups the rest in More panels');
 assert.match(chrome, /id:'tco\.workspace-frame'/, 'workspace customization remains available through the native More panels hub');
-assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.workspace-frame'[^\]]*'tco\.trading'[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
-  'Workspace, Trade, Save, Alerts and chart settings use the shared Vela native topbar slots');
+assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.save-workspace'[^\]]*'alerts'[^\]]*'tco\.chart-settings'/,
+  'Save, Alerts and chart settings use the shared Vela native topbar slots');
 const sidebarActions = terminal.match(/sidebar:\s*(\{[\s\S]*?\n\s{4}\}),\s*topbar:/)?.[1] ?? '';
 assert.ok(
   !sidebarActions.includes("'tco.workspace-frame'") && !sidebarActions.includes("'tco.trading'"),
@@ -173,6 +173,17 @@ assert.doesNotMatch(liveWorkspace, /subscribeMarketData\(/, 'the header adds no 
 assert.match(liveWorkspace, /Open account and broker settings/, 'the account control opens the native account panel');
 assert.doesNotMatch(liveWorkspace, /Open Data Window|Open Objects Tree|Open Paper Trading|My workspace/, 'global header does not duplicate native Vela toolbar actions');
 assert.doesNotMatch(liveWorkspace, /TradingCoreOS application navigation|left-\[48px\]/, 'the app does not add a second left rail beside Vela drawing tools');
+assert.doesNotMatch(topbarComposition, /'tco\.workspace-frame'|'tco\.trading'/, 'Workspace and Trade are promoted to the global application header instead of duplicating Vela chart chrome');
+assert.match(liveWorkspace, /data-tco-header-action="workspace"[\s\S]{0,260}togglePanel\('tco\.workspace-frame', true\)/, 'global Workspace opens the existing Vela saved-layout panel');
+assert.match(liveWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}togglePanel\('tco\.trading', true\)/, 'global Trade opens the existing broker-aware trading panel');
+assert.match(liveWorkspace, /navigator\.share/, 'Share uses the native share sheet when available');
+assert.match(liveWorkspace, /readTcoSharedChartContext[\s\S]{0,700}setSymbol\(sharedChartContext\.symbol\)/, 'shared links validate and restore the requested instrument after workspace restore');
+assert.match(liveWorkspace, /setTimeframe\(sharedChartContext\.timeframe\)/, 'shared links restore the requested timeframe');
+assert.match(liveWorkspace, /downloadScreenshot\(\)/, 'Screenshot delegates to Vela native PNG export');
+assert.match(workspace, /downloadScreenshot\(\): void/, 'the screenshot action uses Vela workspace export rather than DOM capture');
+assert.match(liveWorkspace, /requestFullscreen\(\)/, 'Fullscreen uses the browser Fullscreen API on the live terminal surface');
+assert.match(liveWorkspace, /data-tco-header-action="screenshot"/, 'the reference screenshot control is present and accessible');
+assert.match(liveWorkspace, /data-tco-header-action="fullscreen"/, 'the fullscreen control has a dedicated accessible action');
 
 // Vela's layout picker must retain the reference site's asymmetric layouts and Time sync.
 const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
