@@ -2177,7 +2177,6 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.candleLodIndex = undefined;
         this.scene.retained.markKindDirty('series', SceneDirty.Data | SceneDirty.Transform);
         this.coords.setBarsColumns(this.columnarBars.time, this.columnarBars.length, this.columnarBars.timeUnit ?? 'milliseconds');
-        this.coords.setBars(this.bars.map((b) => b.time));
         for (const model of this.scene.indicators.values()) {
             this.refreshAnchorOffset(model);
             this.scene.markIndicatorDirty(model.id, SceneDirty.Data | SceneDirty.Transform);

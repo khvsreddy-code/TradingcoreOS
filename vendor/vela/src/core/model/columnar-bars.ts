@@ -42,6 +42,7 @@ export interface ColumnarBarUpdate {
      */
     readonly operation?: 'replace-history';
     readonly columns?: ColumnarBars;
+    /** Vela dirty bounds in epoch milliseconds (inclusive), not canonical bar indices. */
     readonly dirtyRange?: Readonly<{ from: number; to: number }>;
     readonly preserveView?: boolean;
 }

@@ -1879,6 +1879,35 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     }
 
     private onColumnarBar(update: ColumnarBarUpdate): void {
+        // Historical corrections/backfills are full columnar snapshots, not scalar
+        // forming-bar ticks. Keep the engine tape, compatibility view, renderer and
+        // indicator sessions on the same canonical revision.
+        if (update.operation === 'replace-history' && update.columns) {
+            this.rawTape.replaceColumns(update.columns);
+            this.invalidateRawBarsCompat();
+
+            if (this.barTransform) {
+                const raw = this.rawTape.toOHLCV();
+                this.rawBarsCompat = raw;
+                this.bars = this.barTransform.full(raw);
+                this.renderer.setBars(this.bars, { preserveView: update.preserveView ?? true });
+            } else {
+                // This compatibility projection is cold-path only; ordinary live
+                // updates continue to mutate the retained tape in O(1).
+                this.bars = this.rawTape.toOHLCV();
+                this.rawBarsCompat = this.bars;
+                this.renderer.updateBarColumns(update);
+            }
+
+            const latest = this.bars[this.bars.length - 1] ?? this.columnarUpdateToBar(update);
+            this.barCause = 'bar';
+            if (this.bars.length > 0) this.events.emit('bar', latest);
+            // Recursive kernels need deterministic correction replay; the exact
+            // millisecond span still travels with the event for range-aware consumers.
+            this.notifySessionsBars('backfill', update.dirtyRange);
+            return;
+        }
+
         const unit = update.timeUnit ?? this.columnarUnit();
         const time = unit === 'seconds' ? update.time * 1000 : update.time;
         if (this.healing) {

@@ -2,6 +2,7 @@ import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, Col
 import { chartDataPlaneKey, getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import { historyStore } from './services/marketData/HistoryStore';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
+import { canonicalIndexRangeToVelaMillis } from './services/marketData/chartCandleEvents';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import type { MarketFeedStatus } from './types/market';
@@ -891,6 +892,11 @@ export class TcoVelaDataProvider implements DataProvider {
           length: view.length,
           timeUnit: 'seconds',
         });
+        const dirtyRange = canonicalIndexRangeToVelaMillis(
+          { from: view.dirtyFrom, to: view.dirtyTo },
+          view.time,
+          'seconds',
+        );
         const replacement: ColumnarBarUpdate = {
           time, open, high, low, close, volume,
           timeUnit: 'seconds',
@@ -898,7 +904,7 @@ export class TcoVelaDataProvider implements DataProvider {
           timelineKey,
           operation: 'replace-history',
           columns,
-          dirtyRange: { from: view.dirtyFrom, to: view.dirtyTo },
+          ...(dirtyRange ? { dirtyRange } : {}),
           preserveView: true,
         };
         const dispatchStartedAt = performanceNow();

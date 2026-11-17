@@ -19,6 +19,31 @@ export type CandleDatasetChange = Readonly<{
 }>;
 export type CandleDatasetFence = Readonly<{ datasetKey: string; datasetGeneration: number; revision?: number }>;
 
+/**
+ * Convert a canonical half-open bar-index span [from, to) into Vela's inclusive
+ * market-time bounds (epoch milliseconds). The caller must pass the time view
+ * from the same canonical revision that produced the dirty indices.
+ */
+export function canonicalIndexRangeToVelaMillis(
+  range: Readonly<{ from: number; to: number }>,
+  timestamps: ArrayLike<number>,
+  timeUnit: 'seconds' | 'milliseconds' = 'seconds',
+): Readonly<{ from: number; to: number }> | undefined {
+  const rawFrom = Number(range.from);
+  const rawTo = Number(range.to);
+  if (!Number.isFinite(rawFrom) || !Number.isFinite(rawTo) || rawFrom < 0 || rawTo < rawFrom) return undefined;
+
+  const start = Math.max(0, Math.min(timestamps.length, Math.floor(rawFrom)));
+  const end = Math.max(start, Math.min(timestamps.length, Math.ceil(rawTo)));
+  if (end <= start) return undefined;
+
+  const factor = timeUnit === 'seconds' ? 1000 : 1;
+  const from = Number(timestamps[start]) * factor;
+  const to = Number(timestamps[end - 1]) * factor;
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to < from) return undefined;
+  return Object.freeze({ from, to });
+}
+
 export function candleTimestampMs(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value > 1e12 ? value : value * 1000;
   const text = String(value ?? '').trim();
