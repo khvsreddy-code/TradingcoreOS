@@ -23,6 +23,8 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm ci --include=dev
+      - name: Validate CI browser-auth bootstrap syntax
+        run: node --check tools/create-browser-auth-state.mjs
       - name: Verify CoreSpirit ownership boundaries
         run: node --loader ./tools/nodeTsTranspileLoader.mjs src/coreSpiritNonNegotiableArchitectureContract.test.mjs
       - name: Install WASM toolchain
@@ -94,7 +96,7 @@ jobs:
           if [ "$TCO_BROWSER_PERF_ENABLED" = "true" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
       - name: Browser-performance gate is not enabled
         if: steps.gate.outputs.enabled != 'true'
-        run: echo "Set TCO_BROWSER_PERF_ENABLED=true and configure the browser URL/state secret to activate this check."
+        run: echo "Set TCO_BROWSER_PERF_ENABLED=true plus the browser URL and Supabase test-account secrets to activate this check."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.enabled == 'true'
         with:
