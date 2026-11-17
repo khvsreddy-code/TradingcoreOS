@@ -149,7 +149,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * transform active it IS {@link rawBars} (same reference, zero cost); under a transforming
      * price style (Heikin Ashi) it's the derived series, index-aligned 1:1 with the raw one.
      */
-    private bars: OHLCV[] = [];
+    /** Lazily-created OHLCV compatibility projection. Identity charts stay columnar until a consumer asks for rows. */
+    private barsCompat: OHLCV[] | null = null;
+    private get bars(): OHLCV[] {
+        if (this.barsCompat) return this.barsCompat;
+        const raw = this.rawBars;
+        return this.barTransform ? (this.barsCompat = this.barTransform.full(raw)) : raw;
+    }
+    private set bars(rows: OHLCV[]) { this.barsCompat = rows; }
     /** The RAW market data, exactly as the feed served it — the source of truth. The `'bar'`
      *  event, gap-heal reconciliation, and `chart.data` stay on this plane; nothing synthetic
      *  is ever stored or emitted as data. */
@@ -160,6 +167,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private get rawBars(): OHLCV[] { return this.rawBarsCompat ??= this.rawTape.toOHLCV(); }
     private set rawBars(rows: OHLCV[]) { this.rawTape.replaceRows(rows); this.rawBarsCompat = rows; }
     private invalidateRawBarsCompat(): void { this.rawBarsCompat = null; }
+    private invalidateBarsCompat(): void { this.barsCompat = null; }
     /** The active price style's 1:1 bar transform (null ≡ raw view). */
     private barTransform: BarTransform | null = null;
     // ── chart-type data engines (SDK): one lazily-created engine per style id ──
@@ -1892,16 +1900,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 this.bars = this.barTransform.full(raw);
                 this.renderer.setBars(this.bars, { preserveView: update.preserveView ?? true });
             } else {
-                // This compatibility projection is cold-path only; ordinary live
-                // updates continue to mutate the retained tape in O(1).
-                this.bars = this.rawTape.toOHLCV();
-                this.rawBarsCompat = this.bars;
+                // Identity charts update the renderer from columns and keep the
+                // object compatibility view invalidated until a consumer requests it.
+                this.invalidateBarsCompat();
                 this.renderer.updateBarColumns(update);
             }
 
-            const latest = this.bars[this.bars.length - 1] ?? this.columnarUpdateToBar(update);
+            const latest = this.rawTape.at(this.rawTape.length - 1) ?? this.columnarUpdateToBar(update);
             this.barCause = 'bar';
-            if (this.bars.length > 0) this.events.emit('bar', latest);
+            if (this.rawTape.length > 0) this.events.emit('bar', latest);
             // Recursive kernels need deterministic correction replay; the exact
             // millisecond span still travels with the event for range-aware consumers.
             this.notifySessionsBars('backfill', update.dirtyRange);
@@ -1932,15 +1939,32 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (Number.isFinite(lastTime) && time === lastTime) {
             this.rawTape.replaceLastValues(time, update.open, update.high, update.low, update.close, volume);
             this.barCause = 'tick';
-            if (this.barTransform) this.bars[this.bars.length - 1] = this.barTransform.next(bar, this.bars[this.bars.length - 2]);
-            else { this.bars[this.bars.length - 1] = bar; this.rawBarsCompat = this.bars; }
+            if (this.barTransform) {
+                this.bars[this.bars.length - 1] = this.barTransform.next(bar, this.bars[this.bars.length - 2]);
+            } else {
+                const compatibility = this.barsCompat ?? this.rawBarsCompat;
+                if (compatibility) {
+                    compatibility[compatibility.length - 1] = bar;
+                    this.barsCompat = compatibility;
+                    this.rawBarsCompat = compatibility;
+                }
+            }
         } else if (!Number.isFinite(lastTime) || time > lastTime) {
             this.rawTape.appendValues(time, update.open, update.high, update.low, update.close, volume);
             this.barCause = 'bar';
-            if (this.barTransform) this.bars.push(this.barTransform.next(bar, this.bars[this.bars.length - 1]));
-            else { this.bars.push(bar); this.rawBarsCompat = this.bars; }
+            if (this.barTransform) {
+                this.bars.push(this.barTransform.next(bar, this.bars[this.bars.length - 1]));
+            } else {
+                const compatibility = this.barsCompat ?? this.rawBarsCompat;
+                if (compatibility) {
+                    compatibility.push(bar);
+                    this.barsCompat = compatibility;
+                    this.rawBarsCompat = compatibility;
+                }
+            }
         } else return;
         if (this.barTransform) this.invalidateRawBarsCompat();
+        else if (!this.barsCompat && !this.rawBarsCompat) this.invalidateBarsCompat();
         this.renderer.updateBarColumns(update);
         this.events.emit('bar', bar);
         if (notify) this.notifySessionsBars(this.historyState === 'backfill' ? 'backfill' : undefined);
@@ -1986,15 +2010,18 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     /** Render retained RAW tape. Identity-transform charts use numeric columns directly. */
     private renderRetainedRawSeries(opts?: { preserveView?: boolean; clearing?: boolean }): void {
-        const raw = this.rawBars;
         if (this.barTransform) {
+            const raw = this.rawBars;
             this.bars = this.barTransform.full(raw);
             this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
         } else {
-            this.bars = raw;
+            // Do not materialize the compatibility OHLCV[] mirror merely to render
+            // identity bars. NativeRenderer owns the columnar series; scripting and
+            // legacy consumers trigger the lazy getter only when they actually read it.
+            this.invalidateBarsCompat();
             this.renderer.setBarsColumns(this.rawTape.snapshotColumns('milliseconds'), { preserveView: opts?.preserveView });
         }
-        if (!opts?.clearing && this.bars.length > 0) this.endLoad();
+        if (!opts?.clearing && this.rawTape.length > 0) this.endLoad();
     }
 
     private setBarSeriesColumns(columns: ColumnarBars, opts?: { preserveView?: boolean; clearing?: boolean }): void {

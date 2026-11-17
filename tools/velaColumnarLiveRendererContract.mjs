@@ -67,4 +67,23 @@ assert.match(providerSource, /canonicalIndexRangeToVelaMillis\([\s\S]{0,160}view
 assert.match(providerSource, /\.\.\.\(dirtyRange \? \{ dirtyRange \} : \{\}\)/,
   'an empty canonical dirty span must not be emitted as a misleading renderer range');
 
+assert.match(engineSource, /private get bars\(\): OHLCV\[\]/,
+  'OHLCV compatibility rows must be materialized lazily rather than on every columnar render');
+const retainedRenderStart = engineSource.indexOf('private renderRetainedRawSeries');
+const retainedRenderEnd = engineSource.indexOf('private setBarSeriesColumns', retainedRenderStart);
+const retainedRenderBody = engineSource.slice(retainedRenderStart, retainedRenderEnd);
+assert.ok(retainedRenderStart >= 0 && retainedRenderEnd > retainedRenderStart);
+assert.ok(!retainedRenderBody.includes('const raw = this.rawBars') || retainedRenderBody.indexOf('const raw = this.rawBars') < retainedRenderBody.indexOf('} else {'),
+  'identity rendering must not read the OHLCV compatibility projection');
+const correctionStart = engineSource.indexOf("if (update.operation === 'replace-history' && update.columns)");
+const correctionEnd = engineSource.indexOf('const unit = update.timeUnit', correctionStart);
+const correctionBody = engineSource.slice(correctionStart, correctionEnd);
+assert.ok(!correctionBody.includes('this.rawTape.toOHLCV()'),
+  'identity history corrections must not eagerly rebuild the full OHLCV object mirror');
+const liveColumnarStart = engineSource.indexOf('private applyColumnarBar(update');
+const liveColumnarEnd = engineSource.indexOf('private columnarUpdateToBar', liveColumnarStart);
+const liveColumnarBody = engineSource.slice(liveColumnarStart, liveColumnarEnd);
+assert.ok(!liveColumnarBody.includes('this.bars.push(bar)') && !liveColumnarBody.includes('this.bars[this.bars.length - 1] = bar'),
+  'identity scalar updates must not force the lazy OHLCV mirror into existence');
+
 console.log('VELA_COLUMNAR_LIVE_RENDERER_CONTRACT_OK');
