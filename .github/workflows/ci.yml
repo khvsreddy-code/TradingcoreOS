@@ -119,7 +119,7 @@ jobs:
           test -n "$TCO_BROWSER_TEST_EMAIL" || { echo "Set repository secret TCO_BROWSER_TEST_EMAIL."; exit 1; }
           test -n "$TCO_BROWSER_TEST_PASSWORD" || { echo "Set repository secret TCO_BROWSER_TEST_PASSWORD."; exit 1; }
           umask 077
-          TCO_BROWSER_STATE_FILE="$RUNNER_TEMP/tco-browser-state.json"
+          export TCO_BROWSER_STATE_FILE="$RUNNER_TEMP/tco-browser-state.json"
           echo "TCO_BROWSER_STATE_FILE=$TCO_BROWSER_STATE_FILE" >> "$GITHUB_ENV"
           node tools/create-browser-auth-state.mjs
       - name: Install agent-browser and Chromium
