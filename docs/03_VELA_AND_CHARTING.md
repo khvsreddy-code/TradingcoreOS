@@ -328,15 +328,17 @@ drawing capability
            ↳ anchored VWAP / fixed-range volume profile
 ```
 
-`vendor/vela/src/core/drawings/registry.ts` no longer statically imports advanced drawing implementations. `loadAdvancedDrawingCatalog()` dynamically loads the family registries only when the drawings toolbar capability is shown. Custom toolbar definitions remain authoritative.
+`vendor/vela/src/core/drawings/registry.ts` keeps advanced drawing factories out of the core registry and exposes separate dynamic imports for Channels, Fibonacci/Gann and Patterns/Harmonics. The chart startup loader does not import the drawing registry or call `loadAdvancedDrawingCatalog()`. Lightweight tool metadata keeps the native toolbar available immediately; opening a drawing-group flyout requests only the family needed by that group. Saved drawings independently request only the families referenced by their serialized types. Custom toolbar definitions remain authoritative.
 
-This is a dependency-graph boundary, not a claim that every individual drawing is independently requested. The family chunks are all optional; a later refinement can load an individual family only when that flyout is opened.
+The compatibility helper `loadAdvancedDrawingCatalog()` remains available to explicit callers that genuinely need the complete catalog, such as inventory and conformance tests. It is not part of workspace startup.
 
 ### Evidence gate
 
 - [x] Core registry has no static Fibonacci/Gann/pattern/volume-profile imports.
-- [x] Channels, Fibonacci/Gann and patterns/measurement/volume tools are separated into dynamic modules.
-- [x] Toolbar visibility is the capability trigger.
+- [x] Channels, Fibonacci/Gann and Patterns/Harmonics are isolated in separate dynamic modules.
+- [x] Workspace startup does not load advanced drawing implementations.
+- [x] Opening a drawing-group flyout loads only its required family.
+- [x] Failed family imports clear their cached promise and expose a retry action.
 - [x] Source contract protects the lazy boundary.
 - [ ] Browser trace proving no advanced drawing JS request on chart startup and family requests only after drawings UI.
 - [ ] Load only the family whose flyout is opened.
