@@ -38,8 +38,8 @@ for (const forbidden of ['CanvasRenderingContext2D', 'getContext(', 'createPrice
 assert.ok(kernel.includes("import './coreSpiritVelaOutputLayer'"));
 assert.ok(outputLayer.includes("from './velaNativeChartKernel'"));
 assert.ok(!outputLayer.includes('velaChartFacade'));
-assert.ok(outputLayer.includes('timeToCoordinate'));
-assert.ok(outputLayer.includes('priceToCoordinate'));
+assert.ok(outputLayer.includes('timeToX'));
+assert.ok(outputLayer.includes('priceToY'));
 assert.ok(facade.includes('Compatibility boundary for the legacy chart-api surface'));
 for (const [file, token] of [['src/components/workspace/ShowcaseChart.tsx','velaNativeChartKernel'],['src/components/workspace/chartController.ts','velaNativeChartKernel'],['src/components/workspace/hooks/useChartUiEvents.ts','velaNativeChartKernel'],['src/services/core/chart/tcoVelaSupabaseStorage.ts','velaNativeChartKernel']]) assert.ok(read(file).includes(token), file + ' must use the native chart kernel');
 assert.equal(fs.existsSync(path.join(root, 'src/services/core/chart/controllers/ChartDrawingController.ts')), false, 'unused parallel drawing renderer must be removed');
