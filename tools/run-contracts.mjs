@@ -83,6 +83,7 @@ const contracts = [
   ['chart-candle-data-plane-fast-switch', ['tools/chartCandleDataPlaneFastSwitchContract.mjs', true]],
   ['corespirit-safe-complexity-types', ['tools/coreSpiritSafeComplexityTypesContract.mjs', true]],
   ['tco-fast-candle-cache', ['tools/tcoFastCandleCacheContract.mjs', false]],
+  ['tco-canonical-historical-columns', ['tools/tcoCanonicalHistoricalColumnsRuntimeContract.mjs', true]],
   ['vela-hot-symbol-lru', ['tools/velaHotSymbolLruContract.mjs', false]],
   ['vela-candle-time-normalization', ['tools/velaCandleTimeNormalizationContract.mjs', true]],
   ['vela-columnar-live-renderer', ['tools/velaColumnarLiveRendererContract.mjs', true]],
