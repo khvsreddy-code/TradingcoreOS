@@ -342,3 +342,22 @@ The compatibility helper `loadAdvancedDrawingCatalog()` remains available to exp
 - [x] Source contract protects the lazy boundary.
 - [ ] Browser trace proving no advanced drawing JS request on chart startup and family requests only after drawings UI.
 - [ ] Load only the family whose flyout is opened.
+
+## v137 — columnar compatibility and dirty-span reconciliation
+
+Identity-price charts now keep the retained Vela history columnar through initial rendering, historical prepends, same-timeline corrections and ordinary forming-bar updates.
+
+- `EngineOrchestrator.bars` is a lazy compatibility projection. The native identity-chart path no longer creates an `OHLCV[]` graph just to render or to accept a columnar tick.
+- Identity backfill prepends update the retained typed tape and renderer directly. Object rows are materialized only when an indicator, replay path, drawing adapter, data-window or other compatibility consumer actually requests them.
+- A same-length historical correction with an unchanged timestamp axis and a valid inclusive epoch-millisecond dirty range patches only the affected typed values and compatibility rows in `NativeRenderer`.
+- A changed timestamp axis, changed history length, or missing/invalid dirty range deliberately falls back to the full replacement path. This is the correctness boundary for inserts, deletes, and ambiguous reconciliation.
+- Transformed price styles remain object-backed because their transform kernels consume ordered OHLCV rows. Recursive indicator correction replay remains deterministic; a dirty span is not permission to reuse stale recursive state.
+
+### Evidence and remaining gates
+
+- [x] Contract coverage protects lazy identity-chart compatibility materialization.
+- [x] Contract coverage protects identity backfill from per-page OHLCV projection.
+- [x] Contract coverage protects same-timeline dirty-span patching and full-replacement fallback.
+- [ ] Complete the remaining replay, drawing, transformed-series and collection-level compatibility seams.
+- [ ] Prove the authenticated 1/4/8-chart browser workload, including a 5,000-bar load, historical prepend, live forming updates, indicator/SMC load, interactions and memory soak.
+- [ ] Optimize only from measured browser evidence; CI source contracts are not browser-performance proof.
