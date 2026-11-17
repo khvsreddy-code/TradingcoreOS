@@ -17,6 +17,12 @@ export const TRADINGCOREOS_ARCHITECTURE: readonly TradingCoreOSPlaneContract[] =
   { id: 'trading', responsibilities: ['strategy', 'risk', 'execution', 'portfolio', 'AI'], mayDependOn: ['marketData', 'coreSpirit', 'compute'] },
 ]);
 
+export const TRADINGCOREOS_CHART_OWNERSHIP_CONTRACT = Object.freeze({
+  chartRendering: 'vela', chartLayoutsAndPanes: 'vela', chartDrawingsAndInteractions: 'vela',
+  indicatorAndModelComputation: 'coreSpirit', normalizedMarketData: 'marketData',
+  applicationShell: 'react', authorizedOrderExecution: 'brokerAdapter',
+} as const);
+
 /**
  * Canonical boundary rules. Adapters implement these contracts rather than
  * grow parallel stores, schedulers, renderers, or order state machines.

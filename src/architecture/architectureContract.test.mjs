@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, TRADINGCOREOS_BOUNDARY_CONTRACTS, validateTradingCoreOSDependency } from './architectureContract.ts';
+import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, TRADINGCOREOS_BOUNDARY_CONTRACTS, TRADINGCOREOS_CHART_OWNERSHIP_CONTRACT, validateTradingCoreOSDependency } from './architectureContract.ts';
 import { canonicalBarIndexRange, canonicalDirtyRange, executionBarRange, toVelaSceneDirtyRange, velaTimeRange } from './crossPlaneContracts.ts';
 assert.equal(TRADINGCOREOS_ARCHITECTURE_VERSION, 2);
+assert.deepEqual(TRADINGCOREOS_CHART_OWNERSHIP_CONTRACT, {
+  chartRendering: 'vela', chartLayoutsAndPanes: 'vela', chartDrawingsAndInteractions: 'vela',
+  indicatorAndModelComputation: 'coreSpirit', normalizedMarketData: 'marketData',
+  applicationShell: 'react', authorizedOrderExecution: 'brokerAdapter',
+});
 assert.deepEqual(TRADINGCOREOS_ARCHITECTURE.map((plane) => plane.id), ['marketData', 'coreSpirit', 'compute', 'vela', 'trading']);
 assert.equal(validateTradingCoreOSDependency('coreSpirit', 'marketData'), true);
 assert.equal(validateTradingCoreOSDependency('coreSpirit', 'compute'), true);

@@ -20,13 +20,17 @@ ChartDataController
         |                      |
         v                      v
 ChartRealtimeController    ChartStore
-        |                      |
+        |
+        +--> ChartAnnotationController
+        |       |
+        |       +--> native Vela price lines + markers
+        |
         v                      +--> imperative consumers
 Vela native renderer          |
         |                      +--> rAF-coalesced UI snapshot
         |
         +--> ChartIndicatorController
-        +--> ChartDrawingController
+        +--> Vela native drawing document/controller
         +--> ChartPredictionController
         +--> ChartCoreSpiritController
 
@@ -46,7 +50,8 @@ React
 | ChartDataController | data-plane subscription and history requests | React state, chart rendering |
 | ChartRealtimeController | high-frequency tick fan-out and Vela update scheduling | React rendering |
 | ChartIndicatorController | indicator compute/render lifecycle and series management | broker transport, UI menus |
-| ChartDrawingController | CoreDrawing store, draw/commit/undo/render | market-data transport |
+| ChartAnnotationController | analytics price-line handles and namespaced automation markers in Vela | market-data transport, React rendering |
+| Vela native drawing document/controller | drawing geometry, hit testing, handles, undo/redo and persistence | market-data transport |
 | ChartPredictionController | prediction overlay jobs and cancellation | React state |
 | ChartCoreSpiritController | CoreSpirit compile/run/output projection | general chart UI |
 | ChartAnalyticsController | analytics/OI compute, rendering, throttled UI projection | React state, broker UI |
@@ -56,7 +61,7 @@ React
 | MarketDataStore | shared chart-data subscriptions and history access | React UI |
 | CoreSpiritStore | editor/source/status state | market ticks |
 | ChartShell | layout and DOM hosts | business logic |
-| ChartOverlay | controls/dialogs/settings | candle rendering |
+| ChartOverlay | React controls/dialogs/settings | candle, indicator, drawing or annotation rendering |
 
 ## #27 high-frequency rule
 
@@ -84,7 +89,8 @@ Vela owns:
 - realtime candle patching
 - viewport/range changes
 - crosshair and pointer coordinates
-- drawing projection
+- drawing projection and object lifecycle
+- support/resistance price-line handles and automation signal markers
 - indicator series
 - prediction overlays
 - CoreSpirit visual output

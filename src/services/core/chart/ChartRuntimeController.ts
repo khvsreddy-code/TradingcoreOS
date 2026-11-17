@@ -8,6 +8,7 @@ import { createChartPredictionController } from './controllers/ChartPredictionCo
 import { createChartRealtimeController } from './controllers/ChartRealtimeController';
 import { createChartCoreSpiritController } from './controllers/ChartCoreSpiritController';
 import { createChartAnalyticsController } from './ChartAnalyticsController';
+import { createChartAnnotationController, type ChartAnnotationController } from './ChartAnnotationController';
 import { createChartInteractionController } from './ChartInteractionController';
 import { getCurrentTheme, getThemePalette } from '../../../theme/theme';
 import { candleSeriesOptions, type CandleAppearance } from './candleAppearance';
@@ -17,6 +18,7 @@ import { CHART_TIMEFRAME_INTERVALS } from '../../marketData/chartDataPlane';
 import { requiredIndicatorHistoryBars, shouldLoadOlderHistory } from '../../marketData/chartHistoryPolicy';
 import type { ChartDataPlane, ChartDataPlaneSnapshot } from '../../marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../marketData/levelEngine';
+import type { AutomationConfig } from '../workspace/workspaceState';
 import type { OIChartAnalytics } from '../../marketData/oiEngine';
 import type { ChartStore } from './ChartStore';
 import type { CoreSpiritChartOutputController } from '../../coreSpirit/chartOutputController';
@@ -69,6 +71,8 @@ export type ChartRuntimeControllerDeps={
   coreSpiritControllerRef:Ref<any>;
   realtimeControllerRef:Ref<any>;
   analyticsControllerRef:Ref<any>;
+  annotationControllerRef:Ref<ChartAnnotationController|null>;
+  automationsRef:Ref<AutomationConfig[]>;
   interactionControllerRef:Ref<any>;
   drawingToolRef:Ref<DrawingTool>;
   chartIndex?:number;
@@ -164,12 +168,19 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         timeframe:deps.timeframe,store:deps.coreSpiritStore,
         publishLifecycle:(state)=>coreEventBus.emit('chart.lifecycle',{chartId:deps.chartId.current,state,timestamp:Date.now()}),
       });
+      const chartAnnotationController=createChartAnnotationController({
+        candle:deps.candle,
+        candles:deps.candles,
+        isLevelsVisible:()=>deps.viewStateRef.current.showLevels,
+        setMarkers:(namespace,markers)=>chartIndicatorController.setExternalMarkers(namespace,markers),
+      });
+      deps.annotationControllerRef.current=chartAnnotationController;
       const chartAnalyticsController=createChartAnalyticsController({
         brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,chartDatasetKey:deps.chartDatasetKey,
         chartDataPlane:deps.chartDataPlane,chartStore:deps.chartStore,dataRevisionRef:deps.dataRevisionRef,
         candles:deps.candles,latestTick:deps.latestTick,candle:deps.candle,lifecycle,
         isOiVisible:()=>deps.viewStateRef.current.showOI,
-        onAnalytics:(value)=>{deps.setAnalytics(value);deps.onAnalytics?.(value);},
+        onAnalytics:(value)=>{chartAnnotationController.renderLevels(value);deps.setAnalytics(value);deps.onAnalytics?.(value);},
         onOiAnalytics:deps.setOiAnalytics,
       });
 
@@ -201,6 +212,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');
         },
         onPredictionTick:(data)=>{chartPredictionController.setInputs({predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,resolvedInstrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe});void chartPredictionController.renderPredictionOverlay(data);},
+        onAutomationTick:(data,bucketChanged)=>{if(bucketChanged)chartAnnotationController.renderAutomations(deps.automationsRef.current,data);},
         onAnalyticsTick:(data,spot)=>chartAnalyticsController.publishAnalytics(data,spot,true),
         onOiTick:(spot)=>chartAnalyticsController.updateOiSpot(spot),
       });
@@ -245,6 +257,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         }
 
         realtimeController.hydrateHistory({...snapshot,candles:data});
+        chartAnnotationController.renderAutomations(deps.automationsRef.current,data);
         if(!canonical.length)deps.rendererController.setHistory(data,deps.appearanceRef.current,false);
         requestRequiredIndicatorHistory();
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
@@ -305,6 +318,7 @@ indicatorController:chartIndicatorController,dataController:chartDataController,
         realtimeController.dispose();
         chartCoreSpiritController.dispose();
         chartAnalyticsController.dispose();
+        chartAnnotationController.dispose();
         unregisterCoreSpirit();
         deps.interactionControllerRef.current=null;
         deps.realtimeControllerRef.current=null;
@@ -312,6 +326,7 @@ indicatorController:chartIndicatorController,dataController:chartDataController,
         deps.predictionControllerRef.current=null;
         deps.coreSpiritControllerRef.current=null;
         deps.analyticsControllerRef.current=null;
+        deps.annotationControllerRef.current=null;
         chartUpdateScheduler.current.cancel();
         publishLifecycle('disposed');
         lifecycle.current.invalidate();

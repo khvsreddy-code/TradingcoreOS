@@ -9,6 +9,7 @@ const facade = read('src/services/core/chart/velaChartFacade.ts');
 const engine = read('src/CoreSpiritVelaEngine.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
 const adapter = read('src/services/core/chart/tcoVelaSemanticAdapter.ts');
+const outputLayer = read('src/services/core/chart/coreSpiritVelaOutputLayer.ts');
 
 assert(/Compatibility boundary for the legacy chart-api surface/.test(facade), 'Vela facade must be explicitly compatibility-only');
 assert(!engine.includes("from './services/core/chart/velaChartFacade'"), 'CoreSpiritVelaEngine must use Vela native ports');
@@ -19,5 +20,7 @@ assert(Buffer.byteLength(facade, 'utf8') <= 40000, 'Vela compatibility facade ex
 assert(adapter.includes('IndicatorModel') && adapter.includes('CoreSpiritObject'), 'TCO semantic adapter must translate trading outputs into native Vela models');
 assert(!adapter.includes('velaChartFacade'), 'TCO semantic adapter must not depend on the compatibility facade');
 assert(engine.includes("./services/core/chart/tcoVelaSemanticAdapter"), 'CoreSpiritVelaEngine must cross the Vela boundary through the semantic adapter');
+assert(outputLayer.includes("from './velaNativeChartKernel'"), 'CoreSpirit output must register through native Vela');
+assert(!outputLayer.includes('velaChartFacade'), 'CoreSpirit output must not depend on the compatibility facade');
 
 console.log('TCO_VELA_SEMANTIC_BOUNDARY_CONTRACT_OK');

@@ -25,9 +25,10 @@ import { getIndicators, saveIndicators, getAutomations, type AutomationConfig } 
 import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot, getIndicatorDefaultPatch } from '../../services/coreSpirit/indicatorSettingsSchema';
 import { CandleAppearance, loadCandleAppearance, saveCandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
 import { getSavedPredictionModelIds, savePredictionModelIds } from '../../services/predictionEngine';
-import { canonicalInstrumentKey, chartIntervals as intervals, loadChartState, chartStateKey, markerForAutomation } from '../../services/core/chart/chartRuntimeSupport';
+import { canonicalInstrumentKey, chartIntervals as intervals, loadChartState, chartStateKey } from '../../services/core/chart/chartRuntimeSupport';
 import type { createChartAnalyticsController } from '../../services/core/chart/ChartAnalyticsController';
 import type { createChartInteractionController } from '../../services/core/chart/ChartInteractionController';
+import type { ChartAnnotationController } from '../../services/core/chart/ChartAnnotationController';
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
@@ -141,8 +142,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const realtimeControllerRef=useRef<ReturnType<typeof createChartRealtimeController>|null>(null);
   const drawingToolRef=useRef<DrawingTool>('none');
   const oiAnalyticsRef=useRef<OIChartAnalytics|null>(null);
-  const analyticsRef=useRef<ChartAnalytics|null>(null);
   const analyticsControllerRef=useRef<ReturnType<typeof createChartAnalyticsController>|null>(null);
+  const annotationControllerRef=useRef<ChartAnnotationController|null>(null);
   const interactionControllerRef=useRef<ReturnType<typeof createChartInteractionController>|null>(null);
   const runtimeControllerRef=useRef<ReturnType<typeof createChartRuntimeController>|null>(null);
 
@@ -269,6 +270,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       coreSpiritControllerRef,
       realtimeControllerRef,
       analyticsControllerRef,
+      annotationControllerRef,
+      automationsRef,
       interactionControllerRef,
       drawingToolRef,
       chartIndex,
@@ -296,31 +299,12 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
-  useEffect(()=>{
-    if(!chart.current||!showLevels||!analyticsRef.current)return;
-    const c=chart.current;
-    const candleSeries=candle.current;
-    if(!candleSeries)return;
-    const lines=[...analyticsRef.current.support.slice(0,6),...analyticsRef.current.resistance.slice(0,6)].map(level=>{
-      const broken=level.state==='BROKEN';
-      const base=level.side==='support'?'#3b82f6':'#ef4444';
-      const title=`${broken?'BROKEN · ':''}${level.side==='support'?'S':'R'}${level.strength!=null?` · ${Math.round(level.strength*100)}%`:''}`;
-      return candleSeries.createPriceLine({
-        price:level.price,
-        color:broken?'#64748b':base,
-        lineWidth:broken?1:Math.max(1,Math.min(3,Math.round((level.strength||.5)*3))),
-        lineStyle:broken?2:0,
-        axisLabelVisible:true,
-        title,
-      });
-    });
-    return ()=>lines.forEach(line=>{try{candleSeries.removePriceLine(line)}catch{}});
-  },[showLevels,analytics]);
+  useEffect(()=>{annotationControllerRef.current?.renderLevels();},[showLevels]);
   const indicatorComputeKey=useMemo(()=>indicators.map(x=>buildIndicatorComputationSignature(x as unknown as Record<string,unknown>)).join('|'),[indicators]);
   useEffect(()=>{if(!candles.current.length||!chart.current)return;const controller=indicatorControllerRef.current;if(!controller)return;controller.setInputs({indicators,timeframe});controller.renderStudies(candles.current);controller.requestIndicatorWorker(candles.current);predictionControllerRef.current?.setInputs({predictionModelIds,chartDatasetKey,resolvedInstrumentKey,timeframe});void predictionControllerRef.current?.renderPredictionOverlay(candles.current);},[indicatorComputeKey,predictionModelIds.join('|'),timeframe,resolvedInstrumentKey,chartDatasetKey]);
   const indicatorAppearanceKey=useMemo(()=>indicators.map(x=>JSON.stringify(buildIndicatorAppearanceSnapshot(x as unknown as Record<string,unknown>,{timeframe,visibleBars:candles.current.length}))).join('|'),[indicators,timeframe,candles.current.length]);
   useEffect(()=>indicatorControllerRef.current?.applyIndicatorAppearanceOnly(),[indicatorAppearanceKey]);
-  useEffect(()=>{if(!candle.current)return;const lines:any[]=[];if(!automationsRef.current.length||!candles.current.length)return;for(const item of automationsRef.current){const signal=markerForAutomation(item,candles.current);if(!signal)continue;lines.push(candle.current.createPriceLine({price:candles.current[candles.current.length-1]?.close||0,color:signal.color,lineWidth:2,lineStyle:2,axisLabelVisible:true,title:`AUTO · ${item.name}`}));}return()=>lines.forEach(line=>{try{candle.current?.removePriceLine(line)}catch{}});},[automations]);
+  useEffect(()=>{annotationControllerRef.current?.renderAutomations(automationsRef.current);},[automations]);
   const viewingIndicator=indicators.find(item=>item.id===viewingIndicatorCode);
   useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
   const drawingUndo=undoDrawing;

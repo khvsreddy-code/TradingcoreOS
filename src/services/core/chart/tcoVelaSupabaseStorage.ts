@@ -1,4 +1,4 @@
-import type { VelaStorage } from './velaChartFacade';
+import type { VelaStorage } from './velaNativeChartKernel';
 import { getSupabaseClient } from '../../auth/supabaseClient';
 
 const LOCAL_PREFIX = 'tradingcore:vela:fallback:';

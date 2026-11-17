@@ -57,15 +57,30 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
   const indicatorSeries: Ref<ISeriesApi<'Line'>[]> = {current:[]};
   const indicatorSeriesMap = new Map<string, ISeriesApi<'Line'>[]>();
   const markerDataByIndicator = new Map<string, any[]>();
+  const externalMarkerGroups = new Map<string, any[]>();
+  let indicatorChartMarkers: any[] = [];
   const indicatorFillMap = new Map<string, any[]>();
   const workerSeriesMap = new Map<string, Array<ISeriesApi<'Line'>|ISeriesApi<'Histogram'>>>();
   let visibleBarsHint = 0;
 
   const registerIndicatorSeries=(indicatorId:string,s:ISeriesApi<'Line'>)=>{indicatorSeries.current.push(s);const group=indicatorSeriesMap.get(indicatorId)||[];group.push(s);indicatorSeriesMap.set(indicatorId,group);return s;};
   const appearanceVisibleBars=()=>{const r=visibleLogicalRangeRef.current;return r?Math.max(1,Math.abs(Number(r.to)-Number(r.from))):candles.current.length;};
-  const clearChartMarkers=()=>{try{markerPlugin?.setMarkers([]);}catch{}};
   let markerPlugin:any=null;
-  const setChartMarkers=(markers:any[])=>{if(!candle.current)return;try{if(!markerPlugin)markerPlugin=createSeriesMarkers(candle.current,[]);markerPlugin.setMarkers(markers.slice(-100));}catch{}};
+  const publishChartMarkers=()=>{
+    if(!candle.current)return;
+    const external=[...externalMarkerGroups.values()].flat();
+    const merged=[...indicatorChartMarkers,...external].sort((left,right)=>Number(left.time)-Number(right.time)).slice(-200);
+    try{if(!markerPlugin)markerPlugin=createSeriesMarkers(candle.current,[]);markerPlugin.setMarkers(merged);}catch{}
+  };
+  const clearChartMarkers=()=>{indicatorChartMarkers=[];publishChartMarkers();};
+  const setChartMarkers=(markers:any[])=>{indicatorChartMarkers=markers.slice(-100);publishChartMarkers();};
+  const setExternalMarkers=(namespace:string,markers:readonly any[])=>{
+    const key=String(namespace||'').trim();
+    if(!key)return;
+    if(markers.length)externalMarkerGroups.set(key,markers.slice(-100).map(marker=>({...marker})));
+    else externalMarkerGroups.delete(key);
+    publishChartMarkers();
+  };
 
   const renderWorkerIndicators=(results:any[])=>{
      if(!chart.current)return;
@@ -251,12 +266,15 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
       workerSeriesMap.forEach(group=>group.forEach(series=>{try{chart.current?.removeSeries(series as any)}catch{};try{oscChart.current?.removeSeries(series as any)}catch{}}));
       indicatorFillMap.forEach(handles=>handles.forEach(handle=>{try{handle.remove()}catch{}}));
       indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();indicatorFillMap.clear();workerSeriesMap.clear();oscSeries.current=[];
-      try{markerPlugin?.setMarkers([]);markerPlugin?.detach?.();}catch{} markerPlugin=null;
+      indicatorChartMarkers=[];
+      if(externalMarkerGroups.size)publishChartMarkers();
+      else {try{markerPlugin?.detach?.();}catch{} markerPlugin=null;}
     },
     requestIndicatorWorker,
     renderWorkerIndicators,
     renderStudies,
     applyIndicatorAppearanceOnly,
+    setExternalMarkers,
     appearanceVisibleBars,
   };
 }

@@ -9,8 +9,8 @@ import {
   LineSeries,
   LineStyle,
   Time,
-  createChart,
-} from '../../services/core/chart/velaChartFacade';
+  createVelaNativeChart,
+} from '../../services/core/chart/velaNativeChartKernel';
 
 type Props = {
   basePrice: number;
@@ -61,7 +61,7 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
   useEffect(() => {
     if (!host.current) return;
     const palette = getThemePalette(getCurrentTheme());
-    const chart = createChart(host.current, {
+    const chart = createVelaNativeChart(host.current, {
       autoSize: true,
       layout: { background: { type: ColorType.Solid, color: palette.surface2 }, textColor: palette.muted, fontFamily: 'JetBrains Mono, monospace', fontSize: 10 },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },

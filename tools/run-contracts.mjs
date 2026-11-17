@@ -207,6 +207,7 @@ const contracts = [
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],
   ['corespirit-non-negotiable-ownership', ['src/coreSpiritNonNegotiableArchitectureContract.test.mjs', true]],
   ['vela-tco-semantic-boundary', ['src/velaTcoSemanticBoundaryContract.test.mjs', false]],
+  ['vela-rendering-ownership', ['src/velaRenderingOwnershipContract.test.mjs', false]],
   ['tco-p0-roadmap', ['src/tcoP0RoadmapContract.test.mjs', false]],
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
   ['p0-latency-trace', ['src/p0LatencyTraceContract.test.mjs', false]],

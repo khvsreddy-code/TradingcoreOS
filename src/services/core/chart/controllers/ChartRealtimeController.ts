@@ -30,6 +30,7 @@ export type ChartRealtimeControllerDeps={
   onLegacyIndicatorTick:(data:HistoricalCandle[],bucketChanged:boolean)=>void;
   onIndicatorWorker:(data:HistoricalCandle[],bucketChanged:boolean)=>void;
   onPredictionTick:(data:HistoricalCandle[])=>void;
+  onAutomationTick:(data:HistoricalCandle[],bucketChanged:boolean)=>void;
   onAnalyticsTick:(data:HistoricalCandle[],spot:number)=>void;
   onOiTick:(spot:number)=>void;
 };
@@ -71,6 +72,7 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
       calculationEngine.updateTick(live,data.length - 1,bucketChanged);
       deps.onLegacyIndicatorTick(data,bucketChanged);
       deps.onIndicatorWorker(data,bucketChanged);
+      if(bucketChanged)deps.onAutomationTick(data,true);
       deps.onAnalyticsTick(data,Number(latestTick.current?.ltp)||Number(live.close)||0);
       deps.onPredictionTick(data);
       if(Number.isFinite(Number(latestTick.current?.ltp)))deps.onOiTick(Number(latestTick.current!.ltp));

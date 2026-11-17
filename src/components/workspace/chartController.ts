@@ -1,4 +1,4 @@
-import type { IChartApi, ISeriesApi, Time } from '../../services/core/chart/velaChartFacade';
+import type { IChartApi, ISeriesApi, Time } from '../../services/core/chart/velaNativeChartKernel';
 import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
 import type { NormalizedMarketTick } from '../../types/market';
 import { candleSeriesOptions, type CandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
