@@ -3,6 +3,7 @@ import { chartDataPlaneKey, getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from 
 import { historyStore } from './services/marketData/HistoryStore';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { canonicalIndexRangeToVelaMillis } from './services/marketData/chartCandleEvents';
+import { historicalRowsToVelaColumns } from './services/marketData/historicalColumns';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import type { MarketFeedStatus } from './types/market';
@@ -344,30 +345,72 @@ function publishChartDataSourceStatus(symbol: string, timeframe: string, phase: 
   };
   window.dispatchEvent(new CustomEvent('tco:chart-data-status', { detail }));
 }
-async function loadCanonicalBarsForChart(symbol: string, timeframe: string, limit = MAX_CANONICAL_HISTORY_BARS, range?: BarRange, signal?: AbortSignal, beforeTimestamp?: number): Promise<OHLCV[]> {
+type CanonicalHistoryRowsResult = Readonly<{
+  rows: HistoricalCandle[];
+  requested: number;
+  source: CanonicalHistorySource;
+}>;
+
+async function fetchCanonicalHistoryRows(
+  symbol: string,
+  timeframe: string,
+  limit = MAX_CANONICAL_HISTORY_BARS,
+  signal?: AbortSignal,
+  beforeTimestamp?: number,
+): Promise<CanonicalHistoryRowsResult | null> {
   const requested = Math.max(2, Math.min(MAX_CANONICAL_HISTORY_BARS, Math.floor(Number(limit) || MAX_CANONICAL_HISTORY_BARS)));
-  if (signal?.aborted) return [];
+  if (signal?.aborted) return null;
   publishChartDataSourceStatus(symbol, timeframe, 'loading');
   try {
     const params = new URLSearchParams({ instrument_key: runtimeSymbol(symbol), interval: runtimeTimeframe(timeframe), limit: String(requested) });
-    if (beforeTimestamp !== undefined && Number.isFinite(beforeTimestamp) && beforeTimestamp > 0) params.set('before', new Date(beforeTimestamp).toISOString());
+    if (beforeTimestamp !== undefined && Number.isFinite(beforeTimestamp) && beforeTimestamp > 0) {
+      params.set('before', new Date(beforeTimestamp).toISOString());
+    }
     const response = await tradingApi('/api/trading/fyers/historical?' + params.toString(), { signal, cache: 'no-store' });
     const payload = await readTradingApiJson<CanonicalHistoryPayload>(response);
     const source = canonicalHistorySource(payload);
-    if (!response.ok || payload?.success !== true || !Array.isArray(payload.data)) throw new Error(canonicalHistoryFailureMessage(payload, response.status));
-    const rows = payload.data.filter((row): row is HistoricalCandle => Boolean(row && typeof row === 'object' && typeof (row as HistoricalCandle).timestamp === 'string'));
-    const bars = filterHistoryToRange(historicalToVelaBars(rows), range, requested);
-    publishChartDataSourceStatus(symbol, timeframe, bars.length ? 'ready' : 'empty', bars.length, undefined, source);
-    return bars;
+    if (!response.ok || payload?.success !== true || !Array.isArray(payload.data)) {
+      throw new Error(canonicalHistoryFailureMessage(payload, response.status));
+    }
+    const rows = payload.data.filter((row): row is HistoricalCandle =>
+      Boolean(row && typeof row === 'object' && typeof (row as HistoricalCandle).timestamp === 'string'),
+    );
+    return { rows, requested, source };
   } catch (error) {
-    if (signal?.aborted) return [];
+    if (signal?.aborted) return null;
     const message = error instanceof Error ? error.message : 'Canonical historical data sources are unavailable.';
     publishChartDataSourceStatus(symbol, timeframe, 'error', 0, message, 'none');
     throw error instanceof Error ? error : new Error(message);
   }
 }
-async function loadCanonicalColumnsForChart(symbol: string, timeframe: string, limit = MAX_CANONICAL_HISTORY_BARS, range?: BarRange): Promise<ColumnarBars> {
-  return seedColumnsFromBars(await loadCanonicalBarsForChart(symbol, timeframe, limit, range));
+
+async function loadCanonicalBarsForChart(
+  symbol: string,
+  timeframe: string,
+  limit = MAX_CANONICAL_HISTORY_BARS,
+  range?: BarRange,
+  signal?: AbortSignal,
+  beforeTimestamp?: number,
+): Promise<OHLCV[]> {
+  const result = await fetchCanonicalHistoryRows(symbol, timeframe, limit, signal, beforeTimestamp);
+  if (!result) return [];
+  const bars = filterHistoryToRange(historicalToVelaBars(result.rows), range, result.requested);
+  publishChartDataSourceStatus(symbol, timeframe, bars.length ? 'ready' : 'empty', bars.length, undefined, result.source);
+  return bars;
+}
+
+async function loadCanonicalColumnsForChart(
+  symbol: string,
+  timeframe: string,
+  limit = MAX_CANONICAL_HISTORY_BARS,
+  range?: BarRange,
+  beforeTimestamp?: number,
+): Promise<ColumnarBars> {
+  const result = await fetchCanonicalHistoryRows(symbol, timeframe, limit, undefined, beforeTimestamp);
+  if (!result) return EMPTY_COLUMNAR_BARS;
+  const columns = historicalRowsToVelaColumns(result.rows, range, result.requested);
+  publishChartDataSourceStatus(symbol, timeframe, columns.length ? 'ready' : 'empty', columns.length, undefined, result.source);
+  return columns;
 }
 function isFyersMarketSessionReady(): boolean {
   return hasValidFyersSession(tradingCoreRuntime.getAllConnections());
@@ -391,27 +434,6 @@ function historicalToVelaBars(bars: readonly HistoricalCandle[]): OHLCV[] {
     close: Number(bar.close),
     volume: Number.isFinite(Number(bar.volume)) ? Number(bar.volume) : undefined,
   }));
-}
-
-function seedColumnsFromBars(bars: readonly OHLCV[]): ColumnarBars {
-  const normalized = bars.map((bar) => ({
-    time: epoch((bar as any).time),
-    open: Number(bar.open),
-    high: Number(bar.high),
-    low: Number(bar.low),
-    close: Number(bar.close),
-    volume: Number(bar.volume) || 0,
-  })).filter((bar) => Number.isFinite(bar.time) && [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite));
-  return {
-    time: Float64Array.from(normalized, (bar) => bar.time),
-    open: Float64Array.from(normalized, (bar) => bar.open),
-    high: Float64Array.from(normalized, (bar) => bar.high),
-    low: Float64Array.from(normalized, (bar) => bar.low),
-    close: Float64Array.from(normalized, (bar) => bar.close),
-    volume: Float64Array.from(normalized, (bar) => bar.volume),
-    length: normalized.length,
-    timeUnit: 'milliseconds',
-  };
 }
 
 function epoch(value: unknown): number {
@@ -556,29 +578,60 @@ export class TcoVelaDataProvider implements DataProvider {
     try {
       brokerId = await activeBrokerId();
     } catch {
-      return loadCanonicalColumnsForChart(symbol, tcoTimeframe, requested, range);
+      const beforeMs = rangeEpochMs(range.to);
+      return loadCanonicalColumnsForChart(
+        symbol,
+        tcoTimeframe,
+        requested,
+        range,
+        beforeMs !== undefined && beforeMs < Date.now() - 60_000 ? beforeMs : undefined,
+      );
     }
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+    const requestedTo = range.to == null
+      ? null
+      : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
 
-    // HOT path: a recently viewed symbol already lives in the shared canonical plane.
-    // Return its typed arrays immediately — no REST, no object materialization.
+    // HOT path: recent, ready history is already in the shared canonical plane.
+    // Return typed subarray views without REST or object materialization.
     const cached = plane.readCanonical();
     if (cached.length > 0 && plane.getSnapshot().historyReady) {
-      const requestedTo = range.to == null
-        ? null
-        : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
       const newestMs = cached.time[cached.length - 1]! * 1000;
       if (requestedTo == null || requestedTo >= newestMs - 1) {
         return marketViewToColumns(cached, range, requested);
       }
     }
 
-    // COLD path: deliberately return an empty column set so Vela moves immediately to
-    // getBarsProgressive(). That path paints the first real history page before older
-    // history is fetched. A 5k REST request must never become the first-frame bottleneck.
-    return EMPTY_COLUMNAR_BARS;
-  }
+    // Historical windows must extend the same shared plane before returning a
+    // columnar slice. Previously only object loadRange() performed this older-page
+    // request, so Vela's columnar paging silently fell back to OHLCV[].
+    try {
+      await plane.ensureReadyHistory(requested);
+      const current = plane.readCanonical();
+      const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+      if (requestedTo != null && Number.isFinite(requestedTo) &&
+          Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
+        await plane.loadOlderHistory('visible', { visibleBars: requested });
+      }
+      const loaded = plane.readCanonical();
+      if (loaded.length > 0) {
+        const columns = marketViewToColumns(loaded, range, requested);
+        if (columns.length > 0) return columns;
+      }
+    } catch {
+      // The REST adapter below remains the source fallback and also writes typed
+      // columns directly from validated response records.
+    }
 
+    const beforeMs = rangeEpochMs(range.to);
+    return loadCanonicalColumnsForChart(
+      symbol,
+      tcoTimeframe,
+      requested,
+      range,
+      beforeMs !== undefined && beforeMs < Date.now() - 60_000 ? beforeMs : undefined,
+    );
+  }
   /**
    * Progressive TCO history: first paint is a small real window from the shared history
    * plane; older pages stream in behind it. Abort promptly when Vela switches symbols.
