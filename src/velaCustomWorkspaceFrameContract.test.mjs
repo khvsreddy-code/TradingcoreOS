@@ -210,8 +210,10 @@ assert.match(workspace, /syncTime: msg\('workspace\.sync\.time', 'Time'\)/, 'Vel
 assert.match(workspace, /id: 'viewport', label: this\.t\(TEXT\.syncTime\)/, 'Time sync is connected to Vela visible-range synchronization');
 assert.match(workspace, /cellAreas: l\.cells\.map/, 'layout glyphs use the real Vela layout-area definitions');
 
-// Native Vela tools and dock presentation: load real drawing implementations before mounting.
-assert.match(workspaceLoader, /loadAdvancedDrawingCatalog\(\)/, 'the terminal preloads every advanced drawing implementation before Vela mounts');
+// Native Vela tools and dock presentation: keep the initial toolbar lightweight and hydrate
+// the real factories only after a drawing family is requested.
+assert.doesNotMatch(workspaceLoader, /loadAdvancedDrawingCatalog|loadDrawingFamily/,
+  'the terminal must not preload any advanced drawing implementation before Vela mounts');
 assert.match(drawingRegistry, /export function loadAdvancedDrawingCatalog\(\): Promise<void>/, 'Vela exposes one complete promise-based drawing-catalog loader');
 assert.match(drawingRegistry, /ADVANCED_DRAWING_FAMILIES = Object.freeze\(\[/, 'all advanced drawing families are part of the native registry');
 for (const family of ['channels', 'fibonacci', 'patterns']) {
