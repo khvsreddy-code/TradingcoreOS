@@ -308,11 +308,11 @@ Reference implementations in tests may still use a simple windowed algorithm bec
 
 ## Columnar transport
 
-The first 5,000-bar Vela load uses compact numeric history when the broker supports it. Deep backfill can prepend typed columns directly into `ColumnarHistoryTape`.
+The first 5,000-bar Vela load uses compact numeric history when the broker supports it. Deep backfill can prepend typed columns directly into `ColumnarHistoryTape`. The TCO historical REST fallback now maps validated response rows directly into typed channels instead of materializing `OHLCV[]` and immediately decomposing it. Bounded historical requests also extend the shared chart plane at the older edge before returning a canonical columnar window.
 
 The retained tape supports binary time lookup, append, replace-last, prepend and bounded trimming.
 
-**Current status: partial completion.** The native tape is columnar, but selected replay/session/drawing/transformed-chart consumers still request `OHLCV[]` compatibility projections. The final removal of that mirror is an ABI migration, not a documentation-only change.
+**Current status: partial completion.** Initial hot history, bounded older-page retrieval, and the REST fallback now have columnar ingestion paths. Progressive cold-start batches and selected replay/session/drawing/transformed-chart consumers still use `OHLCV[]` compatibility projections. The final removal of that mirror is an ABI migration, not a documentation-only change.
 
 ## Dirty-span compute
 
