@@ -94,4 +94,16 @@ assert.ok(backfillStart >= 0 && backfillEnd > backfillStart);
 assert.ok(!backfillBody.includes('this.rawTape.toOHLCVRange') && !backfillBody.includes('this.rawTape.toOHLCV()'),
   'identity historical prepends must not materialize object rows for each backfill page');
 
+assert.match(source, /private patchColumnarHistory\(update: ColumnarBarUpdate\)/,
+  'same-timeline corrections must have a dirty-span in-place renderer path');
+const rendererPatchStart = source.indexOf('private patchColumnarHistory');
+const rendererPatchEnd = source.indexOf('setLodIndex', rendererPatchStart);
+const rendererPatchBody = source.slice(rendererPatchStart, rendererPatchEnd);
+assert.ok(rendererPatchBody.includes('update.dirtyRange') && rendererPatchBody.includes('columnarTimeToMillis'),
+  'renderer dirty spans must be interpreted in the declared epoch time unit');
+assert.ok(rendererPatchBody.includes('incoming.length !== current.length') && rendererPatchBody.includes('return false'),
+  'timeline shape changes must fall back to full safe reconciliation');
+assert.ok(rendererPatchBody.includes('current.open[index] = open') && rendererPatchBody.includes('bar.close = close'),
+  'same-timeline correction must patch typed columns and the compatibility mirror only inside the dirty interval');
+
 console.log('VELA_COLUMNAR_LIVE_RENDERER_CONTRACT_OK');

@@ -2210,9 +2210,10 @@ export class NativeRenderer implements IChartRenderer {
 
     updateBarColumns(update: ColumnarBarUpdate): void {
         if (update.operation === 'replace-history' && update.columns) {
-            // Recovery/backfill corrections may change historical indices, not just
-            // the latest candle. Reconcile the owned columnar tape as one explicit
-            // history operation; ordinary ticks still use the scalar O(1) path below.
+            // When the timeline is unchanged, the canonical dirty time span is enough
+            // to patch only affected values. Inserts/deletes, missing spans or a changed
+            // timeline deliberately fall back to the safe full-history reconciliation.
+            if (this.patchColumnarHistory(update)) return;
             this.setBarsColumns(update.columns, {
                 preserveView: update.preserveView ?? true,
             });
@@ -2238,6 +2239,88 @@ export class NativeRenderer implements IChartRenderer {
         // Columnar updates mutate typed arrays in place, so explicitly invalidate the
         // data tier. Without this, forming-candle LTP changes never repaint.
         this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
+    /**
+     * Apply a same-timeline historical correction in place. The full timestamp check is
+     * intentional: equal length alone cannot prove that an insertion and deletion did
+     * not cancel each other. Value writes and object-mirror updates are restricted to
+     * the inclusive epoch-millisecond dirty interval.
+     */
+    private patchColumnarHistory(update: ColumnarBarUpdate): boolean {
+        const incoming = update.columns;
+        const current = this.columnarBars;
+        const dirty = update.dirtyRange;
+        if (!incoming || !current || !dirty || incoming.length !== current.length
+            || this.bars.length !== current.length
+            || incoming.time.length < incoming.length
+            || incoming.open.length < incoming.length
+            || incoming.high.length < incoming.length
+            || incoming.low.length < incoming.length
+            || incoming.close.length < incoming.length
+            || incoming.volume.length < incoming.length) return false;
+
+        const from = Number(dirty.from);
+        const to = Number(dirty.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return false;
+
+        const incomingUnit = incoming.timeUnit ?? 'milliseconds';
+        const currentUnit = current.timeUnit ?? 'milliseconds';
+        for (let index = 0; index < current.length; index += 1) {
+            if (columnarTimeToMillis(incoming.time[index]!, incomingUnit)
+                !== columnarTimeToMillis(current.time[index]!, currentUnit)) return false;
+        }
+
+        const firstAtOrAfter = (target: number): number => {
+            let low = 0, high = current.length;
+            while (low < high) {
+                const middle = (low + high) >>> 1;
+                if (columnarTimeToMillis(current.time[middle]!, currentUnit) < target) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        };
+        const firstAfter = (target: number): number => {
+            let low = 0, high = current.length;
+            while (low < high) {
+                const middle = (low + high) >>> 1;
+                if (columnarTimeToMillis(current.time[middle]!, currentUnit) <= target) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        };
+        const start = firstAtOrAfter(from);
+        const end = firstAfter(to);
+        if (end <= start) return true;
+
+        for (let index = start; index < end; index += 1) {
+            const open = Number(incoming.open[index]);
+            const high = Number(incoming.high[index]);
+            const low = Number(incoming.low[index]);
+            const close = Number(incoming.close[index]);
+            const volume = Number(incoming.volume[index]);
+            current.open[index] = open;
+            current.high[index] = high;
+            current.low[index] = low;
+            current.close[index] = close;
+            current.volume[index] = Number.isFinite(volume) ? volume : Number.NaN;
+            const bar = this.bars[index]!;
+            bar.open = open;
+            bar.high = high;
+            bar.low = low;
+            bar.close = close;
+            bar.volume = Number.isFinite(volume) ? volume : undefined;
+        }
+
+        this.liveEaseTime = 0;
+        this.columnarLod = null;
+        this.scene.candleLodIndex = undefined;
+        this.scene.retained.markKindDirty('series', SceneDirty.Data | SceneDirty.Transform);
+        for (const model of this.scene.indicators.values()) {
+            this.scene.markIndicatorDirty(model.id, SceneDirty.Data | SceneDirty.Transform);
+        }
+        this.scheduler.invalidate(InvalidateLevel.Full);
+        return true;
     }
 
     setLodIndex(index: ColumnarLodIndex | null): void {
