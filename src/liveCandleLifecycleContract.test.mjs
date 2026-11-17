@@ -11,6 +11,7 @@ const canonicalPlane = read('src/services/core/data/canonicalDataPlane.ts');
 const sharedFeed = read('src/services/marketData/sharedChartMarketFeed.ts');
 const marketStoreHub = read('src/services/marketData/chartMarketStore.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
+const candleEvents = read('src/services/marketData/chartCandleEvents.ts');
 const velaKernel = read('src/services/core/chart/velaNativeChartKernel.ts');
 const columnarUpdate = read('vendor/vela/src/core/model/columnar-bars.ts');
 const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
@@ -35,7 +36,9 @@ assert.match(lifecycle, /timestampMs < this\.lastAcceptedTradeTimestampMs/, 'out
 assert.match(velaKernel, /ColumnarBars|ColumnarBarUpdate/, 'Vela remains the columnar chart boundary');
 assert.match(provider, /pendingHistoryReplacement = true/, 'historical correction and recovery events must schedule a history publication');
 assert.match(provider, /operation: 'replace-history'/, 'reconnect/history fixes must reach Vela instead of only changing the backend cache');
-assert.match(provider, /dirtyRange: \{ from: view\.dirtyFrom, to: view\.dirtyTo \}/, 'history replacement carries canonical dirty bounds');
+assert.match(candleEvents, /canonicalIndexRangeToVelaMillis\(/, 'canonical dirty indices have an explicit conversion into Vela market-time bounds');
+assert.match(provider, /canonicalIndexRangeToVelaMillis\([\s\S]*view\.time[\s\S]*'seconds'/, 'history replacement converts dirty bar indices through the same canonical time view');
+assert.match(provider, /\.\.\.\(dirtyRange \? \{ dirtyRange \} : \{\}\)/, 'empty canonical dirty spans are omitted instead of masquerading as renderer-time bounds');
 assert.match(columnarUpdate, /operation\?: 'replace-history'/, 'columnar ABI exposes an explicit reconciliation operation');
 assert.match(nativeRenderer, /update\.operation === 'replace-history'/, 'Vela native renderer applies historical corrections as a dataset replacement');
 assert.match(nativeRenderer, /this\.setBarsColumns\(update\.columns/, 'history reconciliation stays on the native columnar renderer');
