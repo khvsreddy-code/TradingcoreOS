@@ -5,6 +5,7 @@ const provider = readFileSync(new URL('../src/TcoVelaDataProvider.ts', import.me
 const workspace = readFileSync(new URL('../src/LiveTradingWorkspace.tsx', import.meta.url), 'utf8');
 const dataPlane = readFileSync(new URL('../src/services/marketData/chartDataPlane.ts', import.meta.url), 'utf8');
 const historyCoordinator = readFileSync(new URL('../src/services/marketData/chartHistoryCoordinator.ts', import.meta.url), 'utf8');
+const historicalColumns = readFileSync(new URL('../src/services/marketData/historicalColumns.ts', import.meta.url), 'utf8');
 
 const start = provider.indexOf('async getBarsColumns');
 const end = provider.indexOf('/**', start + 32);
@@ -17,6 +18,17 @@ assert.match(body, /return EMPTY_COLUMNAR_BARS/);
 assert.match(provider, /async getBarsProgressive/);
 assert.match(provider, /plane\.ensureReadyHistory\(firstPaintBars\)/);
 assert.doesNotMatch(body, /getHistoricalDataColumns/);
+assert.match(provider, /historicalRowsToVelaColumns\(result\.rows, range, result\.requested\)/,
+  'the cold REST fallback must write typed columns directly from validated history rows');
+assert.doesNotMatch(provider, /seedColumnsFromBars/,
+  'canonical history must not build OHLCV objects only to decompose them into typed columns');
+assert.match(historicalColumns, /selectedIndexes = new Uint32Array/);
+assert.match(historicalColumns, /new Float64Array\(selectedLength\)/,
+  'column channels must be allocated as typed arrays without per-row OHLCV wrappers');
+assert.match(body, /plane\.loadOlderHistory\('visible', \{ visibleBars: requested \}\)/,
+  'historical columnar requests must extend the shared plane at the older edge');
+assert.match(body, /marketViewToColumns\(loaded, range, requested\)/,
+  'historical range pages must return canonical typed views rather than object bars');
 assert.match(provider, /async getBarsProgressive/);
 assert.doesNotMatch(provider, /Promise\.race/);
 assert.doesNotMatch(provider, /getMarketQuotes/);
