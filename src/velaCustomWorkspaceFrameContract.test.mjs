@@ -32,8 +32,12 @@ assert.match(topbarComposition, /right:\s*\[[^\]]*'tco\.save-workspace'[^\]]*'al
 assert((terminal.match(/topbar:\s*TCO_VELA_TOPBAR_COMPOSITION/g) ?? []).length === 2,
   'the runtime workspace options and topology must consume the same topbar composition');
 assert.match(terminal, /drawings:\s*\{\s*toolbar:\s*true\s*\}/, 'the full native Vela drawing toolbar is explicitly enabled');
-assert.match(workspaceLoader, /await drawings\.loadAdvancedDrawingCatalog\(\)/, 'all advanced drawing families must hydrate before the workspace is constructed');
-assert.ok(workspaceLoader.indexOf('await drawings.loadAdvancedDrawingCatalog()') < workspaceLoader.indexOf("await import('../../../../vendor/vela/src/workspace')"), 'the drawing registry must be fully hydrated before Vela mounts');
+// Workspace startup must never import the advanced drawing registry. The native toolbar
+// keeps lightweight metadata available and loads only the requested family on demand.
+assert.doesNotMatch(workspaceLoader, /loadAdvancedDrawingCatalog|loadDrawingFamily|vendor\/vela\/src\/core\/drawings/,
+  'mounting Vela must not import or hydrate advanced drawing implementations');
+assert.match(workspaceLoader, /const workspace = await import\('\.\.\/\.\.\/\.\.\/\.\.\/vendor\/vela\/src\/workspace'\)/,
+  'the Vela workspace remains a dynamic capability loaded by the chart host');
 assert.match(terminal, /top:\s*\[\s*'tco\.bookmarks',[\s\S]*?'tco\.panels'/, 'the right rail keeps daily panels and collects advanced panels in the native hub');
 assert.match(chrome, /Final Vela chrome pass/, 'native sidebar and watchlist receive the final Vela chrome styling');
 assert.match(chrome, /detailHeight = 228/, 'watchlist inspector starts compact so the instrument list remains visible');

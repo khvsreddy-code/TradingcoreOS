@@ -14,6 +14,8 @@ import {
 
 const userDrawingSource = readFileSync(new URL('../vendor/vela/src/renderers/native/drawings/UserDrawingController.ts', import.meta.url), 'utf8');
 const drawingRegistrySource = readFileSync(new URL('../vendor/vela/src/core/drawings/registry.ts', import.meta.url), 'utf8');
+const drawingToolbarSource = readFileSync(new URL('../vendor/vela/src/renderers/native/drawings/DrawingToolbar.ts', import.meta.url), 'utf8');
+const workspaceLoaderSource = readFileSync(new URL('./services/core/chart/velaWorkspaceLoader.ts', import.meta.url), 'utf8');
 const nativeRendererSource = readFileSync(new URL('../vendor/vela/src/renderers/native/NativeRenderer.ts', import.meta.url), 'utf8');
 const tcoChromeSource = readFileSync(new URL('./services/core/chart/tcoVelaChrome.ts', import.meta.url), 'utf8');
 
@@ -33,8 +35,18 @@ for (const familyModule of ['advancedRegistryChannels','advancedRegistryFibonacc
   );
 }
 assert.doesNotMatch(drawingRegistrySource, /Eagerly hydrate every advanced family/);
+assert.doesNotMatch(workspaceLoaderSource, /loadAdvancedDrawingCatalog|loadDrawingFamily|vendor\/vela\/src\/core\/drawings/,
+  'the chart startup loader must not import the advanced drawing registry');
+assert.match(workspaceLoaderSource, /await import\('\.\.\/\.\.\/\.\.\/\.\.\/vendor\/vela\/src\/workspace'\)/,
+  'Vela remains dynamically mounted without blocking on optional drawing families');
 assert.match(drawingRegistrySource, /advancedFamilyPromises\.delete\(family\)/,
-  'a failed lazy chunk must be retryable');
+  'a rejected family import must clear its cached promise so a retry can start a fresh request');
+assert.match(drawingToolbarSource, /Could not load drawing tools\./,
+  'a failed drawing-family request must expose a clear error state');
+assert.match(drawingToolbarSource, /retry\.addEventListener\('click'/,
+  'the failed-family state must expose an actionable Retry control');
+assert.match(drawingToolbarSource, /this\.openGroupFlyout\(group\)/,
+  'retry must reopen the selected group and request only its required family');
 assert.match(nativeRendererSource, /private settingsEnabled = true/);
 for (const iconId of ['activity','briefcase','shield','list','layers','table','user','layout','play']) {
   assert.match(tcoChromeSource, new RegExp(iconId + ': svg16\\('));
