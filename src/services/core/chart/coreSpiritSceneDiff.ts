@@ -143,6 +143,11 @@ export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
         ? unionDirtySpans(anchor, finiteSpan(start, end ?? value.time))
         : finiteSpan(start, end);
 
+    // These visuals are pane/viewport anchored, not bounded by their event time:
+    // a horizontal price line spans the visible chart width and a table is pinned
+    // to a chart corner. Narrowing either to one timestamp can leave stale pixels.
+    if (output.kind === 'hline' || output.kind === 'table') return null;
+
     if (output.kind === 'band') {
         // A band is one timestamp-anchored price interval. Its top/bottom values
         // are prices, not times, so only its bar/metadata anchors widen dirty time.
@@ -176,9 +181,6 @@ export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
         const geometry = pointTimeSpan(points);
         if (Array.isArray(points) && geometry === null) return null;
         return unionDirtySpans(metadataSpan, geometry);
-    }
-    if (output.kind === 'table') {
-        return unionDirtySpans(metadataSpan, finiteSpan(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime));
     }
     return metadataSpan;
 }
