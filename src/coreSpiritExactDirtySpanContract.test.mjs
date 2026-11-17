@@ -184,4 +184,32 @@ assert.equal(outputDirtySpan({
   right: 120,
 }), null, 'viewport geometry must not be falsely bounded by a market-time anchor');
 
+assert.equal(outputDirtySpan({
+  kind: 'hline',
+  id: 'viewport-price-line',
+  time: 100,
+  price: 200,
+}), null, 'horizontal price lines span the visible pane and cannot be bounded by their event timestamp');
+
+assert.equal(outputDirtySpan({
+  kind: 'table',
+  id: 'corner-table',
+  time: 100,
+  row: 0,
+  column: 0,
+  position: 'topRight',
+  text: 'BULLISH',
+  metadata: { fromTime: 90, toTime: 110 },
+}), null, 'chart-corner tables are viewport anchored even when source metadata contains timestamps');
+
+const viewportOverlayDiff = new CoreSpiritSceneDiff('dirty-span-viewport-overlays');
+const viewportOverlayPatches = viewportOverlayDiff.apply([
+  { kind: 'hline', id: 'global-level', time: 100, price: 200 },
+  { kind: 'table', id: 'stats-table', time: 100, row: 0, column: 0, position: 'topRight', text: 'BULLISH' },
+], { from: 90, to: 110 });
+const viewportOverlayValuePatch = viewportOverlayPatches.find(patch => patch.kind === 'value');
+assert.ok(viewportOverlayValuePatch, 'viewport overlays should be emitted as a value patch');
+assert.deepEqual(viewportOverlayValuePatch.dirty, { from: 90, to: 110 },
+  'viewport-wide overlays must inherit the caller’s conservative dirty interval');
+
 console.log('CORESPIRIT_EXACT_DIRTY_SPAN_CONTRACT_OK');
