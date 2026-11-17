@@ -152,7 +152,7 @@ The **canonical columnar data plane** is the numeric OHLCV boundary from TCO int
 
 ## Columnar candle API
 
-The columnar candle API is the renderer-facing typed time/open/high/low/close/volume contract. It is the preferred ingestion path for identity OHLCV charts and avoids per-candle object allocation in the native renderer.
+The columnar candle API is the renderer-facing typed time/open/high/low/close/volume contract. It is the preferred ingestion path for identity OHLCV charts and avoids per-candle object allocation in the native renderer. TCO's canonical REST fallback now fills these typed channels directly from validated history records, while historical `getBarsColumns` requests extend the shared plane and return a typed range instead of falling back to `OHLCV[]` paging.
 
 ## Columnar retained history
 
@@ -183,7 +183,7 @@ The native renderer consumes typed columns. The user-visible history flow is:
 
 This is **not yet a zero-object end-to-end Vela tape**.
 
-Selected Vela consumers still use explicit `OHLCV[]` projections for compatibility, especially where existing replay/session/drawing/transformed-price APIs have not migrated to a columnar ABI. The native candle renderer is not dependent on those objects, but the compatibility mirror cannot be removed until those consumers are converted.
+Selected Vela consumers still use explicit `OHLCV[]` projections for compatibility, including progressive cold-start batches and existing replay/session/drawing/transformed-price APIs that have not migrated to a columnar ABI. The native candle renderer is not dependent on those objects, but the compatibility mirror cannot be removed until those consumers are converted.
 
 ## Rendering patch model
 
