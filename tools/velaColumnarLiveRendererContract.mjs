@@ -86,4 +86,11 @@ const liveColumnarBody = engineSource.slice(liveColumnarStart, liveColumnarEnd);
 assert.ok(!liveColumnarBody.includes('this.bars.push(bar)') && !liveColumnarBody.includes('this.bars[this.bars.length - 1] = bar'),
   'identity scalar updates must not force the lazy OHLCV mirror into existence');
 
+const backfillStart = engineSource.indexOf('private async backfillHistory');
+const backfillEnd = engineSource.indexOf('private completeHistory', backfillStart);
+const backfillBody = engineSource.slice(backfillStart, backfillEnd);
+assert.ok(backfillStart >= 0 && backfillEnd > backfillStart);
+assert.ok(!backfillBody.includes('this.rawTape.toOHLCVRange') && !backfillBody.includes('this.rawTape.toOHLCV()'),
+  'identity historical prepends must not materialize object rows for each backfill page');
+
 console.log('VELA_COLUMNAR_LIVE_RENDERER_CONTRACT_OK');

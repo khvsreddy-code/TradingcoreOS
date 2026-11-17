@@ -1155,21 +1155,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     this.invalidateRawBarsCompat();
                     this.renderRetainedRawSeries({ preserveView: true });
                 } else {
-                    // Identity-price charts keep Vela's native history columnar. Only the
-                    // newly-prepended 5k page is materialized for engines that still require
-                    // OHLCV[]; the retained tail is reused by reference.
-                    const existing = this.bars;
-                    const headBars = this.rawTape.toOHLCVRange(0, prepended);
-                    if (existing.length + prepended === this.rawTape.length) {
-                        const merged = new Array<OHLCV>(headBars.length + existing.length);
-                        for (let i = 0; i < headBars.length; i += 1) merged[i] = headBars[i]!;
-                        for (let i = 0; i < existing.length; i += 1) merged[headBars.length + i] = existing[i]!;
-                        this.bars = merged;
-                        this.rawBarsCompat = merged;
-                    } else {
-                        this.bars = this.rawTape.toOHLCV();
-                        this.rawBarsCompat = this.bars;
-                    }
+                    // Identity-price charts keep backfill columnar end-to-end. A
+                    // compatibility projection is rebuilt lazily only if an engine,
+                    // data-window API or other legacy consumer actually reads bars.
+                    this.invalidateRawBarsCompat();
+                    this.invalidateBarsCompat();
                     this.renderer.setBarsColumns(this.rawTape.snapshotColumns('milliseconds'), { preserveView: true });
                 }
 
