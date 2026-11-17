@@ -54,7 +54,8 @@ assert.match(coreSpiritRuntime,/validateSynchronizedSnapshot\(snapshot,ctx\)/, '
 
 assert.doesNotMatch(provider,/getChartDataPlane\(['"]fyers['"]/);
 assert.match(provider,/activeBrokerId\(\)/);
-assert.match(provider,/seedColumnsFromBars/);
+assert.match(provider,/historicalRowsToVelaColumns\(result\.rows, range, result\.requested\)/, 'the canonical REST fallback must populate typed Vela columns directly from validated history records');
+assert.doesNotMatch(provider,/seedColumnsFromBars/, 'the canonical columnar fallback must not round-trip through OHLCV[]');
 assert.match(provider,/supportedTimeframes: \['1'.*'M'\]/s);
 
 assert.match(plane,/columns\?: ChartColumnarSnapshot/);
