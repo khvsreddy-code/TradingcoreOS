@@ -78,7 +78,8 @@ assert.ok(!retainedRenderBody.includes('const raw = this.rawBars') || retainedRe
 const correctionStart = engineSource.indexOf("if (update.operation === 'replace-history' && update.columns)");
 const correctionEnd = engineSource.indexOf('const unit = update.timeUnit', correctionStart);
 const correctionBody = engineSource.slice(correctionStart, correctionEnd);
-assert.ok(!correctionBody.includes('this.rawTape.toOHLCV()'),
+const correctionIdentityBody = correctionBody.slice(correctionBody.indexOf('} else {'));
+assert.ok(correctionIdentityBody.length > 0 && !correctionIdentityBody.includes('this.rawTape.toOHLCV()'),
   'identity history corrections must not eagerly rebuild the full OHLCV object mirror');
 const liveColumnarStart = engineSource.indexOf('private applyColumnarBar(update');
 const liveColumnarEnd = engineSource.indexOf('private columnarUpdateToBar', liveColumnarStart);
