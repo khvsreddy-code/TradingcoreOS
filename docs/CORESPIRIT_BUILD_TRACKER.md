@@ -1,6 +1,6 @@
 # TradingCoreOS / CoreSpirit Build Tracker
 
-**Last updated:** 2026-10-11  
+**Last updated:** 2026-11-17  
 **Architecture lock:** CoreSpirit-first scripting + Vela chart engine + TCO-owned data/compute/broker systems. PineScript/PineTS compatibility is not part of the product architecture.
 
 ## Current performance path
@@ -39,6 +39,9 @@ FYERS compact columns
 - [x] `ColumnarHistoryTape` is the retained identity-chart source of truth.
 - [x] First-load and deep-backfill paths can ingest typed columns.
 - [x] Binary time lookup and bounded prepend/append/replace operations exist.
+- [x] TCO REST history fallback writes validated source rows directly into Float64Array channels without an intermediate OHLCV[] graph.
+- [x] Historical `getBarsColumns` requests extend the shared chart plane at the older edge and return canonical typed range views.
+- [~] Progressive cold-start snapshots still use the OHLCV[] provider/feed callback; migrate only with replay/session/cache semantics covered by a versioned ABI contract.
 - [x] Native Vela rendering consumes typed columns.
 - [~] Complete removal of the `OHLCV[]` compatibility mirror is **not** complete. Replay/session/drawing/transformed-chart consumers still have selected object seams.
 - [ ] Remove those final compatibility projections without changing semantics or breaking replay/drawing contracts.
@@ -50,6 +53,7 @@ FYERS compact columns
 - [x] Vela supports localized range patches.
 - [x] CoreSpiritSceneDiff now reports the union of actual time-bounded output extents instead of echoing the full requested dirty range; non-time-bounded value collections conservatively fall back to the requested range.
 - [x] Contract covers a wide requested range with a smaller exact output envelope and rejects time-bounded outputs wholly outside the dirty request.
+- [x] Horizontal price lines and chart-corner tables are treated as viewport-wide overlays; an event timestamp cannot incorrectly narrow their invalidation span.
 - [~] Dirty spans are not yet universal across every RenderPacket/ScenePatch collection and renderer-owned overlay category.
 - [ ] Make every supported overlay consume the same exact causal `[from,to]` range, with full replacement only as a proven fallback.
 
