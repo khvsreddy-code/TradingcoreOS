@@ -130,7 +130,7 @@ export function aggregateCandleColumns(
     i1: number,
     xOf: (index: number) => number,
     yOf: (price: number) => number,
-    colorOf: (bar: OHLCV) => string,
+    colorOf: (bar: OHLCV, index: number) => string,
 ): AggregatedStick[] {
     const out: AggregatedStick[] = [];
     let col = NaN;
@@ -170,7 +170,7 @@ export function aggregateCandleColumns(
             col = x;
         }
         // Merge the bar's range into every overlapping run OF ITS COLOR (usually zero or one).
-        const color = colorOf(b);
+        const color = colorOf(b, i);
         let lo = b.low;
         let hi = b.high;
         for (let k = runs.length - 1; k >= 0; k -= 1) {
@@ -184,4 +184,59 @@ export function aggregateCandleColumns(
     }
     flush();
     return out;
+}
+
+
+/**
+ * Relative-volume intensity used by the native Volume Candles style.
+ *
+ * The comparison baseline uses only preceding bars, so a new tick never changes
+ * historical candle styling. Missing volume falls back to ordinary candle opacity
+ * rather than silently presenting fabricated volume information.
+ */
+export function relativeVolumeOpacity(volumes: ArrayLike<number>, index: number, lookback = 20): number {
+    const current = Number(volumes[index]);
+    if (!Number.isFinite(current) || current <= 0) return 1;
+    const start = Math.max(0, index - Math.max(1, Math.floor(lookback)));
+    let total = 0;
+    let count = 0;
+    for (let i = start; i < index; i += 1) {
+        const value = Number(volumes[i]);
+        if (Number.isFinite(value) && value > 0) {
+            total += value;
+            count += 1;
+        }
+    }
+    if (count === 0 || total <= 0) return 1;
+    const relative = current / (total / count);
+    const strength = Math.max(0, Math.min(1, Math.log2(1 + relative) / Math.log2(5)));
+    return 0.45 + strength * 0.55;
+}
+
+export function relativeVolumeOpacityFromBars(
+    bars: readonly Pick<OHLCV, 'volume'>[],
+    index: number,
+    lookback = 20,
+): number {
+    const current = bars[index]?.volume;
+    if (!Number.isFinite(current) || (current ?? 0) <= 0) return 1;
+    const start = Math.max(0, index - Math.max(1, Math.floor(lookback)));
+    let total = 0;
+    let count = 0;
+    for (let i = start; i < index; i += 1) {
+        const value = bars[i]?.volume;
+        if (Number.isFinite(value) && (value ?? 0) > 0) {
+            total += value!;
+            count += 1;
+        }
+    }
+    if (count === 0 || total <= 0) return 1;
+    const relative = current! / (total / count);
+    const strength = Math.max(0, Math.min(1, Math.log2(1 + relative) / Math.log2(5)));
+    return 0.45 + strength * 0.55;
+}
+
+/** Hollow Candles leaves bullish bodies unfilled while keeping their outline and wicks. */
+export function isHollowUpCandle(priceStyle: string, up: boolean): boolean {
+    return priceStyle === 'hollowcandles' && up;
 }

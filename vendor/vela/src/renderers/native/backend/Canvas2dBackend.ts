@@ -6,7 +6,7 @@ import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColo
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
-import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns } from './candle-lod';
+import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, relativeVolumeOpacity, relativeVolumeOpacityFromBars, isHollowUpCandle } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, COLUMNS_FILL_ALPHA, withAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import { lineMarkerRadius, lineMarkersVisible, columnIsUp, columnGeometry, snapStroke, closeRuns, stepVertices } from './close-styles';
 import type { IRenderBackend } from './IRenderBackend';
@@ -216,7 +216,7 @@ export class Canvas2dBackend implements IRenderBackend {
         if (scene.basePainting === 'none') return; // plugin style fully replaces the price series
         const bars = scene.bars;
         const st = scene.style;
-        if (scene.candleColumns && (scene.priceStyle === 'candles' || scene.priceStyle === 'heikinashi')) {
+        if (scene.candleColumns && ['candles', 'heikinashi', 'hollowcandles', 'volumecandles'].includes(scene.priceStyle)) {
             this.drawCandlesColumns(ctx, scene, scene.candleColumns, i0, i1, coords, pane, theme, barColors);
             return;
         }
@@ -274,7 +274,8 @@ export class Canvas2dBackend implements IRenderBackend {
                 const up = lod.close[k]! >= lod.open[k]!;
                 const t = lod.time[k]!;
                 const tMs = (lod.timeUnit ?? 'milliseconds') === 'seconds' ? t * 1000 : t;
-                const color = barColors.get(tMs) ?? ((up ? cs.wickUpColor : cs.wickDownColor) ?? (up ? paint.up : paint.down));
+                const baseColor = barColors.get(tMs) ?? ((up ? cs.wickUpColor : cs.wickDownColor) ?? (up ? paint.up : paint.down));
+                const color = scene.priceStyle === 'volumecandles' ? withAlpha(baseColor, relativeVolumeOpacity(lod.volume, k)) : baseColor;
                 const x = Math.round(coords.logicalToX(from)) + 0.5;
                 ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath();
                 ctx.moveTo(x, coords.priceToY(lod.high[k]!, pane.scale, pane.bounds));
@@ -292,6 +293,8 @@ export class Canvas2dBackend implements IRenderBackend {
             const tMs = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? tRaw * 1000 : tRaw;
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
             const up = c >= o; const dir = up ? paint.up : paint.down; const bc = barColors.get(tMs); const color = bc ?? dir;
+            const hollowUp = isHollowUpCandle(scene.priceStyle, up);
+            const volumeOpacity = scene.priceStyle === 'volumecandles' ? relativeVolumeOpacity(columns.volume, i) : 1;
             let top = 0, bodyH = 0;
             if (drawBody) {
                 const oY = coords.priceToY(o, pane.scale, pane.bounds), cY = coords.priceToY(c, pane.scale, pane.bounds);
@@ -300,14 +303,14 @@ export class Canvas2dBackend implements IRenderBackend {
             if (cs.wickVisible) {
                 const wick = (up ? cs.wickUpColor : cs.wickDownColor) ?? (drawBody ? dir : color);
                 const hY = snapY(coords.priceToY(h, pane.scale, pane.bounds), coords.dpr), lY = snapY(coords.priceToY(l, pane.scale, pane.bounds), coords.dpr);
-                ctx.globalAlpha = this.candleStructureAlpha; ctx.strokeStyle = wick; ctx.lineWidth = g.wickW; ctx.beginPath();
+                ctx.globalAlpha = this.candleStructureAlpha * (scene.priceStyle === 'volumecandles' ? (0.7 + volumeOpacity * 0.3) : 1); ctx.strokeStyle = wick; ctx.lineWidth = g.wickW; ctx.beginPath();
                 if (drawBody) { ctx.moveTo(g.center, hY); ctx.lineTo(g.center, top); ctx.moveTo(g.center, top + bodyH); ctx.lineTo(g.center, lY); }
                 else { ctx.moveTo(g.center, hY); ctx.lineTo(g.center, lY); }
                 ctx.stroke();
             }
             if (drawBody) {
-                if (cs.bodyVisible) { ctx.globalAlpha = this.candleBodyAlpha; ctx.fillStyle = color; ctx.fillRect(g.bodyX, top, g.bodyW, bodyH); }
-                if (cs.borderVisible || (fading && cs.bodyVisible)) { ctx.globalAlpha = this.candleStructureAlpha; ctx.strokeStyle = cs.borderVisible ? ((up ? cs.borderUpColor : cs.borderDownColor) ?? color) : color; ctx.lineWidth = 1; ctx.strokeRect(g.bodyX + 0.5, top + 0.5, Math.max(0, g.bodyW - 1), Math.max(0, bodyH - 1)); }
+                if (cs.bodyVisible && !hollowUp) { ctx.globalAlpha = this.candleBodyAlpha * volumeOpacity; ctx.fillStyle = color; ctx.fillRect(g.bodyX, top, g.bodyW, bodyH); }
+                if (cs.borderVisible || hollowUp || (fading && cs.bodyVisible)) { ctx.globalAlpha = this.candleStructureAlpha; ctx.strokeStyle = cs.borderVisible ? ((up ? cs.borderUpColor : cs.borderDownColor) ?? color) : color; ctx.lineWidth = 1; ctx.strokeRect(g.bodyX + 0.5, top + 0.5, Math.max(0, g.bodyW - 1), Math.max(0, bodyH - 1)); }
             }
         }
         ctx.globalAlpha = 1;
@@ -609,9 +612,10 @@ export class Canvas2dBackend implements IRenderBackend {
         if (tier === 'aggregate') {
             // The stick IS the candle, so a bar's paint resolves as in the stick-only tier
             // below: the wick color setting wins, then barcolor(), then the direction color.
-            this.drawCandlesAggregated(ctx, bars, i0, i1, coords, pane, (b) => {
+            this.drawCandlesAggregated(ctx, bars, i0, i1, coords, pane, (b, index) => {
                 const up = b.close >= b.open;
-                return (up ? cs.wickUpColor : cs.wickDownColor) ?? barColors.get(b.time) ?? (up ? paint.up : paint.down);
+                const color = (up ? cs.wickUpColor : cs.wickDownColor) ?? barColors.get(b.time) ?? (up ? paint.up : paint.down);
+                return scene.priceStyle === 'volumecandles' ? withAlpha(color, relativeVolumeOpacityFromBars(bars, index)) : color;
             });
             return;
         }
@@ -628,6 +632,8 @@ export class Canvas2dBackend implements IRenderBackend {
             const x = g.center;
             const up = b.close >= b.open;
             const dir = up ? paint.up : paint.down;
+            const hollowUp = isHollowUpCandle(scene.priceStyle, up);
+            const volumeOpacity = scene.priceStyle === 'volumecandles' ? relativeVolumeOpacityFromBars(bars, i) : 1;
             const bc = barColors.get(b.time);
             const color = bc ?? dir;
             // Body geometry up front so the wick can be clipped to it when the body is hollow.
@@ -648,7 +654,7 @@ export class Canvas2dBackend implements IRenderBackend {
                 const wick = (up ? cs.wickUpColor : cs.wickDownColor) ?? (drawBody ? dir : color);
                 const hY = snapY(coords.priceToY(b.high, pane.scale, pane.bounds), coords.dpr);
                 const lY = snapY(coords.priceToY(b.low, pane.scale, pane.bounds), coords.dpr);
-                ctx.globalAlpha = this.candleStructureAlpha;
+                ctx.globalAlpha = this.candleStructureAlpha * (scene.priceStyle === 'volumecandles' ? (0.7 + volumeOpacity * 0.3) : 1);
                 ctx.strokeStyle = wick;
                 ctx.lineWidth = g.wickW;
                 ctx.beginPath();
@@ -666,8 +672,8 @@ export class Canvas2dBackend implements IRenderBackend {
                 ctx.stroke();
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
-                    ctx.globalAlpha = this.candleBodyAlpha;
+                if (cs.bodyVisible && !hollowUp) {
+                    ctx.globalAlpha = this.candleBodyAlpha * volumeOpacity;
                     ctx.fillStyle = color;
                     ctx.fillRect(g.bodyX, top, g.bodyW, bodyH);
                 }
@@ -675,7 +681,7 @@ export class Canvas2dBackend implements IRenderBackend {
                 // forces one. An unconfigured border color inherits the body color, so a
                 // barcolored body gets a matching tinted border, not a direction-colored
                 // outline.
-                if (cs.borderVisible || (fading && cs.bodyVisible)) {
+                if (cs.borderVisible || hollowUp || (fading && cs.bodyVisible)) {
                     ctx.globalAlpha = this.candleStructureAlpha;
                     ctx.strokeStyle = cs.borderVisible ? ((up ? cs.borderUpColor : cs.borderDownColor) ?? color) : color;
                     ctx.lineWidth = 1;

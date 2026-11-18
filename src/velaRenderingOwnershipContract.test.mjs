@@ -34,7 +34,7 @@ assert.ok(!live.includes('createPriceLine'), 'React must not create Vela price l
 assert.ok(!live.includes('markerForAutomation'), 'React must not calculate automation signals');
 assert.ok(live.includes('annotationControllerRef.current?.renderLevels()'));
 assert.ok(live.includes('annotationControllerRef.current?.renderAutomations(automationsRef.current)'));
-for (const forbidden of ['CanvasRenderingContext2D', 'getContext(', 'createPriceLine', 'addSeries(')) assert.ok(!overlay.includes(forbidden), 'React overlay must not render chart data: ' + forbidden);
+for (const forbidden of ['CanvasRenderingContext2D', 'getContext(', 'createPriceLine', 'addSeries(']) assert.ok(!overlay.includes(forbidden), 'React overlay must not render chart data: ' + forbidden);
 assert.ok(kernel.includes("import './coreSpiritVelaOutputLayer'"));
 assert.ok(outputLayer.includes("from './velaNativeChartKernel'"));
 assert.ok(!outputLayer.includes('velaChartFacade'));
@@ -44,3 +44,16 @@ assert.ok(facade.includes('Compatibility boundary for the legacy chart-api surfa
 for (const [file, token] of [['src/components/workspace/ShowcaseChart.tsx','velaNativeChartKernel'],['src/components/workspace/chartController.ts','velaNativeChartKernel'],['src/components/workspace/hooks/useChartUiEvents.ts','velaNativeChartKernel'],['src/services/core/chart/tcoVelaSupabaseStorage.ts','velaNativeChartKernel']]) assert.ok(read(file).includes(token), file + ' must use the native chart kernel');
 assert.equal(fs.existsSync(path.join(root, 'src/services/core/chart/controllers/ChartDrawingController.ts')), false, 'unused parallel drawing renderer must be removed');
 console.log('VELA_RENDERING_OWNERSHIP_CONTRACT_OK');
+
+const candleConfig = read('vendor/vela/src/renderers/native/core/chartConfig.ts');
+const canvasBackend = read('vendor/vela/src/renderers/native/backend/Canvas2dBackend.ts');
+const webglBackend = read('vendor/vela/src/renderers/native/backend/WebGL2Backend.ts');
+const candleStyle = read('vendor/vela/src/renderers/native/backend/candle-lod.ts');
+assert.ok(candleConfig.includes("'hollowcandles'") && candleConfig.includes("'volumecandles'"), 'native price-style registry must expose implemented candle variants');
+for (const [name, source] of [['Canvas2D', canvasBackend], ['WebGL2', webglBackend]]) {
+  assert.ok(source.includes("scene.priceStyle === 'hollowcandles'"), name + ' backend must render hollow bullish candle bodies');
+  assert.ok(source.includes("scene.priceStyle === 'volumecandles'"), name + ' backend must apply volume-derived candle intensity');
+  assert.ok(source.includes('relativeVolumeOpacity'), name + ' backend must use the same relative-volume algorithm');
+}
+assert.ok(candleStyle.includes('export function relativeVolumeOpacity('), 'relative-volume intensity must be deterministic and reusable');
+assert.ok(candleStyle.includes('export function isHollowUpCandle('), 'hollow candle semantics must be centralized');

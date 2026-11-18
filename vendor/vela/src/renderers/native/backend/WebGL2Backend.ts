@@ -6,7 +6,7 @@ import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColo
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
-import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns } from './candle-lod';
+import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, relativeVolumeOpacity, relativeVolumeOpacityFromBars, isHollowUpCandle } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, COLUMNS_FILL_ALPHA, withAlpha as cssWithAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import { lineMarkerRadius, lineMarkersVisible, columnIsUp, columnGeometry, snapStroke, closeRuns, stepVertices } from './close-styles';
 import type { IRenderBackend } from './IRenderBackend';
@@ -798,7 +798,7 @@ export class WebGL2Backend implements IRenderBackend {
         if (scene.basePainting === 'none') return; // plugin style fully replaces the price series
         const bars = scene.bars;
         const st = scene.style;
-        if (scene.candleColumns && (scene.priceStyle === 'candles' || scene.priceStyle === 'heikinashi')) {
+        if (scene.candleColumns && ['candles', 'heikinashi', 'hollowcandles', 'volumecandles'].includes(scene.priceStyle)) {
             this.emitCandlesColumns(b, scene, scene.candleColumns, i0, i1, coords, pane, theme, barColors);
             return;
         }
@@ -851,7 +851,8 @@ export class WebGL2Backend implements IRenderBackend {
                 if (to < i0 - 1 || from > i1 + 1) continue;
                 const up = lod.close[k]! >= lod.open[k]!; const raw = lod.time[k]!;
                 const tMs = (lod.timeUnit ?? 'milliseconds') === 'seconds' ? raw * 1000 : raw;
-                const color = barColors.get(tMs) ?? ((up ? cs.wickUpColor : cs.wickDownColor) ?? (up ? paint.up : paint.down));
+                const baseColor = barColors.get(tMs) ?? ((up ? cs.wickUpColor : cs.wickDownColor) ?? (up ? paint.up : paint.down));
+                const color = scene.priceStyle === 'volumecandles' ? cssWithAlpha(baseColor, relativeVolumeOpacity(lod.volume, k)) : baseColor;
                 const x = Math.round(coords.logicalToX(from));
                 b.rect(x, coords.priceToY(lod.high[k]!, pane.scale, pane.bounds), 1, coords.priceToY(lod.low[k]!, pane.scale, pane.bounds) - coords.priceToY(lod.high[k]!, pane.scale, pane.bounds), parseColor(color));
             }
@@ -866,19 +867,21 @@ export class WebGL2Backend implements IRenderBackend {
             const raw = columns.time[i]!; const tMs = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? raw * 1000 : raw;
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
             const up = c >= o; const dir = up ? paint.up : paint.down; const bc = barColors.get(tMs); const bodyColor = bc ?? dir;
+            const hollowUp = isHollowUpCandle(scene.priceStyle, up);
+            const volumeOpacity = scene.priceStyle === 'volumecandles' ? relativeVolumeOpacity(columns.volume, i) : 1;
             const body = parseColor(bodyColor);
             let top = 0, bodyH = 0;
             if (drawBody) { const oY = coords.priceToY(o, pane.scale, pane.bounds), cY = coords.priceToY(c, pane.scale, pane.bounds); top = snapY(Math.min(oY,cY), coords.dpr); bodyH = Math.max(1/coords.dpr, snapY(Math.max(oY,cY), coords.dpr)-top); }
             if (cs.wickVisible) {
                 const wick = parseColor((up ? cs.wickUpColor : cs.wickDownColor) ?? (drawBody ? dir : bodyColor));
                 const hY = snapY(coords.priceToY(h,pane.scale,pane.bounds),coords.dpr), lY=snapY(coords.priceToY(l,pane.scale,pane.bounds),coords.dpr);
-                b.alpha = this.candleStructureAlpha;
+                b.alpha = this.candleStructureAlpha * (scene.priceStyle === 'volumecandles' ? (0.7 + volumeOpacity * 0.3) : 1);
                 if (drawBody) { b.rect(g.wickX,hY,g.wickW,Math.max(0,top-hY),wick); b.rect(g.wickX,top+bodyH,g.wickW,Math.max(0,lY-(top+bodyH)),wick); }
                 else b.rect(g.wickX,hY,g.wickW,lY-hY,wick);
             }
             if (drawBody) {
-                if (cs.bodyVisible) { b.alpha=this.candleBodyAlpha; b.rect(g.bodyX,top,g.bodyW,bodyH,body); }
-                if (cs.borderVisible || (fading && cs.bodyVisible)) { b.alpha=this.candleStructureAlpha; const bord=parseColor(cs.borderVisible ? ((up?cs.borderUpColor:cs.borderDownColor) ?? bodyColor) : bodyColor); b.rectStroke(g.bodyX+0.5,top+0.5,Math.max(0,g.bodyW-1),Math.max(0,bodyH-1),1,bord); }
+                if (cs.bodyVisible && !hollowUp) { b.alpha=this.candleBodyAlpha * volumeOpacity; b.rect(g.bodyX,top,g.bodyW,bodyH,body); }
+                if (cs.borderVisible || hollowUp || (fading && cs.bodyVisible)) { b.alpha=this.candleStructureAlpha; const bord=parseColor(cs.borderVisible ? ((up?cs.borderUpColor:cs.borderDownColor) ?? bodyColor) : bodyColor); b.rectStroke(g.bodyX+0.5,top+0.5,Math.max(0,g.bodyW-1),Math.max(0,bodyH-1),1,bord); }
             }
         }
         b.alpha = 1;
@@ -1116,9 +1119,10 @@ export class WebGL2Backend implements IRenderBackend {
         if (tier === 'aggregate') {
             // The stick IS the candle, so a bar's paint resolves as in the stick-only tier
             // below: the wick color setting wins, then barcolor(), then the direction color.
-            this.emitCandlesAggregated(b, bars, i0, i1, coords, pane, (bar) => {
+            this.emitCandlesAggregated(b, bars, i0, i1, coords, pane, (bar, index) => {
                 const isUp = bar.close >= bar.open;
-                return (isUp ? cs.wickUpColor : cs.wickDownColor) ?? barColors.get(bar.time) ?? (isUp ? up : down);
+                const color = (isUp ? cs.wickUpColor : cs.wickDownColor) ?? barColors.get(bar.time) ?? (isUp ? up : down);
+                return scene.priceStyle === 'volumecandles' ? cssWithAlpha(color, relativeVolumeOpacityFromBars(bars, index)) : color;
             });
             return;
         }
@@ -1134,6 +1138,8 @@ export class WebGL2Backend implements IRenderBackend {
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
             const isUp = bar.close >= bar.open;
             const dir = isUp ? up : down;
+            const hollowUp = isHollowUpCandle(scene.priceStyle, isUp);
+            const volumeOpacity = scene.priceStyle === 'volumecandles' ? relativeVolumeOpacityFromBars(bars, i) : 1;
             const bc = barColors.get(bar.time);
             const bodyColorStr = bc ?? dir;
             const c = parseColor(bodyColorStr);
@@ -1151,7 +1157,7 @@ export class WebGL2Backend implements IRenderBackend {
             if (cs.wickVisible) {
                 const hY = snapY(coords.priceToY(bar.high, pane.scale, pane.bounds), coords.dpr);
                 const lY = snapY(coords.priceToY(bar.low, pane.scale, pane.bounds), coords.dpr);
-                b.alpha = this.candleStructureAlpha;
+                b.alpha = this.candleStructureAlpha * (scene.priceStyle === 'volumecandles' ? (0.7 + volumeOpacity * 0.3) : 1);
                 // barcolor() recolors only the BODY (TV semantics): the wick keeps the
                 // direction color while a body is drawn. At stick-only zoom the stick IS
                 // the candle, so it keeps the barcolor tint.
@@ -1166,15 +1172,15 @@ export class WebGL2Backend implements IRenderBackend {
                 }
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
-                    b.alpha = this.candleBodyAlpha;
+                if (cs.bodyVisible && !hollowUp) {
+                    b.alpha = this.candleBodyAlpha * volumeOpacity;
                     b.rect(g.bodyX, bodyTop, g.bodyW, bodyH, c);
                 }
                 // The border strictly follows its visibility setting — barcolor() never
                 // forces one. An unconfigured border color inherits the body color, so a
                 // barcolored body gets a matching tinted border, not a direction-colored
                 // outline.
-                if (cs.borderVisible || (fading && cs.bodyVisible)) {
+                if (cs.borderVisible || hollowUp || (fading && cs.bodyVisible)) {
                     b.alpha = this.candleStructureAlpha;
                     const bord = cs.borderVisible ? parseColor((isUp ? cs.borderUpColor : cs.borderDownColor) ?? bodyColorStr) : c;
                     // Inset by half the stroke so the border stays inside the body's
