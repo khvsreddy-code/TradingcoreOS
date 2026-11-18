@@ -131,6 +131,7 @@ export type {
     VisibleRange,
     VisibleRangeOptions,
     DataWindowReadout,
+    DrawingActionView,
     DataWindowGroup,
     DataWindowRow,
     DataWindowOHLC,
