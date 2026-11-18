@@ -69,6 +69,7 @@ export class DrawingController {
     /** FAVORITE tool types (insertion-ordered) — user prefs, not document data. */
     private favs = new Set<DrawingTypeKey>();
     private selectedIds: string[] = []; // ordered; [0] is the primary (settings-popup) selection
+    private groupSeq = 0;
     private clipboard: SerializedDrawing[] = []; // in-memory copy buffer (per chart)
     /** Per-tool remembered settings — the last drawing of each type the user styled seeds the next. */
     private readonly defaults = new Map<DrawingTypeKey, DrawingToolDefaults>();
@@ -366,6 +367,30 @@ export class DrawingController {
         this.history.commit();
     }
 
+    /**
+     * Group two or more drawings without flattening their geometry into an overlay.
+     * Each remains an independent native object; membership is a persisted groupId.
+     */
+    group(ids: readonly string[] = this.selectedIds): string | null {
+        const members = this.resolve([...new Set(ids)]);
+        if (members.length < 2) return null;
+        const groupId = `vela-group-${Date.now().toString(36)}-${++this.groupSeq}`;
+        this.updateMany(members.map((drawing) => ({ id: drawing.id, patch: { groupId } })));
+        this.setSelection(members.map((drawing) => drawing.id));
+        return groupId;
+    }
+
+    /** Remove persisted group membership; no drawing geometry or styling is changed. */
+    ungroup(ids: readonly string[] = this.selectedIds): void {
+        const requested = new Set(ids);
+        const groupIds = new Set(this.resolve([...requested]).map((drawing) => drawing.groupId).filter((id): id is string => !!id));
+        if (groupIds.size === 0) return;
+        const members = this.store.all().filter((drawing) => !!drawing.groupId && groupIds.has(drawing.groupId) || requested.has(drawing.id));
+        if (members.length === 0) return;
+        this.updateMany(members.map((drawing) => ({ id: drawing.id, patch: { groupId: undefined } })));
+        this.setSelection(members.map((drawing) => drawing.id));
+    }
+
     /** Delete several drawings as ONE undo step (the public face of {@link deleteMany}). */
     removeMany(ids: readonly string[]): void {
         this.deleteMany(ids);
@@ -564,10 +589,19 @@ export class DrawingController {
     private insertClones(docs: readonly SerializedDrawing[]): Drawing[] {
         this.history.begin(this.store.serialize());
         const clones: Drawing[] = [];
+        const clonedGroups = new Map<string, string>();
         for (const doc of docs) {
+            // Duplicate an entire group into a fresh group. Otherwise copied members would
+            // remain coupled to their source drawings when either group is later dragged.
+            let groupId = doc.groupId;
+            if (groupId) {
+                let next = clonedGroups.get(groupId);
+                if (!next) { next = `vela-group-${Date.now().toString(36)}-${++this.groupSeq}`; clonedGroups.set(groupId, next); }
+                groupId = next;
+            }
             // A copy keeps its source's DEPTH: the clone lands at the same z and, tying it,
             // paints just in front of it — "duplicate then drag" without a jump up the stack.
-            const d = deserializeDrawing({ ...doc, id: this.store.nextId() });
+            const d = deserializeDrawing({ ...doc, id: this.store.nextId(), groupId });
             if (!d) continue;
             this.store.add(d);
             this.history.markDirty();

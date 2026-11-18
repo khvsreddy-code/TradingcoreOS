@@ -121,6 +121,18 @@ export class DrawingsControl {
         return this;
     }
 
+    /** Group two or more selected drawings as native Vela objects. Returns the group id. */
+    group(ids?: readonly string[]): string | null {
+        if (!this.ok('group')) return null;
+        return this.ctrl.group(ids);
+    }
+
+    /** Ungroup selected drawings (or the specified drawings) without changing their geometry. */
+    ungroup(ids?: readonly string[]): this {
+        if (this.ok('ungroup')) this.ctrl.ungroup(ids);
+        return this;
+    }
+
     /** Remove several drawings as one undo step. */
     removeMany(ids: readonly string[]): this {
         this.ctrl.removeMany(ids);

@@ -61,6 +61,7 @@ export class DrawingStore {
         if (patch.locked !== undefined) d.locked = patch.locked;
         if (patch.visible !== undefined) d.visible = patch.visible;
         if (patch.zIndex !== undefined) d.zIndex = patch.zIndex;
+        if ('groupId' in patch) d.groupId = typeof patch.groupId === 'string' && patch.groupId.length > 0 ? patch.groupId : undefined;
         if (patch.props !== undefined) d.applyProps(patch.props); // per-type extras (e.g. fib levels)
         if ('showOn' in patch) d.showOn = sanitizeShowOn(patch.showOn); // present-but-undefined lifts the limit
         this.emit();

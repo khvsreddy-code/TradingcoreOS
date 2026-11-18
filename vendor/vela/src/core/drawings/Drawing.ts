@@ -120,6 +120,8 @@ export interface SerializedDrawing {
     props?: Record<string, unknown>;
     /** The timeframe bands the drawing shows on (see `TIMEFRAME_BANDS`); absent = every one. */
     showOn?: string[];
+    /** Stable membership key for drawings moved/selected as one logical group. */
+    groupId?: string;
 }
 
 /**
@@ -142,6 +144,8 @@ export abstract class Drawing {
     zIndex = 0;
     /** The timeframe bands the drawing shows on; `undefined` = every timeframe. */
     showOn?: string[];
+    /** Stable group membership; groups remain native drawing objects. */
+    groupId?: string;
     readonly createdAt: number;
 
     // Public so the registry can construct concrete subclasses; `abstract` still
@@ -156,6 +160,7 @@ export abstract class Drawing {
         this.visible = init.visible ?? true;
         this.zIndex = init.zIndex ?? 0;
         this.showOn = sanitizeShowOn(init.showOn);
+        this.groupId = typeof init.groupId === 'string' && init.groupId.length > 0 ? init.groupId : undefined;
         this.createdAt = init.createdAt ?? Date.now();
         if (init.props) this.readProps(init.props);
     }
@@ -298,6 +303,7 @@ export abstract class Drawing {
             // Always present (undefined = every timeframe) so an edit can lift a limit; JSON
             // drops the undefined value, so unlimited drawings save as before.
             showOn: this.showOn ? [...this.showOn] : undefined,
+            groupId: this.groupId,
         };
     }
 

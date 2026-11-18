@@ -263,9 +263,20 @@ export class DrawingInteraction {
             // A body drag of a SELECTED drawing carries the rest of the selection along; a handle
             // drag reshapes just the one, and an unselected drawing drags alone.
             const riders: Rider[] = [];
-            if (handle < 0 && this.deps.selectedIds().has(hit.id)) {
-                for (const id of this.deps.selectedIds()) {
-                    const d = id === hit.id ? null : this.byId(id);
+            if (handle < 0) {
+                // A grouped object remains an independent Drawing; body dragging any member
+                // translates every unlocked, visible member using its own pane coordinates.
+                const riderIds = new Set<string>();
+                if (hit.groupId) {
+                    for (const drawing of this.deps.drawings()) {
+                        if (drawing.id !== hit.id && drawing.groupId === hit.groupId) riderIds.add(drawing.id);
+                    }
+                }
+                if (this.deps.selectedIds().has(hit.id)) {
+                    for (const id of this.deps.selectedIds()) riderIds.add(id);
+                }
+                for (const id of riderIds) {
+                    const d = this.byId(id);
                     if (d && !d.locked && d.visible) riders.push({ id, orig: cloneAnchors(d) });
                 }
             }
