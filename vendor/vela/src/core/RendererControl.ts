@@ -3,6 +3,7 @@ import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
 import type { MessageLike } from './i18n/types';
+import type { NativeGraphicsDiagnostics, NativeGraphicsPolicy } from './graphics';
 
 /**
  * The public control surface for the active renderer — `chart.renderer`. A thin
@@ -22,6 +23,17 @@ export class RendererControl {
     /** What the active renderer can draw (drives graceful degradation). */
     get capabilities(): RendererCapabilities {
         return this.renderer.capabilities;
+    }
+
+    /** Apply a renderer-owned backend/resolution budget. Unsupported renderers safely no-op. */
+    setGraphicsPolicy(policy: NativeGraphicsPolicy): this {
+        this.renderer.setGraphicsPolicy?.(policy);
+        return this;
+    }
+
+    /** Read the native graphics workload and allocation estimate when available. */
+    getGraphicsDiagnostics(): NativeGraphicsDiagnostics | null {
+        return this.renderer.getGraphicsDiagnostics?.() ?? null;
     }
 
     /** Whether the active renderer supports a feature — use to show/hide a UI control. */
