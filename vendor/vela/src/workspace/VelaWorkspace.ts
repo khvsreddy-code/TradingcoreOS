@@ -9,7 +9,7 @@
 // undo-history are per-cell; everything else is shared.
 import type { DataProvider } from '../core/ports/DataProvider';
 import { planAdaptiveGraphicsBudget } from '../core/graphics';
-import type { GraphicsBudgetCellInput, GraphicsHardwareProfile, NativeGraphicsBackend } from '../core/graphics';
+import type { GraphicsBudgetCellInput, GraphicsHardwareProfile, NativeGraphicsBackend, NativeGraphicsDiagnostics } from '../core/graphics';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { VelaTheme, NativeBackend, VelaOptions } from '../core/options';
 import type { VelaShellOptions } from '../widget/shell-options';
@@ -1894,19 +1894,13 @@ export class VelaWorkspace {
     /** Allocate renderer resources by active state, visible area, workload and recent frame pressure. */
     private applyGraphicsBudget(): void {
         if (this.destroyed || this.cellsById.size === 0) return;
-        const hardware: GraphicsHardwareProfile = {
-            webgl2Supported: typeof WebGL2RenderingContext !== 'undefined',
-            deviceMemoryGiB: Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) || 4,
-            hardwareConcurrency: Number(navigator.hardwareConcurrency) || 4,
-            // Conservative portable cap; querying MAX_TEXTURE_SIZE would require creating
-            // an extra context and consume precisely the resource this allocator manages.
-            maxTextureSize: 8192,
-        };
         const inputs: GraphicsBudgetCellInput[] = [];
+        const diagnosticsByCell = new Map<string, NativeGraphicsDiagnostics>();
         for (const [cellId, cell] of this.cellsById) {
             const rect = cell.host.getBoundingClientRect();
             const visible = rect.width > 2 && rect.height > 2 && cell.host.isConnected;
             const diagnostics = cell.chart.renderer.getGraphicsDiagnostics?.();
+            if (diagnostics) diagnosticsByCell.set(cellId, diagnostics);
             inputs.push({
                 cellId, active: cellId === this.activeId, visible,
                 width: rect.width, height: rect.height,
@@ -1919,6 +1913,15 @@ export class VelaWorkspace {
                 frameBudgetMissRate: diagnostics?.frameBudgetMissRate ?? 0,
             });
         }
+        // Reuse an existing chart context for its real MAX_TEXTURE_SIZE capability;
+        // do not create a temporary context just to probe the GPU.
+        const reportedTextureSize = Math.max(0, ...[...diagnosticsByCell.values()].map(item => item.maxTextureSize ?? 0));
+        const hardware: GraphicsHardwareProfile = {
+            webgl2Supported: typeof WebGL2RenderingContext !== 'undefined',
+            deviceMemoryGiB: Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) || 4,
+            hardwareConcurrency: Number(navigator.hardwareConcurrency) || 4,
+            maxTextureSize: reportedTextureSize || 8192,
+        };
         const forced = this.opts.nativeBackend && this.opts.nativeBackend !== 'auto' ? this.opts.nativeBackend as NativeGraphicsBackend : undefined;
         for (const decision of planAdaptiveGraphicsBudget(inputs, hardware, forced)) {
             this.cellsById.get(decision.cellId)?.chart.renderer.setGraphicsPolicy?.({

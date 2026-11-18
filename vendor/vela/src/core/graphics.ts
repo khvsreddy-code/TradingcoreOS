@@ -22,6 +22,7 @@ export interface NativeGraphicsDiagnostics {
     drawingLayerCount: number;
     estimatedGpuBytes: number;
     estimatedCanvasBytes: number;
+    maxTextureSize?: number;
     p95FrameMs: number;
     frameBudgetMissRate: number;
     frameBudgetMs: number;
@@ -98,9 +99,13 @@ export function planAdaptiveGraphicsBudget(
         const qualityTarget = cell.active ? 1 : cell.visible ? 0.82 : 0.68;
         const framePressure = cell.frameP95Ms > 20 || cell.frameBudgetMissRate > 0.25 ? 0.82
             : cell.frameP95Ms > 17 || cell.frameBudgetMissRate > 0.12 ? 0.92 : 1;
-        const pixelScale = rawPixels > 0 ? Math.sqrt(Math.max(0, remainingPixels) / rawPixels) : 1;
+        // Existing canvas/GPU allocations count against the shared page budget too.
+        // Use the larger of physical surface pixels and renderer-reported GPU estimates
+        // to avoid double-counting the same surface while still respecting extra textures.
+        const resourcePixels = Math.max(rawPixels, Math.max(0, Number(cell.estimatedGpuBytes) || 0) / 4);
+        const pixelScale = resourcePixels > 0 ? Math.sqrt(Math.max(0, remainingPixels) / resourcePixels) : 1;
         const scale = Math.max(0.65, Math.min(1, qualityTarget, framePressure, pixelScale, textureScale));
-        const estimatedPixels = rawPixels * scale * scale;
+        const estimatedPixels = resourcePixels * scale * scale;
         remainingPixels = Math.max(0, remainingPixels - estimatedPixels);
 
         let backend: NativeGraphicsBackend;

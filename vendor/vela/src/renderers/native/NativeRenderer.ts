@@ -1959,6 +1959,7 @@ export class NativeRenderer implements IChartRenderer {
             indicatorCount: this.scene.indicators.size,
             drawingLayerCount: this.scene.drawingSlices?.size ?? 0,
             estimatedGpuBytes: gpuBytes, estimatedCanvasBytes,
+            maxTextureSize: this.backend instanceof WebGL2Backend ? this.backend.maxTextureSize : 0,
             p95FrameMs: stats.p95FrameMs, frameBudgetMissRate: stats.frameBudgetMissRate,
             frameBudgetMs: stats.frameBudgetMs,
         };
