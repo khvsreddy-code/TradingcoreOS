@@ -269,6 +269,7 @@ export class NativeRenderer implements IChartRenderer {
     private readonly scene = new SceneGraph();
     private backend!: IRenderBackend; // chosen at mount (WebGL2 if available, else canvas2d)
     private backendMode: NativeBackend = 'auto';
+    private webglUnavailable = false;
     private graphicsPolicy: NativeGraphicsPolicy = { backend: 'webgl2', resolutionScale: 1, glowEnabled: true };
     private glowAmount = 0; // WebGL2 neon-glow intensity (canvas2d ignores it)
     private readonly chrome = new ChromeRenderer(this.priceAxisTicks);
@@ -1902,6 +1903,7 @@ export class NativeRenderer implements IChartRenderer {
                 this.backend = gl;
                 return canvas;
             }
+            this.webglUnavailable = true;
             gl.destroy(); // context acquisition failed → discard the tainted canvas
         }
         const canvas = this.makeDataCanvas();
@@ -1919,7 +1921,8 @@ export class NativeRenderer implements IChartRenderer {
     /** Apply a workspace-owned quality/backend decision without replacing chart data, drawings or viewport state. */
     setGraphicsPolicy(policy: NativeGraphicsPolicy): void {
         const scale = Math.max(0.65, Math.min(1, Number(policy.resolutionScale) || 1));
-        const next: NativeGraphicsPolicy = { ...policy, resolutionScale: scale };
+        const backend = policy.backend === 'webgl2' && this.webglUnavailable ? 'canvas2d' : policy.backend;
+        const next: NativeGraphicsPolicy = { ...policy, backend, resolutionScale: scale };
         const backendChanged = this.backend?.kind !== next.backend;
         const scaleChanged = Math.abs(this.graphicsPolicy.resolutionScale - scale) > 0.01;
         const glowChanged = this.graphicsPolicy.glowEnabled !== next.glowEnabled;
@@ -1962,6 +1965,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     private swapToCanvas2dFallback(): void {
+        this.webglUnavailable = true;
         if (this.backend.kind === 'canvas2d') return;
         const old = this.dataCanvas;
         this.input?.detach();
