@@ -184,6 +184,11 @@ export class WebGL2Backend implements IRenderBackend {
         return this.gl !== null;
     }
 
+    /** Query the capability from this already-owned context; never create a probe context. */
+    get maxTextureSize(): number {
+        return this.gl && !this.contextLost ? this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) : 0;
+    }
+
     mount(canvas: HTMLCanvasElement): void {
         this.canvas = canvas;
         // alpha:true keeps the canvas transparent where nothing is drawn, so a layer behind it (the
