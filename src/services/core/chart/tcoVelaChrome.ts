@@ -3990,6 +3990,159 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
+type TerminalSyncKind = 'symbol' | 'timeframe' | 'crosshair' | 'viewport' | 'style' | 'drawings';
+type TerminalSyncSetting = boolean | Readonly<Record<string, string>> | undefined;
+
+const syncGroupsPanel: SidePanelDescriptor = {
+  id: 'tco.sync-groups',
+  title: 'Sync groups',
+  icon: 'layers',
+  order: 14,
+  width: 410,
+  resizable: true,
+  minWidth: 340,
+  maxWidth: 560,
+  mount(ctx, body, header) {
+    header.setTitle('Chart sync groups');
+    const root = panelRoot(body);
+    const intro = document.createElement('div');
+    intro.textContent = 'Link charts independently. Assign the same group for a sync type; leave a chart unlinked with None.';
+    intro.style.cssText = 'font:10px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);';
+    root.appendChild(intro);
+
+    const table = document.createElement('div');
+    table.style.cssText = 'display:flex;flex-direction:column;gap:7px;min-height:0;overflow:auto;';
+    root.appendChild(table);
+
+    const kinds: Array<{ kind: TerminalSyncKind; label: string }> = [
+      { kind: 'symbol', label: 'Symbol' },
+      { kind: 'timeframe', label: 'Interval' },
+      { kind: 'crosshair', label: 'Crosshair' },
+      { kind: 'viewport', label: 'Time / Viewport' },
+      { kind: 'style', label: 'Style' },
+      { kind: 'drawings', label: 'Drawings' },
+    ];
+    const groupChoices = [
+      { value: '', label: 'None' },
+      { value: 'A', label: 'Group A' },
+      { value: 'B', label: 'Group B' },
+      { value: 'C', label: 'Group C' },
+      { value: 'D', label: 'Group D' },
+    ];
+    type WorkspaceSyncHost = {
+      sync?: {
+        get: (kind: TerminalSyncKind) => TerminalSyncSetting;
+        set: (kind: TerminalSyncKind, setting: Readonly<Record<string, string>> | false | undefined) => void;
+      };
+      on?: (event: string, handler: () => void) => () => void;
+      saveNow?: () => Promise<void> | void;
+    };
+    const getWorkspace = (): WorkspaceSyncHost | undefined =>
+      (window as Window & { __TCO_VELA__?: { workspace?: WorkspaceSyncHost } }).__TCO_VELA__?.workspace;
+
+    const currentGroup = (setting: TerminalSyncSetting, cellId: string): string => {
+      if (setting === true) return 'A';
+      if (!setting || typeof setting !== 'object') return '';
+      return String(setting[cellId] || '');
+    };
+    const setCellGroup = (kind: TerminalSyncKind, cellId: string, group: string): void => {
+      const workspace = getWorkspace();
+      const sync = workspace?.sync;
+      if (!sync) {
+        ctx.toast('Vela sync controls are not available in this workspace.', 'error');
+        return;
+      }
+      const current = sync.get(kind);
+      const next: Record<string, string> = current === true
+        ? Object.fromEntries(ctx.cells.map(cell => [cell.id, 'A']))
+        : current && typeof current === 'object' ? { ...current } : {};
+      if (group) next[cellId] = group;
+      else delete next[cellId];
+      sync.set(kind, Object.keys(next).length ? next : undefined);
+      ctx.stateChanged();
+      void workspace?.saveNow?.();
+      render();
+    };
+
+    const render = (): void => {
+      const cells = [...ctx.cells];
+      const workspace = getWorkspace();
+      table.textContent = '';
+      if (!workspace?.sync) {
+        const unavailable = document.createElement('div');
+        unavailable.textContent = 'Workspace sync API is unavailable.';
+        unavailable.style.cssText = 'padding:10px;color:var(--vela-fg-muted);font-size:10px;';
+        table.appendChild(unavailable);
+        return;
+      }
+      if (!cells.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No charts are currently active.';
+        empty.style.cssText = 'padding:10px;color:var(--vela-fg-muted);font-size:10px;';
+        table.appendChild(empty);
+        return;
+      }
+
+      const heading = document.createElement('div');
+      heading.style.cssText = 'display:grid;grid-template-columns:minmax(110px,1fr) repeat(6,minmax(62px,.8fr));gap:5px;padding:4px 2px;color:var(--vela-fg-muted);font:8px Inter,ui-sans-serif,system-ui,sans-serif;text-transform:uppercase;';
+      const labels = ['Chart', 'Symbol', 'Interval', 'Crosshair', 'Time', 'Style', 'Draw'];
+      for (const label of labels) {
+        const cell = document.createElement('span');
+        cell.textContent = label;
+        heading.appendChild(cell);
+      }
+      table.appendChild(heading);
+
+      for (const cell of cells) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:minmax(110px,1fr) repeat(6,minmax(62px,.8fr));gap:5px;align-items:center;padding:6px 2px;border-top:1px solid var(--vela-border,rgba(128,128,128,.18));';
+        const identity = document.createElement('button');
+        identity.type = 'button';
+        identity.textContent = cell.symbol ? cell.symbol.split(':').pop() || cell.symbol : cell.id;
+        identity.title = `Activate ${cell.symbol || cell.id} · ${cell.timeframe}`;
+        identity.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;color:var(--vela-fg-bright);font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;';
+        identity.addEventListener('click', () => ctx.setActiveCell(cell.id));
+        if (ctx.activeCellId === cell.id) identity.style.color = 'var(--vela-accent,#8b7cff)';
+        row.appendChild(identity);
+        for (const { kind, label } of kinds) {
+          const select = document.createElement('select');
+          select.setAttribute('aria-label', `${label} sync group for ${cell.symbol || cell.id}`);
+          select.title = `${label} synchronization group`;
+          select.style.cssText = 'width:100%;min-width:0;border:1px solid var(--vela-border,rgba(128,128,128,.25));border-radius:5px;padding:4px 2px;background:var(--vela-bg,#111319);color:var(--vela-fg-bright);font:9px Inter,ui-sans-serif,system-ui,sans-serif;';
+          for (const choice of groupChoices) {
+            const option = document.createElement('option');
+            option.value = choice.value;
+            option.textContent = choice.label;
+            select.appendChild(option);
+          }
+          select.value = currentGroup(workspace.sync.get(kind), cell.id);
+          select.addEventListener('change', () => setCellGroup(kind, cell.id, select.value));
+          row.appendChild(select);
+        }
+        table.appendChild(row);
+      }
+    };
+
+    render();
+    const workspace = getWorkspace();
+    const disposers = [
+      workspace?.on?.('cell:active', render),
+      workspace?.on?.('cell:created', render),
+      workspace?.on?.('cell:destroyed', render),
+      workspace?.on?.('layout:changed', render),
+      workspace?.on?.('state:changed', render),
+    ].filter((dispose): dispose is () => void => typeof dispose === 'function');
+    const refreshTimer = window.setInterval(render, 1500);
+    return {
+      onOpen: render,
+      destroy() {
+        window.clearInterval(refreshTimer);
+        disposers.forEach(dispose => dispose());
+      },
+    };
+  },
+};
+
 const panelsHubPanel: SidePanelDescriptor = {
   id: 'tco.panels',
   title: 'More panels',
@@ -4028,6 +4181,7 @@ const panelsHubPanel: SidePanelDescriptor = {
           { id: 'tco.quant', label: 'Quant', detail: 'CoreSpirit research and analysis' },
           { id: 'tco.corespirit-code', label: 'CoreSpirit Editor', detail: 'Create and run chart scripts' },
           { id: 'tco.workspace-frame', label: 'Workspace', detail: 'Layouts, appearance and saved setups' },
+          { id: 'tco.sync-groups', label: 'Sync groups', detail: 'Link charts independently by symbol, interval, crosshair or time' },
         ],
       },
     ];
@@ -4071,6 +4225,7 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
+registerSidePanel(syncGroupsPanel);
 registerSidePanel(panelsHubPanel);
 registerWidgetAttachment(tradeMarksAttachment);
 registerWidgetAttachment(newsMarksAttachment);
