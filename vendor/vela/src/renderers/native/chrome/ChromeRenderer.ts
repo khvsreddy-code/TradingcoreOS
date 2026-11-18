@@ -482,14 +482,15 @@ export class ChromeRenderer {
         ctx.textAlign = 'center';
         const y = dataH + (fullH - dataH) / 2;
         const tr = coords.visibleTimeRange();
-        const offset = tzOffsetMs((tr.from + tr.to) / 2, displayZone(scene.timezone, coords.barInterval));
+        const timeZone = displayZone(scene.timezone, coords.barInterval);
+        const offset = tzOffsetMs((tr.from + tr.to) / 2, timeZone);
         // Width-adaptive density so a narrow surface — a phone, a multi-chart cell —
         // asks for fewer ticks instead of cramming the default eight. The floor of 3
         // keeps a narrow axis populated (a too-small target snaps the ladder to a huge
         // step whose few ticks can all miss the frame); the collision pass below is
         // what actually prevents overlap.
         const target = Math.max(3, Math.min(8, Math.floor(dataW / 64)));
-        const ticks = timeTicks(tr.from, tr.to, target, offset, scene.format)
+        const ticks = timeTicks(tr.from, tr.to, target, offset, scene.format, timeZone)
             .map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: ctx.measureText(tick.label).width / 2 }))
             .filter((tick) => tick.x >= 20 && tick.x <= dataW - 20);
         // Measured collision pass on top: label pitch in PIXELS isn't uniform (bar-index

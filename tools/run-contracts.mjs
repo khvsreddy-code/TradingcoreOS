@@ -48,6 +48,7 @@ const contracts = [
   ['fyers-option-search-token', ['src/fyersOptionSearchTokenContract.test.mjs', true]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['vela-drawing-groups', ['src/velaDrawingGroupContract.test.mjs', false]],
+  ['vela-timezone-dst', ['src/velaTimeZoneTicksContract.test.ts', true]],
   ['vela-ichimoku-math', ['src/velaIchimokuMathContract.test.ts', true]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],
   ['repaint-profiler', ['src/services/coreSpirit/repaintProfilerContract.test.mjs', true]],

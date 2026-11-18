@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { timeTicks } from '../vendor/vela/src/renderers/native/chrome/ticks.ts';
+import { tzOffsetMs } from '../vendor/vela/src/renderers/native/chrome/tz.ts';
+const hour = 60 * 60 * 1000;
+const springFrom = Date.UTC(2026, 2, 8, 5, 0);
+const spring = timeTicks(springFrom, springFrom + 4 * hour, 4, -5 * hour, undefined, 'America/New_York');
+const springHours = spring.map((tick) => new Date(tick.time + tzOffsetMs(tick.time, 'America/New_York')).getUTCHours());
+assert.deepEqual(springHours, [0, 1, 3, 4, 5], 'spring-forward must skip nonexistent local 02:00 rather than label it');
+const fallFrom = Date.UTC(2026, 10, 1, 4, 0);
+const fall = timeTicks(fallFrom, fallFrom + 4 * hour, 4, -4 * hour, undefined, 'America/New_York');
+const fallHours = fall.map((tick) => new Date(tick.time + tzOffsetMs(tick.time, 'America/New_York')).getUTCHours());
+assert.deepEqual(fallHours, [0, 1, 1, 2, 3], 'fall-back must preserve both distinct 01:00 instants');
+assert.equal(new Set(fall.map((tick) => tick.time)).size, fall.length, 'repeated wall-clock labels must retain distinct real instants');
+console.log('VELA_TIMEZONE_DST_TICKS_CONTRACT_OK');

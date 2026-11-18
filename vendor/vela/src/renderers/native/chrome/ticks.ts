@@ -7,7 +7,7 @@
 import type { PctScale } from '../core/SceneGraph';
 import { ENGLISH_FORMAT } from '../../../core/format/formatters';
 import type { FormatSurface, ResolvedFormatters, TimeTickUnit } from '../../../core/format/types';
-import { displayZone } from './tz';
+import { displayZone, tzOffsetMs } from './tz';
 
 export function priceTicks(min: number, max: number, target = 6): number[] {
     if (!(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return [];
@@ -257,24 +257,24 @@ function pickStep(targetMs: number): number {
 }
 
 /**
- * UTC-aligned tick ladder for the time axis. `offsetMs` shifts alignment + labels into
- * a chosen time zone (0 ⇒ UTC): ticks land on local midnights/hours and the returned
- * `time` is the REAL epoch-ms (zoned alignment undone) so the X mapping stays correct.
+ * Zoned tick ladder for the time axis. `offsetMs` remains the compatibility fallback;
+ * when `timeZone` is supplied the IANA offset is recalculated at every tick. That matters
+ * at DST boundaries: spring-forward skips the nonexistent local hour and fall-back may
+ * legitimately emit the repeated hour twice, while each tick remains at its true epoch.
  */
-export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0, fmt: ResolvedFormatters = ENGLISH_FORMAT): TimeTick[] {
+export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0, fmt: ResolvedFormatters = ENGLISH_FORMAT, timeZone?: string): TimeTick[] {
     const span = toMs - fromMs;
     if (!(span > 0)) return [];
     const step = pickStep(span / Math.max(1, target));
-    // Work in zoned space so `first`/steps align to local wall-clock, then undo the
-    // shift on each tick's `time` for pixel placement on the real (UTC) axis.
-    const zFrom = fromMs + offsetMs;
-    const zTo = toMs + offsetMs;
-    const first = Math.ceil(zFrom / step) * step;
+    const offsetAt = (time: number): number => timeZone ? tzOffsetMs(time, timeZone) : offsetMs;
+    const firstOffset = offsetAt(fromMs);
+    const first = Math.ceil((fromMs + firstOffset) / step) * step;
+    const firstTime = first - firstOffset;
     const clockUnit: TimeTickUnit = step < MIN ? 'second' : step < HOUR ? 'minute' : 'hour';
     const out: TimeTick[] = [];
-    for (let zt = first; zt <= zTo; zt += step) {
-        const t = zt - offsetMs;
-        const d = new Date(zt);
+    for (let t = firstTime; t <= toMs; t += step) {
+        const tickOffset = offsetAt(t);
+        const d = new Date(t + tickOffset);
         let unit: TimeTickUnit;
         let major = false;
         if (step < DAY) {
@@ -287,7 +287,7 @@ export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0
             unit = 'year';
             major = true;
         }
-        out.push({ time: t, label: fmt.timeTick(t, { unit, major, offsetMs, surface: 'timeAxis' }), major });
+        out.push({ time: t, label: fmt.timeTick(t, { unit, major, offsetMs: tickOffset, surface: 'timeAxis' }), major });
     }
     return out;
 }
