@@ -49,6 +49,7 @@ const contracts = [
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['vela-drawing-groups', ['src/velaDrawingGroupContract.test.mjs', false]],
   ['vela-synthetic-price-styles', ['src/velaSyntheticPriceStylesContract.test.ts', true]],
+  ['vela-p1-chart-terminal', ['src/velaP1ChartTerminalContract.test.mjs', true]],
   ['vela-anchored-vwap-math', ['src/velaAnchoredVwapMathContract.test.ts', true]],
   ['vela-manual-scale-inversion', ['src/velaManualScaleInversionContract.test.ts', true]],
   ['vela-timezone-dst', ['src/velaTimeZoneTicksContract.test.ts', true]],
