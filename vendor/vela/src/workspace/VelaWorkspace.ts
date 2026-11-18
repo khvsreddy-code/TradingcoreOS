@@ -40,7 +40,7 @@ import { ShortcutsHelp } from '../widget/shortcuts-help';
 import { Toast } from '../widget/toast';
 import { Glider, ZOOM_IN, ZOOM_OUT, PAN_FAST } from '../widget/glide';
 import { toolShortcutHints } from '../widget/tool-shortcuts';
-import { legendActionsProviderFor, legendCalloutsProviderFor, mobilePlacement, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type DockedStrip, type DockStripOptions, type PanelDockView, type TopbarItems, type WidgetActionDescriptor } from '../widget/contributions';
+import { drawingActionsProviderFor, legendActionsProviderFor, legendCalloutsProviderFor, mobilePlacement, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type DockedStrip, type DockStripOptions, type PanelDockView, type TopbarItems, type WidgetActionDescriptor } from '../widget/contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition } from '../widget/topbar-composition';
 import { LayoutModeController, type LayoutMode } from '../widget/layout-mode';
 import { Sidebar, sidebarActions, sidebarControl } from '../widget/sidebar';
@@ -325,6 +325,8 @@ export interface TypingState {
     dialogs: number;
     symbolSearch: boolean;
     timeframeEntry: boolean;
+    /** The shell's `symbolMenuFromKey`: `false` stops a bare key from OPENING symbol search. */
+    symbolMenuFromKey?: boolean;
 }
 
 /**
@@ -530,6 +532,7 @@ export class VelaWorkspace {
         const hostEl = typeof container === 'string' ? document.querySelector<HTMLElement>(container) : container;
         if (!hostEl) throw new Error(`VelaWorkspace: container not found: ${String(container)}`);
         this.opts = opts;
+        this.symbolMenuFromKey = opts.symbolMenuFromKey !== false;
         this.localeState = new LocaleState(pickLocalization(opts));
         // Before any cell exists: the replay watches every cell from its creation on.
         this.replay = new WorkspaceReplay({
@@ -1284,10 +1287,12 @@ export class VelaWorkspace {
         this.dock.refresh(); // rebuilt panels bind to the active cell's chart on their own
         this.sidebar?.render();
         // Re-project every cell's legend rows so a late registerLegendAction /
-        // registerLegendCallout (or a callout's own state change) appears there too.
+        // registerLegendCallout / registerDrawingAction (or a callout's own state change)
+        // appears there too.
         for (const cell of this.cells()) {
             cell.chart.renderer.setLegendActions(legendActionsProviderFor(cell.chart, () => this.context()));
             cell.chart.renderer.setLegendCallouts(legendCalloutsProviderFor(cell.chart, () => this.context()));
+            cell.chart.renderer.setDrawingActions(drawingActionsProviderFor(cell.chart, () => this.context()));
         }
     }
 
@@ -2233,6 +2238,10 @@ export class VelaWorkspace {
             this.propagateDrawingRemoval(cell.id, id);
             this.markStateDirty();
         });
+        // An undo, a redo and a document put in place change the cell's drawings without any
+        // of the three above: unreported, the saved state keeps the drawings as they were.
+        chart.on('drawing:history', () => this.markStateDirty());
+        chart.on('drawing:replaced', () => this.markStateDirty());
         // Tool/magnet/mode reflection (trigger ②): the ACTIVE cell's drawing state drives
         // the shared bar and the global mirrors — whatever the source (bar press, keymap,
         // API, a one-shot tool disarming itself after placement).
@@ -3067,7 +3076,7 @@ export class VelaWorkspace {
             label: TEXT.showShortcuts,
             category: TEXT.categoryHelp,
             run: () => {
-                this.shortcutsHelp ??= new ShortcutsHelp(this.keymap, this.root, (open) => this.trackDialog(open), () => this.localeState);
+                this.shortcutsHelp ??= new ShortcutsHelp(this.keymap, this.root, (open) => this.trackDialog(open), () => this.localeState, { symbolMenuFromKey: this.symbolMenuFromKey });
                 this.shortcutsHelp.open();
             },
         });
@@ -3080,7 +3089,7 @@ export class VelaWorkspace {
         // An input method composing a character (kana, hangul, pinyin) owns its keystrokes.
         if (ev.isComposing || ev.key === 'Process') return;
         if (isEditableTarget(ev)) return; // never hijack a keystroke someone is TYPING
-        const hit = resolveTyping(ev.key, { dialogs: this.openDialogs, symbolSearch: this.symbolPicker.isOpen, timeframeEntry: this.tfQuick.isOpen });
+        const hit = resolveTyping(ev.key, { dialogs: this.openDialogs, symbolSearch: this.symbolPicker.isOpen, timeframeEntry: this.tfQuick.isOpen, symbolMenuFromKey: this.symbolMenuFromKey });
         if (!hit) return;
         ev.preventDefault();
         if (hit.target === 'symbol') this.symbolPicker.type(hit.text);
