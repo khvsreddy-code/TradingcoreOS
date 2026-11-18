@@ -37,4 +37,35 @@ for(const id of ['renko','kagi','linebreak','pointfigure']){
  assert.equal(typeof chartType(id)?.dataEngine,'function',id+' must own its history/realtime/replay data engine');
  assert.ok(rendererLayers().some(x=>x.id===id),id+' must render as a native Vela layer');
 }
+// Every native synthetic style must publish a historical snapshot, react to a new
+// forming/history bar, pause while hidden, and republish the current state on resume.
+const testHost = (current: { bars: OHLCV[]; pushes: unknown[] }) => ({
+ symbol: 'NIFTY', timeframe: '1', live: true,
+ bars: () => current.bars,
+ data: {} as never,
+ pushData: (data: unknown) => current.pushes.push(data),
+ pushPending: (_ranges: ReadonlyArray<readonly [number, number]>) => {},
+});
+for (const id of ['renko','kagi','linebreak','pointfigure'] as const) {
+ const engine = chartType(id)!.dataEngine!();
+ const state = { bars: [...bars], pushes: [] as unknown[] };
+ engine.start(testHost(state));
+ assert.equal(state.pushes.length,1,id+' must publish its historical build on start');
+ assert.equal((state.pushes[0] as {sourceBarCount:number}).sourceBarCount,bars.length,id+' history output must align to its source bar count');
+ const appended = {time:bars.at(-1)!.time+60_000,open:bars.at(-1)!.close,high:bars.at(-1)!.close+22,low:bars.at(-1)!.close-17,close:bars.at(-1)!.close+15,volume:999};
+ state.bars = [...state.bars,appended];
+ engine.onBars?.();
+ assert.equal(state.pushes.length,2,id+' must publish when bars append or update in realtime');
+ assert.equal((state.pushes.at(-1) as {sourceBarCount:number}).sourceBarCount,bars.length+1,id+' realtime output must include the appended bar');
+ engine.suspend();
+ engine.onBars?.();
+ assert.equal(state.pushes.length,2,id+' must suppress renderer pushes while suspended');
+ engine.resume();
+ assert.equal(state.pushes.length,3,id+' must restore its current data when resumed');
+ engine.onSettings?.({boxSize:5,reversalBoxes:2,lineCount:2,reversal:5});
+ assert.equal(state.pushes.length,4,id+' must rebuild from canonical history when settings change');
+ engine.stop();
+ engine.onBars?.();
+ assert.equal(state.pushes.length,4,id+' must release its host and stop publishing after teardown');
+}
 console.log('VELA_SYNTHETIC_PRICE_STYLES_CONTRACT_OK');

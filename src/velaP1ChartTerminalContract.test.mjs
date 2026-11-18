@@ -5,6 +5,10 @@ import { lazyNativeIndicatorCatalog } from '../vendor/vela/src/core/native-indic
 import { registerBuiltinChartTypes } from '../vendor/vela/src/chart-types/builtins.ts';
 import { chartTypes } from '../vendor/vela/src/chart-types/registry.ts';
 import { BUILTIN_PRICE_STYLES } from '../vendor/vela/src/renderers/native/core/chartConfig.ts';
+import { loadNativeIndicatorType } from '../vendor/vela/src/core/native-indicators/lazyCatalog.ts';
+import { volumeDescriptor } from '../vendor/vela/src/core/native-indicators/volume/VolumeIndicator.ts';
+import { vpvrDescriptor } from '../vendor/vela/src/core/native-indicators/vpvr/VpvrIndicator.ts';
+import { ChartScaleModel } from './services/core/chart/chartScales.ts';
 
 const near = (a,b,label) => assert.ok(Number.isFinite(a) && Math.abs(a-b)<1e-8, label + ': ' + a + ' vs ' + b);
 for (const mode of ['linear','log','percent','indexed']) {
@@ -38,6 +42,12 @@ auto.setPaddingRatio(0.1);
 auto.setDomain(100,200,true);
 near(auto.domain.min,90,'auto-scale lower margin');
 near(auto.domain.max,210,'auto-scale upper margin');
+const scaleFacade = new ChartScaleModel();
+scaleFacade.setPriceDomain(10,20);
+scaleFacade.setPriceInverted(true);
+near(scaleFacade.price.yFromPrice(10,100),0,'scale facade inversion at minimum');
+near(scaleFacade.price.yFromPrice(20,100),100,'scale facade inversion at maximum');
+
 const paneA = new ChartPriceScaleEngine(), paneB = new ChartPriceScaleEngine();
 paneA.setBasePrice(100); paneB.setBasePrice(200);
 paneA.setMode('indexed'); paneB.setMode('indexed');
@@ -65,4 +75,12 @@ registerBuiltinChartTypes();
 const registeredTypes = new Set(chartTypes().map(type=>type.id));
 for (const type of ['heikinashi','renko','kagi','linebreak','pointfigure']) assert.ok(registeredTypes.has(type),'native chart type not registered: '+type);
 for (const style of ['candles','hollowcandles','bars','line','area','baseline','heikinashi','volumecandles']) assert.ok(BUILTIN_PRICE_STYLES.includes(style),'native price style missing: '+style);
+for (const type of ["sma","ema","wma","vwma","hma","rma","supertrend","average-directional-index","aroon","parabolic-sar","ichimoku-cloud","williams-alligator","rsi","macd","stochastic","stochastic-rsi","commodity-channel-index","williams-percent-r","rate-of-change","true-strength-index","fisher-transform","awesome-oscillator","average-true-range","bollinger-bands","keltner-channels","donchian-channels","historical-volatility","standard-deviation","choppiness-index","ttm-squeeze","on-balance-volume","vwap","anchored-vwap","accumulation-distribution","money-flow-index","chaikin-money-flow","klinger-oscillator","volume-oscillator"]) {
+ const descriptor = await loadNativeIndicatorType(type);
+ assert.ok(descriptor && descriptor.type === type,'native indicator implementation missing: '+type);
+ assert.equal(typeof descriptor.create,'function','native indicator factory missing: '+type);
+}
+assert.equal(volumeDescriptor.type,'volume','native volume columns descriptor missing');
+assert.equal(vpvrDescriptor.type,'vpvr','native visible-range volume profile descriptor missing');
+assert.ok(vpvrDescriptor.title,'visible-range volume profile must have a named native implementation');
 console.log('VELA_P1_CHART_TERMINAL_CONTRACT_OK');

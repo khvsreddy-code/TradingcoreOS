@@ -19,6 +19,7 @@ export class ChartScaleModel {
   setVolumeDomain(min: number, max: number): void { this._volume = normalizeDomain(min, max); }
   setPriceMode(mode: ChartPriceScaleMode): void { this.price.setMode(mode); }
   setPricePolicy(policy: 'auto' | 'manual' | 'locked'): void { this.price.setPolicy(policy); }
+  setPriceInverted(inverted: boolean): void { this.price.setInverted(inverted); }
   setPercentBase(value: number): void { this.price.setBasePrice(value); }
   setIndexedBase(value: number): void { this.price.setBasePrice(value); }
   setPricePaddingRatio(value: number): void { this.price.setPaddingRatio(value); }
