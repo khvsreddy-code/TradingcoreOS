@@ -50,16 +50,16 @@ const walk = directory => {
 walk(path.join(root, 'src'));
 const fullWorkspaceConsumers = sourceFiles
   .filter(file => !file.endsWith(path.join('components', 'workspace', 'FullWorkspaceView.tsx')))
-  .filter(file => /from\\s+['"][^'"]*\\/FullWorkspaceView['"]/.test(fs.readFileSync(file, 'utf8')))
-  .map(file => path.relative(root, file).replaceAll('\\\\', '/'));
+  .filter(file => /from\s+['"][^'"]*\/FullWorkspaceView['"]/.test(fs.readFileSync(file, 'utf8')))
+  .map(file => path.relative(root, file).replaceAll('\\', '/'));
 assert.deepEqual(fullWorkspaceConsumers, [],
   'the unmounted legacy FullWorkspaceView must not be reachable from the active application graph');
 
 const liveChartConsumers = sourceFiles
   .filter(file => !file.endsWith(path.join('components', 'workspace', 'LiveChart.tsx')))
   .filter(file => !file.endsWith(path.join('components', 'workspace', 'FullWorkspaceView.tsx')))
-  .filter(file => /from\\s+['"][^'"]*\\/LiveChart['"]/.test(fs.readFileSync(file, 'utf8')))
-  .map(file => path.relative(root, file).replaceAll('\\\\', '/'));
+  .filter(file => /from\s+['"][^'"]*\/LiveChart['"]/.test(fs.readFileSync(file, 'utf8')))
+  .map(file => path.relative(root, file).replaceAll('\\', '/'));
 assert.deepEqual(liveChartConsumers, [],
   'legacy LiveChart must stay out of the active application graph while Vela owns /live');
 
