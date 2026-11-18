@@ -330,15 +330,15 @@ export interface TypingState {
 }
 
 /**
- * What a bare keystroke on the workspace root does. Nothing open: a letter seeds symbol
- * search, a digit the timeframe entry. An ENTRY dialog open: its field takes focus a
- * tick after the dialog reports open, so the next key of a fast typist (`NQ`, `15`)
- * still lands on the root — it is handed to that dialog as more typed text instead of
- * dropped. Any other open dialog swallows bare typing. Pure — unit-tested.
+ * What a bare keystroke on the workspace root does. Nothing open: a letter or `0`
+ * seeds symbol search (unless the shell disabled it), digits `1`–`9` open the
+ * timeframe entry. An ENTRY dialog open: its field takes focus a tick after the dialog
+ * reports open, so the next key of a fast typist (`NQ`, `15`) still lands on the root —
+ * it is handed to that dialog as more typed text instead of dropped. Any other open
+ * dialog swallows bare typing. Pure — unit-tested.
  */
 export function resolveTyping(key: string, open: TypingState): { target: 'symbol' | 'timeframe'; text: string } | null {
-    // One printable character (a code point: a letter outside the Basic Multilingual Plane
-    // counts once), not a control key name like `Enter`.
+    // One printable Unicode code point (not a control key name such as Enter).
     const printable = [...key].length === 1;
     if (open.dialogs > 0) {
         if (!printable) return null;
@@ -346,8 +346,10 @@ export function resolveTyping(key: string, open: TypingState): { target: 'symbol
         if (open.timeframeEntry) return { target: 'timeframe', text: key };
         return null;
     }
-    if (/^[a-zA-Z]$/.test(key)) return { target: 'symbol', text: key.toUpperCase() };
-    if (/^[0-9]$/.test(key)) return { target: 'timeframe', text: key };
+    if (printable && /^[\\p{L}0]$/u.test(key)) {
+        return open.symbolMenuFromKey === false ? null : { target: 'symbol', text: key.toUpperCase() };
+    }
+    if (/^[1-9]$/.test(key)) return { target: 'timeframe', text: key };
     return null;
 }
 
@@ -524,6 +526,8 @@ export class VelaWorkspace {
     /** The single grid-wide attribution mark — re-inked on a live theme swap. */
     private attributionMark: HTMLElement | null = null;
     private readonly onRootKeydown = (ev: KeyboardEvent): void => this.routeTyping(ev);
+    /** Whether a bare Unicode letter or 0 opens the native symbol picker. */
+    private readonly symbolMenuFromKey: boolean;
     private readonly onAppearancePreviewRequest = (): void => this.publishAppearancePreview();
 
     constructor(container: HTMLElement | string, opts: VelaWorkspaceOptions = {}) {
