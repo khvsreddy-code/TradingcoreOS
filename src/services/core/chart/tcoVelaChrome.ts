@@ -4132,11 +4132,9 @@ const syncGroupsPanel: SidePanelDescriptor = {
       workspace?.on?.('layout:changed', render),
       workspace?.on?.('state:changed', render),
     ].filter((dispose): dispose is () => void => typeof dispose === 'function');
-    const refreshTimer = window.setInterval(render, 1500);
     return {
       onOpen: render,
       destroy() {
-        window.clearInterval(refreshTimer);
         disposers.forEach(dispose => dispose());
       },
     };
