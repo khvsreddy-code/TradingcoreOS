@@ -2961,10 +2961,11 @@ const replayPanel: SidePanelDescriptor = {
       if (normalized === 'M') return 30 * 86_400_000;
       return 60 * 60_000;
     };
-    const toLocalInput = (timestamp: number): string => {
-      const local = new Date(timestamp - new Date(timestamp).getTimezoneOffset() * 60_000);
-      return local.toISOString().slice(0, 16);
-    };
+    // datetime-local has no timezone. Format and parse it explicitly as IST.
+    const toIstInput = (timestamp: number): string =>
+      new Date(timestamp + 330 * 60_000).toISOString().slice(0, 16);
+    const fromIstInput = (value: string): number =>
+      Date.parse(value ? value + ':00+05:30' : '');
     const suggestedStart = (): number | null => {
       const bounds = replay.bounds;
       if (!bounds || !Number.isFinite(bounds.first) || !Number.isFinite(bounds.last) || bounds.last <= bounds.first) return null;
@@ -2975,10 +2976,10 @@ const replayPanel: SidePanelDescriptor = {
     const syncSuggestedStart = () => {
       if (input.dataset.userEdited === '1' || replay.state.active) return;
       const suggested = suggestedStart();
-      if (suggested != null) input.value = toLocalInput(suggested);
+      if (suggested != null) input.value = toIstInput(suggested);
     };
     const selectedStart = (): number | null => {
-      const selected = input.value ? new Date(input.value).getTime() : suggestedStart();
+      const selected = input.value ? fromIstInput(input.value) : suggestedStart();
       return selected != null && Number.isFinite(selected) ? selected : null;
     };
     const refresh = () => {
@@ -2992,7 +2993,7 @@ const replayPanel: SidePanelDescriptor = {
         ? new Date(state.cursorTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })
         : bounds ? 'Choose a starting candle' : 'Waiting for chart history';
       const total = state.remaining + (state.active ? 1 : 0);
-      if (bounds) input.max = toLocalInput(bounds.last - 1);
+      if (bounds) input.max = toIstInput(bounds.last - 1);
       const progress = state.active && bounds && bounds.last > bounds.first && state.cursorTime != null
         ? Math.max(0, Math.min(100, ((state.cursorTime - bounds.first) / (bounds.last - bounds.first)) * 100))
         : 0;
