@@ -8,6 +8,8 @@ import { LiveChart } from './LiveChart';
 import { ChartAnalytics } from '../../services/marketData/levelEngine';
 import { searchBrokerInstruments, SearchInstrument, InstrumentSearchSegment } from '../../services/marketData/instrumentSearch';
 import { WorkspaceAppearancePanel } from './WorkspaceAppearancePanel';
+import { buildOIChartAnalytics } from '../../services/marketData/oiEngine';
+import { blackScholes, impliedVolatility, optionTimeToExpiryYears, valuationPremium } from '../../services/marketData/options/optionPricing';
 
 const defaultWatchlist = [
   { key: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', short: 'NIFTY', type: 'Index' },
@@ -130,6 +132,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   const watchlist = currentWatchlist.items || [];
   const [selectedKey, setSelectedKey] = useState(watchlist[0]?.key || defaultWatchlist[0].key);
   const [optionChain, setOptionChain] = useState<any>(null);
+  const [optionExpiry, setOptionExpiry] = useState('current_week');
   const [optionLoading, setOptionLoading] = useState(false);
   const [optionError, setOptionError] = useState('');
   const [ticks, setTicks] = useState<Record<string, NormalizedMarketTick>>({});
@@ -217,8 +220,39 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
 
   const sync = async () => { try { const snapshot = await tradingCoreRuntime.syncPortfolio(); setFunds(snapshot.funds); setPositions(snapshot.positions); setOrders(snapshot.orders); setTrades(snapshot.trades); setHoldings(snapshot.holdings); } catch (error: any) { setFeedError(error.message || 'Portfolio synchronization failed'); } };
 
-  const refreshOptionChain = async () => { setOptionLoading(true); setOptionError(''); try { const chain = await tradingCoreRuntime.getOptionChain(selectedKey); setOptionChain(chain); } catch (error: any) { setOptionError(error?.message || 'Unable to load option chain'); } finally { setOptionLoading(false); } };
-  useEffect(() => { if (activeSection !== 'option-chain' || !selectedKey) return; let dead=false; const load=async()=>{ try { const chain=await tradingCoreRuntime.getOptionChain(selectedKey); if(!dead) setOptionChain(chain); setOptionError(''); } catch(e:any){ if(!dead) setOptionError(e?.message||'Unable to load option chain'); } finally { if(!dead) setOptionLoading(false); } }; setOptionLoading(true); void load(); const id=window.setInterval(()=>void load(),15000); return()=>{dead=true;window.clearInterval(id);}; }, [activeSection, selectedKey, brokerId]);
+  const refreshOptionChain = async () => {
+    setOptionLoading(true);
+    setOptionError('');
+    try {
+      const chain = await tradingCoreRuntime.getOptionChain(selectedKey, optionExpiry);
+      setOptionChain(chain);
+    } catch (error: any) {
+      setOptionError(error?.message || 'Unable to load option chain');
+    } finally {
+      setOptionLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (activeSection !== 'option-chain' || !selectedKey) return;
+    let dead = false;
+    const load = async () => {
+      try {
+        const chain = await tradingCoreRuntime.getOptionChain(selectedKey, optionExpiry);
+        if (!dead) {
+          setOptionChain(chain);
+          setOptionError('');
+        }
+      } catch (error: any) {
+        if (!dead) setOptionError(error?.message || 'Unable to load option chain');
+      } finally {
+        if (!dead) setOptionLoading(false);
+      }
+    };
+    setOptionLoading(true);
+    void load();
+    const id = window.setInterval(() => void load(), 15_000);
+    return () => { dead = true; window.clearInterval(id); };
+  }, [activeSection, selectedKey, brokerId, optionExpiry]);
 
   useEffect(() => {
     void sync();
@@ -285,7 +319,15 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         <div data-tco-workspace-zone="chart" className={activeSection === 'option-chain' ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
           <LiveChart key={`${brokerId}:${selectedKey}`} instrumentKey={selectedKey} brokerId={brokerId} levelsRequest={levelsRequest} onAnalytics={setAnalytics} />
         </div>
-        {activeSection === 'option-chain' && <OptionChainPanel loading={optionLoading} error={optionError} chain={optionChain} onChart={() => setActiveSection('info')} onRefresh={() => void refreshOptionChain()} />}
+        {activeSection === 'option-chain' && <OptionChainPanel
+            loading={optionLoading}
+            error={optionError}
+            chain={optionChain}
+            expiry={optionExpiry}
+            onExpiryChange={setOptionExpiry}
+            onChart={() => setActiveSection('info')}
+            onRefresh={() => void refreshOptionChain()}
+          />}
       </section>
 
       <aside data-tco-workspace-zone="sidebar" className="border-t 2xl:border-t-0 2xl:border-l border-[var(--tco-border)] bg-[var(--tco-surface)] p-3 overflow-y-auto">
@@ -309,37 +351,224 @@ function MetricRow({ label, value }: { label: string; value: string }) { return 
 function LevelList({ title, levels }: { title: string; levels: ChartAnalytics['support'] }) { return <div className="mb-3"><div className="text-[9px] uppercase tracking-widest text-[var(--tco-dim)] mb-1">{title}</div>{levels.length ? levels.slice(0, 3).map((x, i) => <div key={`${x.side}-${x.price}`} className="flex items-center justify-between py-1.5 border-b border-[#1a1e29] last:border-0"><span className={`font-mono text-[10px] ${x.state === 'BROKEN' ? 'text-[var(--tco-dim)]' : x.side === 'support' ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>{x.state}</span><span className="font-mono text-[11px]">₹{fmt(x.price)} <span className="text-[var(--tco-dim)]">· {fmt(x.distance, 1)} pts</span></span></div>) : <div className="text-[9px] text-[var(--tco-dim)]">Calculating from live candles…</div>}</div>; }
 function Depth({ title, rows, cls }: { title: string; rows: Array<{ price: number; quantity: number }>; cls: string }) { return <div><div className={`${cls} uppercase mb-1`}>{title}</div>{rows.length ? rows.slice(0, 5).map((r, i) => <div key={i} className="flex justify-between py-0.5"><span>₹{fmt(r.price)}</span><span className="text-[var(--tco-muted)]">{r.quantity}</span></div>) : <div className="text-[var(--tco-dim)]">—</div>}</div>; }
 
-function OptionChainPanel({ loading, error, chain, onChart, onRefresh }: { loading: boolean; error: string; chain: any; onChart: () => void; onRefresh: () => void }) {
+type OptionChainPanelProps = {
+  loading: boolean;
+  error: string;
+  chain: any;
+  expiry: string;
+  onExpiryChange: (expiry: string) => void;
+  onChart: () => void;
+  onRefresh: () => void;
+};
+
+function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onChart, onRefresh }: OptionChainPanelProps) {
   const rows = Array.isArray(chain?.contracts) ? chain.contracts : [];
   const spot = Number(chain?.spot || 0);
-  const atmStrike = rows.length && spot ? rows.reduce((best: any, row: any) => Math.abs(Number(row.strike) - spot) < Math.abs(Number(best.strike) - spot) ? row : best, rows[0]).strike : undefined;
-  const atmIndex = rows.findIndex((r:any)=>Number(r.strike)===Number(atmStrike));
-  const nearby = rows.filter((_:any,i:number)=>atmIndex<0 || Math.abs(i-atmIndex)<=5);
-  const fmtN=(n:any)=>{const x=Number(n||0);return x>=1e7?`${(x/1e7).toFixed(2)}Cr`:x>=1e5?`${(x/1e5).toFixed(2)}L`:x>=1e3?`${(x/1e3).toFixed(1)}K`:String(Math.round(x));};
-  const oiChange=(quote:any)=>{
-    const direct=quote?.oiChange ?? quote?.changeInOI ?? quote?.changeOi;
-    if(direct!=null&&Number.isFinite(Number(direct)))return Number(direct);
-    const oi=Number(quote?.oi),previous=Number(quote?.previousOi);
-    return Number.isFinite(oi)&&Number.isFinite(previous)?oi-previous:0;
+  const atmStrike = rows.length && Number.isFinite(spot) && spot > 0
+    ? rows.reduce((best: any, row: any) => Math.abs(Number(row.strike) - spot) < Math.abs(Number(best.strike) - spot) ? row : best, rows[0]).strike
+    : undefined;
+  const atmIndex = rows.findIndex((row: any) => Number(row.strike) === Number(atmStrike));
+  const nearby = rows.filter((_: any, index: number) => atmIndex < 0 || Math.abs(index - atmIndex) <= 5);
+  const formatCompact = (value: unknown) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '—';
+    const magnitude = Math.abs(number);
+    return magnitude >= 1e7 ? `${(number / 1e7).toFixed(2)}Cr`
+      : magnitude >= 1e5 ? `${(number / 1e5).toFixed(2)}L`
+        : magnitude >= 1e3 ? `${(number / 1e3).toFixed(1)}K`
+          : String(Math.round(number));
   };
-  const callOi=rows.reduce((a:any,r:any)=>a+Number(r.call?.oi||0),0),putOi=rows.reduce((a:any,r:any)=>a+Number(r.put?.oi||0),0);
-  const callChg=rows.reduce((a:any,r:any)=>a+oiChange(r.call),0),putChg=rows.reduce((a:any,r:any)=>a+oiChange(r.put),0);
-  const pcr=callOi?putOi/callOi:0;
-  const maxCall=rows.reduce((b:any,r:any)=>Number(r.call?.oi||0)>Number(b?.call?.oi||0)?r:b,null);
-  const maxPut=rows.reduce((b:any,r:any)=>Number(r.put?.oi||0)>Number(b?.put?.oi||0)?r:b,null);
-  const bullish=pcr>1.05 || putChg>callChg, bearish=pcr<0.8 || callChg>putChg*1.25;
-  const bias=bullish&&!bearish?'BULLISH':bearish&&!bullish?'BEARISH':'RANGE / TWO-WAY';
-  const next = bullish&&!bearish ? `Upside is favoured while ${maxCall?.strike??'resistance'} stays capped; a clean acceptance above the nearest call wall would increase continuation odds.` : bearish&&!bullish ? `Downside is favoured while ${maxPut?.strike??'support'} fails to absorb selling; reclaiming the nearest put wall would invalidate the bearish read.` : `Expect two-way trade around ATM until OI concentration or spot displacement breaks the range.`;
+  const finite = (value: unknown): number | undefined => {
+    if (value == null || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const oiChange = (quote: any): number | undefined => {
+    if (!quote) return undefined;
+    const direct = finite(quote.oiChange ?? quote.changeInOI ?? quote.changeOi);
+    if (direct !== undefined) return direct;
+    const oi = finite(quote.oi);
+    const previous = finite(quote.previousOi);
+    return oi !== undefined && previous !== undefined ? oi - previous : undefined;
+  };
+  const total = (side: 'call' | 'put') => rows.reduce((sum: number, row: any) => sum + (finite(row?.[side]?.oi) ?? 0), 0);
+  const callOi = total('call');
+  const putOi = total('put');
+  const callChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.call) ?? 0), 0);
+  const putChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.put) ?? 0), 0);
+  const hasOi = rows.some((row: any) => finite(row.call?.oi) !== undefined || finite(row.put?.oi) !== undefined);
+  const pcr = callOi > 0 ? putOi / callOi : undefined;
+  const maxCall = rows.reduce((best: any, row: any) => (finite(row.call?.oi) ?? 0) > (finite(best?.call?.oi) ?? 0) ? row : best, null);
+  const maxPut = rows.reduce((best: any, row: any) => (finite(row.put?.oi) ?? 0) > (finite(best?.put?.oi) ?? 0) ? row : best, null);
+  const analytics = chain && hasOi && spot > 0 ? buildOIChartAnalytics(chain, spot) : null;
+  const maxPain = finite(analytics?.maxPain);
+  const bullish = pcr !== undefined && (pcr > 1.05 || putChg > callChg);
+  const bearish = pcr !== undefined && (pcr < 0.8 || callChg > putChg * 1.25);
+  const bias = !hasOi ? 'INSUFFICIENT OI' : bullish && !bearish ? 'BULLISH' : bearish && !bullish ? 'BEARISH' : 'RANGE / TWO-WAY';
+  const next = !hasOi
+    ? 'Open interest is unavailable in this snapshot. No directional read is generated.'
+    : bullish && !bearish
+      ? `Put-side OI is larger or increasing faster. Confirm with spot acceptance; OI alone does not establish direction.`
+      : bearish && !bullish
+        ? `Call-side OI is larger or increasing faster. Confirm with spot acceptance; OI alone does not establish direction.`
+        : 'The OI snapshot is mixed. Wait for price acceptance and a sustained change in strike-level OI.';
+  const quoteObservedAt = String(chain?.observedAt || rows.flatMap((row: any) => [row.call?.observedAt, row.put?.observedAt]).find(Boolean) || '');
+  const quoteObservedMs = Date.parse(quoteObservedAt);
+  const quoteAgeMs = Number.isFinite(quoteObservedMs) ? Date.now() - quoteObservedMs : undefined;
+  const source = String(chain?.source || rows.flatMap((row: any) => [row.call?.source, row.put?.source]).find(Boolean) || 'Unknown');
+  const freshness = quoteAgeMs === undefined
+    ? 'TIMESTAMP UNAVAILABLE'
+    : quoteAgeMs < -1_000 ? 'CLOCK SKEW'
+      : quoteAgeMs <= 15_000 ? 'RECENT SNAPSHOT' : 'STALE SNAPSHOT';
+  const freshnessColor = freshness === 'RECENT SNAPSHOT' ? 'text-[#3b82f6]'
+    : freshness === 'STALE SNAPSHOT' ? 'text-[#f59e0b]' : 'text-[var(--tco-dim)]';
+  const ageLabel = quoteAgeMs === undefined ? 'age unknown'
+    : quoteAgeMs < 0 ? 'clock ahead'
+      : quoteAgeMs < 60_000 ? `${Math.floor(quoteAgeMs / 1000)}s ago`
+        : `${Math.floor(quoteAgeMs / 60_000)}m ago`;
+
+  // These are explicit model assumptions, not broker-provided rates or Greeks.
+  const riskFreeRate = 0.06;
+  const dividendYield = 0.01;
+  const modelFor = (quote: any, right: 'CE' | 'PE', strike: number, rowExpiry?: string) => {
+    const premium = valuationPremium(quote || {});
+    if (premium == null || !(spot > 0)) return null;
+    const observedAt = String(quote?.observedAt || chain?.observedAt || '');
+    const expiryValue = String(rowExpiry || chain?.expiry || '');
+    const timeToExpiryYears = optionTimeToExpiryYears(expiryValue, observedAt);
+    if (timeToExpiryYears == null || timeToExpiryYears <= 0) return null;
+    const common = { right, spot, strike, timeToExpiryYears, riskFreeRate, dividendYield };
+    const volatility = impliedVolatility({ ...common, optionPrice: premium });
+    if (volatility == null || volatility <= 0) return null;
+    return { volatility, greeks: blackScholes({ ...common, volatility }), premium };
+  };
+  const buildUp = (quote: any): string => {
+    const currentPrice = finite(quote?.ltp);
+    const previousPrice = finite(quote?.previousLtp);
+    const currentOi = finite(quote?.oi);
+    const previousOi = finite(quote?.previousOi);
+    if (currentPrice === undefined || previousPrice === undefined || currentOi === undefined || previousOi === undefined) return '—';
+    const priceChange = currentPrice - previousPrice;
+    const oiDelta = currentOi - previousOi;
+    if (priceChange > 0 && oiDelta > 0) return 'LONG BUILDUP';
+    if (priceChange < 0 && oiDelta > 0) return 'SHORT BUILDUP';
+    if (priceChange > 0 && oiDelta < 0) return 'SHORT COVERING';
+    if (priceChange < 0 && oiDelta < 0) return 'LONG UNWINDING';
+    return 'NEUTRAL';
+  };
+  const formatPercent = (value: number | undefined) => value == null || !Number.isFinite(value) ? '—' : `${(value * 100).toFixed(1)}%`;
+  const expiryOptions: string[] = Array.isArray(chain?.expiries) ? chain.expiries.map((value: unknown) => String(value)) : [];
+  const expiryLabel = (value: string) => value === 'current_week' ? `Nearest expiry · ${chain?.expiry || 'provider default'}` : value;
+  const atmRow = rows.find((row: any) => Number(row.strike) === Number(atmStrike));
+  const atmCall = atmRow ? modelFor(atmRow.call, 'CE', Number(atmRow.strike), atmRow.expiry) : null;
+  const atmPut = atmRow ? modelFor(atmRow.put, 'PE', Number(atmRow.strike), atmRow.expiry) : null;
+  const skew = atmCall && atmPut ? atmPut.volatility - atmCall.volatility : undefined;
+
   return <div className="flex min-h-[560px] flex-1 flex-col rounded-xl border border-[var(--tco-border)] bg-[var(--tco-surface)] p-3">
-    <div className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-mono text-sm font-bold">Option Chain Intelligence</div><div className="truncate text-[9px] text-[var(--tco-dim)]">{chain?.underlyingKey||'—'} · Spot {spot?fmt(spot):'—'} · Expiry {chain?.expiry||'—'} · auto-refresh 5s</div></div><div className="flex shrink-0 items-center gap-1.5"><span className="rounded border border-[#3b82f6]/30 bg-[#3b82f6]/5 px-2 py-1 text-[8px] font-mono text-[#3b82f6]">● LIVE</span><button onClick={onRefresh} className="rounded border border-[var(--tco-border)] px-2 py-1 text-[9px] font-mono text-[var(--tco-muted)] hover:text-white"><RefreshCw className="mr-1 inline h-3 w-3"/>Refresh</button><button onClick={onChart} className="rounded border border-[#3b82f6]/40 px-2 py-1 text-[9px] font-mono text-[#3b82f6]"><LineChart className="mr-1 inline h-3 w-3"/>Chart</button></div></div>
-    {loading && !rows.length && <div className="flex flex-1 items-center justify-center text-xs text-[var(--tco-dim)]">Loading live broker option intelligence…</div>}
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="font-mono text-sm font-bold">Option Chain Intelligence</div>
+        <div className="truncate text-[9px] text-[var(--tco-dim)]">
+          {chain?.underlyingKey || '—'} · Spot {spot > 0 ? fmt(spot) : '—'} · Expiry {chain?.expiry || '—'} · refresh 15s
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={`rounded border border-[var(--tco-border)] px-2 py-1 text-[8px] font-mono ${freshnessColor}`} title={quoteObservedAt ? `Observed at ${quoteObservedAt}` : 'Provider timestamp unavailable'}>
+          {source.toUpperCase()} · {freshness}
+        </span>
+        <button onClick={onRefresh} className="rounded border border-[var(--tco-border)] px-2 py-1 text-[9px] font-mono text-[var(--tco-muted)] hover:text-white">
+          <RefreshCw className="mr-1 inline h-3 w-3"/>Refresh
+        </button>
+        <button onClick={onChart} className="rounded border border-[#3b82f6]/40 px-2 py-1 text-[9px] font-mono text-[#3b82f6]">
+          <LineChart className="mr-1 inline h-3 w-3"/>Chart
+        </button>
+      </div>
+    </div>
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <label className="text-[9px] text-[var(--tco-dim)]">EXPIRY</label>
+      <select value={expiry} onChange={event => onExpiryChange(event.target.value)} className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] px-2 py-1 text-[9px] font-mono">
+        <option value="current_week">{expiryLabel('current_week')}</option>
+        {expiryOptions.filter(value => value && value !== 'current_week').map(value => <option key={value} value={value}>{value}</option>)}
+      </select>
+      <span className="text-[9px] text-[var(--tco-dim)]">{ageLabel}</span>
+    </div>
+    {loading && !rows.length && <div className="flex flex-1 items-center justify-center text-xs text-[var(--tco-dim)]">Loading option-chain snapshot from the connected broker…</div>}
     {error && <div className="mb-3 rounded border border-[#ef4444]/30 bg-[#ef4444]/5 p-3 text-xs text-[#ef4444]">{error}</div>}
     {!!rows.length && <>
-      <div className="grid gap-2 md:grid-cols-5 mb-3"><div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3"><div className="text-[8px] text-[var(--tco-dim)]">PCR</div><div className="mt-1 text-lg font-black">{pcr.toFixed(2)}</div><div className="text-[8px] text-[var(--tco-muted)]">{pcr>1.05?'put support bias':pcr<.8?'call pressure':'balanced'}</div></div><div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3"><div className="text-[8px] text-[var(--tco-dim)]">CALL OI</div><div className="mt-1 text-lg font-black text-[#ef4444]">{fmtN(callOi)}</div><div className="text-[8px] text-[var(--tco-muted)]">Δ {callChg>=0?'+':''}{fmtN(callChg)}</div></div><div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3"><div className="text-[8px] text-[var(--tco-dim)]">PUT OI</div><div className="mt-1 text-lg font-black text-[#3b82f6]">{fmtN(putOi)}</div><div className="text-[8px] text-[var(--tco-muted)]">Δ {putChg>=0?'+':''}{fmtN(putChg)}</div></div><div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3"><div className="text-[8px] text-[var(--tco-dim)]">MAX WALLS</div><div className="mt-1 text-sm font-black">{maxPut?.strike??'—'} / {maxCall?.strike??'—'}</div><div className="text-[8px] text-[var(--tco-muted)]">PUT support / CALL resistance</div></div><div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3"><div className="text-[8px] text-[var(--tco-dim)]">CURRENT READ</div><div className={`mt-1 text-sm font-black ${bias==='BULLISH'?'text-[#3b82f6]':bias==='BEARISH'?'text-[#ef4444]':'text-[#f59e0b]'}`}>{bias}</div><div className="text-[8px] text-[var(--tco-muted)]">derived from OI + ΔOI</div></div></div>
-      <div className="mb-3 rounded-lg border border-[#3b82f6]/15 bg-[#3b82f6]/5 p-3"><div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">What is likely next</div><div className="mt-1 text-xs leading-5 text-[#d1d5db]">{next}</div></div>
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--tco-border)]"><table className="w-full min-w-[1120px] text-left font-mono text-[10px]"><thead className="sticky top-0 z-10 bg-[var(--tco-surface-3)] text-[var(--tco-dim)]"><tr><th className="p-2 text-right">CALL OI</th><th className="p-2 text-right">ΔOI</th><th className="p-2 text-right">LTP</th><th className="p-2 text-right">BID</th><th className="p-2 text-right">ASK</th><th className="p-2 text-center text-white">STRIKE</th><th className="p-2">BID</th><th className="p-2">ASK</th><th className="p-2">LTP</th><th className="p-2">ΔOI</th><th className="p-2">PUT OI</th></tr></thead><tbody>{nearby.map((row:any)=>{const atm=Number(row.strike)===Number(atmStrike);const c=row.call||{},q=row.put||{},cOiChange=oiChange(c),qOiChange=oiChange(q);return <tr key={`${row.strike}-${row.expiry||''}`} className={`border-t border-[#151923] ${atm?'bg-[#3b82f6]/10':'hover:bg-[#121722]'}`}><td className="p-2 text-right text-[#ef4444]">{fmtN(c.oi)}</td><td className={`p-2 text-right ${cOiChange>=0?'text-[#3b82f6]':'text-[#ef4444]'}`}>{fmtN(cOiChange)}</td><td className="p-2 text-right">{c.ltp??'—'}</td><td className="p-2 text-right text-[var(--tco-dim)]">{c.bidPrice??'—'}</td><td className="p-2 text-right text-[var(--tco-dim)]">{c.askPrice??'—'}</td><td className="p-2 text-center font-bold text-white">{row.strike}{atm&&<span className="ml-1 rounded bg-[#3b82f6]/15 px-1 text-[8px] text-[#3b82f6]">ATM</span>}</td><td className="p-2 text-[var(--tco-dim)]">{q.bidPrice??'—'}</td><td className="p-2 text-[var(--tco-dim)]">{q.askPrice??'—'}</td><td className="p-2">{q.ltp??'—'}</td><td className={`p-2 ${qOiChange>=0?'text-[#3b82f6]':'text-[#ef4444]'}`}>{fmtN(qOiChange)}</td><td className="p-2 text-[#3b82f6]">{fmtN(q.oi)}</td></tr>})}</tbody></table></div>
+      <div className="grid gap-2 md:grid-cols-6 mb-3">
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">PCR</div>
+          <div className="mt-1 text-lg font-black">{pcr == null ? '—' : pcr.toFixed(2)}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">{pcr == null ? 'OI unavailable' : pcr > 1.05 ? 'put OI heavier' : pcr < .8 ? 'call OI heavier' : 'balanced OI'}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">CALL OI</div>
+          <div className="mt-1 text-lg font-black text-[#ef4444]">{hasOi ? formatCompact(callOi) : '—'}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">Δ {hasOi ? `${callChg >= 0 ? '+' : ''}${formatCompact(callChg)}` : '—'}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">PUT OI</div>
+          <div className="mt-1 text-lg font-black text-[#3b82f6]">{hasOi ? formatCompact(putOi) : '—'}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">Δ {hasOi ? `${putChg >= 0 ? '+' : ''}${formatCompact(putChg)}` : '—'}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">MAX WALLS</div>
+          <div className="mt-1 text-sm font-black">{maxPut?.strike ?? '—'} / {maxCall?.strike ?? '—'}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">PUT support / CALL resistance</div>
+        </div>
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">MAX PAIN</div>
+          <div className="mt-1 text-sm font-black">{maxPain == null ? '—' : fmt(maxPain, 0)}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">OI-weighted expiry payoff</div>
+        </div>
+        <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+          <div className="text-[8px] text-[var(--tco-dim)]">CURRENT READ</div>
+          <div className={`mt-1 text-sm font-black ${bias === 'BULLISH' ? 'text-[#3b82f6]' : bias === 'BEARISH' ? 'text-[#ef4444]' : 'text-[#f59e0b]'}`}>{bias}</div>
+          <div className="text-[8px] text-[var(--tco-muted)]">derived from available OI changes</div>
+        </div>
+      </div>
+      <div className="mb-3 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
+        <div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Volatility surface snapshot</div>
+        <div className="mt-1 text-[10px] text-[var(--tco-muted)]">
+          ATM CE IV {formatPercent(atmCall?.volatility)} · ATM PE IV {formatPercent(atmPut?.volatility)} · PE−CE skew {skew == null ? '—' : `${(skew * 100).toFixed(1)} vol pts`}
+        </div>
+        <div className="mt-1 text-[8px] text-[var(--tco-dim)]">
+          Model estimate from bid/ask midpoint (LTP fallback) · Black–Scholes · ACT/365 · r { (riskFreeRate * 100).toFixed(1) }% · q { (dividendYield * 100).toFixed(1) }%. Theta/day; Vega and Rho per 1 percentage point. Not broker Greeks.
+        </div>
+        <div className="mt-1 text-[8px] text-[var(--tco-dim)]">{next}</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--tco-border)]">
+        <table className="w-full min-w-[1560px] text-left font-mono text-[10px]">
+          <thead className="sticky top-0 z-10 bg-[var(--tco-surface-3)] text-[var(--tco-dim)]">
+            <tr>
+              <th className="p-2 text-right">CALL OI</th><th className="p-2 text-right">ΔOI</th><th className="p-2 text-right">LTP</th><th className="p-2 text-right">BID</th><th className="p-2 text-right">ASK</th><th className="p-2 text-right">IV</th><th className="p-2 text-right">Δ</th><th className="p-2 text-right">Γ</th><th className="p-2 text-right">Θ/day</th><th className="p-2 text-right">Vega</th><th className="p-2 text-center text-white">STRIKE</th><th className="p-2">BID</th><th className="p-2">ASK</th><th className="p-2">LTP</th><th className="p-2">IV</th><th className="p-2">Δ</th><th className="p-2">Γ</th><th className="p-2">Θ/day</th><th className="p-2">Vega</th><th className="p-2">ΔOI</th><th className="p-2">PUT OI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nearby.map((row: any) => {
+              const atm = Number(row.strike) === Number(atmStrike);
+              const call = row.call || {};
+              const put = row.put || {};
+              const callChange = oiChange(call);
+              const putChange = oiChange(put);
+              const callModel = modelFor(call, 'CE', Number(row.strike), row.expiry);
+              const putModel = modelFor(put, 'PE', Number(row.strike), row.expiry);
+              return <tr key={`${row.strike}-${row.expiry || ''}`} className={`border-t border-[#151923] ${atm ? 'bg-[#3b82f6]/10' : 'hover:bg-[#121722]'}`}>
+                <td className="p-2 text-right text-[#ef4444]">{formatCompact(call.oi)}</td>
+                <td className={`p-2 text-right ${callChange === undefined ? 'text-[var(--tco-dim)]' : callChange >= 0 ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>{callChange === undefined ? '—' : formatCompact(callChange)}</td>
+                <td className="p-2 text-right">{fmt(finite(call.ltp), 2)}</td><td className="p-2 text-right text-[var(--tco-dim)]">{fmt(finite(call.bidPrice), 2)}</td><td className="p-2 text-right text-[var(--tco-dim)]">{fmt(finite(call.askPrice), 2)}</td>
+                <td className="p-2 text-right">{callModel ? formatPercent(callModel.volatility) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td>
+                <td className="p-2 text-center font-bold text-white">{row.strike}{atm && <span className="ml-1 rounded bg-[#3b82f6]/15 px-1 text-[8px] text-[#3b82f6]">ATM</span>}</td>
+                <td className="p-2 text-[var(--tco-dim)]">{fmt(finite(put.bidPrice), 2)}</td><td className="p-2 text-[var(--tco-dim)]">{fmt(finite(put.askPrice), 2)}</td><td className="p-2">{fmt(finite(put.ltp), 2)}</td>
+                <td className="p-2">{putModel ? formatPercent(putModel.volatility) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td>
+                <td className={`p-2 ${putChange === undefined ? 'text-[var(--tco-dim)]' : putChange >= 0 ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>{putChange === undefined ? '—' : formatCompact(putChange)}</td>
+                <td className="p-2 text-[#3b82f6]">{formatCompact(put.oi)}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
     </>}
-    {!loading&&!error&&!rows.length&&<div className="flex flex-1 items-center justify-center text-xs text-[var(--tco-dim)]">No option contracts returned by the connected broker.</div>}
+    {!loading && !error && !rows.length && <div className="flex flex-1 items-center justify-center text-xs text-[var(--tco-dim)]">No option contracts returned by the connected broker.</div>}
   </div>;
 }
-
