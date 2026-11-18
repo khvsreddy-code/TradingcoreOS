@@ -298,10 +298,10 @@ const browserRuntimeMetrics = useRef({
       await registerVelaWorkspaceLayouts(TCO_VELA_LAYOUT_PRESETS);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
-      // Vela's native grid picker accepts every 1..4 row/column combination
-      // (g1x3 = 3 charts, g2x3 = 6 charts, g2x4 = 8 charts, etc.).
-      // TCO saved presets remain valid alongside Vela's built-in layouts.
-      const isNativeGridLayout = /^g[1-4]x[1-4]$/.test(queryLayout);
+      // Vela synthesizes native grids from row/column counts. TCO intentionally
+      // caps the terminal at eight simultaneous chart cells (including deep links).
+      const gridMatch = /^g([1-4])x([1-4])$/.exec(queryLayout);
+      const isNativeGridLayout = Boolean(gridMatch && Number(gridMatch[1]) * Number(gridMatch[2]) <= 8);
       const isTcoLayoutPreset = TCO_VELA_LAYOUT_PRESETS.some(preset => preset.id === queryLayout);
       const isBuiltinLayout = ['1','2h','2v','4','8'].includes(queryLayout);
       const initialLayout = isNativeGridLayout || isTcoLayoutPreset || isBuiltinLayout
