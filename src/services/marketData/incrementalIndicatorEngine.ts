@@ -84,6 +84,9 @@ export class IncrementalIndicatorRuntime {
   private lastTimestamp:string|null=null;
   private barCount=0;
   private previousCandle:HistoricalCandle|null=null;
+  // The completed bar immediately before the active bar. Revisions must never
+  // treat an earlier version of the forming bar as its own historical predecessor.
+  private stablePreviousCandle:HistoricalCandle|null=null;
 
   private stateFor(cfg:IndicatorConfig) {
     const existing=this.states.get(cfg.id);if(existing)return existing;
@@ -132,11 +135,15 @@ export class IncrementalIndicatorRuntime {
     return {ema:new EMAState(p),atr:new ATRState(p),adaptive:null,previousAdaptive:null};
   }
 
-  private clear(){this.states.clear();this.outputs.clear();this.lastTimestamp=null;this.barCount=0;this.previousCandle=null;}
+  private clear(){this.states.clear();this.outputs.clear();this.lastTimestamp=null;this.barCount=0;this.previousCandle=null;this.stablePreviousCandle=null;}
+
+  private previousCandleFor(mode:'append'|'replace'):HistoricalCandle|null{
+    return mode==='replace'?this.stablePreviousCandle:this.previousCandle;
+  }
 
   seed(candles:HistoricalCandle[],configs:IndicatorConfig[]):IncrementalEvaluation{
     this.clear();this.signature=configSignature(configs);this.configs=configs.filter(x=>x.enabled&&isIncrementalIndicatorSupported(x.kind));for(const cfg of this.configs)this.outputs.set(cfg.id,[]);
-    for(const candle of candles){this.step(candle,'append',true);this.previousCandle=candle;this.lastTimestamp=candle.timestamp;this.barCount+=1;}
+    for(const candle of candles){this.stablePreviousCandle=this.previousCandle;this.step(candle,'append',true);this.previousCandle=candle;this.lastTimestamp=candle.timestamp;this.barCount+=1;}
     this.lastTimestamp=candles.at(-1)?.timestamp||null;
     return {results:this.configs.map(cfg=>({id:cfg.id,kind:cfg.kind,data:this.outputs.get(cfg.id)||[],mode:'full'})),ready:true,processedBars:candles.length,updateCost:'full linear seed'};
   }
@@ -146,8 +153,9 @@ export class IncrementalIndicatorRuntime {
     if(mode==='replace' && this.lastTimestamp!==candle.timestamp)return {results:[],ready:false,resetRequired:true,processedBars:0,updateCost:'forming-bar identity changed'};
     if(mode==='append' && this.lastTimestamp && new Date(candle.timestamp).getTime()<=new Date(this.lastTimestamp).getTime())return {results:[],ready:false,resetRequired:true,processedBars:0,updateCost:'non-monotonic append'};
     const results:IncrementalPatch[]=[];
+    const priorCandle=this.previousCandle;
     for(const cfg of this.configs){const next=this.calculate(cfg,candle,mode);const data=next==null?[]:[next];results.push({id:cfg.id,kind:cfg.kind,data,mode:'update'});}
-    this.lastTimestamp=candle.timestamp;if(mode==='append'){this.barCount+=1;this.previousCandle=candle;}return {results,ready:true,processedBars:mode==='append'?1:0,updateCost:mode==='append'?'O(nodes) append':'O(nodes) replace'};
+    this.lastTimestamp=candle.timestamp;if(mode==='append'){this.stablePreviousCandle=priorCandle;this.barCount+=1;}this.previousCandle=candle;return {results,ready:true,processedBars:mode==='append'?1:0,updateCost:mode==='append'?'O(nodes) append':'O(nodes) replace'};
   }
 
   private step(c:HistoricalCandle,mode:'append'|'replace',seeding=false){for(const cfg of this.configs)this.calculate(cfg,c,mode,seeding);}
@@ -192,7 +200,7 @@ export class IncrementalIndicatorRuntime {
     if(seeding)return out; return out;
   }
 
-  private supertrend(s:SupertrendState,c:HistoricalCandle,mode:'append'|'replace',period:number,multiplier:number){const a=s.atr.update(c.high,c.low,c.close,mode);if(a==null)return null;const previousClose=this.previousCandle?.close??c.close;
+  private supertrend(s:SupertrendState,c:HistoricalCandle,mode:'append'|'replace',period:number,multiplier:number){const a=s.atr.update(c.high,c.low,c.close,mode);if(a==null)return null;const previousClose=this.previousCandleFor(mode)?.close??c.close;
     if(mode==='replace'){s.finalUpper=s.previousFinalUpper;s.finalLower=s.previousFinalLower;s.trend=s.previousTrend;}
     const mid=(c.high+c.low)/2,upper=mid+multiplier*a,lower=mid-multiplier*a;
     if(s.index===0){s.finalUpper=upper;s.finalLower=lower;}else{s.previousFinalUpper=s.finalUpper;s.previousFinalLower=s.finalLower;s.previousTrend=s.trend;s.finalUpper=upper<s.finalUpper||previousClose>s.finalUpper?upper:s.finalUpper;s.finalLower=lower>s.finalLower||previousClose<s.finalLower?lower:s.finalLower;if(s.trend===-1&&c.close>s.previousFinalUpper)s.trend=1;else if(s.trend===1&&c.close<s.previousFinalLower)s.trend=-1;}
@@ -201,7 +209,7 @@ export class IncrementalIndicatorRuntime {
 
   private advanced(cfg:IndicatorConfig,s:AdvancedState,c:HistoricalCandle,src:number,mode:'append'|'replace'){
     const p=Math.max(3,Math.floor(cfg.period||20)),mult=cfg.multiplier||2;
-    if(cfg.kind==='Adaptive Ehlers'){const atrv=s.atr.update(c.high,c.low,c.close,mode),atrScale=atrv||Math.max(1,src*.001);if(mode==='replace'&&s.previousAdaptive!=null)s.adaptive=s.previousAdaptive;const previous=s.adaptive??src,volr=Math.abs(src-(this.previousCandle?.close??src))/atrScale,a=Math.max(.05,Math.min(.7,(2/(p+1))*(1+volr)));if(mode==='append')s.previousAdaptive=previous;s.adaptive=previous+a*(src-previous);return this.barCount>=p-1?point(c,s.adaptive):null;}
+    if(cfg.kind==='Adaptive Ehlers'){const atrv=s.atr.update(c.high,c.low,c.close,mode),atrScale=atrv||Math.max(1,src*.001);if(mode==='replace'&&s.previousAdaptive!=null)s.adaptive=s.previousAdaptive;const previous=s.adaptive??src,volr=Math.abs(src-(this.previousCandleFor(mode)?.close??src))/atrScale,a=Math.max(.05,Math.min(.7,(2/(p+1))*(1+volr)));if(mode==='append')s.previousAdaptive=previous;s.adaptive=previous+a*(src-previous);return this.barCount>=p-1?point(c,s.adaptive):null;}
     if(cfg.kind==='Fractional EMA Kalman Filter'){const atrv=s.atr.update(c.high,c.low,c.close,mode)||src*.005;if(mode==='replace'){s.xhat=s.previousXhat;s.err=s.previousErr;}if(s.xhat==null)s.xhat=src; if(mode==='append'){s.previousXhat=s.xhat;s.previousErr=s.err;}const q=atrv**2,r=atrv**2*.5,pred=s.err+q,k=pred/(pred+r);s.xhat=s.xhat+k*(src-s.xhat);s.err=(1-k)*pred;return this.barCount>=p-1?point(c,s.xhat):null;}
     if(cfg.kind==='Trend Pressure'){const prev=s.previousSource??src,mom=src-prev;if(mode==='append')s.previousSource=src;const z=s.momentum.update(mom,mode).value,v=s.volume.update(Math.max(0,c.volume||0),mode).value;if(z==null||v==null)return null;const zm=(mom-(s.momentum.mean()??0))/(z||1),zv=(Math.max(0,c.volume||0)-(s.volume.mean()??0))/(v||1);return point(c,Math.tanh(.7*zm+.3*zv));}
     if(cfg.kind==='Trend Target Ribbon'){const f=s.fast.update(src,mode),m=s.mid.update(src,mode),sl=s.slow.update(src,mode),a=s.atr.update(c.high,c.low,c.close,mode);return f!=null&&m!=null&&sl!=null&&a!=null?{time:timestamp(c),fast:f,mid:m,slow:sl,'Target+':sl+mult*a,'Target-':sl-mult*a}:null;}

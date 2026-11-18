@@ -89,4 +89,47 @@ verify(replaced,'forming-bar replacement');
 const appended={...forming,timestamp:new Date(Date.parse(forming.timestamp)+60_000).toISOString(),open:forming.close,high:forming.close+7,low:forming.close-4,close:forming.close+3,volume:3100};
 assert.equal(runtime.update(appended,'append',configs).ready,true);
 verify([...replaced,appended],'new-bar append');
+
+const supertrendConfig = [{ id:'supertrend-revision',kind:'Supertrend',period:5,multiplier:2,enabled:true }];
+const lastBar = bars.at(-1);
+const upwardRevision = {
+  ...lastBar,
+  close: lastBar.open + 65,
+  high: lastBar.open + 72,
+  low: lastBar.open - 3,
+};
+const downwardRevision = {
+  ...lastBar,
+  close: lastBar.open - 68,
+  high: lastBar.open + 3,
+  low: lastBar.open - 74,
+};
+const liveSupertrend = new IncrementalIndicatorRuntime();
+assert.equal(liveSupertrend.seed(bars,supertrendConfig).ready,true);
+const liveValue = () => liveSupertrend.fullResults().find(x=>x.id===supertrendConfig[0].id)?.data.at(-1)?.value;
+for (const [revision,label] of [[upwardRevision,'upward'],[downwardRevision,'downward']]) {
+  assert.equal(liveSupertrend.update(revision,'replace',supertrendConfig).ready,true);
+  const historicalSupertrend = new IncrementalIndicatorRuntime();
+  historicalSupertrend.seed([...bars.slice(0,-1),revision],supertrendConfig);
+  const historicalValue = historicalSupertrend.fullResults().find(x=>x.id===supertrendConfig[0].id)?.data.at(-1)?.value;
+  closeEnough(liveValue(),historicalValue,'Supertrend '+label+' forming-bar revision');
+}
+const finalRevision = downwardRevision;
+const nextSupertrendBar = {
+  timestamp:new Date(Date.parse(finalRevision.timestamp)+60_000).toISOString(),
+  open:finalRevision.close,
+  high:finalRevision.close+8,
+  low:finalRevision.close-5,
+  close:finalRevision.close+3,
+  volume:2400,
+};
+assert.equal(liveSupertrend.update(nextSupertrendBar,'append',supertrendConfig).ready,true);
+const replayedSupertrend = new IncrementalIndicatorRuntime();
+replayedSupertrend.seed([...bars.slice(0,-1),finalRevision,nextSupertrendBar],supertrendConfig);
+closeEnough(
+  liveSupertrend.fullResults().find(x=>x.id===supertrendConfig[0].id)?.data.at(-1)?.value,
+  replayedSupertrend.fullResults().find(x=>x.id===supertrendConfig[0].id)?.data.at(-1)?.value,
+  'Supertrend append after repeated forming-bar revisions',
+);
+
 console.log('VELA_P1_INCREMENTAL_CATALOG_PARITY_OK');
