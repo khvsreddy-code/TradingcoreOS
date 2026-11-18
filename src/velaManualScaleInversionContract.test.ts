@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { rescaleAround, shiftScale } from '../vendor/vela/src/renderers/native/core/manualScale.ts';
+import type { PriceScale } from '../vendor/vela/src/renderers/native/core/CoordinateSystem.ts';
+const linear:PriceScale={min:10,max:20,log:false,invert:true};
+const linearZoom=rescaleAround(linear,1.5);
+assert.equal(linearZoom.invert,true,'linear manual zoom must preserve inverted scale state');
+assert.equal(linearZoom.min,8.75);
+assert.equal(linearZoom.max,21.25);
+const linearPan=shiftScale(linear,12,100);
+assert.equal(linearPan.invert,true,'linear manual pan must preserve inverted scale state');
+assert.equal(linearPan.min,11.2);
+assert.equal(linearPan.max,21.2);
+const logarithmic:PriceScale={min:1,max:100,log:true,invert:true};
+assert.equal(rescaleAround(logarithmic,1.25).invert,true,'logarithmic manual zoom must preserve inversion');
+assert.equal(shiftScale(logarithmic,10,100).invert,true,'logarithmic manual pan must preserve inversion');
+assert.deepEqual(shiftScale(logarithmic,10,0),logarithmic,'zero-height panning is a no-op');
+console.log('VELA_MANUAL_SCALE_INVERSION_CONTRACT_OK');
