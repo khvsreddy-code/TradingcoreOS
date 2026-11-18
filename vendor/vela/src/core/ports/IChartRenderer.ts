@@ -12,6 +12,7 @@ import type { IDrawingsRendererPort } from '../drawings/port';
 import type { MarkClickEvent, MarkGroup, TimelineMark } from '../marks/types';
 import type { SymbolFacts } from './MarketDataFeed';
 import type { MessageLike, TextDirection, Translator } from '../i18n/types';
+import type { NativeGraphicsDiagnostics, NativeGraphicsPolicy } from '../graphics';
 
 /** The language and direction attributes of a renderer's root element (`null` = unset). */
 export interface RendererRootAttributes {
@@ -282,6 +283,10 @@ export interface IChartRenderer {
      */
     setLocalization?(i18n: Translator, root: RendererRootAttributes): void;
     resize(): void;
+    /** Apply a workspace-owned adaptive graphics budget without replacing chart data or models. */
+    setGraphicsPolicy?(policy: NativeGraphicsPolicy): void;
+    /** Renderer-local surface, workload and frame-budget estimates for the workspace allocator. */
+    getGraphicsDiagnostics?(): NativeGraphicsDiagnostics;
     destroy(): void;
 
     /**
