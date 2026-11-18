@@ -24,15 +24,54 @@ export const NATIVE_CAPABILITIES: RendererCapabilities = {
     inputsUI: true, // reuses the DOM InputsUI
 };
 
-/** Whether the environment can create a WebGL2 context (probed once on a throwaway canvas). */
-let webgl2Probe: boolean | null = null;
-export function supportsWebGL2(): boolean {
-    if (webgl2Probe !== null) return webgl2Probe;
-    try {
-        const c = document.createElement('canvas');
-        webgl2Probe = !!c.getContext('webgl2');
-    } catch {
-        webgl2Probe = false;
+/** Conservative public limits from a short-lived WebGL2 probe. Browsers do not expose
+ * dedicated VRAM or a reliable maximum-context count, so the budgeter uses these limits
+ * together with measured per-chart allocations and device hints. */
+export interface WebGL2CapabilityProfile {
+    supported: boolean;
+    maxTextureSize: number;
+    maxRenderbufferSize: number;
+    maxViewportWidth: number;
+    maxViewportHeight: number;
+}
+
+let webgl2Profile: WebGL2CapabilityProfile | null = null;
+
+export function getWebGL2CapabilityProfile(): WebGL2CapabilityProfile {
+    if (webgl2Profile) return webgl2Profile;
+    const unsupported: WebGL2CapabilityProfile = {
+        supported: false, maxTextureSize: 0, maxRenderbufferSize: 0,
+        maxViewportWidth: 0, maxViewportHeight: 0,
+    };
+    if (typeof document === 'undefined') {
+        webgl2Profile = unsupported;
+        return webgl2Profile;
     }
-    return webgl2Probe;
+    let gl: WebGL2RenderingContext | null = null;
+    try {
+        const canvas = document.createElement('canvas');
+        gl = canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true });
+        if (!gl) {
+            webgl2Profile = unsupported;
+            return webgl2Profile;
+        }
+        const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
+        webgl2Profile = {
+            supported: true,
+            maxTextureSize: Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)) || 0,
+            maxRenderbufferSize: Number(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)) || 0,
+            maxViewportWidth: Number(viewport?.[0]) || 0,
+            maxViewportHeight: Number(viewport?.[1]) || 0,
+        };
+    } catch {
+        webgl2Profile = unsupported;
+    } finally {
+        // A capability probe must not consume a scarce page WebGL context.
+        gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    }
+    return webgl2Profile;
+}
+
+export function supportsWebGL2(): boolean {
+    return getWebGL2CapabilityProfile().supported;
 }
