@@ -51,6 +51,7 @@ const contracts = [
   ['vela-synthetic-price-styles', ['src/velaSyntheticPriceStylesContract.test.ts', true]],
   ['vela-p1-chart-terminal', ['src/velaP1ChartTerminalContract.test.mjs', true]],
   ['options-black-scholes', ['src/optionsBlackScholesContract.test.mjs', true]],
+  ['vela-p1-workspace-marketdata', ['src/velaP1WorkspaceMarketDataContract.test.mjs', false]],
   ['vela-anchored-vwap-math', ['src/velaAnchoredVwapMathContract.test.ts', true]],
   ['vela-manual-scale-inversion', ['src/velaManualScaleInversionContract.test.ts', true]],
   ['vela-timezone-dst', ['src/velaTimeZoneTicksContract.test.ts', true]],
