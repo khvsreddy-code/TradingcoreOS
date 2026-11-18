@@ -15,6 +15,7 @@ import { marketLatencyTrace } from '../core/performance/marketLatencyTrace';
 import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutationKind } from './chartCandleEvents';
 import { chartComputeCoordinator } from './chartComputeCoordinator';
 import { patchImmutableArrayLike } from './persistentArrayLike';
+import { hasUnexpectedIntradayGap } from './liveGapPolicy';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -499,6 +500,26 @@ export class ChartDataPlane {
       || this.state.historyLoading
       || this.state.recoveryPending
       || this.state.recoveryInFlight;
+
+    // A healthy websocket can still miss an intraday bar without disconnecting.
+    // Use exchange timestamps for NSE/BSE same-session gaps; never infer a broker
+    // sequence gap from the transport's local receive counter. Buffer the current
+    // tick, reconcile a fresh canonical history window, then replay buffered ticks.
+    if (!replaying && hasHistory && !lifecyclePending && this.state.feedStatus === 'connected'
+      && hasUnexpectedIntradayGap({
+        instrumentKey: this.instrumentKey,
+        previousTradeTimeMs: this.state.lastAcceptedTradeTimestampMs,
+        currentTradeTimeMs: tradeTimeMs,
+        timeframeSeconds: CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
+      })) {
+      this.state.recoveryPending = true;
+      this.liveCandle.bufferTick(tick);
+      this.maybeRecoverAfterReconnect();
+      if (Number.isFinite(price) && this.rememberLatestTick(tick, tradeTimeMs)) {
+        this.emit({ type: 'quote', snapshot: this.snapshot() });
+      }
+      return;
+    }
 
     if (!replaying && lifecyclePending) this.liveCandle.bufferTick(tick);
 
