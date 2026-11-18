@@ -370,10 +370,13 @@ export class FyersAdapter extends BaseBroker {
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
     rateLimitIdentity?: string,
   ): Promise<BrokerOptionChain> {
-    // Keep the legacy adapter on the exact same FYERS quota admission path as
-    // the dedicated market-data route. Do not fan out one request per strike.
-    const params:Record<string,string|number|undefined> = { symbol:instrumentKey, strikecount:'7' };
-    if (expiryDate && expiryDate !== 'current_week' && /^[0-9]+$/.test(expiryDate)) params.timestamp=expiryDate;
+    // Keep the adapter on the existing FYERS quota admission path. A single chain
+    // request returns all requested strikes; do not create per-strike requests.
+    const params: Record<string, string | number | undefined> = {
+      symbol: instrumentKey,
+      strikecount: '7',
+      greeks: '1',
+    };
     const userId = String(rateLimitIdentity || '').trim();
     const quotaIdentity = await this.quotaIdentityForUser(userId);
     const client = new FyersApiClient(accessToken, undefined, capabilities, quotaIdentity);
@@ -385,49 +388,83 @@ export class FyersAdapter extends BaseBroker {
       'high',
     );
 
-    // This timestamp is the server's observation/receive time. It is deliberately
-    // distinct from an exchange event timestamp, which the provider may not return.
     const observedAt = new Date().toISOString();
     const data = payload?.data || {};
     const rows = Array.isArray(data?.optionsChain) ? data.optionsChain : [];
     const expiryRows = Array.isArray(data?.expiryData) ? data.expiryData : [];
-    const expiries = [...new Set(expiryRows.map((entry: any) =>
-      String(entry?.expiry ?? entry?.expiryDate ?? entry?.date ?? entry ?? '').trim(),
-    ).filter((value: string) => value.length > 0))];
-    const spotRow = rows.find((row: any) => !row?.option_type || row?.strike_price === -1);
-    const spotValue = Number(spotRow?.ltp);
-    const spot = Number.isFinite(spotValue) && spotValue > 0 ? spotValue : undefined;
-    const selectedExpiry = String(
-      expiryDate && expiryDate !== 'current_week'
-        ? (expiryRows.find((entry: any) => String(entry?.timestamp ?? entry?.expiry ?? entry) === expiryDate)?.expiry ?? expiryDate)
-        : data?.expiryData?.[0]?.expiry ?? data?.expiryData?.[0]?.expiryDate ?? 'current_week',
+    const numeric = (value: unknown): number | undefined => {
+      if (value == null || value === '') return undefined;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const expiryOptions = expiryRows
+      .map((entry: any) => ({
+        value: String(entry?.expiry ?? entry?.timestamp ?? '').trim(),
+        label: String(entry?.date ?? entry?.expiryDate ?? entry?.expiry ?? '').trim(),
+      }))
+      .filter((entry: { value: string; label: string }) => /^\d{10,13}$/.test(entry.value));
+    const requestedExpiry = String(expiryDate || 'current_week').trim();
+    const matchingExpiry = expiryOptions.find((entry: { value: string; label: string }) =>
+      entry.value === requestedExpiry || entry.label === requestedExpiry,
     );
+    const selectedExpiry = requestedExpiry === 'current_week'
+      ? expiryOptions[0]
+      : matchingExpiry ?? (/^\d{10,13}$/.test(requestedExpiry)
+        ? { value: requestedExpiry, label: '' }
+        : undefined);
+    if (selectedExpiry?.value && requestedExpiry !== 'current_week') {
+      params.timestamp = selectedExpiry.value;
+    }
+    const rowsExpiryTimestamp = selectedExpiry?.value
+      ?? String(expiryRows[0]?.expiry ?? expiryRows[0]?.timestamp ?? 'current_week');
+    const rowsExpiryLabel = selectedExpiry?.label
+      ?? String(expiryRows[0]?.date ?? expiryRows[0]?.expiryDate ?? '');
+    const spotRow = rows.find((row: any) => !row?.option_type || Number(row?.strike_price) === -1);
+    const spotValue = numeric(spotRow?.ltp);
+    const spot = spotValue !== undefined && spotValue > 0 ? spotValue : undefined;
     const byStrike = new Map<number, any>();
+
     for (const row of rows) {
       const optionType = String(row?.option_type || '').toUpperCase();
-      const strike = Number(row?.strike_price);
-      if (!Number.isFinite(strike) || strike <= 0 || (optionType !== 'CE' && optionType !== 'PE')) continue;
+      const strike = numeric(row?.strike_price);
+      if (strike === undefined || strike <= 0 || (optionType !== 'CE' && optionType !== 'PE')) continue;
+
       const current = byStrike.get(strike) || {
         strike,
-        expiry: selectedExpiry,
+        expiry: rowsExpiryTimestamp,
         underlyingKey: instrumentKey,
-        lotSize: Number.isFinite(Number(row?.lot_size)) && Number(row?.lot_size) > 0 ? Number(row.lot_size) : undefined,
+        exchange: row?.exchange === 'BSE' ? 'BSE' : 'NSE',
+        lotSize: numeric(row?.lot_size),
+        tickSize: numeric(row?.tick_size),
       };
-      const numeric = (value: unknown): number | undefined => {
-        const parsed = Number(value);
-        return value == null || value === '' || !Number.isFinite(parsed) ? undefined : parsed;
-      };
+      const ltp = numeric(row?.ltp);
+      const ltpChange = numeric(row?.ltpch ?? row?.ltp_change);
+      const greeks = row?.greeks && typeof row.greeks === 'object' ? row.greeks : {};
+      const providerIvPercent = numeric(greeks?.iv ?? row?.iv);
       const quote = {
-        instrumentKey: row?.fyToken || row?.symbol,
-        ltp: numeric(row?.ltp),
+        instrumentKey: row?.fyToken || row?.fytoken || row?.symbol,
+        ltp,
         volume: numeric(row?.volume),
         oi: numeric(row?.oi),
         previousOi: numeric(row?.prev_oi),
-        previousLtp: numeric(row?.prev_ltp ?? row?.prevLtp),
+        oiChange: numeric(row?.oich),
+        // FYERS returns ltpch (change from the previous close), not previous LTP.
+        // Derive the prior close only when both source fields exist.
+        previousLtp: numeric(row?.prev_ltp ?? row?.prevLtp)
+          ?? (ltp !== undefined && ltpChange !== undefined ? ltp - ltpChange : undefined),
         bidPrice: numeric(row?.bid),
         bidQuantity: numeric(row?.bid_qty ?? row?.bidQty),
         askPrice: numeric(row?.ask),
         askQuantity: numeric(row?.ask_qty ?? row?.askQty),
+        // FYERS documents IV in percentage points; normalize to decimal for all
+        // downstream pricing functions so 23.4 means 0.234.
+        impliedVolatility: providerIvPercent !== undefined ? providerIvPercent / 100 : undefined,
+        providerGreeks: {
+          delta: numeric(greeks?.delta ?? row?.delta),
+          gamma: numeric(greeks?.gamma ?? row?.gamma),
+          thetaPerDay: numeric(greeks?.theta ?? row?.theta),
+          vegaPerVolPoint: numeric(greeks?.vega ?? row?.vega),
+        },
         observedAt,
         source: 'fyers',
       };
@@ -435,14 +472,17 @@ export class FyersAdapter extends BaseBroker {
       else current.put = quote;
       byStrike.set(strike, current);
     }
+
     return {
       underlyingKey: instrumentKey,
-      expiry: selectedExpiry,
+      expiry: rowsExpiryTimestamp,
+      expiryLabel: rowsExpiryLabel,
+      expiryOptions,
       spot,
       contracts: [...byStrike.values()].sort((a, b) => a.strike - b.strike),
       observedAt,
       source: 'fyers',
-      expiries,
+      expiries: expiryOptions.map((entry: { value: string }) => entry.value),
     };
   }
 
