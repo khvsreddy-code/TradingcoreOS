@@ -31,10 +31,13 @@ The browser verifier does not wait for `networkidle`: the terminal intentionally
 Before enabling the browser CI gate, configure these repository settings:
 
 1. Repository variable `TCO_BROWSER_PERF_ENABLED=true`.
-2. Repository variable `TCO_BROWSER_BASE_URL`, set to the authenticated production/live terminal origin and path, for example the production `/live` URL.
-3. Repository secret `TCO_BROWSER_STATE_BASE64`, containing the base64-encoded agent-browser storage-state JSON for a dedicated performance-test account.
+2. Repository variable `TCO_BROWSER_BASE_URL`, set to the complete HTTPS production terminal URL ending in `/live` (for example, `https://tradingcoreos.vercel.app/live`).
+3. Repository secrets `TCO_BROWSER_SUPABASE_URL` and `TCO_BROWSER_SUPABASE_PUBLISHABLE_KEY`.
+4. Repository secrets `TCO_BROWSER_TEST_EMAIL` and `TCO_BROWSER_TEST_PASSWORD` for a dedicated Supabase performance-test account.
 
-Use a dedicated least-privilege test account. Refresh the state when its authentication expires. Do not commit storage-state files, Supabase tokens, broker credentials, or session cookies. The browser runner adds Chromium's `--enable-precise-memory-info` flag and fails when heap metrics are unavailable.
+Both browser workflows install the project dependencies and call `tools/create-browser-auth-state.mjs` on the GitHub runner. The script signs in with the test account and writes Playwright-compatible browser storage state to a permission-restricted file under the runner's temporary directory. The scheduled soak reuses this exact bootstrap; it does not require a separately maintained base64 storage-state secret.
+
+Use a dedicated least-privilege test account. Keep its credentials in GitHub Actions secrets; never commit them, generated storage-state files, Supabase access/refresh tokens, broker credentials, or session cookies. The workflows add Chromium's `--enable-precise-memory-info` flag and fail when heap metrics are unavailable.
 
 Until those repository variables/secrets are configured, the browser workflows run an explicit gate step and skip the browser execution steps. The check will be visible, but a gate-disabled success is not live-browser evidence and must not be required or represented as a passing browser run.
 
