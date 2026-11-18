@@ -23,7 +23,7 @@ export function buildChartLayoutUrls(baseUrl, layouts = [1, 4, 8]) {
     throw new Error('TCO_BROWSER_BASE_URL must not embed credentials.');
   }
 
-  const pathname = base.pathname.replace(/\\/+$/, '') || '/';
+  const pathname = base.pathname.replace(/\/+$/, '') || '/'
   if (pathname !== '/live') {
     throw new Error('TCO_BROWSER_BASE_URL must point to the complete /live route, not the site root or another page.');
   }

@@ -40,10 +40,9 @@ for (const key of [
   'TCO_BROWSER_TEST_PASSWORD',
 ]) {
   assert.match(authBootstrap, new RegExp(`requiredEnv\\('${key}'\\)`), `ephemeral bootstrap must require ${key}`);
-  assert.ok(ci.includes(` ${key}: ${key.includes('URL') || key.includes('KEY') ? '${{ secrets.' + key + ' }}' : '${{ secrets.' + key + ' }}'}`) || ci.includes(`${key}: ${{ secrets.${key} }}`),
-    `normal CI browser job must inject ${key}`);
-  assert.ok(soak.includes(`${key}: ${{ secrets.${key} }}`),
-    `scheduled soak must inject ${key}`);
+  const secretBinding = key + ': ${{ secrets.' + key + ' }}';
+  assert.ok(ci.includes(secretBinding), `normal CI browser job must inject ${key}`);
+  assert.ok(soak.includes(secretBinding), `scheduled soak must inject ${key}`);
 }
 
 assert.match(ci, /TCO_BROWSER_LAYOUTS: '1,4,8'/, 'normal CI must cover 1, 4 and 8 chart layouts');
