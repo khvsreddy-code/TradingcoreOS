@@ -622,7 +622,7 @@ export class WebGL2Backend implements IRenderBackend {
 
     /** Grow streaming GPU buffers geometrically and update only the used prefix.
      *  Avoids reallocating storage with bufferData on every pane flush/frame. */
-    private uploadDynamicBuffer(gl: WebGL2RenderingContext, buffer: WebGLBuffer, data: ArrayBufferView): void {
+    private uploadDynamicBuffer(gl: WebGL2RenderingContext, buffer: WebGLBuffer, data: Float32Array | Uint8Array): void {
         const required = data.byteLength;
         const capacity = this.dynamicBufferCapacity.get(buffer) ?? 0;
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
