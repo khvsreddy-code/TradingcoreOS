@@ -114,6 +114,11 @@ export interface OptionChain {
   /** Snapshot receive time, not an exchange trade timestamp. */
   observedAt?: string;
   source?: string;
+  /** Provider aggregate open interest across the option chain, if supplied. */
+  aggregateCallOi?: number;
+  aggregatePutOi?: number;
+  /** Provider India VIX snapshot, when supplied alongside the chain. */
+  indiaVix?: number;
   /** Expiry date label corresponding to the selected provider timestamp. */
   expiryLabel?: string;
   /** Provider-backed expiries; value is sent to the provider, label is shown to the user. */
