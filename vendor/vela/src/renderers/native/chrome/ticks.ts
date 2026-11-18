@@ -257,24 +257,52 @@ function pickStep(targetMs: number): number {
 }
 
 /**
- * Zoned tick ladder for the time axis. `offsetMs` remains the compatibility fallback;
- * when `timeZone` is supplied the IANA offset is recalculated at every tick. That matters
- * at DST boundaries: spring-forward skips the nonexistent local hour and fall-back may
- * legitimately emit the repeated hour twice, while each tick remains at its true epoch.
+ * Zoned tick ladder for the time axis. The visible range controls density, while
+ * `notBeforeMs` removes labels before the first real bar. When an IANA timezone
+ * is supplied, each epoch tick is formatted with that instant's actual offset:
+ * spring-forward skips a nonexistent wall-clock hour and fall-back keeps both
+ * distinct 01:00 instants. The return value always remains a real UTC epoch.
  */
-export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0, fmt: ResolvedFormatters = ENGLISH_FORMAT, timeZone?: string): TimeTick[] {
+export function timeTicks(
+    fromMs: number,
+    toMs: number,
+    target = 8,
+    offsetMs = 0,
+    fmt: ResolvedFormatters = ENGLISH_FORMAT,
+    timeZone?: string,
+    notBeforeMs = Number.NEGATIVE_INFINITY,
+): TimeTick[] {
     const span = toMs - fromMs;
     if (!(span > 0)) return [];
+    const start = Math.max(fromMs, notBeforeMs);
+    if (!(toMs >= start)) return [];
     const step = pickStep(span / Math.max(1, target));
     const offsetAt = (time: number): number => timeZone ? tzOffsetMs(time, timeZone) : offsetMs;
-    const firstOffset = offsetAt(fromMs);
-    const first = Math.ceil((fromMs + firstOffset) / step) * step;
+
+    // Calendar intervals need real month/year boundaries rather than fixed 30/365
+    // day approximations. Work in local wall-clock space, then map each boundary
+    // back to its real epoch so the chart's X coordinate remains unambiguous.
+    if (step >= MONTH) {
+        const zFrom = start + offsetAt(start);
+        const zTo = toMs + offsetAt(toMs);
+        const months = step >= YEAR
+            ? 12 * yearStep(span, target)
+            : step >= 3 * MONTH ? 3 : 1;
+        return calendarTicks(zFrom, zTo, months, offsetMs, offsetAt, start, toMs, fmt);
+    }
+
+    // For sub-month intervals, advance along real elapsed time. Re-evaluating the
+    // timezone offset at every instant naturally skips spring-forward 02:00 and
+    // emits the repeated fall-back 01:00 twice with different epoch timestamps.
+    const firstOffset = offsetAt(start);
+    const first = Math.ceil((start + firstOffset) / step) * step;
     const firstTime = first - firstOffset;
     const clockUnit: TimeTickUnit = step < MIN ? 'second' : step < HOUR ? 'minute' : 'hour';
     const out: TimeTick[] = [];
-    for (let t = firstTime; t <= toMs; t += step) {
-        const tickOffset = offsetAt(t);
-        const d = new Date(t + tickOffset);
+    for (let time = firstTime; time <= toMs; time += step) {
+        if (time < start) continue;
+        const tickOffset = offsetAt(time);
+        const d = new Date(time + tickOffset);
         let unit: TimeTickUnit;
         let major = false;
         if (step < DAY) {
@@ -287,7 +315,60 @@ export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0
             unit = 'year';
             major = true;
         }
-        out.push({ time: t, label: fmt.timeTick(t, { unit, major, offsetMs: tickOffset, surface: 'timeAxis' }), major });
+        out.push({
+            time,
+            label: fmt.timeTick(time, { unit, major, offsetMs: tickOffset, surface: 'timeAxis' }),
+            major,
+        });
     }
     return out;
+}
+
+/** Month, quarter and year ticks on real calendar boundaries in zoned space. */
+function calendarTicks(
+    zFrom: number,
+    zTo: number,
+    months: number,
+    fallbackOffsetMs: number,
+    offsetAt: (time: number) => number,
+    notBeforeMs: number,
+    toMs: number,
+    fmt: ResolvedFormatters,
+): TimeTick[] {
+    const d0 = new Date(zFrom);
+    let monthIndex = d0.getUTCFullYear() * 12 + d0.getUTCMonth();
+    if (monthStart(monthIndex) < zFrom) monthIndex += 1;
+    monthIndex = Math.ceil(monthIndex / months) * months;
+    const unit: TimeTickUnit = months >= 12 ? 'year' : 'month';
+    const out: TimeTick[] = [];
+
+    for (let wallTime = monthStart(monthIndex); wallTime <= zTo; monthIndex += months, wallTime = monthStart(monthIndex)) {
+        // Convert a local wall-clock boundary back to UTC. Iterate because the
+        // timezone offset is a function of the resulting UTC instant.
+        let time = wallTime - fallbackOffsetMs;
+        for (let pass = 0; pass < 3; pass += 1) time = wallTime - offsetAt(time);
+        if (time < notBeforeMs || time > toMs) continue;
+        const tickOffset = offsetAt(time);
+        out.push({
+            time,
+            label: fmt.timeTick(time, { unit, major: true, offsetMs: tickOffset, surface: 'timeAxis' }),
+            major: true,
+        });
+    }
+    return out;
+}
+
+/** Epoch milliseconds of the first of a month (year 0 is handled without Date.UTC's 0–99 rule). */
+function monthStart(monthIndex: number): number {
+    const year = Math.floor(monthIndex / 12);
+    return new Date(0).setUTCFullYear(year, monthIndex - year * 12, 1);
+}
+
+/** Keep distant time axes readable: 1, 2, 5, 10, 20… year spacing. */
+function yearStep(spanMs: number, target: number): number {
+    const need = spanMs / (2 * Math.max(1, target) * YEAR);
+    if (!(need > 1)) return 1;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(need)));
+    const normalized = need / magnitude;
+    return (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
 }
