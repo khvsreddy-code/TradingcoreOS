@@ -164,7 +164,7 @@ export function aggregateCandleColumns(
     i1: number,
     xOf: (index: number) => number,
     yOf: (price: number) => number,
-    colorOf: (bar: OHLCV) => string,
+    colorOf: (bar: OHLCV, index: number) => string,
     extent: Exclude<CandleStickExtent, 'none'> = 'range',
 ): AggregatedStick[] {
     const out: AggregatedStick[] = [];
@@ -205,7 +205,7 @@ export function aggregateCandleColumns(
             col = x;
         }
         // Merge the bar's range into every overlapping run OF ITS COLOR (usually zero or one).
-        const color = colorOf(b);
+        const color = colorOf(b, i);
         let lo = extent === 'body' ? Math.min(b.open, b.close) : b.low;
         let hi = extent === 'body' ? Math.max(b.open, b.close) : b.high;
         for (let k = runs.length - 1; k >= 0; k -= 1) {
