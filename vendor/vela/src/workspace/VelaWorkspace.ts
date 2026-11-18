@@ -926,6 +926,7 @@ export class VelaWorkspace {
 
         this.applyGrid();
         this.buildCells();
+        this.applyGraphicsBudget();
         this.relinkIdenticalDrawings(); // a persisted document's copies link again
         this.syncCellPresentation();
         this.setActiveCell(bootActive != null && this.cellsById.has(bootActive) ? bootActive : (this.order[0] ?? null));
@@ -1445,7 +1446,6 @@ export class VelaWorkspace {
         this.order = st.charts.map((c) => c.id); // the document's arrangement IS the order
         const def = this.monoLayout ? null : ensureLayout(st.layout); // mono: grid stays pinned to '1'
         if (def) this.def = def;
-        this.cellBackend = this.backendFor(this.def);
         this.clearMaximized(); // ditto — the rebuilt grid starts unmaximized
         this.applyGrid();
         this.buildCells();
@@ -1525,16 +1525,14 @@ export class VelaWorkspace {
      * Switch the grid. Cells are diffed BY IDENTITY (`order` head of the next size):
      * surviving cells keep their live charts untouched; cells past the new size
      * dehydrate into the pool; (re)appearing positions hydrate their identity from
-     * the pool (or its seed). Crossing the WebGL budget rebuilds every cell through
-     * the pool so the backend stays uniform.
+     * the pool (or its seed). Renderer backend choices are now per-cell and do not
+     * require rebuilding the chart model.
      */
     setLayout(layout: string | LayoutDefinition): void {
         if (this.destroyed) return;
         if (this.monoLayout) return; // single-chart mode — the grid is pinned to '1'
         this.clearMaximized(); // a maximized cell is presentation — a layout switch restores first
         const next = this.resolveLayout(layout);
-        const nextBackend = this.backendFor(next);
-        const rebuildAll = nextBackend !== this.cellBackend;
         // The ACTIVE chart always survives a shrink — it moves into the last kept
         // slot instead of pooling, so changing the grid never hides the chart the
         // user is working in.
@@ -1545,7 +1543,7 @@ export class VelaWorkspace {
         // need the style and drawings alignment below.
         const preexisting = new Set(this.cellsById.keys());
         for (const [id, cell] of [...this.cellsById]) {
-            if (!keep.has(id) || rebuildAll) {
+            if (!keep.has(id)) {
                 this.poolSet(id, cell.dehydrate());
                 cell.destroy();
                 this.cellsById.delete(id);
@@ -1553,9 +1551,9 @@ export class VelaWorkspace {
             }
         }
         this.def = next;
-        this.cellBackend = nextBackend;
         this.applyGrid();
         this.buildCells();
+        this.applyGraphicsBudget();
         this.alignNewCellStyles(preexisting);
         this.alignNewCellDrawings(preexisting);
         this.syncCellPresentation();
