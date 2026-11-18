@@ -1,12 +1,13 @@
 import { msg, withValues } from '../../i18n/message';
+import type { MessageLike } from '../../i18n/types';
 import type { OHLCV } from '../../model/ohlcv';
 import type { MarkerPoint } from '../../model/series';
 import type { DrawingPolyline } from '../../model/drawings';
-import { BULLISH, BEARISH, NEUTRAL, WARNING } from '../../palette';
+import { BULLISH, BEARISH, INFO, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicBand, ClassicIndicatorSpec, ClassicPlot } from './define';
 import { bool, num, str } from './define';
 import { SETTINGS, STYLE, boolInput, colorInput, floatInput, intInput, optionInput, sourceInput, transp } from './shared';
-import { sourceValues } from './math';
+import { sourceValues, type SourceName } from './math';
 
 /** Price-anchored specials: stops, anchored averages, levels, pivots, patterns. */
 
@@ -34,128 +35,6 @@ function barInterval(bars: readonly OHLCV[]): number {
     gaps.sort((a, b) => a - b);
     return gaps[Math.floor(gaps.length / 2)] ?? 0;
 }
-
-
-/** O(n) rolling midpoint of the highest high and lowest low over the window. */
-function ichimokuMidpoint(bars: readonly OHLCV[], period: number): number[] {
-    const n = bars.length;
-    const out = new Array<number>(n).fill(Number.NaN);
-    if (period < 1 || n === 0) return out;
-    const highs = new Int32Array(n);
-    const lows = new Int32Array(n);
-    let highHead = 0, highTail = 0, lowHead = 0, lowTail = 0;
-    for (let i = 0; i < n; i++) {
-        const bar = bars[i]!;
-        while (highTail > highHead && bars[highs[highTail - 1]!]!.high <= bar.high) highTail--;
-        highs[highTail++] = i;
-        while (lowTail > lowHead && bars[lows[lowTail - 1]!]!.low >= bar.low) lowTail--;
-        lows[lowTail++] = i;
-        const first = i - period + 1;
-        while (highHead < highTail && highs[highHead]! < first) highHead++;
-        while (lowHead < lowTail && lows[lowHead]! < first) lowHead++;
-        if (first >= 0) out[i] = (bars[highs[highHead]!]!.high + bars[lows[lowHead]!]!.low) / 2;
-    }
-    return out;
-}
-
-export const ichimokuCloud: ClassicIndicatorSpec = {
-    type: 'ichimoku-cloud',
-    title: msg('indicator.ichimoku.title', 'Ichimoku Cloud'),
-    shortTitle: msg('indicator.ichimoku.shortTitle', 'Ichimoku'),
-    overlay: true,
-    inputs: [
-        intInput('conversionPeriod', msg('indicator.ichimoku.conversion', 'Conversion Line Length'), 9, 1, 200),
-        intInput('basePeriod', msg('indicator.ichimoku.base', 'Base Line Length'), 26, 1, 300),
-        intInput('spanBPeriod', msg('indicator.ichimoku.spanB', 'Leading Span B Length'), 52, 1, 500),
-        intInput('displacement', msg('indicator.ichimoku.displacement', 'Displacement'), 26, 0, 200),
-        colorInput('#2962FF', msg('indicator.ichimoku.conversionColor', 'Conversion Line'), 'conversionColor'),
-        colorInput('#B71C1C', msg('indicator.ichimoku.baseColor', 'Base Line'), 'baseColor'),
-        colorInput('#26A69A', msg('indicator.ichimoku.laggingColor', 'Lagging Span'), 'laggingColor'),
-    ],
-    compute: (bars, inputs) => {
-        const conversionPeriod = Math.max(1, Math.floor(num(inputs, 'conversionPeriod', 9)));
-        const basePeriod = Math.max(1, Math.floor(num(inputs, 'basePeriod', 26)));
-        const spanBPeriod = Math.max(1, Math.floor(num(inputs, 'spanBPeriod', 52)));
-        const displacement = Math.max(0, Math.min(200, Math.floor(num(inputs, 'displacement', 26))));
-        const conversion = ichimokuMidpoint(bars, conversionPeriod);
-        const base = ichimokuMidpoint(bars, basePeriod);
-        const spanB = ichimokuMidpoint(bars, spanBPeriod);
-        const spanA = new Array<number>(bars.length).fill(Number.NaN);
-        const chikou = bars.map((bar) => bar.close);
-        const cloudColors = new Array<string | null>(bars.length + displacement).fill(null);
-        for (let i = 0; i < bars.length; i++) {
-            if (Number.isFinite(conversion[i]!) && Number.isFinite(base[i]!)) spanA[i] = (conversion[i]! + base[i]!) / 2;
-            if (Number.isFinite(spanA[i]!) && Number.isFinite(spanB[i]!)) {
-                const destination = i + displacement;
-                cloudColors[destination] = spanA[i]! >= spanB[i]!
-                    ? 'rgba(38,166,154,0.14)'
-                    : 'rgba(239,83,80,0.14)';
-            }
-        }
-        return {
-            plots: [
-                { key: 'conversion', title: msg('indicator.ichimoku.conversion', 'Conversion Line'), values: conversion, color: str(inputs, 'conversionColor', '#2962FF'), width: 1 },
-                { key: 'base', title: msg('indicator.ichimoku.base', 'Base Line'), values: base, color: str(inputs, 'baseColor', '#B71C1C'), width: 1 },
-                { key: 'spanA', title: msg('indicator.ichimoku.spanA', 'Leading Span A'), values: spanA, color: '#26A69A', offset: displacement, width: 1 },
-                { key: 'spanB', title: msg('indicator.ichimoku.spanB', 'Leading Span B'), values: spanB, color: '#EF5350', offset: displacement, width: 1 },
-                { key: 'chikou', title: msg('indicator.ichimoku.chikou', 'Lagging Span'), values: chikou, color: str(inputs, 'laggingColor', '#26A69A'), offset: -displacement, width: 1 },
-            ],
-            bands: [{ key: 'cloud', from: 'spanA', to: 'spanB', color: 'rgba(38,166,154,0.12)', colors: cloudColors }],
-        };
-    },
-};
-
-
-/** Timestamp-anchored VWAP. The selected timestamp never rolls at session boundaries. */
-const anchoredVwap: ClassicIndicatorSpec = {
-    type: 'anchored-vwap',
-    title: msg('indicator.anchoredVwap.title', 'Anchored VWAP'),
-    shortTitle: msg('indicator.anchoredVwap.shortTitle', 'AVWAP'),
-    overlay: true,
-    inputs: [
-        intInput('anchorTime', msg('indicator.anchoredVwap.anchorTime', 'Anchor time (Unix ms; 0 = first loaded bar)'), 0, 0, 8_640_000_000_000),
-        sourceInput('HLC3', 'source', msg('indicator.anchoredVwap.source', 'Source')),
-        boolInput('showBands', msg('indicator.anchoredVwap.showBands', 'Show deviation bands'), false, SETTINGS),
-        floatInput('bandMult', msg('indicator.anchoredVwap.bandMult', 'Band multiplier'), 1, 0.1, 10, 0.1),
-        colorInput('#7E57C2', msg('indicator.anchoredVwap.color', 'VWAP'), 'color'),
-    ],
-    compute: (bars, inputs) => {
-        const anchorTime = Math.max(0, num(inputs, 'anchorTime', 0));
-        const source = sourceValues(bars, str(inputs, 'source', 'HLC3'));
-        const vwap = new Array<number>(bars.length).fill(Number.NaN);
-        const upper = new Array<number>(bars.length).fill(Number.NaN);
-        const lower = new Array<number>(bars.length).fill(Number.NaN);
-        const multiplier = Math.max(0.1, num(inputs, 'bandMult', 1));
-        let volumeSum = 0;
-        let mean = 0;
-        let weightedM2 = 0;
-        for (let i = 0; i < bars.length; i++) {
-            if (anchorTime > 0 && bars[i]!.time < anchorTime) continue;
-            const price = source[i]!;
-            const volume = Number(bars[i]!.volume ?? 0);
-            if (!Number.isFinite(price) || !Number.isFinite(volume) || volume <= 0) continue;
-            const nextVolume = volumeSum + volume;
-            const delta = price - mean;
-            mean += (volume / nextVolume) * delta;
-            weightedM2 += volume * delta * (price - mean);
-            volumeSum = nextVolume;
-            const deviation = Math.sqrt(Math.max(0, weightedM2 / volumeSum)) * multiplier;
-            vwap[i] = mean;
-            upper[i] = mean + deviation;
-            lower[i] = mean - deviation;
-        }
-        const plots: ClassicPlot[] = [
-            { key:'vwap', title:msg('indicator.anchoredVwap.plot.vwap','Anchored VWAP'), values:vwap, color:str(inputs,'color','#7E57C2'), width:2 },
-        ];
-        if (bool(inputs, 'showBands', false)) {
-            plots.push(
-                { key:'upper', title:msg('indicator.anchoredVwap.plot.upper','Upper deviation'), values:upper, color:'#26A69A', width:1 },
-                { key:'lower', title:msg('indicator.anchoredVwap.plot.lower','Lower deviation'), values:lower, color:'#EF5350', width:1 },
-            );
-        }
-        return { plots };
-    },
-};
 
 const parabolicSar: ClassicIndicatorSpec = {
     type: 'parabolic-sar',
@@ -562,4 +441,33 @@ const williamsFractal: ClassicIndicatorSpec = {
     },
 };
 
-export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, anchoredVwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal];
+/** One of a bar's summary prices as a study of its own — the line a source input names, found by its name. */
+function priceStudy(type: string, source: SourceName, text: { title: MessageLike; plot: MessageLike; colorTooltip: MessageLike }): ClassicIndicatorSpec {
+    return {
+        type,
+        title: text.title,
+        overlay: true,
+        inputs: [colorInput(INFO, undefined, 'color', text.colorTooltip)],
+        compute: (bars, inputs) => ({ plots: [{ key: 'price', title: text.plot, values: sourceValues(bars, source), color: str(inputs, 'color', INFO) }] }),
+    };
+}
+
+const medianPrice = priceStudy('median-price', 'HL2', {
+    title: msg('indicator.medianPrice.title', 'Median Price'),
+    plot: msg('indicator.medianPrice.plot.price', 'Median Price'),
+    colorTooltip: msg('indicator.medianPrice.color.tooltip', 'Color of the line through the midpoint of each bar: the average of its high and low.'),
+});
+
+const typicalPrice = priceStudy('typical-price', 'HLC3', {
+    title: msg('indicator.typicalPrice.title', 'Typical Price'),
+    plot: msg('indicator.typicalPrice.plot.price', 'Typical Price'),
+    colorTooltip: msg('indicator.typicalPrice.color.tooltip', 'Color of the line through the average of each bar’s high, low and close.'),
+});
+
+const averagePrice = priceStudy('average-price', 'OHLC4', {
+    title: msg('indicator.averagePrice.title', 'Average Price'),
+    plot: msg('indicator.averagePrice.plot.price', 'Average Price'),
+    colorTooltip: msg('indicator.averagePrice.color.tooltip', 'Color of the line through the average of each bar’s open, high, low and close.'),
+});
+
+export const overlaySpecs: ClassicIndicatorSpec[] = [parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal, medianPrice, typicalPrice, averagePrice];
