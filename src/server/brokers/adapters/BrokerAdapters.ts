@@ -435,7 +435,7 @@ export class FyersAdapter extends BaseBroker {
         strike,
         expiry: rowsExpiryTimestamp,
         underlyingKey: instrumentKey,
-        exchange: row?.exchange === 'BSE' ? 'BSE' : 'NSE',
+        ...(row?.exchange === 'NSE' || row?.exchange === 'BSE' ? { exchange: row.exchange } : {}),
         lotSize: numeric(row?.lot_size),
         tickSize: numeric(row?.tick_size),
       };
