@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import type { OHLCV } from '../vendor/vela/src/core/model/ohlcv.ts';
+import { overlaySpecs } from '../vendor/vela/src/core/native-indicators/classics/overlays.ts';
+const bars:OHLCV[]=Array.from({length:5},(_,i)=>({time:1_700_000_000_000+i*60_000,open:100+i,high:102+i,low:98+i,close:100+i,volume:10}));
+const spec=overlaySpecs.find(x=>x.type==='anchored-vwap');
+assert.ok(spec,'Anchored VWAP belongs to the lazy native overlay family');
+const output=spec.compute(bars,{anchorTime:bars[2]!.time}).plots.find(x=>x.key==='vwap')!;
+assert.ok(Number.isNaN(output.values[0]!)&&Number.isNaN(output.values[1]!), 'pre-anchor bars must remain blank');
+assert.equal(output.values[2],102,'selected anchor bar begins the calculation');
+assert.equal(output.values[3],102.5,'anchor VWAP uses cumulative volume-weighted typical price');
+assert.equal(output.values[4],103,'anchored VWAP persists across following bars');
+assert.equal(spec.compute(bars,{}).plots[0]!.values[0],100,'zero means first loaded bar');
+const bands=spec.compute(bars,{anchorTime:bars[0]!.time,showBands:true});
+assert.ok(bands.plots.some(x=>x.key==='upper')&&bands.plots.some(x=>x.key==='lower'),'optional standard-deviation bands are emitted');
+console.log('VELA_ANCHORED_VWAP_MATH_CONTRACT_OK');

@@ -48,6 +48,8 @@ const contracts = [
   ['fyers-option-search-token', ['src/fyersOptionSearchTokenContract.test.mjs', true]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['vela-drawing-groups', ['src/velaDrawingGroupContract.test.mjs', false]],
+  ['vela-synthetic-price-styles', ['src/velaSyntheticPriceStylesContract.test.ts', true]],
+  ['vela-anchored-vwap-math', ['src/velaAnchoredVwapMathContract.test.ts', true]],
   ['vela-timezone-dst', ['src/velaTimeZoneTicksContract.test.ts', true]],
   ['vela-ichimoku-math', ['src/velaIchimokuMathContract.test.ts', true]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],

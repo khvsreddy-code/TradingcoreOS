@@ -100,6 +100,7 @@ const CATALOG: readonly LazyNativeIndicatorCatalogEntry[] = [
         ['ichimoku-cloud', 'Ichimoku Cloud'],
         ['parabolic-sar', 'Parabolic SAR'],
         ['vwap', 'Volume Weighted Average Price'],
+        ['anchored-vwap', 'Anchored VWAP'],
         ['pivot-points', 'Pivot Points Standard'],
         ['52-week-high-low', '52 Week High/Low'],
         ['zigzag', 'ZigZag'],

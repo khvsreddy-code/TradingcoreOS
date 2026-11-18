@@ -105,6 +105,57 @@ export const ichimokuCloud: ClassicIndicatorSpec = {
     },
 };
 
+
+/** Timestamp-anchored VWAP. The selected timestamp never rolls at session boundaries. */
+const anchoredVwap: ClassicIndicatorSpec = {
+    type: 'anchored-vwap',
+    title: msg('indicator.anchoredVwap.title', 'Anchored VWAP'),
+    shortTitle: msg('indicator.anchoredVwap.shortTitle', 'AVWAP'),
+    overlay: true,
+    inputs: [
+        intInput('anchorTime', msg('indicator.anchoredVwap.anchorTime', 'Anchor time (Unix ms; 0 = first loaded bar)'), 0, 0, 8_640_000_000_000, 1),
+        sourceInput('HLC3', 'source', msg('indicator.anchoredVwap.source', 'Source')),
+        boolInput('showBands', msg('indicator.anchoredVwap.showBands', 'Show deviation bands'), false, SETTINGS),
+        floatInput('bandMult', msg('indicator.anchoredVwap.bandMult', 'Band multiplier'), 1, 0.1, 10, 0.1),
+        colorInput('#7E57C2', msg('indicator.anchoredVwap.color', 'VWAP'), 'color'),
+    ],
+    compute: (bars, inputs) => {
+        const anchorTime = Math.max(0, num(inputs, 'anchorTime', 0));
+        const source = sourceValues(bars, str(inputs, 'source', 'HLC3'));
+        const vwap = new Array<number>(bars.length).fill(Number.NaN);
+        const upper = new Array<number>(bars.length).fill(Number.NaN);
+        const lower = new Array<number>(bars.length).fill(Number.NaN);
+        const multiplier = Math.max(0.1, num(inputs, 'bandMult', 1));
+        let volumeSum = 0;
+        let priceVolume = 0;
+        let priceSquaredVolume = 0;
+        for (let i = 0; i < bars.length; i++) {
+            if (anchorTime > 0 && bars[i]!.time < anchorTime) continue;
+            const price = source[i]!;
+            const volume = Number(bars[i]!.volume ?? 0);
+            if (!Number.isFinite(price) || !Number.isFinite(volume) || volume <= 0) continue;
+            volumeSum += volume;
+            priceVolume += price * volume;
+            priceSquaredVolume += price * price * volume;
+            const mean = priceVolume / volumeSum;
+            const deviation = Math.sqrt(Math.max(0, priceSquaredVolume / volumeSum - mean * mean)) * multiplier;
+            vwap[i] = mean;
+            upper[i] = mean + deviation;
+            lower[i] = mean - deviation;
+        }
+        const plots: ClassicPlot[] = [
+            { key:'vwap', title:msg('indicator.anchoredVwap.plot.vwap','Anchored VWAP'), values:vwap, color:str(inputs,'color','#7E57C2'), width:2 },
+        ];
+        if (bool(inputs, 'showBands', false)) {
+            plots.push(
+                { key:'upper', title:msg('indicator.anchoredVwap.plot.upper','Upper deviation'), values:upper, color:'#26A69A', width:1 },
+                { key:'lower', title:msg('indicator.anchoredVwap.plot.lower','Lower deviation'), values:lower, color:'#EF5350', width:1 },
+            );
+        }
+        return { plots };
+    },
+};
+
 const parabolicSar: ClassicIndicatorSpec = {
     type: 'parabolic-sar',
     title: msg('indicator.parabolicSar.title', 'Parabolic SAR'),
@@ -510,4 +561,4 @@ const williamsFractal: ClassicIndicatorSpec = {
     },
 };
 
-export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal];
+export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, anchoredVwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal];
