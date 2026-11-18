@@ -48,7 +48,7 @@ export class DrawingStore {
     }
 
     /** Apply a (possibly partial) record onto an existing drawing in place. */
-    update(id: string, patch: Partial<SerializedDrawing>): Drawing | null {
+    update(id: string, patch: Partial<SerializedDrawing>, notify = true): Drawing | null {
         const d = this.byId.get(id);
         if (!d) return null;
         if (patch.anchors) d.anchors = patch.anchors.map((p) => ({ time: p.time, price: p.price }));
@@ -64,9 +64,12 @@ export class DrawingStore {
         if ('groupId' in patch) d.groupId = typeof patch.groupId === 'string' && patch.groupId.length > 0 ? patch.groupId : undefined;
         if (patch.props !== undefined) d.applyProps(patch.props); // per-type extras (e.g. fib levels)
         if ('showOn' in patch) d.showOn = sanitizeShowOn(patch.showOn); // present-but-undefined lifts the limit
-        this.emit();
+        if (notify) this.emit();
         return d;
     }
+
+    /** Notify render subscribers after a batch of in-place updates. */
+    notifyChanged(): void { this.emit(); }
 
     /** Every drawing in paint order (ascending z). */
     all(): Drawing[] {

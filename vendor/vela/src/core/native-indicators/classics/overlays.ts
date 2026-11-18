@@ -58,7 +58,7 @@ function ichimokuMidpoint(bars: readonly OHLCV[], period: number): number[] {
     return out;
 }
 
-const ichimokuCloud: ClassicIndicatorSpec = {
+export const ichimokuCloud: ClassicIndicatorSpec = {
     type: 'ichimoku-cloud',
     title: msg('indicator.ichimoku.title', 'Ichimoku Cloud'),
     shortTitle: msg('indicator.ichimoku.shortTitle', 'Ichimoku'),
@@ -84,8 +84,8 @@ const ichimokuCloud: ClassicIndicatorSpec = {
         const chikou = bars.map((bar) => bar.close);
         const cloudColors = new Array<string | null>(bars.length + displacement).fill(null);
         for (let i = 0; i < bars.length; i++) {
-            if (Number.isFinite(conversion[i]!) && Number.isFinite(base[i]!)) {
-                spanA[i] = (conversion[i]! + base[i]!) / 2;
+            if (Number.isFinite(conversion[i]!) && Number.isFinite(base[i]!)) spanA[i] = (conversion[i]! + base[i]!) / 2;
+            if (Number.isFinite(spanA[i]!) && Number.isFinite(spanB[i]!)) {
                 const destination = i + displacement;
                 cloudColors[destination] = spanA[i]! >= spanB[i]!
                     ? 'rgba(38,166,154,0.14)'

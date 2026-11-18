@@ -358,12 +358,15 @@ export class DrawingController {
     /** Apply several partial records as ONE undo step (e.g. hiding/locking/reordering a group). */
     updateMany(patches: ReadonlyArray<{ id: string; patch: Partial<SerializedDrawing> }>): void {
         this.history.begin(this.store.serialize());
+        let changed = false;
         for (const { id, patch } of patches) {
-            if (this.updateDrawing(id, patch)) {
+            if (this.updateDrawing(id, patch, false)) {
+                changed = true;
                 this.history.markDirty();
                 this.events.emit('drawing:edited', { id });
             }
         }
+        if (changed) this.store.notifyChanged();
         this.history.commit();
     }
 
@@ -621,10 +624,10 @@ export class DrawingController {
 
     /** `store.update` that remembers the drawing's settings only when the patch changed them:
      *  moving an older drawing must not hand its look back to the tool. */
-    private updateDrawing(id: string, patch: Partial<SerializedDrawing>): boolean {
+    private updateDrawing(id: string, patch: Partial<SerializedDrawing>, notify = true): boolean {
         const cur = this.store.get(id);
         const before = cur ? captureToolDefaults(cur) : undefined;
-        if (!this.store.update(id, patch)) return false;
+        if (!this.store.update(id, patch, notify)) return false;
         const after = this.store.get(id);
         if (after && !sameToolDefaults(before, captureToolDefaults(after))) this.captureDefaults(id);
         return true;

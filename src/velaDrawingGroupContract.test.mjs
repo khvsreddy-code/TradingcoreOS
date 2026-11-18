@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root = process.cwd();
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const drawing = read('vendor/vela/src/core/drawings/Drawing.ts');
+const store = read('vendor/vela/src/core/drawings/DrawingStore.ts');
+const controller = read('vendor/vela/src/core/drawings/DrawingController.ts');
+const facade = read('vendor/vela/src/core/DrawingsControl.ts');
+const interaction = read('vendor/vela/src/renderers/native/drawings/DrawingInteraction.ts');
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+assert(drawing.includes('groupId?: string') && drawing.includes('groupId: this.groupId'), 'group identity must survive native drawing serialization');
+assert(store.includes("if ('groupId' in patch)"), 'ungroup must clear persisted membership explicitly');
+assert(controller.includes('group(ids: readonly string[]') && controller.includes('ungroup(ids: readonly string[]'), 'core drawing controller must expose group/ungroup mutations');
+assert(controller.includes('const clonedGroups = new Map<string, string>()'), 'duplicated groups must receive fresh group identities');
+assert(controller.includes('this.store.notifyChanged()'), 'batch group mutations must notify render subscribers once');
+assert(facade.includes('group(ids?: readonly string[])') && facade.includes('ungroup(ids?: readonly string[])'), 'public chart.drawings facade must expose group/ungroup');
+assert(interaction.includes('drawing.groupId === hit.groupId'), 'dragging one group member must move the other native members');
+console.log('VELA_DRAWING_GROUP_CONTRACT_OK');

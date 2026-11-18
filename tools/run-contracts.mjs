@@ -47,6 +47,8 @@ const contracts = [
   ['vela-live-ui-corespirit', ['src/velaLiveUiCoreSpiritContract.test.mjs', false]],
   ['fyers-option-search-token', ['src/fyersOptionSearchTokenContract.test.mjs', true]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
+  ['vela-drawing-groups', ['src/velaDrawingGroupContract.test.mjs', false]],
+  ['vela-ichimoku-math', ['src/velaIchimokuMathContract.test.ts', true]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],
   ['repaint-profiler', ['src/services/coreSpirit/repaintProfilerContract.test.mjs', true]],
   ['corespirit-execution-safety-and-conformance', ['src/services/coreSpirit/coreSpiritExecutionSafetyContract.test.mjs', true]],
