@@ -78,7 +78,19 @@ const TCO_CHROME_ICONS: Record<string, string> = {
 };
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
-type WatchlistItem = { symbol: string; label: string; short: string };
+type WatchlistItem = {
+  symbol: string;
+  label: string;
+  short: string;
+  exchange?: string;
+  type?: string;
+  expiry?: string;
+  strike?: number;
+  optionType?: string;
+  lotSize?: number;
+  tickSize?: number;
+};
+type WatchlistGroup = { id: string; name: string; items: WatchlistItem[] };
 
 const DEFAULT_WATCHLIST: readonly WatchlistItem[] = [
   { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', short: 'NIFTY' },
@@ -89,13 +101,15 @@ const DEFAULT_WATCHLIST: readonly WatchlistItem[] = [
 ];
 const WATCHLIST_STATE_KEY = 'tco.watchlist.v2';
 const WATCHLIST_LOCAL_KEY = 'tradingcore:vela:watchlist:v2';
+let watchlistGroups: WatchlistGroup[] = [{ id: 'main', name: 'Main', items: [...DEFAULT_WATCHLIST] }];
+let activeWatchlistId = 'main';
 let watchlist: WatchlistItem[] = [...DEFAULT_WATCHLIST];
 const watchlistRefreshers = new Set<() => void>();
 let watchlistCloudSaveTimer: number | null = null;
 let watchlistMutationRevision = 0;
 let watchlistCloudReady = false;
 
-function normalizeWatchlist(value: unknown): WatchlistItem[] {
+function normalizeWatchlist(value: unknown, allowEmpty = false): WatchlistItem[] {
   const raw: unknown[] = Array.isArray(value)
     ? value
     : value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).items)
@@ -109,24 +123,128 @@ function normalizeWatchlist(value: unknown): WatchlistItem[] {
     const symbol = String(source.symbol ?? '').trim().toUpperCase();
     if (!symbol || seen.has(symbol)) continue;
     const ticker = symbol.includes(':') ? symbol.split(':', 2)[1] ?? symbol : symbol;
-    const short = String(source.short ?? ticker).trim() || symbol;
-    const label = String(source.label ?? ticker ?? symbol).trim() || symbol;
-    result.push({ symbol, label, short });
+    const numeric = (key: string): number | undefined => {
+      const value = Number(source[key]);
+      return source[key] == null || source[key] === '' || !Number.isFinite(value) ? undefined : value;
+    };
+    const itemValue: WatchlistItem = {
+      symbol,
+      label: String(source.label ?? ticker ?? symbol).trim() || symbol,
+      short: String(source.short ?? ticker).trim() || symbol,
+      ...(source.exchange ? { exchange: String(source.exchange) } : {}),
+      ...(source.type ? { type: String(source.type) } : {}),
+      ...(source.expiry ? { expiry: String(source.expiry) } : {}),
+      ...(numeric('strike') !== undefined ? { strike: numeric('strike') } : {}),
+      ...(source.optionType ? { optionType: String(source.optionType).toUpperCase() } : {}),
+      ...(numeric('lotSize') !== undefined ? { lotSize: numeric('lotSize') } : {}),
+      ...(numeric('tickSize') !== undefined ? { tickSize: numeric('tickSize') } : {}),
+    };
+    result.push(itemValue);
     seen.add(symbol);
     if (result.length >= 50) break;
   }
-  return result.length ? result : [...DEFAULT_WATCHLIST];
+  return result.length || allowEmpty ? result : [...DEFAULT_WATCHLIST];
+}
+
+function normalizeWatchlistGroups(value: unknown): WatchlistGroup[] {
+  const raw = value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).watchlists)
+    ? (value as Record<string, unknown>).watchlists as unknown[]
+    : [];
+  const result: WatchlistGroup[] = [];
+  const ids = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const source = entry as Record<string, unknown>;
+    const id = String(source.id ?? '').trim().slice(0, 80);
+    if (!id || ids.has(id)) continue;
+    result.push({
+      id,
+      name: String(source.name ?? 'Watchlist').trim().slice(0, 48) || 'Watchlist',
+      items: normalizeWatchlist(source.items, true),
+    });
+    ids.add(id);
+    if (result.length >= 12) break;
+  }
+  if (!result.some(group => group.id === 'main')) {
+    result.unshift({ id: 'main', name: 'Main', items: [...DEFAULT_WATCHLIST] });
+  }
+  return result;
+}
+
+function activeWatchlistGroup(): WatchlistGroup {
+  return watchlistGroups.find(group => group.id === activeWatchlistId) ?? watchlistGroups[0]!;
 }
 
 function persistWatchlistLocal(): void {
-  try { localStorage.setItem(WATCHLIST_LOCAL_KEY, JSON.stringify({ version: 2, items: watchlist })); } catch {}
+  try {
+    const active = activeWatchlistGroup();
+    active.items = normalizeWatchlist(watchlist, true);
+    localStorage.setItem(WATCHLIST_LOCAL_KEY, JSON.stringify({
+      version: 3,
+      activeWatchlistId,
+      watchlists: watchlistGroups,
+    }));
+  } catch {}
 }
 
 function loadWatchlistLocal(): void {
   try {
     const raw = localStorage.getItem(WATCHLIST_LOCAL_KEY);
-    if (raw) watchlist = normalizeWatchlist(JSON.parse(raw));
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>).watchlists)) {
+      watchlistGroups = normalizeWatchlistGroups(parsed);
+      const preferred = String((parsed as Record<string, unknown>).activeWatchlistId ?? 'main');
+      activeWatchlistId = watchlistGroups.some(group => group.id === preferred) ? preferred : 'main';
+      watchlist = normalizeWatchlist(activeWatchlistGroup().items, true);
+      return;
+    }
+    // Migrate the previous single-list document without discarding its order or symbols.
+    watchlist = normalizeWatchlist(parsed);
+    watchlistGroups = [{ id: 'main', name: 'Main', items: watchlist }];
+    activeWatchlistId = 'main';
+    persistWatchlistLocal();
   } catch {}
+}
+
+function selectWatchlistGroup(id: string, ctx?: { stateChanged?: () => void }): void {
+  const target = watchlistGroups.find(group => group.id === id);
+  if (!target || target.id === activeWatchlistId) return;
+  activeWatchlistGroup().items = normalizeWatchlist(watchlist, true);
+  activeWatchlistId = target.id;
+  watchlist = normalizeWatchlist(target.items, true);
+  watchlistMutationRevision += 1;
+  persistWatchlistLocal();
+  ctx?.stateChanged?.();
+  watchlistRefreshers.forEach(refresh => refresh());
+}
+
+function createWatchlistGroup(name: string, ctx?: { stateChanged?: () => void }): string | null {
+  const safeName = String(name || '').trim().slice(0, 48);
+  if (!safeName || watchlistGroups.length >= 12) return null;
+  const id = `list-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  activeWatchlistGroup().items = normalizeWatchlist(watchlist, true);
+  watchlistGroups = [...watchlistGroups, { id, name: safeName, items: [] }];
+  activeWatchlistId = id;
+  watchlist = [];
+  watchlistMutationRevision += 1;
+  persistWatchlistLocal();
+  ctx?.stateChanged?.();
+  watchlistRefreshers.forEach(refresh => refresh());
+  return id;
+}
+
+function deleteWatchlistGroup(id: string, ctx?: { stateChanged?: () => void }): void {
+  if (id === 'main' || watchlistGroups.length <= 1) return;
+  watchlistGroups = watchlistGroups.filter(group => group.id !== id);
+  if (activeWatchlistId === id) {
+    activeWatchlistId = 'main';
+    watchlist = normalizeWatchlist(activeWatchlistGroup().items, true);
+  }
+  watchlistMutationRevision += 1;
+  persistWatchlistLocal();
+  ctx?.stateChanged?.();
+  watchlistRefreshers.forEach(refresh => refresh());
 }
 
 function symbolDescriptor(item: WatchlistItem) {
@@ -141,12 +259,15 @@ function symbolDescriptor(item: WatchlistItem) {
 }
 
 function applyWatchlist(next: WatchlistItem[], ctx?: { stateChanged?: () => void }): void {
-  watchlist = normalizeWatchlist(next);
+  watchlist = normalizeWatchlist(next, true);
+  activeWatchlistGroup().items = watchlist;
   watchlistMutationRevision += 1;
   persistWatchlistLocal();
   ctx?.stateChanged?.();
   watchlistRefreshers.forEach((refresh) => refresh());
-  if (watchlistCloudReady && typeof window !== 'undefined') {
+  // The existing Supabase RPC stores only Main. Other named lists are included in
+  // Vela workspace state + local versioned persistence and are never overwritten by it.
+  if (activeWatchlistId === 'main' && watchlistCloudReady && typeof window !== 'undefined') {
     if (watchlistCloudSaveTimer !== null) window.clearTimeout(watchlistCloudSaveTimer);
     watchlistCloudSaveTimer = window.setTimeout(() => {
       watchlistCloudSaveTimer = null;
@@ -161,11 +282,21 @@ const watchlistStatePersistence: StatePersistenceHandler = {
   key: WATCHLIST_STATE_KEY,
   scope: 'global',
   serialize() {
-    return { version: 2, items: watchlist };
+    activeWatchlistGroup().items = normalizeWatchlist(watchlist, true);
+    return { version: 3, activeWatchlistId, watchlists: watchlistGroups };
   },
   restore(payload) {
     if (watchlistCloudReady || watchlistMutationRevision > 0) return;
-    watchlist = normalizeWatchlist(payload);
+    if (payload && typeof payload === 'object' && Array.isArray((payload as Record<string, unknown>).watchlists)) {
+      watchlistGroups = normalizeWatchlistGroups(payload);
+      const preferred = String((payload as Record<string, unknown>).activeWatchlistId ?? 'main');
+      activeWatchlistId = watchlistGroups.some(group => group.id === preferred) ? preferred : 'main';
+      watchlist = normalizeWatchlist(activeWatchlistGroup().items, true);
+    } else {
+      watchlist = normalizeWatchlist(payload);
+      watchlistGroups = [{ id: 'main', name: 'Main', items: watchlist }];
+      activeWatchlistId = 'main';
+    }
     persistWatchlistLocal();
     watchlistRefreshers.forEach((refresh) => refresh());
   },
