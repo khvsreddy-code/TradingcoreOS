@@ -68,6 +68,12 @@ export interface OptionQuote {
   bidQuantity?: number;
   askPrice?: number;
   askQuantity?: number;
+  /** Previous traded premium when the provider supplies it; never inferred from OI. */
+  previousLtp?: number;
+  /** Provider IV as a decimal or percentage only when the provider explicitly supplies it. */
+  impliedVolatility?: number;
+  /** Provider event timestamp when available; observedAt remains server receive time. */
+  eventTime?: string;
   observedAt?: string;
   source?: string;
 }
@@ -89,6 +95,11 @@ export interface OptionChain {
   expiry: string;
   spot?: number;
   contracts: OptionContract[];
+  /** Snapshot receive time, not an exchange trade timestamp. */
+  observedAt?: string;
+  source?: string;
+  /** Expiries returned by the provider in the same response; not inferred locally. */
+  expiries?: string[];
 }
 
 export interface OIObservation {
