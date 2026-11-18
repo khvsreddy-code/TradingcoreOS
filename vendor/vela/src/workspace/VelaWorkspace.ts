@@ -8,6 +8,8 @@
 // exception — always aggregated, tagged by cell). Statusline/watermark/context-menu/
 // undo-history are per-cell; everything else is shared.
 import type { DataProvider } from '../core/ports/DataProvider';
+import { planAdaptiveGraphicsBudget } from '../core/graphics';
+import type { GraphicsBudgetCellInput, GraphicsHardwareProfile, NativeGraphicsBackend } from '../core/graphics';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { VelaTheme, NativeBackend, VelaOptions } from '../core/options';
 import type { VelaShellOptions } from '../widget/shell-options';
@@ -910,7 +912,7 @@ export class VelaWorkspace {
             gapPx: () => GAP_PX,
         });
         if (typeof ResizeObserver !== 'undefined') {
-            this.resizeObserver = new ResizeObserver(() => this.splitters.layout());
+            this.resizeObserver = new ResizeObserver(() => { this.splitters.layout(); this.applyGraphicsBudget(); });
             this.resizeObserver.observe(this.gridEl);
         }
 
@@ -1112,6 +1114,7 @@ export class VelaWorkspace {
             const el = this.cellsById.get(id)?.host;
             if (el) el.dataset.active = '1';
         }
+        this.applyGraphicsBudget();
         if (id) {
             this.projectActiveCell(); // trigger ① — the chrome rebinds to the new active cell
             this.events.emit('cell:active', { id, prev });
@@ -1882,11 +1885,49 @@ export class VelaWorkspace {
         return def;
     }
 
-    private backendFor(def: LayoutDefinition): NativeBackend {
-        // An explicit backend is the host's word — the WebGL budget policy only decides 'auto'.
-        const explicit = this.opts.nativeBackend;
-        if (explicit && explicit !== 'auto') return explicit;
-        return def.cells.length > (this.opts.maxWebglCells ?? 8) ? 'canvas2d' : 'auto';
+    private backendFor(_def: LayoutDefinition): NativeBackend {
+        // Keep explicit host overrides. Automatic allocation is per-cell and is applied
+        // after mount by applyGraphicsBudget(); never force every cell onto one backend.
+        return this.opts.nativeBackend && this.opts.nativeBackend !== 'auto' ? this.opts.nativeBackend : 'auto';
+    }
+
+    /** Allocate renderer resources by active state, visible area, workload and recent frame pressure. */
+    private applyGraphicsBudget(): void {
+        if (this.destroyed || this.cellsById.size === 0) return;
+        const hardware: GraphicsHardwareProfile = {
+            webgl2Supported: typeof WebGL2RenderingContext !== 'undefined',
+            deviceMemoryGiB: Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) || 4,
+            hardwareConcurrency: Number(navigator.hardwareConcurrency) || 4,
+            // Conservative portable cap; querying MAX_TEXTURE_SIZE would require creating
+            // an extra context and consume precisely the resource this allocator manages.
+            maxTextureSize: 8192,
+        };
+        const inputs: GraphicsBudgetCellInput[] = [];
+        for (const [cellId, cell] of this.cellsById) {
+            const rect = cell.host.getBoundingClientRect();
+            const visible = rect.width > 2 && rect.height > 2 && cell.host.isConnected;
+            const diagnostics = cell.chart.renderer.getGraphicsDiagnostics?.();
+            inputs.push({
+                cellId, active: cellId === this.activeId, visible,
+                width: rect.width, height: rect.height,
+                devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+                visibleBars: diagnostics?.visibleBars ?? 0,
+                indicatorCount: diagnostics?.indicatorCount ?? 0,
+                drawingLayerCount: diagnostics?.drawingLayerCount ?? 0,
+                estimatedGpuBytes: diagnostics?.estimatedGpuBytes ?? 0,
+                frameP95Ms: diagnostics?.p95FrameMs ?? 0,
+                frameBudgetMissRate: diagnostics?.frameBudgetMissRate ?? 0,
+            });
+        }
+        const forced = this.opts.nativeBackend && this.opts.nativeBackend !== 'auto' ? this.opts.nativeBackend as NativeGraphicsBackend : undefined;
+        for (const decision of planAdaptiveGraphicsBudget(inputs, hardware, forced)) {
+            this.cellsById.get(decision.cellId)?.chart.renderer.setGraphicsPolicy?.({
+                backend: decision.backend,
+                resolutionScale: decision.resolutionScale,
+                glowEnabled: decision.glowEnabled,
+                reason: decision.reason,
+            });
+        }
     }
 
     private currentTracks(): { cols: number[]; rows: number[] } {

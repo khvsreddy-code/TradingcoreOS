@@ -21,6 +21,7 @@ import type {
     RendererRootAttributes,
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
+import type { NativeGraphicsDiagnostics, NativeGraphicsPolicy, NativeGraphicsBackend } from '../../core/graphics';
 import type { Translator } from '../../core/i18n/types';
 import { englishTranslator } from '../../core/i18n/translator';
 import { msg } from '../../core/i18n/message';
@@ -268,6 +269,7 @@ export class NativeRenderer implements IChartRenderer {
     private readonly scene = new SceneGraph();
     private backend!: IRenderBackend; // chosen at mount (WebGL2 if available, else canvas2d)
     private backendMode: NativeBackend = 'auto';
+    private graphicsPolicy: NativeGraphicsPolicy = { backend: 'webgl2', resolutionScale: 1, glowEnabled: true };
     private glowAmount = 0; // WebGL2 neon-glow intensity (canvas2d ignores it)
     private readonly chrome = new ChromeRenderer(this.priceAxisTicks);
     /** Prepaints each indicator's Pine drawings into interleave slices at the model's z. */
@@ -1887,8 +1889,9 @@ export class NativeRenderer implements IChartRenderer {
         return this.createPlotCanvas({ pointerEvents: true });
     }
 
-    private createGeometryBackend(): HTMLCanvasElement {
-        if ((this.backendMode === 'auto' || this.backendMode === 'webgl2') && supportsWebGL2()) {
+    private createGeometryBackend(requestedBackend?: NativeGraphicsBackend): HTMLCanvasElement {
+        const wantsWebGL = requestedBackend ? requestedBackend === 'webgl2' : (this.backendMode === 'auto' || this.backendMode === 'webgl2');
+        if (wantsWebGL && supportsWebGL2()) {
             const canvas = this.makeDataCanvas();
             const gl = new WebGL2Backend();
             gl.glow = this.glowAmount;
@@ -1913,6 +1916,52 @@ export class NativeRenderer implements IChartRenderer {
      * the program) → replace the L0 backend with the canvas2d fallback on a fresh
      * data canvas. The chrome/cursor layers + viewport state are untouched.
      */
+    /** Apply a workspace-owned quality/backend decision without replacing chart data, drawings or viewport state. */
+    setGraphicsPolicy(policy: NativeGraphicsPolicy): void {
+        const scale = Math.max(0.65, Math.min(1, Number(policy.resolutionScale) || 1));
+        const next: NativeGraphicsPolicy = { ...policy, resolutionScale: scale };
+        const backendChanged = this.backend?.kind !== next.backend;
+        const scaleChanged = Math.abs(this.graphicsPolicy.resolutionScale - scale) > 0.01;
+        const glowChanged = this.graphicsPolicy.glowEnabled !== next.glowEnabled;
+        this.graphicsPolicy = next;
+        this.glowAmount = next.glowEnabled ? Math.max(0, this.glowAmount) : 0;
+        if (this.backend instanceof WebGL2Backend) this.backend.glow = this.glowAmount;
+        if (backendChanged && this.wrapper && this.dataCanvas) {
+            const previousCanvas = this.dataCanvas;
+            this.input?.detach();
+            this.backend.destroy();
+            const replacement = this.createGeometryBackend(next.backend);
+            previousCanvas.replaceWith(replacement);
+            this.dataCanvas = replacement;
+            this.input?.attach(replacement);
+        }
+        if (backendChanged || scaleChanged || glowChanged) this.syncSize();
+    }
+
+    /** Renderer-local estimates; GPU bytes are estimates, not driver-reported VRAM. */
+    getGraphicsDiagnostics(): NativeGraphicsDiagnostics {
+        const rect = this.plot?.getBoundingClientRect?.();
+        const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+        const scale = this.graphicsPolicy.resolutionScale;
+        const width = rect?.width ?? this.wrapper?.clientWidth ?? 0;
+        const height = rect?.height ?? this.wrapper?.clientHeight ?? 0;
+        const canvases = [this.dataCanvas, this.backdropCanvas, this.volumeCanvas, this.vpvrCanvas, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas];
+        const estimatedCanvasBytes = canvases.reduce((sum, canvas) => sum + (canvas ? canvas.width * canvas.height * 4 : 0), 0);
+        const gpuBytes = this.backend?.kind === 'webgl2' && this.dataCanvas ? this.dataCanvas.width * this.dataCanvas.height * 4 : 0;
+        const range = this.coords.visibleLogicalRange();
+        const stats = this.getPerformanceStats();
+        return {
+            backend: this.backend?.kind ?? 'unknown', cssWidth: width, cssHeight: height,
+            devicePixelRatio: dpr, resolutionScale: scale,
+            visibleBars: Math.max(0, Math.ceil(range.to) - Math.floor(range.from)),
+            indicatorCount: this.scene.indicators.size,
+            drawingLayerCount: this.scene.drawingSlices?.size ?? 0,
+            estimatedGpuBytes: gpuBytes, estimatedCanvasBytes,
+            p95FrameMs: stats.p95FrameMs, frameBudgetMissRate: stats.frameBudgetMissRate,
+            frameBudgetMs: stats.frameBudgetMs,
+        };
+    }
+
     private swapToCanvas2dFallback(): void {
         if (this.backend.kind === 'canvas2d') return;
         const old = this.dataCanvas;
@@ -5237,7 +5286,8 @@ export class NativeRenderer implements IChartRenderer {
         const w = this.wrapper.clientWidth;
         const h = this.wrapper.clientHeight;
         if (w <= 0 || h <= 0) return;
-        const dpr = window.devicePixelRatio || 1;
+        const physicalDpr = window.devicePixelRatio || 1;
+        const dpr = physicalDpr * this.graphicsPolicy.resolutionScale;
         // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
         // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
         this.plot.style.left = `${this.toolbarGutter}px`;
@@ -5255,7 +5305,7 @@ export class NativeRenderer implements IChartRenderer {
         // (e.g. right after the toolbar gutter moved the plot) is rejected; the observer
         // fires again with the fresh box and re-syncs.
         const dev = this.plotDeviceSize;
-        if (dev && Math.abs(dev.width - rect.width * dpr) <= 1 && Math.abs(dev.height - rect.height * dpr) <= 1) {
+        if (this.graphicsPolicy.resolutionScale >= 0.999 && dev && Math.abs(dev.width - rect.width * dpr) <= 1 && Math.abs(dev.height - rect.height * dpr) <= 1) {
             bw = Math.max(1, dev.width);
             bh = Math.max(1, dev.height);
         }
