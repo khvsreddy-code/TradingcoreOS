@@ -440,6 +440,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
   const atmIndex = rows.findIndex((row: any) => Number(row.strike) === Number(atmStrike));
   const nearby = rows.filter((_: any, index: number) => atmIndex < 0 || Math.abs(index - atmIndex) <= 5);
   const formatCompact = (value: unknown) => {
+    if (value == null || value === '') return '—';
     const number = Number(value);
     if (!Number.isFinite(number)) return '—';
     const magnitude = Math.abs(number);
@@ -466,17 +467,20 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
   const putOi = total('put');
   const callChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.call) ?? 0), 0);
   const putChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.put) ?? 0), 0);
-  const hasOi = rows.some((row: any) => finite(row.call?.oi) !== undefined || finite(row.put?.oi) !== undefined);
-  const pcr = callOi > 0 ? putOi / callOi : undefined;
-  const maxCall = rows.reduce((best: any, row: any) => (finite(row.call?.oi) ?? 0) > (finite(best?.call?.oi) ?? 0) ? row : best, null);
-  const maxPut = rows.reduce((best: any, row: any) => (finite(row.put?.oi) ?? 0) > (finite(best?.put?.oi) ?? 0) ? row : best, null);
+  const hasOi = rows.length > 0 && rows.every((row: any) =>
+    finite(row.call?.oi) !== undefined && finite(row.put?.oi) !== undefined);
+  const hasCompleteOiChange = hasOi && rows.every((row: any) =>
+    oiChange(row.call) !== undefined && oiChange(row.put) !== undefined);
+  const pcr = hasOi && callOi > 0 ? putOi / callOi : undefined;
+  const maxCall = hasOi ? rows.reduce((best: any, row: any) => (finite(row.call?.oi) ?? 0) > (finite(best?.call?.oi) ?? 0) ? row : best, null) : null;
+  const maxPut = hasOi ? rows.reduce((best: any, row: any) => (finite(row.put?.oi) ?? 0) > (finite(best?.put?.oi) ?? 0) ? row : best, null) : null;
   const analytics = chain && hasOi && spot > 0 ? buildOIChartAnalytics(chain, spot) : null;
   const maxPain = finite(analytics?.maxPain);
-  const bullish = pcr !== undefined && (pcr > 1.05 || putChg > callChg);
-  const bearish = pcr !== undefined && (pcr < 0.8 || callChg > putChg * 1.25);
-  const bias = !hasOi ? 'INSUFFICIENT OI' : bullish && !bearish ? 'BULLISH' : bearish && !bullish ? 'BEARISH' : 'RANGE / TWO-WAY';
+  const bullish = pcr !== undefined && (pcr > 1.05 || (hasCompleteOiChange && putChg > callChg));
+  const bearish = pcr !== undefined && (pcr < 0.8 || (hasCompleteOiChange && callChg > putChg * 1.25));
+  const bias = !hasOi ? 'INCOMPLETE OI' : bullish && !bearish ? 'BULLISH' : bearish && !bullish ? 'BEARISH' : 'RANGE / TWO-WAY';
   const next = !hasOi
-    ? 'Open interest is unavailable in this snapshot. No directional read is generated.'
+    ? 'The broker returned a partial chain. PCR, walls and max pain are withheld until both sides have OI for every returned strike.'
     : bullish && !bearish
       ? `Put-side OI is larger or increasing faster. Confirm with spot acceptance; OI alone does not establish direction.`
       : bearish && !bullish
@@ -526,7 +530,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
     return {
       volatility,
       premium,
-      source: suppliedIv != null || hasProviderGreeks ? 'FYERS' : 'MODEL',
+      source: suppliedIv != null ? 'FYERS IV' : hasProviderGreeks ? 'FYERS Greeks + MODEL IV' : 'MODEL',
       greeks: {
         delta: providerValues.delta ?? modelGreeks.delta,
         gamma: providerValues.gamma ?? modelGreeks.gamma,
