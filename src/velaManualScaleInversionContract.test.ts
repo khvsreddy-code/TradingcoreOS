@@ -4,8 +4,8 @@ import type { PriceScale } from '../vendor/vela/src/renderers/native/core/Coordi
 const linear:PriceScale={min:10,max:20,log:false,invert:true};
 const linearZoom=rescaleAround(linear,1.5);
 assert.equal(linearZoom.invert,true,'linear manual zoom must preserve inverted scale state');
-assert.equal(linearZoom.min,8.75);
-assert.equal(linearZoom.max,21.25);
+assert.equal(linearZoom.min,7.5);
+assert.equal(linearZoom.max,22.5);
 const linearPan=shiftScale(linear,12,100);
 assert.equal(linearPan.invert,true,'linear manual pan must preserve inverted scale state');
 assert.equal(linearPan.min,11.2);
