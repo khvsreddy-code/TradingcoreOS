@@ -35,6 +35,76 @@ function barInterval(bars: readonly OHLCV[]): number {
     return gaps[Math.floor(gaps.length / 2)] ?? 0;
 }
 
+
+/** O(n) rolling midpoint of the highest high and lowest low over the window. */
+function ichimokuMidpoint(bars: readonly OHLCV[], period: number): number[] {
+    const n = bars.length;
+    const out = new Array<number>(n).fill(Number.NaN);
+    if (period < 1 || n === 0) return out;
+    const highs = new Int32Array(n);
+    const lows = new Int32Array(n);
+    let highHead = 0, highTail = 0, lowHead = 0, lowTail = 0;
+    for (let i = 0; i < n; i++) {
+        const bar = bars[i]!;
+        while (highTail > highHead && bars[highs[highTail - 1]!]!.high <= bar.high) highTail--;
+        highs[highTail++] = i;
+        while (lowTail > lowHead && bars[lows[lowTail - 1]!]!.low >= bar.low) lowTail--;
+        lows[lowTail++] = i;
+        const first = i - period + 1;
+        while (highHead < highTail && highs[highHead]! < first) highHead++;
+        while (lowHead < lowTail && lows[lowHead]! < first) lowHead++;
+        if (first >= 0) out[i] = (bars[highs[highHead]!]!.high + bars[lows[lowHead]!]!.low) / 2;
+    }
+    return out;
+}
+
+const ichimokuCloud: ClassicIndicatorSpec = {
+    type: 'ichimoku-cloud',
+    title: msg('indicator.ichimoku.title', 'Ichimoku Cloud'),
+    shortTitle: msg('indicator.ichimoku.shortTitle', 'Ichimoku'),
+    overlay: true,
+    inputs: [
+        intInput('conversionPeriod', msg('indicator.ichimoku.conversion', 'Conversion Line Length'), 9, 1, 200),
+        intInput('basePeriod', msg('indicator.ichimoku.base', 'Base Line Length'), 26, 1, 300),
+        intInput('spanBPeriod', msg('indicator.ichimoku.spanB', 'Leading Span B Length'), 52, 1, 500),
+        intInput('displacement', msg('indicator.ichimoku.displacement', 'Displacement'), 26, 0, 200),
+        colorInput('#2962FF', msg('indicator.ichimoku.conversionColor', 'Conversion Line'), 'conversionColor'),
+        colorInput('#B71C1C', msg('indicator.ichimoku.baseColor', 'Base Line'), 'baseColor'),
+        colorInput('#26A69A', msg('indicator.ichimoku.laggingColor', 'Lagging Span'), 'laggingColor'),
+    ],
+    compute: (bars, inputs) => {
+        const conversionPeriod = Math.max(1, Math.floor(num(inputs, 'conversionPeriod', 9)));
+        const basePeriod = Math.max(1, Math.floor(num(inputs, 'basePeriod', 26)));
+        const spanBPeriod = Math.max(1, Math.floor(num(inputs, 'spanBPeriod', 52)));
+        const displacement = Math.max(0, Math.min(200, Math.floor(num(inputs, 'displacement', 26))));
+        const conversion = ichimokuMidpoint(bars, conversionPeriod);
+        const base = ichimokuMidpoint(bars, basePeriod);
+        const spanB = ichimokuMidpoint(bars, spanBPeriod);
+        const spanA = new Array<number>(bars.length).fill(Number.NaN);
+        const chikou = bars.map((bar) => bar.close);
+        const cloudColors = new Array<string | null>(bars.length + displacement).fill(null);
+        for (let i = 0; i < bars.length; i++) {
+            if (Number.isFinite(conversion[i]!) && Number.isFinite(base[i]!)) {
+                spanA[i] = (conversion[i]! + base[i]!) / 2;
+                const destination = i + displacement;
+                cloudColors[destination] = spanA[i]! >= spanB[i]!
+                    ? 'rgba(38,166,154,0.14)'
+                    : 'rgba(239,83,80,0.14)';
+            }
+        }
+        return {
+            plots: [
+                { key: 'conversion', title: msg('indicator.ichimoku.conversion', 'Conversion Line'), values: conversion, color: str(inputs, 'conversionColor', '#2962FF'), width: 1 },
+                { key: 'base', title: msg('indicator.ichimoku.base', 'Base Line'), values: base, color: str(inputs, 'baseColor', '#B71C1C'), width: 1 },
+                { key: 'spanA', title: msg('indicator.ichimoku.spanA', 'Leading Span A'), values: spanA, color: '#26A69A', offset: displacement, width: 1 },
+                { key: 'spanB', title: msg('indicator.ichimoku.spanB', 'Leading Span B'), values: spanB, color: '#EF5350', offset: displacement, width: 1 },
+                { key: 'chikou', title: msg('indicator.ichimoku.chikou', 'Lagging Span'), values: chikou, color: str(inputs, 'laggingColor', '#26A69A'), offset: -displacement, width: 1 },
+            ],
+            bands: [{ key: 'cloud', from: 'spanA', to: 'spanB', color: 'rgba(38,166,154,0.12)', colors: cloudColors }],
+        };
+    },
+};
+
 const parabolicSar: ClassicIndicatorSpec = {
     type: 'parabolic-sar',
     title: msg('indicator.parabolicSar.title', 'Parabolic SAR'),
@@ -440,4 +510,4 @@ const williamsFractal: ClassicIndicatorSpec = {
     },
 };
 
-export const overlaySpecs: ClassicIndicatorSpec[] = [parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal];
+export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal];

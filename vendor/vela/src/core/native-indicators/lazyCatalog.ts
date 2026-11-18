@@ -97,6 +97,7 @@ const CATALOG: readonly LazyNativeIndicatorCatalogEntry[] = [
         ['intraday-intensity', 'Intraday Intensity'],
     ].map(([type, title]) => ({ type, title, family: 'volume' as const, multiInstance: true as const })),
     ...[
+        ['ichimoku-cloud', 'Ichimoku Cloud'],
         ['parabolic-sar', 'Parabolic SAR'],
         ['vwap', 'Volume Weighted Average Price'],
         ['pivot-points', 'Pivot Points Standard'],

@@ -31,6 +31,8 @@ export interface ClassicPlot {
     /** Series kind; default `'line'`. */
     kind?: LineLikeKind;
     values: readonly number[];
+    /** Shift in chart slots: positive projects forward (Ichimoku cloud), negative backward (lagging span). */
+    offset?: number;
     color: string;
     width?: number;
     lineStyle?: LineStyle;
@@ -108,14 +110,26 @@ export function bool(inputs: Record<string, InputValue>, key: string, fallback: 
     return typeof v === 'boolean' ? v : fallback;
 }
 
-function toPoints(bars: readonly OHLCV[], values: readonly number[], colors?: ReadonlyArray<string | null>): SeriesPoint[] {
-    const pts = new Array<SeriesPoint>(bars.length);
-    for (let i = 0; i < bars.length; i++) {
-        const v = values[i];
-        const p: SeriesPoint = { time: bars[i]!.time, value: v != null && Number.isFinite(v) ? v : null };
-        const c = colors?.[i];
+function toPoints(bars: readonly OHLCV[], values: readonly number[], colors?: ReadonlyArray<string | null>, offset = 0): SeriesPoint[] {
+    const shift = Number.isFinite(offset) ? Math.trunc(offset) : 0;
+    const length = Math.max(0, values.length + shift);
+    const intervals: number[] = [];
+    for (let i = Math.max(1, bars.length - 50); i < bars.length; i++) {
+        const gap = bars[i]!.time - bars[i - 1]!.time;
+        if (Number.isFinite(gap) && gap > 0) intervals.push(gap);
+    }
+    intervals.sort((a, b) => a - b);
+    const step = intervals.length ? intervals[Math.floor(intervals.length / 2)]! : 0;
+    const pts = new Array<SeriesPoint>(length);
+    const lastTime = bars[bars.length - 1]?.time ?? 0;
+    for (let slot = 0; slot < length; slot++) {
+        const source = slot - shift;
+        const v = source >= 0 && source < values.length ? values[source] : Number.NaN;
+        const time = slot < bars.length ? bars[slot]!.time : lastTime + step * (slot - bars.length + 1);
+        const p: SeriesPoint = { time, value: v != null && Number.isFinite(v) ? v : null };
+        const c = source >= 0 ? colors?.[source] : null;
         if (c != null) p.color = c;
-        pts[i] = p;
+        pts[slot] = p;
     }
     return pts;
 }
@@ -176,7 +190,7 @@ class ClassicIndicator implements NativeIndicator {
                 ...(displayTitle ? { displayTitle } : {}),
                 paneId: '', // stamped by the orchestrator
                 kind,
-                points: toPoints(bars, plot.values, plot.colors),
+                points: toPoints(bars, plot.values, plot.colors, plot.offset ?? 0),
                 style: {
                     color: plot.color,
                     width: plot.width ?? 1,
