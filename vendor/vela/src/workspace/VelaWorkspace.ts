@@ -2716,6 +2716,9 @@ export class VelaWorkspace {
     /** Trigger ② — a cell's indicator ledger changed: count + picker only if active. */
     private onCellIndicatorsChanged(id: string): void {
         this.markStateDirty();
+        // Indicator and drawing workload can change without a resize; refresh the
+        // per-cell budget here, but never from the per-tick script:run hot path.
+        this.applyGraphicsBudget();
         if (id !== this.activeId) return;
         const cell = this.cellsById.get(id);
         if (!cell) return;
