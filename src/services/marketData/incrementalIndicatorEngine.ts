@@ -10,6 +10,15 @@ export type IncrementalEvaluation = { results: IncrementalPatch[]; ready: boolea
 type RsiState = { period:number; gain:WilderState; loss:WilderState; previousSource:number|null; currentSource:number|null; value:number|null };
 type FlowState = { period:number; positive:RollingSum; negative:RollingSum; previousSource:number|null; currentSource:number|null; currentPositive:number; currentNegative:number };
 type ObvState = { previousSource:number|null; currentSource:number|null; currentContribution:number; value:number };
+type RateOfChangeState = { data: Float64Array; cursor: number; count: number; period: number };
+type RangeOscillatorState = { high: RollingMinMax; low: RollingMinMax };
+type AwesomeOscillatorState = { fast: RollingMean; slow: RollingMean };
+type StochRsiState = { rsi: RsiState; high: RollingMinMax; low: RollingMinMax; k: RollingMean; d: RollingMean };
+type ChaikinMoneyFlowState = { moneyFlow: RollingSum; volume: RollingSum };
+type VolumeOscillatorState = { fast: EMAState; slow: EMAState };
+type HistoricalVolatilityState = { variance: RollingVariance; previousClose: number | null; stablePreviousClose: number | null };
+type ChoppinessState = { trueRange: RollingSum; high: RollingMinMax; low: RollingMinMax; previousClose: number | null; stablePreviousClose: number | null };
+type AccumulationDistributionState = { value: number; stableValue: number; contribution: number };
 type AdxState = { period:number; atr:WilderState; plus:WilderState; minus:WilderState; dx:WilderState; previousHigh:number|null; previousLow:number|null; previousClose:number|null; currentHigh:number|null; currentLow:number|null; currentClose:number|null; currentTR:number; currentPlus:number; currentMinus:number; value:number|null };
 type CciState = { mean:RollingMean; deviation:RollingAbsoluteDeviation };
 type SupertrendState = { atr:ATRState; finalUpper:number; finalLower:number; trend:1|-1; index:number; previousFinalUpper:number; previousFinalLower:number; previousTrend:1|-1; value:number|null };
@@ -22,6 +31,7 @@ type AdvancedState = any;
 
 const standardIncrementalKinds = new Set<IndicatorKind>([
   'EMA','SMA','WMA','VWMA','RMA','HMA','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Supertrend','Ichimoku Cloud',
+  'Williams %R','Awesome Oscillator','ROC','Chaikin Money Flow','Volume Oscillator','Standard Deviation','Choppiness Index','Historical Volatility','Accumulation/Distribution',
 ]);
 const advancedIncrementalKinds = new Set<IndicatorKind>([
   'Adaptive Ehlers','Fractional EMA Kalman Filter','Trend Pressure','Trend Target Ribbon','Trinity','Neural Weight Oscillator',
@@ -85,6 +95,15 @@ export class IncrementalIndicatorRuntime {
       case 'RMA': state=new WilderState(p);break;
       case 'VWMA': state={priceVolume:new RollingSum(p),volume:new RollingSum(p)};break;
       case 'HMA': state={half:new WMAState(Math.max(1,Math.floor(p/2))),full:new WMAState(p),raw:new WMAState(Math.max(1,Math.floor(Math.sqrt(p))))} as HmaState;break;
+      case 'Williams %R': state={high:new RollingMinMax(p),low:new RollingMinMax(p)} as RangeOscillatorState;break;
+      case 'Awesome Oscillator': state={fast:new RollingMean(Math.max(2,Math.floor(cfg.fast||5))),slow:new RollingMean(Math.max(3,Math.floor(cfg.slow||34)))} as AwesomeOscillatorState;break;
+      case 'ROC': state={data:new Float64Array(p+1),cursor:0,count:0,period:p} as RateOfChangeState;break;
+      case 'Chaikin Money Flow': state={moneyFlow:new RollingSum(p),volume:new RollingSum(p)} as ChaikinMoneyFlowState;break;
+      case 'Volume Oscillator': state={fast:new EMAState(Math.max(1,Math.floor(cfg.fast||5))),slow:new EMAState(Math.max(2,Math.floor(cfg.slow||20)))} as VolumeOscillatorState;break;
+      case 'Standard Deviation': state=new RollingVariance(p);break;
+      case 'Choppiness Index': state={trueRange:new RollingSum(p),high:new RollingMinMax(p),low:new RollingMinMax(p),previousClose:null,stablePreviousClose:null} as ChoppinessState;break;
+      case 'Historical Volatility': state={variance:new RollingVariance(p),previousClose:null,stablePreviousClose:null} as HistoricalVolatilityState;break;
+      case 'Accumulation/Distribution': state={value:0,stableValue:0,contribution:0} as AccumulationDistributionState;break;
       case 'VWAP': state=new VWAPSessionState();break;
       case 'Bollinger Bands': state={mean:new RollingMean(p),variance:new RollingVariance(p)} as BollingerState;break;
       case 'Keltner Channels': state={mid:new EMAState(p),atr:new ATRState(p)};break;
@@ -144,6 +163,15 @@ export class IncrementalIndicatorRuntime {
       case 'RMA': out=point(c,s.updateWilder(src,mode));break;
       case 'VWMA': {const volume=Math.max(0,Number(c.volume)||0);s.priceVolume.update(src*volume,mode);s.volume.update(volume,mode);const weighted=s.priceVolume.value(),total=s.volume.value();out=point(c,weighted!=null&&total!=null&&total>0?weighted/total:null);break;}
       case 'HMA': {const a=s.half.update(src,mode),b=s.full.update(src,mode),raw=a!=null&&b!=null?2*a-b:null,h=s.raw.update(raw??NaN,mode);out=point(c,h);break;}
+      case 'Williams %R': {const hi=s.high.update(c.high,mode).max,lo=s.low.update(c.low,mode).min;out=point(c,hi==null||lo==null?null:hi===lo?0:-100*(hi-src)/(hi-lo));break;}
+      case 'Awesome Oscillator': {const median=(c.high+c.low)/2,fast=s.fast.update(median,mode).value(),slow=s.slow.update(median,mode).value();out=point(c,fast==null||slow==null?null:fast-slow);break;}
+      case 'ROC': {const state=s as RateOfChangeState;if(mode==='replace'&&state.count>0)state.data[(state.cursor-1+state.data.length)%state.data.length]=src;else{state.data[state.cursor]=src;state.cursor=(state.cursor+1)%state.data.length;state.count=Math.min(state.count+1,state.data.length);}const previous=state.count>state.period?state.data[(state.cursor-1-state.period+state.data.length*2)%state.data.length]:null;out=point(c,previous==null||previous===0?null:((src-previous)/previous)*100);break;}
+      case 'Chaikin Money Flow': {const range=c.high-c.low,multiplier=range===0?0:((c.close-c.low)-(c.high-c.close))/range,volume=Math.max(0,Number(c.volume)||0);s.moneyFlow.update(multiplier*volume,mode);s.volume.update(volume,mode);const flow=s.moneyFlow.value(),total=s.volume.value();out=point(c,flow==null||total==null||total===0?null:flow/total);break;}
+      case 'Volume Oscillator': {const volume=Math.max(0,Number(c.volume)||0),fast=s.fast.update(volume,mode),slow=s.slow.update(volume,mode);out=point(c,fast==null||slow==null||slow===0?null:((fast-slow)/slow)*100);break;}
+      case 'Standard Deviation': out=point(c,s.update(src,mode).value);break;
+      case 'Choppiness Index': {const previous=mode==='replace'?(s.stablePreviousClose??s.previousClose):s.previousClose,tr=previous==null?c.high-c.low:Math.max(c.high-c.low,Math.abs(c.high-previous),Math.abs(c.low-previous));s.trueRange.update(tr,mode);const high=s.high.update(c.high,mode).max,low=s.low.update(c.low,mode).min;if(mode==='append'){s.stablePreviousClose=s.previousClose;s.previousClose=c.close;}else{s.previousClose=c.close;}const sum=s.trueRange.value(),range=high==null||low==null?null:high-low;out=point(c,sum==null||range==null||range<=0||p<=1?null:Math.max(0,Math.min(100,100*Math.log10(sum/range)/Math.log10(p))));break;}
+      case 'Historical Volatility': {const previous=mode==='replace'?(s.stablePreviousClose??s.previousClose):s.previousClose;const logReturn=previous==null||previous<=0||c.close<=0?NaN:Math.log(c.close/previous);s.variance.update(logReturn,mode);if(mode==='append'){s.stablePreviousClose=s.previousClose;s.previousClose=c.close;}else{s.previousClose=c.close;}const deviation=s.variance.value(),annualization=Math.max(1,Number(cfg.annualization)||252);out=point(c,deviation==null?null:deviation*Math.sqrt(annualization)*100);break;}
+      case 'Accumulation/Distribution': {const range=c.high-c.low,volume=Math.max(0,Number(c.volume)||0),multiplier=range===0?0:(2*c.close-c.high-c.low)/range,contribution=multiplier*volume;if(mode==='append'){s.stableValue=s.value;s.value+=contribution;}else{s.value=s.stableValue+contribution;}s.contribution=contribution;out=point(c,s.value);break;}
       case 'VWAP': out=point(c,s.update(c.timestamp,src,c.volume||0,c.close,mode));break;
       case 'Bollinger Bands': {s.mean.update(src,mode);s.variance.update(src,mode);const m=s.mean.value(),sd=s.variance.value();out=m==null||sd==null?null:{time:timestamp(c),middle:m,upper:m+(cfg.multiplier||2)*sd,lower:m-(cfg.multiplier||2)*sd};break;}
       case 'Keltner Channels': {const m=s.mid.update(src,mode),a=s.atr.update(c.high,c.low,c.close,mode);out=m==null||a==null?null:{time:timestamp(c),middle:m,upper:m+(cfg.multiplier||2)*a,lower:m-(cfg.multiplier||2)*a};break;}

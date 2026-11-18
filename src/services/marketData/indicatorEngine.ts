@@ -7,6 +7,7 @@ import { CORE_PRICE_SOURCE_OPTIONS } from '../coreSpirit/indicatorSettingsSchema
 import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSchema';
 
 export type IndicatorKind =
+  | 'Williams %R' | 'Awesome Oscillator' | 'ROC' | 'Chaikin Money Flow' | 'Volume Oscillator' | 'Standard Deviation' | 'Choppiness Index' | 'Historical Volatility' | 'Accumulation/Distribution'
   | 'EMA' | 'SMA' | 'WMA' | 'VWMA' | 'RMA' | 'HMA' | 'VWAP' | 'Bollinger Bands' | 'Keltner Channels' | 'Donchian Channels'
   | 'RSI' | 'MACD' | 'ATR' | 'ADX' | 'Stochastic' | 'CCI' | 'OBV' | 'MFI'
   | 'Supertrend' | 'Ichimoku Cloud' | 'Pivot Points' | 'CPR' | 'Key Levels' | 'Opening Range' | 'Weekly Levels' | 'Swing Levels' | 'Gap Levels' | 'Market Structure' | 'Fair Value Gaps' | 'Dynamic Support/Resistance' | 'Liquidity Sweeps' | 'Order Blocks' | 'Previous Day Levels' | 'Previous Week Levels' | 'Previous Month Levels' | 'Opening Range Pro' | 'Gap Zones' | 'Equal Highs/Lows' | 'Liquidity Pools' | 'BOS / CHOCH' | 'FVG + Mitigation' | 'Order Blocks + Mitigation' | 'Breakout / Retest' | 'Failed Breakout' | 'Rejection Candles' | 'Inside Bar Breakout' | 'Engulfing Patterns' | 'Pin Bars' | 'NR7 Volatility Contraction' | 'Developing Day High/Low' | 'VWAP Deviation Bands' | 'Anchored VWAP' | 'CPR R1-R5 / S1-S5' | 'Camarilla Pivots' | 'Fibonacci Pivots' | 'Weekly Pivots' | 'Monthly Pivots' | 'TradingCore V Price Action'
@@ -42,6 +43,15 @@ export const INDICATOR_LIBRARY: Array<{ kind: IndicatorKind; description: string
   { kind: 'VWMA', description: 'Volume-weighted moving average.', overlay: true, defaults: { period: 20 } },
   { kind: 'RMA', description: 'Wilder smoothed moving average.', overlay: true, defaults: { period: 14 } },
   { kind: 'HMA', description: 'Hull moving average for a faster, smoother trend line.', overlay: true, defaults: { period: 20 } },
+  { kind: 'Williams %R', description: 'Range-normalized momentum oscillator using rolling highs and lows.', overlay: false, defaults: { period: 14 } },
+  { kind: 'Awesome Oscillator', description: 'Difference between 5- and 34-period median-price simple averages.', overlay: false, defaults: { fast: 5, slow: 34 } },
+  { kind: 'ROC', description: 'Rate of change of the selected price source over a configurable lag.', overlay: false, defaults: { period: 12 } },
+  { kind: 'Chaikin Money Flow', description: 'Volume-weighted accumulation/distribution pressure over a rolling window.', overlay: false, defaults: { period: 20 } },
+  { kind: 'Volume Oscillator', description: 'Percentage difference between fast and slow volume moving averages.', overlay: false, defaults: { fast: 5, slow: 20 } },
+  { kind: 'Standard Deviation', description: 'Population standard deviation of the selected source.', overlay: false, defaults: { period: 20 } },
+  { kind: 'Choppiness Index', description: 'Range-normalized sum of true range over a configurable window.', overlay: false, defaults: { period: 14 } },
+  { kind: 'Historical Volatility', description: 'Annualized rolling standard deviation of log returns.', overlay: false, defaults: { period: 20 } },
+  { kind: 'Accumulation/Distribution', description: 'Cumulative money-flow volume derived from candle close location and volume.', overlay: false, defaults: {} },
   { kind: 'VWAP', description: 'Session volume-weighted average price.', overlay: true, defaults: {} },
   { kind: 'Bollinger Bands', description: 'Volatility envelope around a moving average.', overlay: true, defaults: { period: 20, multiplier: 2 } },
   { kind: 'Keltner Channels', description: 'EMA centerline with ATR-based volatility bands.', overlay: true, defaults: { period: 20, multiplier: 2 } },
