@@ -51,7 +51,7 @@ const webglBackend = read('vendor/vela/src/renderers/native/backend/WebGL2Backen
 const candleStyle = read('vendor/vela/src/renderers/native/backend/candle-lod.ts');
 assert.ok(candleConfig.includes("'hollowcandles'") && candleConfig.includes("'volumecandles'"), 'native price-style registry must expose implemented candle variants');
 for (const [name, source] of [['Canvas2D', canvasBackend], ['WebGL2', webglBackend]]) {
-  assert.ok(source.includes("scene.priceStyle === 'hollowcandles'"), name + ' backend must render hollow bullish candle bodies');
+  assert.ok(source.includes('isHollowUpCandle(scene.priceStyle'), name + ' backend must render hollow bullish candle bodies');
   assert.ok(source.includes("scene.priceStyle === 'volumecandles'"), name + ' backend must apply volume-derived candle intensity');
   assert.ok(source.includes('relativeVolumeOpacity'), name + ' backend must use the same relative-volume algorithm');
 }

@@ -710,7 +710,7 @@ export class Canvas2dBackend implements IRenderBackend {
         i1: number,
         coords: CoordinateSystem,
         pane: PaneNode,
-        colorOf: (bar: OHLCV) => string,
+        colorOf: (bar: OHLCV, index: number) => string,
     ): void {
         const yOf = (price: number): number => coords.priceToY(price, pane.scale, pane.bounds);
         ctx.lineWidth = 1;

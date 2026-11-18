@@ -1201,7 +1201,7 @@ export class WebGL2Backend implements IRenderBackend {
      * cost stays bounded by screen width, not bar count. `colorOf` is the calling
      * style's per-bar paint rule (candles and OHLC bars resolve theirs differently).
      */
-    private emitCandlesAggregated(b: Batch, bars: OHLCV[], i0: number, i1: number, coords: CoordinateSystem, pane: PaneNode, colorOf: (bar: OHLCV) => string): void {
+    private emitCandlesAggregated(b: Batch, bars: OHLCV[], i0: number, i1: number, coords: CoordinateSystem, pane: PaneNode, colorOf: (bar: OHLCV, index: number) => string): void {
         const yOf = (price: number): number => coords.priceToY(price, pane.scale, pane.bounds);
         for (const s of aggregateCandleColumns(bars, i0, i1, (i) => coords.logicalToX(i), yOf, colorOf)) {
             const c = parseColor(s.color);
