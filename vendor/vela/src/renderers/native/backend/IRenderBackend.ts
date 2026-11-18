@@ -34,5 +34,7 @@ export interface IRenderBackend {
     mount(canvas: HTMLCanvasElement): void;
     /** Paint the data layer for the current frame. */
     render(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme): void;
+    /** Estimated renderer-owned allocation; browser/driver bookkeeping is excluded. */
+    getEstimatedMemoryBytes?(): number;
     destroy(): void;
 }
