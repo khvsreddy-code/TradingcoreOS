@@ -370,8 +370,8 @@ export class FyersAdapter extends BaseBroker {
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
     rateLimitIdentity?: string,
   ): Promise<BrokerOptionChain> {
-    // Keep this legacy adapter compatible with the same Data API quota gate as
-    // the dedicated FYERS route. The newer route preserves the fuller chain.
+    // Keep the legacy adapter on the exact same FYERS quota admission path as
+    // the dedicated market-data route. Do not fan out one request per strike.
     const params:Record<string,string|number|undefined> = { symbol:instrumentKey, strikecount:'7' };
     if (expiryDate && expiryDate !== 'current_week' && /^[0-9]+$/.test(expiryDate)) params.timestamp=expiryDate;
     const userId = String(rateLimitIdentity || '').trim();
@@ -385,31 +385,65 @@ export class FyersAdapter extends BaseBroker {
       'high',
     );
 
+    // This timestamp is the server's observation/receive time. It is deliberately
+    // distinct from an exchange event timestamp, which the provider may not return.
+    const observedAt = new Date().toISOString();
     const data = payload?.data || {};
     const rows = Array.isArray(data?.optionsChain) ? data.optionsChain : [];
+    const expiryRows = Array.isArray(data?.expiryData) ? data.expiryData : [];
+    const expiries = [...new Set(expiryRows.map((entry: any) =>
+      String(entry?.expiry ?? entry?.expiryDate ?? entry?.date ?? entry ?? '').trim(),
+    ).filter((value: string) => value.length > 0))];
     const spotRow = rows.find((row: any) => !row?.option_type || row?.strike_price === -1);
-    const spot = Number(spotRow?.ltp || 0) || undefined;
-    const selectedExpiry = String(expiryDate && expiryDate !== 'current_week' ? expiryDate : data?.expiryData?.[0]?.expiry || 'current_week');
+    const spotValue = Number(spotRow?.ltp);
+    const spot = Number.isFinite(spotValue) && spotValue > 0 ? spotValue : undefined;
+    const selectedExpiry = String(
+      expiryDate && expiryDate !== 'current_week'
+        ? (expiryRows.find((entry: any) => String(entry?.timestamp ?? entry?.expiry ?? entry) === expiryDate)?.expiry ?? expiryDate)
+        : data?.expiryData?.[0]?.expiry ?? data?.expiryData?.[0]?.expiryDate ?? 'current_week',
+    );
     const byStrike = new Map<number, any>();
     for (const row of rows) {
       const optionType = String(row?.option_type || '').toUpperCase();
       const strike = Number(row?.strike_price);
-      if (!Number.isFinite(strike) || strike < 0 || (optionType !== 'CE' && optionType !== 'PE')) continue;
-      const current = byStrike.get(strike) || { strike, expiry: selectedExpiry, underlyingKey: instrumentKey };
+      if (!Number.isFinite(strike) || strike <= 0 || (optionType !== 'CE' && optionType !== 'PE')) continue;
+      const current = byStrike.get(strike) || {
+        strike,
+        expiry: selectedExpiry,
+        underlyingKey: instrumentKey,
+        lotSize: Number.isFinite(Number(row?.lot_size)) && Number(row?.lot_size) > 0 ? Number(row.lot_size) : undefined,
+      };
+      const numeric = (value: unknown): number | undefined => {
+        const parsed = Number(value);
+        return value == null || value === '' || !Number.isFinite(parsed) ? undefined : parsed;
+      };
       const quote = {
         instrumentKey: row?.fyToken || row?.symbol,
-        ltp: Number(row?.ltp || 0),
-        volume: Number(row?.volume || 0),
-        oi: Number(row?.oi || 0),
-        previousOi: Number(row?.prev_oi ?? row?.oi ?? 0),
-        bidPrice: Number(row?.bid || 0),
-        askPrice: Number(row?.ask || 0),
+        ltp: numeric(row?.ltp),
+        volume: numeric(row?.volume),
+        oi: numeric(row?.oi),
+        previousOi: numeric(row?.prev_oi),
+        previousLtp: numeric(row?.prev_ltp ?? row?.prevLtp),
+        bidPrice: numeric(row?.bid),
+        bidQuantity: numeric(row?.bid_qty ?? row?.bidQty),
+        askPrice: numeric(row?.ask),
+        askQuantity: numeric(row?.ask_qty ?? row?.askQty),
+        observedAt,
+        source: 'fyers',
       };
       if (optionType === 'CE') current.call = quote;
       else current.put = quote;
       byStrike.set(strike, current);
     }
-    return { underlyingKey: instrumentKey, expiry: selectedExpiry, spot, contracts: [...byStrike.values()].sort((a, b) => a.strike - b.strike) };
+    return {
+      underlyingKey: instrumentKey,
+      expiry: selectedExpiry,
+      spot,
+      contracts: [...byStrike.values()].sort((a, b) => a.strike - b.strike),
+      observedAt,
+      source: 'fyers',
+      expiries,
+    };
   }
 
   private orderPayload(orderData: any): any {
