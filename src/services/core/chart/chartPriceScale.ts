@@ -10,6 +10,7 @@ export class ChartPriceScaleEngine {
   private _basePrice = 1;
   private _paddingRatio = 0.05;
   private _basePriceExplicit = false;
+  private _inverted = false;
 
   private _a = 0;
   private _b = 1;
@@ -21,7 +22,17 @@ export class ChartPriceScaleEngine {
   get policy(): ChartPriceScalePolicy { return this._policy; }
   get basePrice(): number { return this._basePrice; }
 
-  setMode(mode: ChartPriceScaleMode): void { this._mode = mode; this.rebuildTransform(); }
+  setMode(mode: ChartPriceScaleMode): void {
+    if (this._mode === mode) return;
+    this._mode = mode;
+    // A domain created in linear mode may include zero/negative prices. A logarithmic
+    // transform must never publish those bounds: clamp and normalize before coefficients
+    // are rebuilt so both the forward and inverse transforms describe the same domain.
+    this._domain = normalizeDomain(this._domain.min, this._domain.max, mode === 'log');
+    this.rebuildTransform();
+  }
+  setInverted(inverted: boolean): void { this._inverted = Boolean(inverted); }
+  get inverted(): boolean { return this._inverted; }
   setPolicy(policy: ChartPriceScalePolicy): void { this._policy = policy; }
   setBasePrice(value: number): void { if (Number.isFinite(value) && value > 0) { this._basePrice = value; this._basePriceExplicit = true; this.rebuildTransform(); } }
   setPaddingRatio(value: number): void { if (Number.isFinite(value)) { this._paddingRatio = Math.max(0, Math.min(0.5, value)); } }
@@ -65,11 +76,13 @@ export class ChartPriceScaleEngine {
   unitToPrice(unit: number): number { return this.transformInverse(this._inverseA * unit + this._inverseB); }
 
   yFromPrice(price: number, pixelHeight: number): number {
-    return (1 - this.priceToUnit(price)) * Math.max(1, pixelHeight);
+    const unit = this.priceToUnit(price);
+    return (this._inverted ? unit : 1 - unit) * Math.max(1, pixelHeight);
   }
 
   priceFromY(y: number, pixelHeight: number): number {
-    return this.unitToPrice(1 - y / Math.max(1, pixelHeight));
+    const fraction = y / Math.max(1, pixelHeight);
+    return this.unitToPrice(this._inverted ? fraction : 1 - fraction);
   }
 
   displayValue(price: number): number {
@@ -79,7 +92,7 @@ export class ChartPriceScaleEngine {
   }
 
   snapshot() {
-    return Object.freeze({ domain: this._domain, mode: this._mode, policy: this._policy, basePrice: this._basePrice, basePriceExplicit: this._basePriceExplicit, paddingRatio: this._paddingRatio });
+    return Object.freeze({ domain: this._domain, mode: this._mode, policy: this._policy, inverted: this._inverted, basePrice: this._basePrice, basePriceExplicit: this._basePriceExplicit, paddingRatio: this._paddingRatio });
   }
 
   private transformForward(price: number): number {

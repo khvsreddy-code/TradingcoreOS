@@ -15,6 +15,19 @@ for (const mode of ['linear','log','percent','indexed']) {
   const sample = 123.45;
   near(scale.unitToPrice(scale.priceToUnit(sample)),sample,mode+' scale round-trip');
 }
+const logDomain = new ChartPriceScaleEngine();
+logDomain.setDomain(-10,100,true);
+logDomain.setMode('log');
+assert.ok(logDomain.domain.min > 0 && logDomain.domain.max > logDomain.domain.min,'switching an existing scale to logarithmic mode must clamp its domain to positive prices');
+near(logDomain.unitToPrice(logDomain.priceToUnit(25)),25,'linear-to-log domain transition');
+const inverted = new ChartPriceScaleEngine();
+inverted.setDomain(10,20,true);
+inverted.setInverted(true);
+near(inverted.yFromPrice(10,100),0,'inverted scale puts its minimum at the top');
+near(inverted.yFromPrice(20,100),100,'inverted scale puts its maximum at the bottom');
+near(inverted.priceFromY(35,100),13.5,'inverted scale inverse pixel mapping');
+assert.equal(inverted.snapshot().inverted,true,'scale inversion is persisted in the scale snapshot');
+
 const manual = new ChartPriceScaleEngine();
 manual.setManualDomain(90,110);
 manual.setPolicy('locked');
@@ -47,7 +60,7 @@ near(vwmaValues[last],pv/volume,'VWMA price-volume weighting');
 assert.ok(Number.isFinite(hmaValues[last]),'HMA must emit a finite value when the composite windows are warm');
 
 const lazy = new Set(lazyNativeIndicatorCatalog().map(item=>item.type));
-for (const type of ['wma','vwma','hma','rma']) assert.ok(lazy.has(type),'lazy indicator picker metadata missing: '+type);
+for (const type of ["sma","ema","wma","vwma","hma","rma","supertrend","average-directional-index","aroon","parabolic-sar","ichimoku-cloud","williams-alligator","rsi","macd","stochastic","stochastic-rsi","commodity-channel-index","williams-percent-r","rate-of-change","true-strength-index","fisher-transform","awesome-oscillator","average-true-range","bollinger-bands","keltner-channels","donchian-channels","historical-volatility","standard-deviation","choppiness-index","ttm-squeeze","on-balance-volume","vwap","anchored-vwap","accumulation-distribution","money-flow-index","chaikin-money-flow","klinger-oscillator","volume-oscillator"]) assert.ok(lazy.has(type),'lazy indicator picker metadata missing: '+type);
 registerBuiltinChartTypes();
 const registeredTypes = new Set(chartTypes().map(type=>type.id));
 for (const type of ['heikinashi','renko','kagi','linebreak','pointfigure']) assert.ok(registeredTypes.has(type),'native chart type not registered: '+type);
