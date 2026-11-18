@@ -3264,52 +3264,163 @@ const optionsPanel: SidePanelDescriptor = {
   mount(ctx, body, header) {
     header.setTitle('Options Chain');
     const root = panelRoot(body);
+    root.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    const expirySelect = document.createElement('select');
+    expirySelect.setAttribute('aria-label', 'Options expiry');
+    expirySelect.style.cssText = 'min-width:0;flex:1;border:1px solid var(--vela-border,#303644);border-radius:6px;padding:6px;background:var(--vela-bg,#111319);color:var(--vela-fg-bright);font:10px ui-monospace;';
+    const refreshButton = document.createElement('button');
+    refreshButton.type = 'button';
+    refreshButton.textContent = 'Refresh';
+    refreshButton.style.cssText = 'border:1px solid var(--vela-border,#303644);border-radius:6px;padding:6px 9px;color:var(--vela-fg-muted);font:10px ui-monospace;';
+    controls.append(expirySelect, refreshButton);
+    root.appendChild(controls);
+
     const meta = document.createElement('div');
-    meta.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:7px;';
+    meta.style.cssText = 'font-size:9px;line-height:1.5;color:#64748b;';
     root.appendChild(meta);
     const table = document.createElement('div');
     table.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
     root.appendChild(table);
 
     let requestKey = '';
-    const render = async () => {
+    let requestSerial = 0;
+    let selectedExpiry = 'current_week';
+    const fmt = (value: unknown): string => {
+      if (value == null || value === '') return '—';
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—';
+    };
+    const compact = (value: unknown): string => {
+      if (value == null || value === '') return '—';
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return '—';
+      const abs = Math.abs(parsed);
+      return abs >= 1e7 ? `${(parsed / 1e7).toFixed(1)}Cr`
+        : abs >= 1e5 ? `${(parsed / 1e5).toFixed(1)}L`
+          : abs >= 1e3 ? `${(parsed / 1e3).toFixed(1)}K` : String(Math.round(parsed));
+    };
+    const render = async (force = false) => {
       const symbol = String(ctx.symbol || '').trim();
-      if (!symbol) return;
-      if (requestKey === symbol) return;
-      requestKey = symbol;
+      if (!symbol) {
+        meta.textContent = 'Select an instrument with listed options.';
+        return;
+      }
+      const key = `${symbol}:${selectedExpiry}`;
+      if (!force && requestKey === key) return;
+      requestKey = key;
+      const serial = ++requestSerial;
       try {
-        const chain = await tradingCoreRuntime.getOptionChain(symbol);
+        const chain = await tradingCoreRuntime.getOptionChain(symbol, selectedExpiry);
+        if (serial !== requestSerial) return;
+        const contracts = Array.isArray(chain?.contracts) ? chain.contracts : [];
+        const expiryChoices = Array.isArray(chain?.expiryOptions) ? chain.expiryOptions : [];
+        const previousValue = expirySelect.value;
+        expirySelect.textContent = '';
+        const nearest = document.createElement('option');
+        nearest.value = 'current_week';
+        nearest.textContent = `Nearest · ${chain?.expiryLabel || 'provider default'}`;
+        expirySelect.appendChild(nearest);
+        for (const item of expiryChoices) {
+          const value = String(item?.value || '');
+          if (!/^\\d{10,13}$/.test(value)) continue;
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = String(item?.label || value);
+          expirySelect.appendChild(option);
+        }
+        expirySelect.value = selectedExpiry === 'current_week'
+          ? 'current_week'
+          : (expiryChoices.some((item: any) => String(item?.value) === selectedExpiry) ? selectedExpiry : 'current_week');
+
+        const observedAt = String(chain?.observedAt || '');
+        const observedMs = Date.parse(observedAt);
+        const ageMs = Number.isFinite(observedMs) ? Date.now() - observedMs : undefined;
+        const source = String(chain?.source || 'UNKNOWN').toUpperCase();
+        const freshness = ageMs === undefined ? 'TIMESTAMP UNAVAILABLE'
+          : ageMs < -1000 ? 'CLOCK SKEW'
+            : ageMs <= 15_000 ? 'RECENT SNAPSHOT' : 'STALE SNAPSHOT';
+        const ageText = ageMs === undefined ? 'age unknown'
+          : ageMs < 0 ? 'clock ahead'
+            : ageMs < 60_000 ? `${Math.floor(ageMs / 1000)}s ago`
+              : `${Math.floor(ageMs / 60_000)}m ago`;
+        const spot = Number(chain?.spot);
+        meta.textContent = `${symbol} · ${chain?.expiryLabel || chain?.expiry || 'Expiry unavailable'} · Spot ${Number.isFinite(spot) && spot > 0 ? fmt(spot) : '—'} · ${source} · ${freshness} · ${ageText}`;
+        meta.style.color = freshness === 'RECENT SNAPSHOT' ? '#4ade80'
+          : freshness === 'STALE SNAPSHOT' ? '#fbbf24' : '#94a3b8';
+
         table.textContent = '';
-        meta.textContent = `${symbol} · ${chain.expiry} · Spot ${Number(chain.spot || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
         const head = document.createElement('div');
-        head.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:4px 6px;color:#64748b;font:9px ui-monospace;text-transform:uppercase;';
-        head.innerHTML = '<span>Call</span><span>Strike</span><span>Put</span>';
+        head.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) 66px minmax(0,1fr);gap:6px;padding:4px 6px;color:#64748b;font:8px ui-monospace;text-transform:uppercase;';
+        for (const label of ['CALL · LTP / OI / VOL / IV', 'STRIKE', 'PUT · LTP / OI / VOL / IV']) {
+          const cell = document.createElement('span');
+          cell.textContent = label;
+          head.appendChild(cell);
+        }
         table.appendChild(head);
-        const contracts = Array.isArray(chain.contracts) ? chain.contracts : [];
         for (const contract of contracts.slice(0, 40)) {
           const row = document.createElement('div');
-          row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:5px 6px;border-radius:5px;background:rgba(255,255,255,.025);font:10px ui-monospace;';
-          const call = document.createElement('span'); call.textContent = contract.call?.ltp != null ? Number(contract.call.ltp).toFixed(2) : '—'; call.style.color = '#4ade80';
-          const strike = document.createElement('span'); strike.textContent = Number(contract.strike).toLocaleString('en-IN', { maximumFractionDigits: 2 }); strike.style.color = '#e2e8f0'; strike.style.textAlign = 'center';
-          const put = document.createElement('span'); put.textContent = contract.put?.ltp != null ? Number(contract.put.ltp).toFixed(2) : '—'; put.style.color = '#fb7185'; put.style.textAlign = 'right';
-          row.append(call,strike,put); table.appendChild(row);
+          row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) 66px minmax(0,1fr);gap:6px;padding:6px;border-radius:5px;background:rgba(255,255,255,.025);font:9px ui-monospace;';
+          const quoteCell = (quote: any, side: 'call' | 'put') => {
+            const cell = document.createElement('div');
+            cell.style.cssText = `min-width:0;text-align:${side === 'call' ? 'left' : 'right'};`;
+            const ltp = document.createElement('div');
+            ltp.textContent = fmt(quote?.ltp);
+            ltp.style.color = side === 'call' ? '#4ade80' : '#fb7185';
+            ltp.style.fontWeight = '700';
+            const iv = Number(quote?.impliedVolatility);
+            const ivText = Number.isFinite(iv) && iv > 0 ? `${(iv * 100).toFixed(1)}%` : '—';
+            const oiChange = quote?.oiChange != null ? quote.oiChange
+              : quote?.oi != null && quote?.previousOi != null ? Number(quote.oi) - Number(quote.previousOi) : undefined;
+            const sub = document.createElement('div');
+            sub.textContent = `OI ${compact(quote?.oi)} · ΔOI ${compact(oiChange)} · V ${compact(quote?.volume)} · IV ${ivText}`;
+            sub.style.cssText = 'margin-top:2px;color:#748093;font-size:8px;white-space:normal;';
+            cell.append(ltp, sub);
+            return cell;
+          };
+          const strike = document.createElement('span');
+          strike.textContent = fmt(contract.strike);
+          strike.style.cssText = 'color:#e2e8f0;text-align:center;font-weight:700;';
+          row.append(quoteCell(contract.call, 'call'), strike, quoteCell(contract.put, 'put'));
+          table.appendChild(row);
+        }
+        if (!contracts.length) {
+          const empty = document.createElement('div');
+          empty.textContent = 'No contracts returned by the provider for this expiry.';
+          empty.style.cssText = 'font-size:10px;color:#64748b;padding:12px 0;';
+          table.appendChild(empty);
         }
       } catch (error) {
+        if (serial !== requestSerial) return;
         table.textContent = '';
         const msg = document.createElement('div');
         msg.textContent = error instanceof Error ? error.message : String(error);
         msg.style.cssText = 'font-size:10px;color:#fb7185;padding:10px 0;';
         table.appendChild(msg);
+        meta.textContent = `${symbol} · Snapshot unavailable · retry manually or check FYERS connection`;
       } finally {
-        requestKey = '';
+        if (serial === requestSerial) requestKey = '';
       }
     };
-    void render();
-    const timer = window.setInterval(() => void render(), 5000);
-    return { onOpen: () => void render(), onChart: () => void render(), destroy: () => window.clearInterval(timer) };
+
+    expirySelect.addEventListener('change', () => {
+      selectedExpiry = expirySelect.value || 'current_week';
+      void render(true);
+    });
+    refreshButton.addEventListener('click', () => void render(true));
+    void render(true);
+    const timer = window.setInterval(() => void render(true), 15_000);
+    return {
+      onOpen: () => void render(true),
+      onChart: () => { selectedExpiry = 'current_week'; void render(true); },
+      destroy() {
+        requestSerial += 1;
+        window.clearInterval(timer);
+      },
+    };
   },
 };
-
 
 function navigateTcoTerminalRoute(route:string): void {
   if (typeof window === 'undefined') return;
