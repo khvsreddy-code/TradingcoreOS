@@ -21,7 +21,7 @@ type AdvancedState = any;
 
 
 const standardIncrementalKinds = new Set<IndicatorKind>([
-  'EMA','SMA','HMA','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Supertrend','Ichimoku Cloud',
+  'EMA','SMA','WMA','VWMA','RMA','HMA','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Supertrend','Ichimoku Cloud',
 ]);
 const advancedIncrementalKinds = new Set<IndicatorKind>([
   'Adaptive Ehlers','Fractional EMA Kalman Filter','Trend Pressure','Trend Target Ribbon','Trinity','Neural Weight Oscillator',
@@ -81,6 +81,9 @@ export class IncrementalIndicatorRuntime {
     switch(cfg.kind){
       case 'EMA': state=new EMAState(p);break;
       case 'SMA': state=new RollingMean(p);break;
+      case 'WMA': state=new WMAState(p);break;
+      case 'RMA': state=new WilderState(p);break;
+      case 'VWMA': state={priceVolume:new RollingSum(p),volume:new RollingSum(p)};break;
       case 'HMA': state={half:new WMAState(Math.max(1,Math.floor(p/2))),full:new WMAState(p),raw:new WMAState(Math.max(1,Math.floor(Math.sqrt(p))))} as HmaState;break;
       case 'VWAP': state=new VWAPSessionState();break;
       case 'Bollinger Bands': state={mean:new RollingMean(p),variance:new RollingVariance(p)} as BollingerState;break;
@@ -137,6 +140,9 @@ export class IncrementalIndicatorRuntime {
     switch(cfg.kind){
       case 'EMA': out=point(c,s.update(src,mode));break;
       case 'SMA': out=point(c,s.update(src,mode).value);break;
+      case 'WMA': out=point(c,s.update(src,mode));break;
+      case 'RMA': out=point(c,s.updateWilder(src,mode));break;
+      case 'VWMA': {const volume=Math.max(0,Number(c.volume)||0);s.priceVolume.update(src*volume,mode);s.volume.update(volume,mode);const weighted=s.priceVolume.value(),total=s.volume.value();out=point(c,weighted!=null&&total!=null&&total>0?weighted/total:null);break;}
       case 'HMA': {const a=s.half.update(src,mode),b=s.full.update(src,mode),raw=a!=null&&b!=null?2*a-b:null,h=s.raw.update(raw??NaN,mode);out=point(c,h);break;}
       case 'VWAP': out=point(c,s.update(c.timestamp,src,c.volume||0,c.close,mode));break;
       case 'Bollinger Bands': {s.mean.update(src,mode);s.variance.update(src,mode);const m=s.mean.value(),sd=s.variance.value();out=m==null||sd==null?null:{time:timestamp(c),middle:m,upper:m+(cfg.multiplier||2)*sd,lower:m-(cfg.multiplier||2)*sd};break;}

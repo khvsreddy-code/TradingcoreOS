@@ -128,6 +128,8 @@ const contracts = [
   ['routes', ['src/routeContract.test.mjs', false]],
   ['indicator-dependency-graph', ['src/indicatorDependencyGraphContract.test.mjs', false]],
   ['indicator-incremental', ['src/indicatorIncrementalContract.test.mjs', false]],
+  ['vela-p1-indicator-incremental', ['src/velaP1IndicatorIncrementalContract.test.mjs', true]],
+  ['vela-p1-chart-terminal', ['src/velaP1ChartTerminalContract.test.mjs', true]],
   ['indicator-appearance', ['src/indicatorAppearanceContract.test.mjs', false]],
   ['indicator-parameter-system', ['src/indicatorParameterSystemContract.test.mjs', false]],
   ['indicator-conditional-settings', ['src/indicatorConditionalSettingsContract.test.mjs', false]],

@@ -204,6 +204,52 @@ const smoothedMa: ClassicIndicatorSpec = {
     }),
 };
 
+const weightedMa: ClassicIndicatorSpec = {
+    type: 'wma',
+    title: msg('indicator.wma.title', 'Weighted Moving Average'),
+    shortTitle: msg('indicator.wma.shortTitle', 'WMA'),
+    overlay: true,
+    inputs: [
+        sourceInput('Close', 'source', msg('indicator.wma.source', 'Source')),
+        lengthInput(20, 'length', msg('indicator.wma.length', 'Length'), 5000),
+        ...directionInputs(),
+    ],
+    compute: (bars, inputs) => {
+        const values = wma(sourceValues(bars, str(inputs, 'source', 'Close')), num(inputs, 'length', 20));
+        return { plots: [slopeColoredPlot('wma', msg('indicator.wma.plot', 'WMA'), values, inputs)] };
+    },
+};
+const volumeWeightedMa: ClassicIndicatorSpec = {
+    type: 'vwma',
+    title: msg('indicator.vwma.title', 'Volume Weighted Moving Average'),
+    shortTitle: msg('indicator.vwma.shortTitle', 'VWMA'),
+    overlay: true,
+    inputs: [
+        sourceInput('Close', 'source', msg('indicator.vwma.source', 'Source')),
+        lengthInput(20, 'length', msg('indicator.vwma.length', 'Length'), 5000),
+        ...directionInputs(),
+    ],
+    compute: (bars, inputs) => {
+        const values = vwma(sourceValues(bars, str(inputs, 'source', 'Close')), volumes(bars), num(inputs, 'length', 20));
+        return { plots: [slopeColoredPlot('vwma', msg('indicator.vwma.plot', 'VWMA'), values, inputs)] };
+    },
+};
+const hullMa: ClassicIndicatorSpec = {
+    type: 'hma',
+    title: msg('indicator.hma.title', 'Hull Moving Average'),
+    shortTitle: msg('indicator.hma.shortTitle', 'HMA'),
+    overlay: true,
+    inputs: [
+        sourceInput('Close', 'source', msg('indicator.hma.source', 'Source')),
+        lengthInput(20, 'length', msg('indicator.hma.length', 'Length'), 5000),
+        ...directionInputs(),
+    ],
+    compute: (bars, inputs) => {
+        const values = hma(sourceValues(bars, str(inputs, 'source', 'Close')), num(inputs, 'length', 20));
+        return { plots: [slopeColoredPlot('hma', msg('indicator.hma.plot', 'HMA'), values, inputs)] };
+    },
+};
+
 const zlema: ClassicIndicatorSpec = {
     type: 'zlema',
     title: msg('indicator.zlema.title', 'Zero-Lag Exponential Moving Average'),
@@ -361,4 +407,4 @@ const linearRegressionSlope: ClassicIndicatorSpec = {
     },
 };
 
-export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope];
+export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, weightedMa, volumeWeightedMa, hullMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope];

@@ -7,7 +7,7 @@ import { CORE_PRICE_SOURCE_OPTIONS } from '../coreSpirit/indicatorSettingsSchema
 import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSchema';
 
 export type IndicatorKind =
-  | 'EMA' | 'SMA' | 'HMA' | 'VWAP' | 'Bollinger Bands' | 'Keltner Channels' | 'Donchian Channels'
+  | 'EMA' | 'SMA' | 'WMA' | 'VWMA' | 'RMA' | 'HMA' | 'VWAP' | 'Bollinger Bands' | 'Keltner Channels' | 'Donchian Channels'
   | 'RSI' | 'MACD' | 'ATR' | 'ADX' | 'Stochastic' | 'CCI' | 'OBV' | 'MFI'
   | 'Supertrend' | 'Ichimoku Cloud' | 'Pivot Points' | 'CPR' | 'Key Levels' | 'Opening Range' | 'Weekly Levels' | 'Swing Levels' | 'Gap Levels' | 'Market Structure' | 'Fair Value Gaps' | 'Dynamic Support/Resistance' | 'Liquidity Sweeps' | 'Order Blocks' | 'Previous Day Levels' | 'Previous Week Levels' | 'Previous Month Levels' | 'Opening Range Pro' | 'Gap Zones' | 'Equal Highs/Lows' | 'Liquidity Pools' | 'BOS / CHOCH' | 'FVG + Mitigation' | 'Order Blocks + Mitigation' | 'Breakout / Retest' | 'Failed Breakout' | 'Rejection Candles' | 'Inside Bar Breakout' | 'Engulfing Patterns' | 'Pin Bars' | 'NR7 Volatility Contraction' | 'Developing Day High/Low' | 'VWAP Deviation Bands' | 'Anchored VWAP' | 'CPR R1-R5 / S1-S5' | 'Camarilla Pivots' | 'Fibonacci Pivots' | 'Weekly Pivots' | 'Monthly Pivots' | 'TradingCore V Price Action'
   | 'Adaptive Ehlers' | 'ATR Percentile Bands' | 'CVD Profiles' | 'Delta Sigma Heatmap'
@@ -32,12 +32,15 @@ export type IndicatorConfig = {
 };
 export const PRICE_SOURCES: Array<{value: PriceSource; label: string}> = CORE_PRICE_SOURCE_OPTIONS as Array<{value: PriceSource; label: string}>;
 export const defaultIndicatorStyle = (kind: IndicatorKind) => ({
-  color: ({EMA:'#38bdf8',SMA:'#f59e0b',HMA:'#e879f9',VWAP:'#c084fc',RSI:'#f59e0b',MACD:'#38bdf8',ATR:'#22c55e',ADX:'#22c55e',CCI:'#fb7185',OBV:'#60a5fa',MFI:'#a78bfa'} as Record<string,string>)[kind] || '#94a3b8',
+  color: ({EMA:'#38bdf8',SMA:'#f59e0b',WMA:'#38bdf8',VWMA:'#a78bfa',RMA:'#e879f9',HMA:'#e879f9',VWAP:'#c084fc',RSI:'#f59e0b',MACD:'#38bdf8',ATR:'#22c55e',ADX:'#22c55e',CCI:'#fb7185',OBV:'#60a5fa',MFI:'#a78bfa'} as Record<string,string>)[kind] || '#94a3b8',
   lineWidth: 2 as number, lineStyle: 0 as 0 | 1 | 2,
 });
 export const INDICATOR_LIBRARY: Array<{ kind: IndicatorKind; description: string; overlay: boolean; defaults: Partial<IndicatorConfig> }> = [
   { kind: 'EMA', description: 'Exponential moving average for trend direction.', overlay: true, defaults: { period: 20 } },
   { kind: 'SMA', description: 'Simple moving average baseline.', overlay: true, defaults: { period: 20 } },
+  { kind: 'WMA', description: 'Weighted moving average with linearly increasing weights.', overlay: true, defaults: { period: 20 } },
+  { kind: 'VWMA', description: 'Volume-weighted moving average.', overlay: true, defaults: { period: 20 } },
+  { kind: 'RMA', description: 'Wilder smoothed moving average.', overlay: true, defaults: { period: 14 } },
   { kind: 'HMA', description: 'Hull moving average for a faster, smoother trend line.', overlay: true, defaults: { period: 20 } },
   { kind: 'VWAP', description: 'Session volume-weighted average price.', overlay: true, defaults: {} },
   { kind: 'Bollinger Bands', description: 'Volatility envelope around a moving average.', overlay: true, defaults: { period: 20, multiplier: 2 } },

@@ -20,6 +20,9 @@ export interface LazyNativeIndicatorCatalogEntry {
 const CATALOG: readonly LazyNativeIndicatorCatalogEntry[] = [
     ...[
         ['moving-average', 'Moving Average'],
+        ['wma', 'Weighted Moving Average'],
+        ['vwma', 'Volume Weighted Moving Average'],
+        ['hma', 'Hull Moving Average'],
         ['rma', 'Smoothed Moving Average'],
         ['zlema', 'Zero-Lag Exponential Moving Average'],
         ['vidya', 'Variable Index Dynamic Average'],

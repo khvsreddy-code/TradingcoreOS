@@ -12,6 +12,16 @@ assert.ok(renko.length>4,'Renko can emit multiple synthetic bricks for one sourc
 assert.ok(renko.every(x=>Math.abs(x.close-x.open)===10),'Renko brick body equals configured box size');
 assert.ok(renko.some((x,i)=>i>0&&x.direction!==renko[i-1]!.direction),'Renko uses the two-box reversal rule');
 const lineBreak=buildLineBreakSeries(bars,3);
+const intrabarBars:OHLCV[]=[
+  {time:1_700_100_000_000,open:100,high:100,low:100,close:100,volume:10},
+  {time:1_700_100_060_000,open:100,high:130,low:70,close:100,volume:20},
+];
+assert.equal(buildRenkoSeries(intrabarBars,10,2).length,0,'close-only remains the safe default when the bar closes at its open');
+assert.ok(buildRenkoSeries(intrabarBars,10,2,{sourceMode:'ohlc',intrabarPath:'ohlc'}).length>0,'explicit OHLC mode consumes intrabar high/low excursions');
+assert.ok(buildRenkoSeries(intrabarBars,10,2,{sourceMode:'ohlc',intrabarPath:'olhc'}).length>0,'alternate deterministic OHLC path is supported');
+assert.ok(buildPointFigureSeries(intrabarBars,10,3,{sourceMode:'ohlc'}).length>0,'Point & Figure can use an explicit OHLC path');
+assert.ok(buildKagiSeries(intrabarBars,10,{sourceMode:'ohlc'}).length>1,'Kagi consumes explicit intrabar swings');
+assert.ok(buildLineBreakSeries(intrabarBars,1,{sourceMode:'ohlc'}).length>0,'Line Break consumes explicit intrabar breakouts');
 assert.ok(lineBreak.length>2,'N-Line Break produces accepted lines on close breakouts');
 assert.ok(lineBreak.every(x=>x.open!==x.close),'Line Break retains the open-close range');
 const kagi=buildKagiSeries(bars,10);
