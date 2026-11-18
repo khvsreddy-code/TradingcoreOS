@@ -160,6 +160,8 @@ const contracts = [
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
   ['tco-vela-performance-telemetry', ['src/tcoVelaPerformanceTelemetryContract.test.mjs', false]],
   ['browser-performance-release-gates', ['src/browserPerformanceReleaseGateContract.test.mjs', false]],
+  ['browser-performance-auth-bootstrap', ['src/browserPerformanceAuthContract.test.mjs', false]],
+  ['vela-live-workspace-ownership', ['src/velaLiveWorkspaceOwnershipContract.test.mjs', false]],
   ['vercel-realtime-service-routing', ['src/vercelRealtimeServiceRoutingContract.test.mjs', false]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
   ['fyers-compliance-symbol-catalog', ['src/fyersComplianceSymbolCatalogContract.test.mjs', false]],
