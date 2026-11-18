@@ -121,6 +121,8 @@ function joinSegments(hw: number): number {
  * the canvas2d backend is the permanent fallback.
  */
 export class WebGL2Backend implements IRenderBackend {
+    /** Reusable streaming VBO capacities; the WeakMap follows buffer lifetime across context rebuilds. */
+    private readonly dynamicBufferCapacity = new WeakMap<WebGLBuffer, number>();
     readonly kind = 'webgl2' as const;
     modelAlpha = 1;
     candleBodyAlpha = 1;
@@ -429,8 +431,7 @@ export class WebGL2Backend implements IRenderBackend {
                 gl.useProgram(this.program);
                 gl.bindVertexArray(this.vao);
                 gl.uniform2f(this.uRes, canvas.width / dpr, canvas.height / dpr);
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-                gl.bufferData(gl.ARRAY_BUFFER, b.view, gl.DYNAMIC_DRAW);
+                this.uploadDynamicBuffer(gl, this.vbo, b.view);
                 gl.drawArrays(gl.TRIANGLES, 0, b.vertexCount);
                 b.reset();
             };
@@ -580,8 +581,7 @@ export class WebGL2Backend implements IRenderBackend {
             const topH = Math.round(pane.bounds.top * dpr * 0.5);
             const botH = Math.round((pane.bounds.top + pane.bounds.height) * dpr * 0.5);
             gl.scissor(0, hh - botH, Math.round(dataW * dpr * 0.5), botH - topH);
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-            gl.bufferData(gl.ARRAY_BUFFER, b.view, gl.DYNAMIC_DRAW);
+            this.uploadDynamicBuffer(gl, this.vbo, b.view);
             gl.drawArrays(gl.TRIANGLES, 0, b.vertexCount);
         }
         gl.disable(gl.SCISSOR_TEST);
@@ -615,6 +615,20 @@ export class WebGL2Backend implements IRenderBackend {
         gl.bindVertexArray(null);
     }
 
+    /** Grow streaming GPU buffers geometrically and update only the used prefix.
+     *  Avoids reallocating storage with bufferData on every pane flush/frame. */
+    private uploadDynamicBuffer(gl: WebGL2RenderingContext, buffer: WebGLBuffer, data: ArrayBufferView): void {
+        const required = data.byteLength;
+        const capacity = this.dynamicBufferCapacity.get(buffer) ?? 0;
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        if (required > capacity) {
+            const nextCapacity = Math.max(required, Math.max(1024, capacity * 2));
+            gl.bufferData(gl.ARRAY_BUFFER, nextCapacity, gl.DYNAMIC_DRAW);
+            this.dynamicBufferCapacity.set(buffer, nextCapacity);
+        }
+        if (required > 0) gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+    }
+
     private drawRectInstances(gl: WebGL2RenderingContext, batch: GpuRectBatch, width: number, height: number): void {
         const count = Math.floor(batch.rects.length / 4);
         if (!count || !this.instanceProgram || !this.instanceVao || !this.instanceRectVbo || !this.instanceColorVbo) return;
@@ -622,10 +636,8 @@ export class WebGL2Backend implements IRenderBackend {
         gl.useProgram(this.instanceProgram);
         gl.bindVertexArray(this.instanceVao);
         gl.uniform2f(this.instanceURes, width, height);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceRectVbo);
-        gl.bufferData(gl.ARRAY_BUFFER, batch.rects, gl.DYNAMIC_DRAW);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceColorVbo);
-        gl.bufferData(gl.ARRAY_BUFFER, batch.colors, gl.DYNAMIC_DRAW);
+        this.uploadDynamicBuffer(gl, this.instanceRectVbo, batch.rects);
+        this.uploadDynamicBuffer(gl, this.instanceColorVbo, batch.colors);
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
         gl.bindVertexArray(null);
     }
