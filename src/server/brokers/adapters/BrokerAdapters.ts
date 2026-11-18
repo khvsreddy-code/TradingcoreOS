@@ -375,7 +375,8 @@ export class FyersAdapter extends BaseBroker {
     const requestedExpiry = String(expiryDate || 'current_week').trim();
     const params: Record<string, string | number | undefined> = {
       symbol: instrumentKey,
-      // FYERS max is 50 ITM + ATM + 50 OTM; wider coverage improves PCR / OI walls / max pain.\n      strikecount: '50',
+      // FYERS max is 50 ITM + ATM + 50 OTM; wider coverage improves PCR / OI walls / max pain.
+      strikecount: '50',
       greeks: '1',
       ...(requestedExpiry !== 'current_week' && /^\\d{10,13}$/.test(requestedExpiry)
         ? { timestamp: requestedExpiry }
