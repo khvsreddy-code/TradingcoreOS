@@ -259,8 +259,8 @@ function registerLayer(style:SyntheticPriceData['style']){
   }});
 }
 const sourceRows=[
-  {kind:'select' as const,key:'sourceMode',label:msg('chart.synthetic.sourceMode','Price source'),options:[['close','Close only'],['ohlc','OHLC path']],defval:'close'},
-  {kind:'select' as const,key:'intrabarPath',label:msg('chart.synthetic.intrabarPath','Intrabar path'),options:[['ohlc','Open → High → Low → Close'],['olhc','Open → Low → High → Close']],defval:'ohlc',when:{key:'sourceMode',equals:'ohlc'}},
+  {kind:'select' as const,key:'sourceMode',label:msg('chart.synthetic.sourceMode','Price source'),options:[['close','Close only'],['ohlc','OHLC path']] as const,defval:'close'},
+  {kind:'select' as const,key:'intrabarPath',label:msg('chart.synthetic.intrabarPath','Intrabar path'),options:[['ohlc','Open → High → Low → Close'],['olhc','Open → Low → High → Close']] as const,defval:'ohlc',when:{key:'sourceMode',equals:'ohlc'}},
 ];
 const boxRows=[
   {kind:'number' as const,key:'boxSize',label:msg('chart.synthetic.boxSize','Box size'),defval:10,min:0.01,max:100000,step:0.25},
