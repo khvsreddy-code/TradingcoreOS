@@ -104,7 +104,7 @@ export function planAdaptiveGraphicsBudget(
         // to avoid double-counting the same surface while still respecting extra textures.
         const resourcePixels = Math.max(rawPixels, Math.max(0, Number(cell.estimatedGpuBytes) || 0) / 4);
         const pixelScale = resourcePixels > 0 ? Math.sqrt(Math.max(0, remainingPixels) / resourcePixels) : 1;
-        const scale = Math.max(0.65, Math.min(1, qualityTarget, framePressure, pixelScale, textureScale));
+        const scale = Math.max(0.5, Math.min(1, qualityTarget, framePressure, pixelScale, textureScale));
         const estimatedPixels = resourcePixels * scale * scale;
         remainingPixels = Math.max(0, remainingPixels - estimatedPixels);
 

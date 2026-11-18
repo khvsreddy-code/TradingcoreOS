@@ -1920,7 +1920,7 @@ export class NativeRenderer implements IChartRenderer {
      */
     /** Apply a workspace-owned quality/backend decision without replacing chart data, drawings or viewport state. */
     setGraphicsPolicy(policy: NativeGraphicsPolicy): void {
-        const scale = Math.max(0.65, Math.min(1, Number(policy.resolutionScale) || 1));
+        const scale = Math.max(0.5, Math.min(1, Number(policy.resolutionScale) || 1));
         const backend = policy.backend === 'webgl2' && this.webglUnavailable ? 'canvas2d' : policy.backend;
         const next: NativeGraphicsPolicy = { ...policy, backend, resolutionScale: scale };
         const backendChanged = this.backend?.kind !== next.backend;
