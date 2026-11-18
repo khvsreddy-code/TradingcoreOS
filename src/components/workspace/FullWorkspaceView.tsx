@@ -423,11 +423,15 @@ type OptionChainPanelProps = {
   chain: any;
   expiry: string;
   onExpiryChange: (expiry: string) => void;
+  termStructure: Array<{ expiry: string; callIv?: number; putIv?: number; source: string }>;
+  termStructureLoading: boolean;
+  termStructureError: string;
+  onLoadTermStructure: () => void;
   onChart: () => void;
   onRefresh: () => void;
 };
 
-function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onChart, onRefresh }: OptionChainPanelProps) {
+function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termStructure, termStructureLoading, termStructureError, onLoadTermStructure, onChart, onRefresh }: OptionChainPanelProps) {
   const rows = Array.isArray(chain?.contracts) ? chain.contracts : [];
   const spot = Number(chain?.spot || 0);
   const atmStrike = rows.length && Number.isFinite(spot) && spot > 0
@@ -497,16 +501,41 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
   const riskFreeRate = 0.06;
   const dividendYield = 0.01;
   const modelFor = (quote: any, right: 'CE' | 'PE', strike: number, rowExpiry?: string) => {
-    const premium = valuationPremium(quote || {});
-    if (premium == null || !(spot > 0)) return null;
+    if (!(spot > 0)) return null;
     const observedAt = String(quote?.observedAt || chain?.observedAt || '');
     const expiryValue = String(rowExpiry || chain?.expiry || '');
     const timeToExpiryYears = optionTimeToExpiryYears(expiryValue, observedAt);
     if (timeToExpiryYears == null || timeToExpiryYears <= 0) return null;
     const common = { right, spot, strike, timeToExpiryYears, riskFreeRate, dividendYield };
-    const volatility = impliedVolatility({ ...common, optionPrice: premium });
+    const premium = valuationPremium(quote || {});
+    const suppliedIv = finite(quote?.impliedVolatility);
+    const inferredIv = suppliedIv == null && premium != null
+      ? impliedVolatility({ ...common, optionPrice: premium })
+      : null;
+    const volatility = suppliedIv != null && suppliedIv > 0 ? suppliedIv : inferredIv;
     if (volatility == null || volatility <= 0) return null;
-    return { volatility, greeks: blackScholes({ ...common, volatility }), premium };
+    const modelGreeks = blackScholes({ ...common, volatility });
+    const provider = quote?.providerGreeks || {};
+    const providerValues = {
+      delta: finite(provider.delta),
+      gamma: finite(provider.gamma),
+      thetaPerDay: finite(provider.thetaPerDay),
+      vegaPerVolPoint: finite(provider.vegaPerVolPoint),
+    };
+    const hasProviderGreeks = Object.values(providerValues).some(value => value !== undefined);
+    return {
+      volatility,
+      premium,
+      source: suppliedIv != null || hasProviderGreeks ? 'FYERS' : 'MODEL',
+      greeks: {
+        delta: providerValues.delta ?? modelGreeks.delta,
+        gamma: providerValues.gamma ?? modelGreeks.gamma,
+        thetaPerDay: providerValues.thetaPerDay ?? modelGreeks.thetaPerDay,
+        vegaPerVolPoint: providerValues.vegaPerVolPoint ?? modelGreeks.vegaPerVolPoint,
+        // FYERS' documented option-chain response does not include Rho.
+        rhoPerRatePoint: modelGreeks.rhoPerRatePoint,
+      },
+    };
   };
   const buildUp = (quote: any): string => {
     const currentPrice = finite(quote?.ltp);
@@ -523,8 +552,16 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
     return 'NEUTRAL';
   };
   const formatPercent = (value: number | undefined) => value == null || !Number.isFinite(value) ? '—' : `${(value * 100).toFixed(1)}%`;
-  const expiryOptions: string[] = Array.isArray(chain?.expiries) ? chain.expiries.map((value: unknown) => String(value)) : [];
-  const expiryLabel = (value: string) => value === 'current_week' ? `Nearest expiry · ${chain?.expiry || 'provider default'}` : value;
+  const expiryOptions: Array<{ value: string; label: string }> = Array.isArray(chain?.expiryOptions)
+    ? chain.expiryOptions
+        .map((entry: any) => ({ value: String(entry?.value || ''), label: String(entry?.label || entry?.value || '') }))
+        .filter((entry: { value: string; label: string }) => Boolean(entry.value))
+    : Array.isArray(chain?.expiries)
+      ? chain.expiries.map((value: unknown) => ({ value: String(value), label: String(value) }))
+      : [];
+  const expiryLabel = (value: string) => value === 'current_week'
+    ? `Nearest expiry · ${chain?.expiryLabel || chain?.expiry || 'provider default'}`
+    : expiryOptions.find(option => option.value === value)?.label || value;
   const atmRow = rows.find((row: any) => Number(row.strike) === Number(atmStrike));
   const atmCall = atmRow ? modelFor(atmRow.call, 'CE', Number(atmRow.strike), atmRow.expiry) : null;
   const atmPut = atmRow ? modelFor(atmRow.put, 'PE', Number(atmRow.strike), atmRow.expiry) : null;
@@ -535,7 +572,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
       <div className="min-w-0">
         <div className="font-mono text-sm font-bold">Option Chain Intelligence</div>
         <div className="truncate text-[9px] text-[var(--tco-dim)]">
-          {chain?.underlyingKey || '—'} · Spot {spot > 0 ? fmt(spot) : '—'} · Expiry {chain?.expiry || '—'} · refresh 15s
+          {chain?.underlyingKey || '—'} · Spot {spot > 0 ? fmt(spot) : '—'} · Expiry {chain?.expiryLabel || chain?.expiry || '—'} · refresh 15s
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -554,7 +591,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
       <label className="text-[9px] text-[var(--tco-dim)]">EXPIRY</label>
       <select value={expiry} onChange={event => onExpiryChange(event.target.value)} className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] px-2 py-1 text-[9px] font-mono">
         <option value="current_week">{expiryLabel('current_week')}</option>
-        {expiryOptions.filter(value => value && value !== 'current_week').map(value => <option key={value} value={value}>{value}</option>)}
+        {expiryOptions.filter(option => option.value && option.value !== 'current_week').map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
       <span className="text-[9px] text-[var(--tco-dim)]">{ageLabel}</span>
     </div>
@@ -596,18 +633,31 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
       <div className="mb-3 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
         <div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Volatility surface snapshot</div>
         <div className="mt-1 text-[10px] text-[var(--tco-muted)]">
-          ATM CE IV {formatPercent(atmCall?.volatility)} · ATM PE IV {formatPercent(atmPut?.volatility)} · PE−CE skew {skew == null ? '—' : `${(skew * 100).toFixed(1)} vol pts`}
+          ATM CE IV {formatPercent(atmCall?.volatility)} ({atmCall?.source || '—'}) · ATM PE IV {formatPercent(atmPut?.volatility)} ({atmPut?.source || '—'}) · PE−CE skew {skew == null ? '—' : `${(skew * 100).toFixed(1)} vol pts`}
         </div>
         <div className="mt-1 text-[8px] text-[var(--tco-dim)]">
-          Model estimate from bid/ask midpoint (LTP fallback) · Black–Scholes · ACT/365 · r { (riskFreeRate * 100).toFixed(1) }% · q { (dividendYield * 100).toFixed(1) }%. Theta/day; Vega and Rho per 1 percentage point. Not broker Greeks.
+          FYERS IV and Greeks are used where supplied. Missing values fall back to Black–Scholes using bid/ask midpoint (LTP fallback), ACT/365, r {(riskFreeRate * 100).toFixed(1)}%, q {(dividendYield * 100).toFixed(1)}%. Rho is model-derived; not an executable quote.
         </div>
         <div className="mt-1 text-[8px] text-[var(--tco-dim)]">{next}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button onClick={onLoadTermStructure} disabled={termStructureLoading || expiryOptions.length < 2} className="rounded border border-[var(--tco-border)] px-2 py-1 text-[9px] font-mono text-[var(--tco-muted)] disabled:opacity-40">
+            {termStructureLoading ? 'Loading expiries…' : `Load IV term structure · ${Math.min(6, expiryOptions.length)} requests max`}
+          </button>
+          <span className="text-[8px] text-[var(--tco-dim)]">Manual only · uses one chain request per expiry beyond the current snapshot</span>
+        </div>
+        {termStructureError && <div className="mt-1 text-[9px] text-[#f59e0b]">{termStructureError}</div>}
+        {!!termStructure.length && <div className="mt-2 grid gap-1 md:grid-cols-2">
+          {termStructure.map(row => <div key={row.expiry} className="flex items-center justify-between rounded border border-[var(--tco-border)] px-2 py-1 text-[9px]">
+            <span className="text-[var(--tco-dim)]">{row.expiry} · {row.source}</span>
+            <span className="font-mono">CE {formatPercent(row.callIv)} / PE {formatPercent(row.putIv)}</span>
+          </div>)}
+        </div>}
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--tco-border)]">
-        <table className="w-full min-w-[1560px] text-left font-mono text-[10px]">
+        <table className="w-full min-w-[1980px] text-left font-mono text-[10px]">
           <thead className="sticky top-0 z-10 bg-[var(--tco-surface-3)] text-[var(--tco-dim)]">
             <tr>
-              <th className="p-2 text-right">CALL OI</th><th className="p-2 text-right">ΔOI</th><th className="p-2 text-right">LTP</th><th className="p-2 text-right">BID</th><th className="p-2 text-right">ASK</th><th className="p-2 text-right">IV</th><th className="p-2 text-right">Δ</th><th className="p-2 text-right">Γ</th><th className="p-2 text-right">Θ/day</th><th className="p-2 text-right">Vega</th><th className="p-2 text-center text-white">STRIKE</th><th className="p-2">BID</th><th className="p-2">ASK</th><th className="p-2">LTP</th><th className="p-2">IV</th><th className="p-2">Δ</th><th className="p-2">Γ</th><th className="p-2">Θ/day</th><th className="p-2">Vega</th><th className="p-2">ΔOI</th><th className="p-2">PUT OI</th>
+              <th className="p-2 text-right">CALL OI</th><th className="p-2 text-right">ΔOI</th><th className="p-2 text-right">BUILD-UP</th><th className="p-2 text-right">VOL</th><th className="p-2 text-right">LTP</th><th className="p-2 text-right">BID</th><th className="p-2 text-right">ASK</th><th className="p-2 text-right">IV</th><th className="p-2 text-right">Δ</th><th className="p-2 text-right">Γ</th><th className="p-2 text-right">Θ/day</th><th className="p-2 text-right">Vega</th><th className="p-2 text-right">Rho*</th><th className="p-2 text-center text-white">STRIKE</th><th className="p-2">BID</th><th className="p-2">ASK</th><th className="p-2">LTP</th><th className="p-2">VOL</th><th className="p-2">IV</th><th className="p-2">Δ</th><th className="p-2">Γ</th><th className="p-2">Θ/day</th><th className="p-2">Vega</th><th className="p-2">Rho*</th><th className="p-2">BUILD-UP</th><th className="p-2">ΔOI</th><th className="p-2">PUT OI</th>
             </tr>
           </thead>
           <tbody>
@@ -622,11 +672,15 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, onCha
               return <tr key={`${row.strike}-${row.expiry || ''}`} className={`border-t border-[#151923] ${atm ? 'bg-[#3b82f6]/10' : 'hover:bg-[#121722]'}`}>
                 <td className="p-2 text-right text-[#ef4444]">{formatCompact(call.oi)}</td>
                 <td className={`p-2 text-right ${callChange === undefined ? 'text-[var(--tco-dim)]' : callChange >= 0 ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>{callChange === undefined ? '—' : formatCompact(callChange)}</td>
+                <td className="p-2 text-right">{buildUp(call)}</td>
+                <td className="p-2 text-right">{formatCompact(call.volume)}</td>
                 <td className="p-2 text-right">{fmt(finite(call.ltp), 2)}</td><td className="p-2 text-right text-[var(--tco-dim)]">{fmt(finite(call.bidPrice), 2)}</td><td className="p-2 text-right text-[var(--tco-dim)]">{fmt(finite(call.askPrice), 2)}</td>
-                <td className="p-2 text-right">{callModel ? formatPercent(callModel.volatility) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td>
+                <td className="p-2 text-right">{callModel ? formatPercent(callModel.volatility) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td><td className="p-2 text-right">{callModel ? callModel.greeks.rhoPerRatePoint.toFixed(3) : '—'}</td>
                 <td className="p-2 text-center font-bold text-white">{row.strike}{atm && <span className="ml-1 rounded bg-[#3b82f6]/15 px-1 text-[8px] text-[#3b82f6]">ATM</span>}</td>
                 <td className="p-2 text-[var(--tco-dim)]">{fmt(finite(put.bidPrice), 2)}</td><td className="p-2 text-[var(--tco-dim)]">{fmt(finite(put.askPrice), 2)}</td><td className="p-2">{fmt(finite(put.ltp), 2)}</td>
-                <td className="p-2">{putModel ? formatPercent(putModel.volatility) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td>
+                <td className="p-2">{formatCompact(put.volume)}</td>
+                <td className="p-2">{putModel ? formatPercent(putModel.volatility) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.delta.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.gamma.toFixed(5) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.thetaPerDay.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.vegaPerVolPoint.toFixed(3) : '—'}</td><td className="p-2">{putModel ? putModel.greeks.rhoPerRatePoint.toFixed(3) : '—'}</td>
+                <td className="p-2">{buildUp(put)}</td>
                 <td className={`p-2 ${putChange === undefined ? 'text-[var(--tco-dim)]' : putChange >= 0 ? 'text-[#3b82f6]' : 'text-[#ef4444]'}`}>{putChange === undefined ? '—' : formatCompact(putChange)}</td>
                 <td className="p-2 text-[#3b82f6]">{formatCompact(put.oi)}</td>
               </tr>;
