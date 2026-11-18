@@ -262,25 +262,30 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         const observedAt = String(chain?.observedAt || '');
         const timeToExpiryYears = optionTimeToExpiryYears(expiryTimestamp, observedAt);
         if (timeToExpiryYears == null || timeToExpiryYears <= 0) continue;
-        const getIv = (quote: any, right: 'CE' | 'PE'): number | undefined => {
-          const supplied = Number(quote?.impliedVolatility);
-          if (Number.isFinite(supplied) && supplied > 0) return supplied;
+        const getIv = (quote: any, right: 'CE' | 'PE'): { value: number; source: string } | undefined => {
           const premium = valuationPremium(quote || {});
-          if (premium == null) return undefined;
-          const inferred = impliedVolatility({
-            right, spot, strike: Number(atm.strike), timeToExpiryYears,
-            optionPrice: premium, riskFreeRate: 0.06, dividendYield: 0.01,
-          });
-          return inferred != null && inferred > 0 ? inferred : undefined;
+          if (premium != null) {
+            const inferred = impliedVolatility({
+              right, spot, strike: Number(atm.strike), timeToExpiryYears,
+              optionPrice: premium, riskFreeRate: 0.06, dividendYield: 0.01,
+            });
+            if (inferred != null && inferred > 0) return { value: inferred, source: `${right} model IV` };
+          }
+          // Provider IV is one OTM-derived value mirrored across both rights;
+          // use it only when a leg cannot be independently solved from premium.
+          const supplied = Number(quote?.impliedVolatility);
+          return Number.isFinite(supplied) && supplied > 0
+            ? { value: supplied, source: 'FYERS shared IV fallback' }
+            : undefined;
         };
         const callIv = getIv(atm.call, 'CE');
         const putIv = getIv(atm.put, 'PE');
+        const sources = [...new Set([callIv?.source, putIv?.source].filter(Boolean))];
         output.push({
           expiry: String(choice.label || chain?.expiryLabel || choice.value),
-          ...(callIv !== undefined ? { callIv } : {}),
-          ...(putIv !== undefined ? { putIv } : {}),
-          source: atm.call?.impliedVolatility != null || atm.put?.impliedVolatility != null
-            ? 'FYERS IV' : 'model estimate',
+          ...(callIv ? { callIv: callIv.value } : {}),
+          ...(putIv ? { putIv: putIv.value } : {}),
+          source: sources.join(' · ') || 'IV unavailable',
         });
       }
       if (underlying === selectedKey) {
@@ -579,6 +584,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
   const atmRow = rows.find((row: any) => Number(row.strike) === Number(atmStrike));
   const atmCall = atmRow ? modelFor(atmRow.call, 'CE', Number(atmRow.strike), atmRow.expiry) : null;
   const atmPut = atmRow ? modelFor(atmRow.put, 'PE', Number(atmRow.strike), atmRow.expiry) : null;
+  const providerAtmIv = finite(atmRow?.call?.impliedVolatility) ?? finite(atmRow?.put?.impliedVolatility);
   const modelSkew = atmCall?.modelImpliedVolatility != null && atmPut?.modelImpliedVolatility != null
     ? atmPut.modelImpliedVolatility - atmCall.modelImpliedVolatility
     : undefined;
@@ -649,7 +655,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
       <div className="mb-3 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
         <div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Volatility surface snapshot</div>
         <div className="mt-1 text-[10px] text-[var(--tco-muted)]">
-          FYERS shared ATM IV {formatPercent(atmCall?.source === 'FYERS SHARED IV' ? atmCall.volatility : atmPut?.volatility)} · CE model IV {formatPercent(atmCall?.modelImpliedVolatility)} · PE model IV {formatPercent(atmPut?.modelImpliedVolatility)} · model PE−CE skew {modelSkew == null ? '—' : `${(modelSkew * 100).toFixed(1)} vol pts`}
+          FYERS shared ATM IV {formatPercent(providerAtmIv)} · CE model IV {formatPercent(atmCall?.modelImpliedVolatility)} · PE model IV {formatPercent(atmPut?.modelImpliedVolatility)} · model PE−CE skew {modelSkew == null ? '—' : `${(modelSkew * 100).toFixed(1)} vol pts`}
         </div>
         <div className="mt-1 text-[8px] text-[var(--tco-dim)]">
           FYERS IV is a shared OTM-derived strike/expiry value, not separate CE/PE skew. Model CE/PE IVs solve each leg's premium independently using bid/ask midpoint (LTP fallback), ACT/365, r {(riskFreeRate * 100).toFixed(1)}%, q {(dividendYield * 100).toFixed(1)}%. Rho is model-derived.
