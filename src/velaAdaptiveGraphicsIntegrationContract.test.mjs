@@ -19,4 +19,7 @@ assert.match(webgl, /gl\.bufferSubData\(gl\.ARRAY_BUFFER, 0, data\)/);
 assert.match(webgl, /dynamicBufferCapacity\.get\(buffer\)/);
 assert.doesNotMatch(webgl, /gl\.bufferData\(gl\.ARRAY_BUFFER, b\.view, gl\.DYNAMIC_DRAW\)/);
 assert.match(graphics, /export function planAdaptiveGraphicsBudget/);
+assert.match(graphics, /estimatedGpuBytes\) \/ 4/);
+assert.match(workspace, /reportedTextureSize \|\| 8192/);
+assert.match(fs.readFileSync('vendor/vela/src/renderers/native/backend/WebGL2Backend.ts', 'utf8'), /get maxTextureSize\(\)/);
 console.log('VELA_ADAPTIVE_GRAPHICS_INTEGRATION_OK');

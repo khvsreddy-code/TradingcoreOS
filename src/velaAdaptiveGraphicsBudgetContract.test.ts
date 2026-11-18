@@ -16,6 +16,8 @@ assert.equal(byId.hidden.backend, 'canvas2d', 'hidden charts never consume WebGL
 assert.ok(byId.active.priority > byId.background.priority);
 assert.ok(byId.background.resolutionScale <= 0.92, 'frame pressure reduces background resolution');
 assert.equal(byId.hidden.glowEnabled, false);
+const gpuHeavy = planAdaptiveGraphicsBudget([{ ...cells[0]!, cellId: 'gpu-heavy', estimatedGpuBytes: 128 * 1024 * 1024 }], hardware)[0]!;
+assert.equal(gpuHeavy.resolutionScale, 0.5, 'reported GPU allocation pressure lowers render resolution');
 assert.equal(planAdaptiveGraphicsBudget(cells, { ...hardware, webgl2Supported: false })[0].backend, 'canvas2d');
 assert.ok(planAdaptiveGraphicsBudget(cells, hardware, 'canvas2d').every(item => item.backend === 'canvas2d'), 'explicit backend override wins');
 console.log('VELA_ADAPTIVE_GRAPHICS_BUDGET_OK');
