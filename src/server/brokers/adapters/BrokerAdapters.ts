@@ -372,10 +372,14 @@ export class FyersAdapter extends BaseBroker {
   ): Promise<BrokerOptionChain> {
     // Keep the adapter on the existing FYERS quota admission path. A single chain
     // request returns all requested strikes; do not create per-strike requests.
+    const requestedExpiry = String(expiryDate || 'current_week').trim();
     const params: Record<string, string | number | undefined> = {
       symbol: instrumentKey,
       strikecount: '7',
       greeks: '1',
+      ...(requestedExpiry !== 'current_week' && /^\\d{10,13}$/.test(requestedExpiry)
+        ? { timestamp: requestedExpiry }
+        : {}),
     };
     const userId = String(rateLimitIdentity || '').trim();
     const quotaIdentity = await this.quotaIdentityForUser(userId);
@@ -412,9 +416,6 @@ export class FyersAdapter extends BaseBroker {
       : matchingExpiry ?? (/^\d{10,13}$/.test(requestedExpiry)
         ? { value: requestedExpiry, label: '' }
         : undefined);
-    if (selectedExpiry?.value && requestedExpiry !== 'current_week') {
-      params.timestamp = selectedExpiry.value;
-    }
     const rowsExpiryTimestamp = selectedExpiry?.value
       ?? String(expiryRows[0]?.expiry ?? expiryRows[0]?.timestamp ?? 'current_week');
     const rowsExpiryLabel = selectedExpiry?.label
