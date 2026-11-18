@@ -56,8 +56,8 @@ export interface GraphicsBudgetDecision extends NativeGraphicsPolicy {
 }
 
 /** Deterministic policy function: favors the active chart, then visible area and workload.
- *  Context limits are deliberately conservative because WebGL does not expose the browser's
- *  remaining page-wide context allowance. */
+ * Context limits are deliberately conservative because WebGL does not expose the browser's
+ * remaining page-wide context allowance. */
 export function planAdaptiveGraphicsBudget(
     cells: readonly GraphicsBudgetCellInput[],
     hardware: GraphicsHardwareProfile,
@@ -74,7 +74,6 @@ export function planAdaptiveGraphicsBudget(
         : memory <= 8 ? 12_000_000
         : memory <= 16 ? 24_000_000 : 36_000_000;
     const maxTextureSize = Math.max(0, Number(hardware.maxTextureSize) || 0);
-
     const priorityOf = (cell: GraphicsBudgetCellInput): number => {
         const area = Math.max(0, cell.width) * Math.max(0, cell.height);
         const workload = 1
