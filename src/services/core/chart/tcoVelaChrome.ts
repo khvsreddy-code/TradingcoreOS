@@ -2071,9 +2071,20 @@ const bookmarksPanel: SidePanelDescriptor = {
       const current = String(ctx.symbol || '').trim();
       const quote = quoteView(current);
       const ticker = current.includes(':') ? current.split(':', 2)[1] || current : current;
+      const selectedMeta = watchlist.find(item => item.symbol.toUpperCase() === current.toUpperCase());
+      const snapshot = (tradingCoreRuntime.getMarketSnapshot(current) || {}) as Record<string, unknown>;
+      const exchange = String(selectedMeta?.exchange || snapshot.exchange || snapshot.venue || '—');
+      const instrumentDetails = [
+        exchange,
+        selectedMeta?.type,
+        selectedMeta?.expiry,
+        selectedMeta?.strike != null ? String(selectedMeta.strike) : undefined,
+        selectedMeta?.optionType,
+        selectedMeta?.lotSize != null ? `Lot ${selectedMeta.lotSize}` : undefined,
+      ].filter(Boolean).join(' · ');
       const { ltp, change, changePercent, high, low } = quote;
       detailTitle.textContent = ticker || 'Active instrument';
-      detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${(tradingCoreRuntime.getMarketSnapshot(current) as any)?.exchange || (tradingCoreRuntime.getMarketSnapshot(current) as any)?.venue || 'Active chart'}`;
+      detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${instrumentDetails || 'Instrument details unavailable'}`;
       liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.source === 'yahoo' ? 'YAHOO DELAYED' : quote.stale ? 'STALE' : 'LIVE';
       liveBadge.dataset.quoteState = ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
       liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'Stale quote' : 'Live quote');
@@ -2366,6 +2377,15 @@ const bookmarksPanel: SidePanelDescriptor = {
       const isOption = (instrument: SearchInstrument) =>
         /option/i.test(String(instrument.type || '')) || Boolean(instrument.optionType)
         || (instrument.strike !== undefined && Boolean(instrument.expiry));
+      const optionRight = (instrument: SearchInstrument): 'CE' | 'PE' | null => {
+        const providerRight = String(instrument.optionType || '').trim().toUpperCase();
+        if (/^(CE|CALL)$/.test(providerRight)) return 'CE';
+        if (/^(PE|PUT)$/.test(providerRight)) return 'PE';
+        const contractText = `${instrument.symbol} ${instrument.label} ${instrument.description || ''}`.toUpperCase();
+        const match = contractText.match(/(?:^|[\\s:_-])(CE|PE|CALL|PUT)(?:$|[\\s:_-])/);
+        if (!match) return null;
+        return /^(CE|CALL)$/.test(match[1]!) ? 'CE' : 'PE';
+      };
       const optionEntries = [...unique.values()]
         .filter(isOption)
         // Only list contracts whose expiry is known and still active. Date-only
@@ -2374,16 +2394,16 @@ const bookmarksPanel: SidePanelDescriptor = {
           const expiryAt = optionExpiryTime(instrument.expiry);
           return expiryAt !== Number.MAX_SAFE_INTEGER && expiryAt > Date.now();
         })
-        .filter(instrument => !requestedRight || (
-          /^(CE|CALL)$/i.test(String(instrument.optionType || '')) ? 'CE' : 'PE'
-        ) === requestedRight)
+        // An explicit CE/PE query must be supported by provider metadata or a
+        // recognisable contract symbol. Unknown rights are excluded, never guessed.
+        .filter(instrument => !requestedRight || optionRight(instrument) === requestedRight)
         .sort((a,b) => {
           const expiryDiff = optionExpiryTime(a.expiry) - optionExpiryTime(b.expiry);
           if (expiryDiff) return expiryDiff;
           const strikeDiff = requestedStrike ? Math.abs(Number(a.strike || 0) - requestedStrike) - Math.abs(Number(b.strike || 0) - requestedStrike) : 0;
           if (strikeDiff) return strikeDiff;
-          const typeRank = (value?: string) => /^(CE|CALL)$/i.test(String(value || '')) ? 0 : /^(PE|PUT)$/i.test(String(value || '')) ? 1 : 2;
-          return typeRank(a.optionType) - typeRank(b.optionType);
+          const typeRank = (value: SearchInstrument) => optionRight(value) === 'CE' ? 0 : optionRight(value) === 'PE' ? 1 : 2;
+          return typeRank(a) - typeRank(b);
         })
         .slice(0, 10)
         .map(instrument => {
@@ -2392,7 +2412,15 @@ const bookmarksPanel: SidePanelDescriptor = {
           const contractShort = instrument.optionType
             ? `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${instrument.optionType}`.trim()
             : ticker.split(/\s+/)[0] || symbol;
-          const item = { symbol, label: ticker, short: contractShort };
+          const item: WatchlistItem = {
+            symbol, label: ticker, short: contractShort,
+            ...(instrument.exchange ? { exchange: instrument.exchange } : {}),
+            ...(instrument.type ? { type: instrument.type } : { type: 'option' }),
+            ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
+            ...(Number.isFinite(Number(instrument.strike)) ? { strike: Number(instrument.strike) } : {}),
+            ...(optionRight(instrument) ? { optionType: optionRight(instrument)! } : {}),
+            ...(Number.isFinite(Number(instrument.lotSize)) ? { lotSize: Number(instrument.lotSize) } : {}),
+          };
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
@@ -2403,7 +2431,17 @@ const bookmarksPanel: SidePanelDescriptor = {
         .map(instrument => {
           const ticker = String(instrument.symbol || instrument.key).split(':').pop() || String(instrument.symbol || instrument.key);
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
-          const item = { symbol, label: String(instrument.label || instrument.description || ticker), short: ticker };
+          const item: WatchlistItem = {
+            symbol,
+            label: String(instrument.label || instrument.description || ticker),
+            short: ticker,
+            ...(instrument.exchange ? { exchange: instrument.exchange } : {}),
+            ...(instrument.type ? { type: instrument.type } : {}),
+            ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
+            ...(Number.isFinite(Number(instrument.strike)) ? { strike: Number(instrument.strike) } : {}),
+            ...(instrument.optionType ? { optionType: instrument.optionType.toUpperCase() } : {}),
+            ...(Number.isFinite(Number(instrument.lotSize)) ? { lotSize: Number(instrument.lotSize) } : {}),
+          };
           return { item, caption: `${instrument.type || 'INSTRUMENT'} · ${instrument.exchange || 'FYERS'}`, rank: 0 };
         });
       const combined = requestedStrike && underlyingQuery
