@@ -135,6 +135,9 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   const [optionExpiry, setOptionExpiry] = useState('current_week');
   const [optionLoading, setOptionLoading] = useState(false);
   const [optionError, setOptionError] = useState('');
+  const [ivTermStructure, setIvTermStructure] = useState<Array<{ expiry: string; callIv?: number; putIv?: number; source: string }>>([]);
+  const [ivTermStructureLoading, setIvTermStructureLoading] = useState(false);
+  const [ivTermStructureError, setIvTermStructureError] = useState('');
   const [ticks, setTicks] = useState<Record<string, NormalizedMarketTick>>({});
   const [feedStatus, setFeedStatus] = useState<MarketFeedStatus>('disconnected');
   const [feedError, setFeedError] = useState<string>();
@@ -232,6 +235,65 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
       setOptionLoading(false);
     }
   };
+  const loadIvTermStructure = async () => {
+    const underlying = selectedKey;
+    const choices = Array.isArray(optionChain?.expiryOptions) ? optionChain.expiryOptions : [];
+    if (!underlying || choices.length < 2) {
+      setIvTermStructureError('The broker did not return multiple active expiries for this underlying.');
+      setIvTermStructure([]);
+      return;
+    }
+    setIvTermStructureLoading(true);
+    setIvTermStructureError('');
+    const output: Array<{ expiry: string; callIv?: number; putIv?: number; source: string }> = [];
+    try {
+      // Deliberately opt-in and sequential: each additional expiry is a broker
+      // options-chain request. Cap the sweep to six expiries to protect quota.
+      for (const choice of choices.slice(0, 6)) {
+        const chain = choice.value === optionExpiry && optionChain
+          ? optionChain
+          : await tradingCoreRuntime.getOptionChain(underlying, choice.value);
+        const contracts = Array.isArray(chain?.contracts) ? chain.contracts : [];
+        const spot = Number(chain?.spot);
+        if (!contracts.length || !Number.isFinite(spot) || spot <= 0) continue;
+        const atm = contracts.reduce((best: any, row: any) =>
+          Math.abs(Number(row.strike) - spot) < Math.abs(Number(best.strike) - spot) ? row : best, contracts[0]);
+        const expiryTimestamp = String(atm?.expiry || chain?.expiry || choice.value);
+        const observedAt = String(chain?.observedAt || '');
+        const timeToExpiryYears = optionTimeToExpiryYears(expiryTimestamp, observedAt);
+        if (timeToExpiryYears == null || timeToExpiryYears <= 0) continue;
+        const getIv = (quote: any, right: 'CE' | 'PE'): number | undefined => {
+          const supplied = Number(quote?.impliedVolatility);
+          if (Number.isFinite(supplied) && supplied > 0) return supplied;
+          const premium = valuationPremium(quote || {});
+          if (premium == null) return undefined;
+          const inferred = impliedVolatility({
+            right, spot, strike: Number(atm.strike), timeToExpiryYears,
+            optionPrice: premium, riskFreeRate: 0.06, dividendYield: 0.01,
+          });
+          return inferred != null && inferred > 0 ? inferred : undefined;
+        };
+        const callIv = getIv(atm.call, 'CE');
+        const putIv = getIv(atm.put, 'PE');
+        output.push({
+          expiry: String(choice.label || chain?.expiryLabel || choice.value),
+          ...(callIv !== undefined ? { callIv } : {}),
+          ...(putIv !== undefined ? { putIv } : {}),
+          source: atm.call?.impliedVolatility != null || atm.put?.impliedVolatility != null
+            ? 'FYERS IV' : 'model estimate',
+        });
+      }
+      if (underlying === selectedKey) {
+        setIvTermStructure(output);
+        if (!output.length) setIvTermStructureError('No valid ATM IV values were returned for the selected expiry set.');
+      }
+    } catch (error: any) {
+      setIvTermStructureError(error?.message || 'Unable to load IV term structure.');
+    } finally {
+      setIvTermStructureLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeSection !== 'option-chain' || !selectedKey) return;
     let dead = false;
@@ -325,6 +387,10 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
             chain={optionChain}
             expiry={optionExpiry}
             onExpiryChange={setOptionExpiry}
+            termStructure={ivTermStructure}
+            termStructureLoading={ivTermStructureLoading}
+            termStructureError={ivTermStructureError}
+            onLoadTermStructure={() => void loadIvTermStructure()}
             onChart={() => setActiveSection('info')}
             onRefresh={() => void refreshOptionChain()}
           />}
