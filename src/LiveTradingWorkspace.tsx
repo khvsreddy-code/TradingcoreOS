@@ -298,7 +298,15 @@ const browserRuntimeMetrics = useRef({
       await registerVelaWorkspaceLayouts(TCO_VELA_LAYOUT_PRESETS);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
-      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '1');
+      // Vela's native grid picker accepts every 1..4 row/column combination
+      // (g1x3 = 3 charts, g2x3 = 6 charts, g2x4 = 8 charts, etc.).
+      // TCO saved presets remain valid alongside Vela's built-in layouts.
+      const isNativeGridLayout = /^g[1-4]x[1-4]$/.test(queryLayout);
+      const isTcoLayoutPreset = TCO_VELA_LAYOUT_PRESETS.some(preset => preset.id === queryLayout);
+      const isBuiltinLayout = ['1','2h','2v','4','8'].includes(queryLayout);
+      const initialLayout = isNativeGridLayout || isTcoLayoutPreset || isBuiltinLayout
+        ? queryLayout
+        : (defaults.layout || '1');
 
       const baseWorkspaceStorage = createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers');
       let releaseInitialWorkspaceRestore!: () => void;
