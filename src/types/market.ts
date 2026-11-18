@@ -70,12 +70,28 @@ export interface OptionQuote {
   askQuantity?: number;
   /** Previous traded premium when the provider supplies it; never inferred from OI. */
   previousLtp?: number;
-  /** Provider IV as a decimal or percentage only when the provider explicitly supplies it. */
+  /** Provider IV normalized to a decimal (0.25 = 25%) when explicitly supplied. */
   impliedVolatility?: number;
+  /** Direct open-interest change when the provider supplies it. */
+  oiChange?: number;
+  /** Provider Greeks are retained separately from locally modelled fallbacks. */
+  providerGreeks?: {
+    delta?: number;
+    gamma?: number;
+    thetaPerDay?: number;
+    vegaPerVolPoint?: number;
+  };
   /** Provider event timestamp when available; observedAt remains server receive time. */
   eventTime?: string;
   observedAt?: string;
   source?: string;
+}
+
+export interface OptionExpiryChoice {
+  /** Epoch-seconds timestamp accepted by FYERS options-chain-v3. */
+  value: string;
+  /** Human-readable provider expiry label, e.g. DD-MM-YYYY. */
+  label: string;
 }
 
 export interface OptionContract {
@@ -98,7 +114,11 @@ export interface OptionChain {
   /** Snapshot receive time, not an exchange trade timestamp. */
   observedAt?: string;
   source?: string;
-  /** Expiries returned by the provider in the same response; not inferred locally. */
+  /** Expiry date label corresponding to the selected provider timestamp. */
+  expiryLabel?: string;
+  /** Provider-backed expiries; value is sent to the provider, label is shown to the user. */
+  expiryOptions?: OptionExpiryChoice[];
+  /** Legacy timestamp-only list retained for callers that have not migrated. */
   expiries?: string[];
 }
 
