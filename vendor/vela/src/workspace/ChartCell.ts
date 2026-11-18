@@ -30,6 +30,7 @@ import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
     legendCalloutsProviderFor,
+    drawingActionsProviderFor,
     resolveEngines,
     statePersistenceHandlers,
     type CellStateContext,
@@ -430,6 +431,7 @@ export class ChartCell {
         // context follows the workspace rule (built fresh per click, active-cell bound).
         this.inner.renderer.setLegendActions(legendActionsProviderFor(this.inner, () => deps.context()));
         this.inner.renderer.setLegendCallouts(legendCalloutsProviderFor(this.inner, () => deps.context()));
+        this.inner.renderer.setDrawingActions(drawingActionsProviderFor(this.inner, () => deps.context()));
         // The cell owns ONE unified undo timeline (drawings + indicator ops), driven by
         // the workspace keymap. The drawings layer must not self-serve Ctrl+Z/Y or the
         // two histories desync (its preempt would pop the core drawing stack while the
@@ -1768,9 +1770,8 @@ export class ChartCell {
         for (const [part, visible] of statuslinePartEntries(cs.statuslineParts)) {
             if (this.statusline && this.statusline.partVisible(part) !== visible) this.setStatuslinePart(part, visible);
         }
-        // Cosmetics + drawings round-trip (both validate untrusted input).
+        // Cosmetics round-trip (validates untrusted input); the drawings follow the market below.
         if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
-        if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
         if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
         this.state.priceScales = cs.priceScales;
         this.restoreWorkspaceScaleState();
@@ -1821,6 +1822,10 @@ export class ChartCell {
         } else {
             restoreViewport();
         }
+        // The drawings round-trip (untrusted input too) once the switch has STARTED: a chart
+        // whose drawings belong to its symbol drops them as a symbol switch starts, and the
+        // document's drawings are the ones of the market it names.
+        if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
     }
 
     /** Snapshot everything the pool needs to restore this slot later. The market fields
