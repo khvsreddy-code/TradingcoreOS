@@ -463,18 +463,24 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
     return oi !== undefined && previous !== undefined ? oi - previous : undefined;
   };
   const total = (side: 'call' | 'put') => rows.reduce((sum: number, row: any) => sum + (finite(row?.[side]?.oi) ?? 0), 0);
-  const callOi = total('call');
-  const putOi = total('put');
+  const rowCallOi = total('call');
+  const rowPutOi = total('put');
+  const aggregateCallOi = finite(chain?.aggregateCallOi);
+  const aggregatePutOi = finite(chain?.aggregatePutOi);
+  const hasAggregateOi = aggregateCallOi !== undefined && aggregatePutOi !== undefined;
+  const callOi = aggregateCallOi ?? rowCallOi;
+  const putOi = aggregatePutOi ?? rowPutOi;
   const callChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.call) ?? 0), 0);
   const putChg = rows.reduce((sum: number, row: any) => sum + (oiChange(row.put) ?? 0), 0);
-  const hasOi = rows.length > 0 && rows.every((row: any) =>
+  const hasCompleteRowOi = rows.length > 0 && rows.every((row: any) =>
     finite(row.call?.oi) !== undefined && finite(row.put?.oi) !== undefined);
-  const hasCompleteOiChange = hasOi && rows.every((row: any) =>
+  const hasOi = hasAggregateOi || hasCompleteRowOi;
+  const hasCompleteOiChange = hasCompleteRowOi && rows.every((row: any) =>
     oiChange(row.call) !== undefined && oiChange(row.put) !== undefined);
   const pcr = hasOi && callOi > 0 ? putOi / callOi : undefined;
-  const maxCall = hasOi ? rows.reduce((best: any, row: any) => (finite(row.call?.oi) ?? 0) > (finite(best?.call?.oi) ?? 0) ? row : best, null) : null;
-  const maxPut = hasOi ? rows.reduce((best: any, row: any) => (finite(row.put?.oi) ?? 0) > (finite(best?.put?.oi) ?? 0) ? row : best, null) : null;
-  const analytics = chain && hasOi && spot > 0 ? buildOIChartAnalytics(chain, spot) : null;
+  const maxCall = hasCompleteRowOi ? rows.reduce((best: any, row: any) => (finite(row.call?.oi) ?? 0) > (finite(best?.call?.oi) ?? 0) ? row : best, null) : null;
+  const maxPut = hasCompleteRowOi ? rows.reduce((best: any, row: any) => (finite(row.put?.oi) ?? 0) > (finite(best?.put?.oi) ?? 0) ? row : best, null) : null;
+  const analytics = chain && hasCompleteRowOi && spot > 0 ? buildOIChartAnalytics(chain, spot) : null;
   const maxPain = finite(analytics?.maxPain);
   const bullish = pcr !== undefined && (pcr > 1.05 || (hasCompleteOiChange && putChg > callChg));
   const bearish = pcr !== undefined && (pcr < 0.8 || (hasCompleteOiChange && callChg > putChg * 1.25));
@@ -576,7 +582,7 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
       <div className="min-w-0">
         <div className="font-mono text-sm font-bold">Option Chain Intelligence</div>
         <div className="truncate text-[9px] text-[var(--tco-dim)]">
-          {chain?.underlyingKey || '—'} · Spot {spot > 0 ? fmt(spot) : '—'} · Expiry {chain?.expiryLabel || chain?.expiry || '—'} · refresh 15s
+          {chain?.underlyingKey || '—'} · Spot {spot > 0 ? fmt(spot) : '—'} · India VIX {finite(chain?.indiaVix) != null ? fmt(finite(chain?.indiaVix), 2) : '—'} · Expiry {chain?.expiryLabel || chain?.expiry || '—'} · refresh 15s
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
