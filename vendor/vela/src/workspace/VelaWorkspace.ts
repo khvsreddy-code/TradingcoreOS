@@ -384,7 +384,6 @@ export class VelaWorkspace {
     /** The cell maximized over the whole grid (null = normal grid). TRANSIENT view
      *  state — never persisted; any structural change (layout, applyState) restores. */
     private maximizedId: string | null = null;
-    private cellBackend: NativeBackend = 'auto';
     /** `layout: false` — the grid is pinned to the one-cell layout, the layout picker
      *  and sync switches never render, and `setLayout` no-ops. */
     private readonly monoLayout: boolean;
@@ -925,7 +924,6 @@ export class VelaWorkspace {
         this.root.addEventListener('keydown', this.onRootKeydown);
         this.root.tabIndex = -1; // focusable host so bare keystrokes land here
 
-        this.cellBackend = this.backendFor(this.def);
         this.applyGrid();
         this.buildCells();
         this.relinkIdenticalDrawings(); // a persisted document's copies link again
@@ -1885,10 +1883,12 @@ export class VelaWorkspace {
         return def;
     }
 
-    private backendFor(_def: LayoutDefinition): NativeBackend {
-        // Keep explicit host overrides. Automatic allocation is per-cell and is applied
-        // after mount by applyGraphicsBudget(); never force every cell onto one backend.
-        return this.opts.nativeBackend && this.opts.nativeBackend !== 'auto' ? this.opts.nativeBackend : 'auto';
+    private initialBackendForCell(cellId: string): NativeBackend {
+        const explicit = this.opts.nativeBackend;
+        if (explicit && explicit !== 'auto') return explicit;
+        // Avoid creating a burst of WebGL contexts before the first layout measurement.
+        // The first cell bootstraps the active renderer; the allocator can promote others.
+        return cellId === (this.order[0] ?? cellId) ? 'auto' : 'canvas2d';
     }
 
     /** Allocate renderer resources by active state, visible area, workload and recent frame pressure. */
@@ -2085,7 +2085,9 @@ export class VelaWorkspace {
                 volume: this.opts.volume ?? true,
                 statusline: this.opts.statusline !== false,
                 watermark: this.opts.watermark !== false,
-                nativeBackend: this.cellBackend,
+                // Bootstrap only one WebGL context. The adaptive allocator promotes
+                // additional visible cells after layout measurement and device profiling.
+                nativeBackend: this.initialBackendForCell(id),
                 dialogHost: this.root,
                 timezone: () => this.timezone,
                 setTimezone: (zone) => this.setTimezone(zone),
