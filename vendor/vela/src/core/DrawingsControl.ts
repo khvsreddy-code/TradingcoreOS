@@ -121,21 +121,31 @@ export class DrawingsControl {
         return this;
     }
 
-    /** Group two or more selected drawings as native Vela objects. Returns the group id. */
-    group(ids?: readonly string[]): string | null {
-        return this.ctrl.group(ids);
-    }
-
-    /** Ungroup selected drawings (or the specified drawings) without changing their geometry. */
-    ungroup(ids?: readonly string[]): this {
-        this.ctrl.ungroup(ids);
-        return this;
-    }
-
     /** Remove several drawings as one undo step. */
     removeMany(ids: readonly string[]): this {
         this.ctrl.removeMany(ids);
         return this;
+    }
+
+    /** Remove every drawing as one undo step, locked ones included. */
+    clear(): this {
+        this.ctrl.clear();
+        return this;
+    }
+
+    /**
+     * Make the drawings belong to the chart's symbol: switching to another symbol removes
+     * them all, as the switch starts, with the undo history; `drawing:replaced` stands in
+     * for a `drawing:removed` per drawing. A timeframe or session change keeps them. Off by
+     * default; the `drawings` option's `clearOnSymbolChange` sets it at construction.
+     */
+    setClearOnSymbolChange(on: boolean): this {
+        this.ctrl.setClearOnSymbolChange(on);
+        return this;
+    }
+
+    getClearOnSymbolChange(): boolean {
+        return this.ctrl.getClearOnSymbolChange();
     }
 
     lock(id: string, v = true): this {
