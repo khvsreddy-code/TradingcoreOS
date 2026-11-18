@@ -1894,7 +1894,7 @@ export class NativeRenderer implements IChartRenderer {
         if (wantsWebGL && supportsWebGL2()) {
             const canvas = this.makeDataCanvas();
             const gl = new WebGL2Backend();
-            gl.glow = this.glowAmount;
+            gl.glow = this.graphicsPolicy.glowEnabled ? this.glowAmount : 0;
             gl.onNeedsRedraw = () => this.scheduler?.invalidate(InvalidateLevel.Full);
             gl.onContextFailed = () => this.swapToCanvas2dFallback();
             gl.mount(canvas);
@@ -1924,8 +1924,7 @@ export class NativeRenderer implements IChartRenderer {
         const scaleChanged = Math.abs(this.graphicsPolicy.resolutionScale - scale) > 0.01;
         const glowChanged = this.graphicsPolicy.glowEnabled !== next.glowEnabled;
         this.graphicsPolicy = next;
-        this.glowAmount = next.glowEnabled ? Math.max(0, this.glowAmount) : 0;
-        if (this.backend instanceof WebGL2Backend) this.backend.glow = this.glowAmount;
+        if (this.backend instanceof WebGL2Backend) this.backend.glow = next.glowEnabled ? this.glowAmount : 0;
         if (backendChanged && this.wrapper && this.dataCanvas) {
             const previousCanvas = this.dataCanvas;
             this.input?.detach();

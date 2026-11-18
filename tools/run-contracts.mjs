@@ -7,6 +7,8 @@ const contracts = [
   ['ml-training-input-security', ['src/mlTrainingSecurityContract.test.mjs', false]],
   ['corescript-capability-maturity', ['src/coreScriptCapabilityMaturityContract.test.mjs', true]],
   ['vela-scene-graph', ['src/velaSceneGraphContract.test.mjs', false]],
+  ['vela-adaptive-graphics-budget', ['src/velaAdaptiveGraphicsBudgetContract.test.ts', true]],
+  ['vela-adaptive-graphics-integration', ['src/velaAdaptiveGraphicsIntegrationContract.test.mjs', false]],
   ['frontend-bundle-architecture', ['src/frontendBundleArchitectureContract.test.mjs', false]],
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
