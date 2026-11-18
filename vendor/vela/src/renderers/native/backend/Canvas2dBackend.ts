@@ -172,6 +172,10 @@ export class Canvas2dBackend implements IRenderBackend {
         }
     }
 
+    getEstimatedMemoryBytes(): number {
+        return this.canvas ? this.canvas.width * this.canvas.height * 4 : 0;
+    }
+
     destroy(): void {
         this.canvas = null;
         this.ctx = null;
