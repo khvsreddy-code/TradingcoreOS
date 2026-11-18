@@ -375,7 +375,7 @@ export class FyersAdapter extends BaseBroker {
     const requestedExpiry = String(expiryDate || 'current_week').trim();
     const params: Record<string, string | number | undefined> = {
       symbol: instrumentKey,
-      strikecount: '7',
+      // FYERS max is 50 ITM + ATM + 50 OTM; wider coverage improves PCR / OI walls / max pain.\n      strikecount: '50',
       greeks: '1',
       ...(requestedExpiry !== 'current_week' && /^\\d{10,13}$/.test(requestedExpiry)
         ? { timestamp: requestedExpiry }
@@ -483,6 +483,9 @@ export class FyersAdapter extends BaseBroker {
       contracts: [...byStrike.values()].sort((a, b) => a.strike - b.strike),
       observedAt,
       source: 'fyers',
+      aggregateCallOi: numeric(data?.callOi),
+      aggregatePutOi: numeric(data?.putOi),
+      indiaVix: numeric(data?.indiavixData?.ltp),
       expiries: expiryOptions.map((entry: { value: string }) => entry.value),
     };
   }
