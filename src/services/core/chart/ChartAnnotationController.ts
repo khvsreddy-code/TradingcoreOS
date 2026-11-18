@@ -1,6 +1,6 @@
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import type { ChartAnalytics } from '../../marketData/levelEngine';
-import type { AutomationConfig } from '../workspace/workspaceState';
+import type { AutomationConfig } from '../../../workspace/workspaceState';
 import { markerForAutomation } from './chartRuntimeSupport';
 import type { ISeriesApi } from './velaNativeChartKernel';
 

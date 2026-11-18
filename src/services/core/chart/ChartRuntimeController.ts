@@ -18,7 +18,7 @@ import { CHART_TIMEFRAME_INTERVALS } from '../../marketData/chartDataPlane';
 import { requiredIndicatorHistoryBars, shouldLoadOlderHistory } from '../../marketData/chartHistoryPolicy';
 import type { ChartDataPlane, ChartDataPlaneSnapshot } from '../../marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../marketData/levelEngine';
-import type { AutomationConfig } from '../workspace/workspaceState';
+import type { AutomationConfig } from '../../../workspace/workspaceState';
 import type { OIChartAnalytics } from '../../marketData/oiEngine';
 import type { ChartStore } from './ChartStore';
 import type { CoreSpiritChartOutputController } from '../../coreSpirit/chartOutputController';

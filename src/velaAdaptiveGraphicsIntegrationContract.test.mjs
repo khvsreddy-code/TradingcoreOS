@@ -5,7 +5,7 @@ const workspace = fs.readFileSync('vendor/vela/src/workspace/VelaWorkspace.ts', 
 const renderer = fs.readFileSync('vendor/vela/src/renderers/native/NativeRenderer.ts', 'utf8');
 const graphics = fs.readFileSync('vendor/vela/src/core/graphics.ts', 'utf8');
 assert.match(workspace, /planAdaptiveGraphicsBudget\(inputs, hardware, forced\)/);
-assert.match(workspace, /cell\.chart\.renderer\.setGraphicsPolicy/);
+assert.match(workspace, /chart\.renderer\.setGraphicsPolicy/);
 assert.match(workspace, /cellId === this\.activeId/);
 assert.doesNotMatch(workspace, /def\.cells\.length > \(this\.opts\.maxWebglCells/);
 assert.match(renderer, /setGraphicsPolicy\(policy: NativeGraphicsPolicy\)/);
