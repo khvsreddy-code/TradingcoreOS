@@ -29,6 +29,7 @@ import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../.
 import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
+import { parseOptionExpiryTimestamp } from '../../marketData/options/optionPricing';
 import { historyStore } from '../../marketData/HistoryStore';
 import type { TimelineMark } from './velaNativeChartKernel';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
@@ -1779,7 +1780,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     let suggestionTimer: number | undefined;
 
     let filterMode: 'all' | 'gainers' | 'losers' = 'all';
-    let sortMode: 'default' | 'symbol' | 'change' | 'price' = 'default';
+    let sortMode: 'default' | 'symbol' | 'change' | 'price' | 'volume' | 'oi' = 'default';
     const filters = document.createElement('div');
     filters.className = 'tco-watchlist-filters';
     const filterButtons = new Map<string, HTMLButtonElement>();
@@ -1801,7 +1802,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     sort.className = 'tco-frame-select tco-watchlist-sort';
     sort.style.cssText = 'margin-left:auto;width:112px;max-width:112px;padding:5px 6px;font-size:10px;';
     sort.setAttribute('aria-label', 'Sort watchlist');
-    for (const [value, label] of [['default', 'Custom order'], ['symbol', 'Symbol A–Z'], ['change', 'Day change'], ['price', 'Last price']] as const) {
+    for (const [value, label] of [['default', 'Custom order'], ['symbol', 'Symbol A–Z'], ['change', 'Day change'], ['price', 'Last price'], ['volume', 'Volume'], ['oi', 'Open interest']] as const) {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = label;
@@ -1929,8 +1930,10 @@ const bookmarksPanel: SidePanelDescriptor = {
       low?: number;
       receivedAt: number;
       source: 'fyers' | 'yahoo';
+      volume?: number;
+      oi?: number;
     };
-    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; receivedAt?: number; stale: boolean; source?: 'fyers' | 'yahoo' };
+    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; volume?: number; oi?: number; receivedAt?: number; stale: boolean; source?: 'fyers' | 'yahoo' };
     const quotes = new Map<string, Quote>();
     let quoteStop: (() => void) | undefined;
 
@@ -1990,6 +1993,8 @@ const bookmarksPanel: SidePanelDescriptor = {
         ...(source ? { source } : {}),
         high: asFinite(cachedIsNewest ? cached?.high : snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
         low: asFinite(cachedIsNewest ? cached?.low : snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
+        volume: asFinite(cachedIsNewest ? cached?.volume : snapshot.volume, snapshot.volume, cached?.volume),
+        oi: asFinite(cachedIsNewest ? cached?.oi : snapshot.oi, snapshot.oi, snapshot.openInterest, cached?.oi),
         ...(hasFreshTimestamp ? { receivedAt } : {}),
         stale: !hasFreshTimestamp || Date.now() - receivedAt! > STALE_AFTER_MS,
       };
@@ -2038,10 +2043,12 @@ const bookmarksPanel: SidePanelDescriptor = {
           low: asFinite(tick.dayLow, tick.low, daily?.low),
           receivedAt: Date.now(),
           source: 'fyers',
+          volume: asFinite(tick.volume),
+          oi: asFinite(tick.oi, tick.openInterest),
         });
         // Keep live price/change sorts stable while the feed updates, without rebuilding
         // every DOM row on the default custom-order path.
-        if (sortMode === 'price' || sortMode === 'change') buildRows();
+        if (sortMode === 'price' || sortMode === 'change' || sortMode === 'volume' || sortMode === 'oi') buildRows();
         else updateRows(symbol);
       });
     };
@@ -2249,13 +2256,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     ];
     const optionExpiryTime = (value?: string) => {
       if (!value) return Number.MAX_SAFE_INTEGER;
-      const parsed = Date.parse(value);
-      if (Number.isFinite(parsed)) return parsed;
-      const digits = value.match(/(\d{1,2})[- /]?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[- /]?(\d{2,4})/i);
-      if (!digits) return Number.MAX_SAFE_INTEGER;
-      const months: Record<string, number> = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
-      const year = Number(digits[3]) + (Number(digits[3]) < 100 ? 2000 : 0);
-      return new Date(year, months[digits[2]!.toUpperCase()]!, Number(digits[1])).getTime();
+      return parseOptionExpiryTimestamp(value) ?? Number.MAX_SAFE_INTEGER;
     };
     const hideSuggestions = () => {
       suggestionList.hidden = true;
@@ -2319,6 +2320,10 @@ const bookmarksPanel: SidePanelDescriptor = {
       const upper = query.toUpperCase();
       const strikeMatch = query.match(/\b(\d{4,6})\b/);
       const requestedStrike = strikeMatch ? Number(strikeMatch[1]) : undefined;
+      const rightMatch = upper.match(/\b(CE|PE|CALL|PUT)\b/);
+      const requestedRight = rightMatch
+        ? (/^(CE|CALL)$/i.test(rightMatch[1]!) ? 'CE' : 'PE')
+        : undefined;
       const underlyingQuery = upper.replace(/\d{4,6}/g, '').replace(/\b(CE|PE|CALL|PUT)\b/g, '').trim();
       const indexMatches = INDEX_SEARCH_UNIVERSE
         .map(item => {
@@ -2363,6 +2368,15 @@ const bookmarksPanel: SidePanelDescriptor = {
         || (instrument.strike !== undefined && Boolean(instrument.expiry));
       const optionEntries = [...unique.values()]
         .filter(isOption)
+        // Only list contracts whose expiry is known and still active. Date-only
+        // values are evaluated at the exchange close (15:30 IST), not UTC midnight.
+        .filter(instrument => {
+          const expiryAt = optionExpiryTime(instrument.expiry);
+          return expiryAt !== Number.MAX_SAFE_INTEGER && expiryAt > Date.now();
+        })
+        .filter(instrument => !requestedRight || (
+          /^(CE|CALL)$/i.test(String(instrument.optionType || '')) ? 'CE' : 'PE'
+        ) === requestedRight)
         .sort((a,b) => {
           const expiryDiff = optionExpiryTime(a.expiry) - optionExpiryTime(b.expiry);
           if (expiryDiff) return expiryDiff;
@@ -2436,8 +2450,10 @@ const bookmarksPanel: SidePanelDescriptor = {
 
       const ordered = [...watchlist];
       if (sortMode === 'symbol') ordered.sort((a, b) => a.short.localeCompare(b.short));
-      if (sortMode === 'price') ordered.sort((a, b) => (quotes.get(b.symbol)?.ltp ?? -Infinity) - (quotes.get(a.symbol)?.ltp ?? -Infinity));
-      if (sortMode === 'change') ordered.sort((a, b) => (quotes.get(b.symbol)?.changePercent ?? -Infinity) - (quotes.get(a.symbol)?.changePercent ?? -Infinity));
+      if (sortMode === 'price') ordered.sort((a, b) => (quoteView(b.symbol).ltp ?? -Infinity) - (quoteView(a.symbol).ltp ?? -Infinity));
+      if (sortMode === 'change') ordered.sort((a, b) => (quoteView(b.symbol).changePercent ?? -Infinity) - (quoteView(a.symbol).changePercent ?? -Infinity));
+      if (sortMode === 'volume') ordered.sort((a, b) => (quoteView(b.symbol).volume ?? -Infinity) - (quoteView(a.symbol).volume ?? -Infinity));
+      if (sortMode === 'oi') ordered.sort((a, b) => (quoteView(b.symbol).oi ?? -Infinity) - (quoteView(a.symbol).oi ?? -Infinity));
       for (const item of ordered) {
         let ref = rowRefs.get(item.symbol);
         if (!ref) {
