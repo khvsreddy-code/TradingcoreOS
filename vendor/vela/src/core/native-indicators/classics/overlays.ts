@@ -113,7 +113,7 @@ const anchoredVwap: ClassicIndicatorSpec = {
     shortTitle: msg('indicator.anchoredVwap.shortTitle', 'AVWAP'),
     overlay: true,
     inputs: [
-        intInput('anchorTime', msg('indicator.anchoredVwap.anchorTime', 'Anchor time (Unix ms; 0 = first loaded bar)'), 0, 0, 8_640_000_000_000, 1),
+        intInput('anchorTime', msg('indicator.anchoredVwap.anchorTime', 'Anchor time (Unix ms; 0 = first loaded bar)'), 0, 0, 8_640_000_000_000),
         sourceInput('HLC3', 'source', msg('indicator.anchoredVwap.source', 'Source')),
         boolInput('showBands', msg('indicator.anchoredVwap.showBands', 'Show deviation bands'), false, SETTINGS),
         floatInput('bandMult', msg('indicator.anchoredVwap.bandMult', 'Band multiplier'), 1, 0.1, 10, 0.1),

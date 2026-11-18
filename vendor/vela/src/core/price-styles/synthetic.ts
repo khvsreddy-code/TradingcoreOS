@@ -79,8 +79,8 @@ export function buildLineBreakSeries(bars:readonly OHLCV[],lineCount=3):Syntheti
     if(lines.length<count)direction=close>previous?1:close<previous?-1:null;
     else{
       const recent=lines.slice(-count);
-      if(close>Math.max(...recent.map(x=>x.close)))direction=1;
-      else if(close<Math.min(...recent.map(x=>x.close)))direction=-1;
+      if(close>Math.max(...recent.map(x=>x.high)))direction=1;
+      else if(close<Math.min(...recent.map(x=>x.low)))direction=-1;
     }
     if(direction==null)continue;
     lines.push({logical:i,sourceIndex:i,time:bar.time,open:previous,high:Math.max(previous,close),low:Math.min(previous,close),close,direction});
