@@ -4,14 +4,44 @@
  * same zoom thresholds.
  *
  * - `full`: high-low wick + a body (enough room for a visible body).
- * - `wick`: high-low stick only (too thin for a body — the old `spacing < 3` path).
+ * - `wick`: one stick per bar (too thin for a body — the old `spacing < 3` path).
  * - `aggregate`: sub-pixel spacing — bars sharing a pixel column collapse to one
- *   high-low stick, so draw cost stays bounded by screen width when zoomed far out
+ *   stick, so draw cost stays bounded by screen width when zoomed far out
  *   (true LOD) instead of growing with the bar count.
+ *
+ * In the two stick tiers the stick stands for the WHOLE candle, so what it spans
+ * follows the parts left visible ({@link candleStickExtent}), not the wick alone.
  */
 import type { OHLCV } from '../../../core/model/ohlcv';
+import type { CandleStyle } from '../core/chartConfig';
 
 export type CandleTier = 'full' | 'wick' | 'aggregate';
+
+/**
+ * What a candle's stick spans in the tiers too thin for a body:
+ * - `range`: high to low — the wick is visible.
+ * - `body`: open to close — the wick is hidden but the body or its border is not, so
+ *   the candle stays on screen without bringing the hidden wick back.
+ * - `none`: every part is hidden; the candle paints at no zoom.
+ */
+export type CandleStickExtent = 'range' | 'body' | 'none';
+
+/** Shared by both backends so a candle never vanishes in one tier and returns in the next. */
+export function candleStickExtent(cs: Pick<CandleStyle, 'bodyVisible' | 'borderVisible' | 'wickVisible'>): CandleStickExtent {
+    if (cs.wickVisible) return 'range';
+    return cs.bodyVisible || cs.borderVisible ? 'body' : 'none';
+}
+
+/**
+ * A stick's paint. `bodyColor` is the bar's resolved body color (barcolor(), else its
+ * direction color). A range stick wears the wick color; a body stick wears the body
+ * color, or the border's when the border is all that shows — never the hidden wick's.
+ */
+export function candleStickColor(cs: CandleStyle, extent: Exclude<CandleStickExtent, 'none'>, isUp: boolean, bodyColor: string): string {
+    if (extent === 'range') return (isUp ? cs.wickUpColor : cs.wickDownColor) ?? bodyColor;
+    if (cs.bodyVisible) return bodyColor;
+    return (isUp ? cs.borderUpColor : cs.borderDownColor) ?? bodyColor;
+}
 
 /** Below this spacing a candle has no body (wick-only). */
 export const CANDLE_BODY_MIN_SPACING = 3;
@@ -108,13 +138,17 @@ interface Coverage {
 
 /**
  * Aggregate-tier bucketing shared by both backends: bars whose centers round to the
- * same pixel column collapse into high-low sticks. Coverage is kept as the UNION of
- * the bars' true high-low ranges — one stick per contiguous run — instead of one
- * min-to-max span, so a PRICE GAP between bars sharing the column (the bars around
- * an overnight jump, once zoomed far out) stays a visible void instead of being
- * painted over as a solid connection. Runs whose separation is under one pixel
- * (`yOf` measures it) merge anyway: an invisible void isn't worth a second stick, and
- * ordinary contiguous data keeps producing exactly one stick per column.
+ * same pixel column collapse into sticks. Coverage is kept as the UNION of the bars'
+ * true ranges — one stick per contiguous run — instead of one min-to-max span, so a
+ * PRICE GAP between bars sharing the column (the bars around an overnight jump, once
+ * zoomed far out) stays a visible void instead of being painted over as a solid
+ * connection. Runs whose separation is under one pixel (`yOf` measures it) merge
+ * anyway: an invisible void isn't worth a second stick, and ordinary contiguous data
+ * keeps producing exactly one stick per column.
+ *
+ * A bar's range is high to low, or open to close under a `body` extent (see
+ * {@link candleStickExtent}) — which can be flat (a doji), so `hi === lo` sticks
+ * come out and the painter owns their minimum height.
  *
  * Runs are kept PER COLOR (`colorOf` resolves each bar's paint — direction, barcolor(),
  * wick setting): bars of different colors never merge, so a down bar's long wick stays
@@ -130,7 +164,8 @@ export function aggregateCandleColumns(
     i1: number,
     xOf: (index: number) => number,
     yOf: (price: number) => number,
-    colorOf: (bar: OHLCV, index: number) => string,
+    colorOf: (bar: OHLCV) => string,
+    extent: Exclude<CandleStickExtent, 'none'> = 'range',
 ): AggregatedStick[] {
     const out: AggregatedStick[] = [];
     let col = NaN;
@@ -170,9 +205,9 @@ export function aggregateCandleColumns(
             col = x;
         }
         // Merge the bar's range into every overlapping run OF ITS COLOR (usually zero or one).
-        const color = colorOf(b, i);
-        let lo = b.low;
-        let hi = b.high;
+        const color = colorOf(b);
+        let lo = extent === 'body' ? Math.min(b.open, b.close) : b.low;
+        let hi = extent === 'body' ? Math.max(b.open, b.close) : b.high;
         for (let k = runs.length - 1; k >= 0; k -= 1) {
             const r = runs[k]!;
             if (r.color !== color || r.lo > hi || r.hi < lo) continue;
@@ -184,59 +219,4 @@ export function aggregateCandleColumns(
     }
     flush();
     return out;
-}
-
-
-/**
- * Relative-volume intensity used by the native Volume Candles style.
- *
- * The comparison baseline uses only preceding bars, so a new tick never changes
- * historical candle styling. Missing volume falls back to ordinary candle opacity
- * rather than silently presenting fabricated volume information.
- */
-export function relativeVolumeOpacity(volumes: ArrayLike<number>, index: number, lookback = 20): number {
-    const current = Number(volumes[index]);
-    if (!Number.isFinite(current) || current <= 0) return 1;
-    const start = Math.max(0, index - Math.max(1, Math.floor(lookback)));
-    let total = 0;
-    let count = 0;
-    for (let i = start; i < index; i += 1) {
-        const value = Number(volumes[i]);
-        if (Number.isFinite(value) && value > 0) {
-            total += value;
-            count += 1;
-        }
-    }
-    if (count === 0 || total <= 0) return 1;
-    const relative = current / (total / count);
-    const strength = Math.max(0, Math.min(1, Math.log2(1 + relative) / Math.log2(5)));
-    return 0.45 + strength * 0.55;
-}
-
-export function relativeVolumeOpacityFromBars(
-    bars: readonly Pick<OHLCV, 'volume'>[],
-    index: number,
-    lookback = 20,
-): number {
-    const current = bars[index]?.volume;
-    if (!Number.isFinite(current) || (current ?? 0) <= 0) return 1;
-    const start = Math.max(0, index - Math.max(1, Math.floor(lookback)));
-    let total = 0;
-    let count = 0;
-    for (let i = start; i < index; i += 1) {
-        const value = bars[i]?.volume;
-        if (Number.isFinite(value) && (value ?? 0) > 0) {
-            total += value!;
-            count += 1;
-        }
-    }
-    if (count === 0 || total <= 0) return 1;
-    const relative = current! / (total / count);
-    const strength = Math.max(0, Math.min(1, Math.log2(1 + relative) / Math.log2(5)));
-    return 0.45 + strength * 0.55;
-}
-
-/** Hollow Candles leaves bullish bodies unfilled while keeping their outline and wicks. */
-export function isHollowUpCandle(priceStyle: string, up: boolean): boolean {
-    return priceStyle === 'hollowcandles' && up;
 }
