@@ -1651,6 +1651,117 @@ const bookmarksPanel: SidePanelDescriptor = {
     controls.append(addCurrent);
     root.appendChild(controls);
 
+    const groupToolbar = document.createElement('div');
+    groupToolbar.style.cssText = 'display:flex;align-items:center;gap:5px;min-width:0;';
+    const groupSelect = document.createElement('select');
+    groupSelect.className = 'tco-frame-select tco-watchlist-group';
+    groupSelect.setAttribute('aria-label', 'Active watchlist');
+    groupSelect.style.cssText = 'min-width:0;flex:1;padding:6px 7px;font-size:10px;';
+    const refreshGroupSelect = () => {
+      groupSelect.textContent = '';
+      for (const group of watchlistGroups) {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = `${group.name} · ${group.items.length}`;
+        option.selected = group.id === activeWatchlistId;
+        groupSelect.appendChild(option);
+      }
+      groupSelect.value = activeWatchlistId;
+    };
+    const groupNameInput = document.createElement('input');
+    groupNameInput.type = 'text';
+    groupNameInput.placeholder = 'New watchlist name';
+    groupNameInput.maxLength = 48;
+    groupNameInput.setAttribute('aria-label', 'New watchlist name');
+    groupNameInput.style.cssText = 'display:none;min-width:0;flex:1;border:1px solid var(--vela-border,#303644);border-radius:6px;padding:6px 7px;background:var(--vela-bg,#111319);color:var(--vela-fg-bright);font:10px Inter,ui-sans-serif,system-ui,sans-serif;';
+    const createGroupButton = document.createElement('button');
+    createGroupButton.type = 'button';
+    createGroupButton.textContent = '+';
+    createGroupButton.title = 'Create watchlist';
+    createGroupButton.setAttribute('aria-label', 'Create watchlist');
+    createGroupButton.style.cssText = 'flex:none;border:1px solid var(--vela-border,#303644);border-radius:6px;padding:5px 9px;color:var(--vela-fg-bright);font:700 12px Inter,ui-sans-serif,system-ui,sans-serif;';
+    const renameGroupButton = document.createElement('button');
+    renameGroupButton.type = 'button';
+    renameGroupButton.textContent = 'Rename';
+    renameGroupButton.title = 'Rename active watchlist';
+    renameGroupButton.style.cssText = 'flex:none;border:1px solid var(--vela-border,#303644);border-radius:6px;padding:5px 7px;color:var(--vela-fg-muted);font:9px Inter,ui-sans-serif,system-ui,sans-serif;';
+    const deleteGroupButton = document.createElement('button');
+    deleteGroupButton.type = 'button';
+    deleteGroupButton.textContent = '×';
+    deleteGroupButton.title = 'Delete active watchlist';
+    deleteGroupButton.setAttribute('aria-label', 'Delete active watchlist');
+    deleteGroupButton.style.cssText = 'flex:none;border:1px solid var(--vela-border,#303644);border-radius:6px;padding:4px 8px;color:var(--vela-fg-muted);font:700 13px Inter,ui-sans-serif,system-ui,sans-serif;';
+    const commitNewGroup = () => {
+      const created = createWatchlistGroup(groupNameInput.value, ctx);
+      if (!created) {
+        ctx.toast(watchlistGroups.length >= 12 ? 'A maximum of 12 watchlists is supported.' : 'Enter a watchlist name.', 'info');
+        return;
+      }
+      groupNameInput.value = '';
+      groupNameInput.style.display = 'none';
+      groupSelect.style.display = '';
+      refreshGroupSelect();
+      quoteSubscribe();
+      buildRows();
+    };
+    createGroupButton.addEventListener('click', () => {
+      if (groupNameInput.style.display === 'none') {
+        groupSelect.style.display = 'none';
+        groupNameInput.style.display = '';
+        groupNameInput.focus();
+        createGroupButton.textContent = '✓';
+        createGroupButton.title = 'Save watchlist';
+      } else {
+        commitNewGroup();
+        createGroupButton.textContent = '+';
+        createGroupButton.title = 'Create watchlist';
+      }
+    });
+    groupNameInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitNewGroup();
+        createGroupButton.textContent = '+';
+        createGroupButton.title = 'Create watchlist';
+      } else if (event.key === 'Escape') {
+        groupNameInput.value = '';
+        groupNameInput.style.display = 'none';
+        groupSelect.style.display = '';
+        createGroupButton.textContent = '+';
+        createGroupButton.title = 'Create watchlist';
+      }
+    });
+    groupSelect.addEventListener('change', () => {
+      selectWatchlistGroup(groupSelect.value, ctx);
+      refreshGroupSelect();
+      quoteSubscribe();
+      buildRows();
+    });
+    renameGroupButton.addEventListener('click', () => {
+      const group = activeWatchlistGroup();
+      const name = window.prompt('Rename watchlist', group.name);
+      if (!name?.trim()) return;
+      group.name = name.trim().slice(0, 48);
+      persistWatchlistLocal();
+      ctx.stateChanged?.();
+      refreshGroupSelect();
+    });
+    deleteGroupButton.addEventListener('click', () => {
+      if (activeWatchlistId === 'main') {
+        ctx.toast('The Main watchlist cannot be deleted.', 'info');
+        return;
+      }
+      const group = activeWatchlistGroup();
+      if (!window.confirm(`Delete watchlist "${group.name}"?`)) return;
+      deleteWatchlistGroup(group.id, ctx);
+      refreshGroupSelect();
+      quoteSubscribe();
+      buildRows();
+    });
+    refreshGroupSelect();
+    groupToolbar.append(groupSelect, groupNameInput, createGroupButton, renameGroupButton, deleteGroupButton);
+    root.appendChild(groupToolbar);
+
     const filterInput = document.createElement('input');
     filterInput.className = 'tco-watch-search tco-watchlist-search';
     filterInput.type = 'search';
@@ -2332,6 +2443,34 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (!ref) {
           const row = document.createElement('div');
           row.className = 'tco-watchlist-row';
+          row.draggable = true;
+          row.title = 'Drag to reorder this instrument';
+          row.addEventListener('dragstart', event => {
+            if (sortMode !== 'default') {
+              event.preventDefault();
+              return;
+            }
+            event.dataTransfer?.setData('text/plain', item.symbol);
+            if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+            row.dataset.dragging = '1';
+          });
+          row.addEventListener('dragend', () => { delete row.dataset.dragging; });
+          row.addEventListener('dragover', event => {
+            if (sortMode === 'default') event.preventDefault();
+          });
+          row.addEventListener('drop', event => {
+            if (sortMode !== 'default') return;
+            event.preventDefault();
+            const fromSymbol = event.dataTransfer?.getData('text/plain') || '';
+            const fromIndex = watchlist.findIndex(candidate => candidate.symbol === fromSymbol);
+            const toIndex = watchlist.findIndex(candidate => candidate.symbol === item.symbol);
+            if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+            const next = [...watchlist];
+            const [moved] = next.splice(fromIndex, 1);
+            if (!moved) return;
+            next.splice(toIndex, 0, moved);
+            applyWatchlist(next, ctx);
+          });
 
           const button = document.createElement('button');
           button.type = 'button';
@@ -2502,15 +2641,19 @@ const bookmarksPanel: SidePanelDescriptor = {
       watchlistCloudReady = true;
       if (!document.contains(root)) return;
       if (watchlistMutationRevision !== cloudRevisionAtLoad) {
-        void saveDefaultTerminalWatchlist(watchlist).catch(() => undefined);
+        const main = watchlistGroups.find(group => group.id === 'main');
+        if (main) void saveDefaultTerminalWatchlist(main.items).catch(() => undefined);
         return;
       }
+      const mainGroup = watchlistGroups.find(group => group.id === 'main');
       if (cloudItems && cloudItems.length) {
-        watchlist = normalizeWatchlist(cloudItems);
+        const mainItems = normalizeWatchlist(cloudItems);
+        if (mainGroup) mainGroup.items = mainItems;
+        if (activeWatchlistId === 'main') watchlist = mainItems;
         persistWatchlistLocal();
         watchlistRefreshers.forEach((refreshWatchlist) => refreshWatchlist());
-      } else {
-        void saveDefaultTerminalWatchlist(watchlist).catch(() => undefined);
+      } else if (mainGroup) {
+        void saveDefaultTerminalWatchlist(mainGroup.items).catch(() => undefined);
       }
     }).catch(() => { watchlistCloudReady = true; });
 
