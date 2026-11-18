@@ -12,7 +12,7 @@ const bars: OHLCV[] = Array.from({ length: 80 }, (_, i) => ({
 const output = ichimokuCloud.compute(bars, {});
 const find = (key: string) => output.plots.find((plot) => plot.key === key)!;
 assert.equal(find('conversion').values[8], 54, '9-bar conversion line uses the highest high / lowest low midpoint');
-assert.equal(find('base').values[25], 37.5 + 50, '26-bar base line uses the correct rolling midpoint');
+assert.equal(find('base').values[25], 62.5, '26-bar base line uses the correct rolling midpoint');
 assert.equal(find('spanB').values[51], 50 + 51 - 25.5, '52-bar leading span B uses the correct rolling midpoint');
 assert.equal(find('spanA').offset, 26, 'leading span A is displaced forward');
 assert.equal(find('spanB').offset, 26, 'leading span B is displaced forward');
