@@ -139,6 +139,9 @@ const clampTrack = (n: number): number => Math.max(1, Math.min(GRID_PICKER_MAX, 
 export function layoutForGrid(rows: number, cols: number, i18n?: Translator | null): LayoutDefinition {
     const r = clampTrack(rows);
     const c = clampTrack(cols);
+    if (r * c > WORKSPACE_MAX_CHART_CELLS) {
+        throw new RangeError(`Workspace layouts are limited to ${WORKSPACE_MAX_CHART_CELLS} charts.`);
+    }
     const builtin = GRID_BUILTIN_IDS[`${r}x${c}`];
     const registered = builtin ? registry.get(builtin) : undefined;
     if (registered) return inLanguage(registered, i18n);
