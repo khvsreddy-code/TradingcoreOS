@@ -100,6 +100,10 @@ export function registerBuiltinLayouts(): void {
     registerLayout({ id: '2v', label: msg('workspace.layout.stacked', '2 stacked'), cols: [1], rows: [1, 1], cells: slots(2) });
     registerLayout({ id: '4', label: msg('workspace.layout.grid4', '4 grid'), cols: [1, 1], rows: [1, 1], cells: slots(4) });
     registerLayout({ id: '8', label: msg('workspace.layout.grid8', '8 grid'), cols: [1, 1, 1, 1], rows: [1, 1], cells: slots(8) });
+    // Exact five/seven-slot layouts are used by the duplicate-chart command between
+    // the standard 4/6/8 presets. Their unused grid track remains an intentional gap.
+    registerLayout({ id: 'tco-duplicate-grid-5', label: '5 charts', cols: [1, 1, 1], rows: [1, 1], cells: slots(5) });
+    registerLayout({ id: 'tco-duplicate-grid-7', label: '7 charts', cols: [1, 1, 1, 1], rows: [1, 1], cells: slots(7) });
 }
 
 // ── dynamic layouts (the topbar's grid picker) ──────────────────────────────
