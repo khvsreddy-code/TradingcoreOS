@@ -55,6 +55,27 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
   '1M': 2592000,
 };
 
+const INTRADAY_TIMEFRAME_SECONDS: Readonly<Record<string, number>> = Object.freeze({
+  '1': 60, '1M': 60,
+  '3': 180, '3M': 180,
+  '5': 300, '5M': 300,
+  '10': 600, '10M': 600,
+  '15': 900, '15M': 900,
+  '30': 1800, '30M': 1800,
+  '45': 2700, '45M': 2700,
+  '60': 3600, '60M': 3600, '1H': 3600,
+  '120': 7200, '120M': 7200, '2H': 7200,
+  '240': 14400, '240M': 14400, '4H': 14400,
+});
+
+export function intradayGapTimeframeSeconds(timeframe: string): number | null {
+  const normalized = String(timeframe ?? '').trim().toUpperCase();
+  if (!normalized || normalized === 'D' || normalized === '1D'
+    || normalized === 'W' || normalized === '1W'
+    || normalized === 'M' || normalized === '1MO' || normalized === '1MONTH') return null;
+  return INTRADAY_TIMEFRAME_SECONDS[normalized] ?? null;
+}
+
 const MAX_HISTORY_CANDLES = 50_000;
 const IDLE_HOLD_MS = 30_000;
 const MAX_IDLE_CHART_PLANE_MS = 10 * 60_000;
@@ -506,11 +527,12 @@ export class ChartDataPlane {
     // sequence gap from the transport's local receive counter. Buffer the current
     // tick, reconcile a fresh canonical history window, then replay buffered ticks.
     if (!replaying && hasHistory && !lifecyclePending && this.state.feedStatus === 'connected'
+      && intradayGapTimeframeSeconds(this.timeframe) !== null
       && hasUnexpectedIntradayGap({
         instrumentKey: this.instrumentKey,
         previousTradeTimeMs: this.state.lastAcceptedTradeTimestampMs,
         currentTradeTimeMs: tradeTimeMs,
-        timeframeSeconds: CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
+        timeframeSeconds: intradayGapTimeframeSeconds(this.timeframe)!,
       })) {
       this.state.recoveryPending = true;
       this.liveCandle.bufferTick(tick);
