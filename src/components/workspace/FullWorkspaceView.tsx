@@ -530,7 +530,12 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
     const modelImpliedVolatility = premium != null
       ? impliedVolatility({ ...common, optionPrice: premium })
       : null;
-    const volatility = suppliedIv != null && suppliedIv > 0 ? suppliedIv : modelImpliedVolatility;
+    // The provider's IV is shared by CE/PE at a strike; prefer each leg's
+    // independently solved IV for local Greek fallback. Use shared FYERS IV only
+    // when this leg has no valid premium from which to solve its own volatility.
+    const volatility = modelImpliedVolatility != null && modelImpliedVolatility > 0
+      ? modelImpliedVolatility
+      : suppliedIv;
     if (volatility == null || volatility <= 0) return null;
     const modelGreeks = blackScholes({ ...common, volatility });
     const provider = quote?.providerGreeks || {};
@@ -545,7 +550,9 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
       volatility,
       modelImpliedVolatility,
       premium,
-      source: suppliedIv != null ? 'FYERS SHARED IV' : hasProviderGreeks ? 'FYERS Greeks + MODEL IV' : 'MODEL',
+      source: modelImpliedVolatility != null && modelImpliedVolatility > 0
+        ? (hasProviderGreeks ? 'MODEL IV + FYERS GREEKS' : 'MODEL IV + GREEKS')
+        : suppliedIv != null ? 'FYERS SHARED IV FALLBACK' : 'IV UNAVAILABLE',
       greeks: {
         delta: providerValues.delta ?? modelGreeks.delta,
         gamma: providerValues.gamma ?? modelGreeks.gamma,
