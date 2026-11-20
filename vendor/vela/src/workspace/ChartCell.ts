@@ -1826,6 +1826,10 @@ export class ChartCell {
         // whose drawings belong to its symbol drops them as a symbol switch starts, and the
         // document's drawings are the ones of the market it names.
         if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
+        // The drawings round-trip (untrusted input too) once the switch has STARTED: a chart
+        // whose drawings belong to its symbol drops them as a symbol switch starts, and the
+        // document's drawings are the ones of the market it names.
+        if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
     }
 
     /** Snapshot everything the pool needs to restore this slot later. The market fields
