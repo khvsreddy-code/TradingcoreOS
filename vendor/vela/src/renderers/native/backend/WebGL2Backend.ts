@@ -1129,7 +1129,6 @@ export class WebGL2Backend implements IRenderBackend {
                 const color = candleStickColor(cs, stick, isUp, barColors.get(bar.time) ?? (isUp ? up : down));
                 return scene.priceStyle === 'volumecandles' ? cssWithAlpha(color, relativeVolumeOpacityFromBars(bars, index)) : color;
             }, stick);
-            });
             return;
         }
         const drawBody = tier === 'full';
