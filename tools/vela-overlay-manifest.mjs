@@ -11,8 +11,8 @@ const SNAPSHOT = path.join(VENDOR, 'UPSTREAM-DIFF.json');
 const RELEASE_SNAPSHOT = path.join(VENDOR, 'UPSTREAM-RELEASE-DIFF.json');
 const PATCH_MANIFEST = path.join(VENDOR, 'patches.json');
 const UPSTREAM_BASE_COMMIT = '305521811eabc35c3797e5b6ab58adb25e70c1c7';
-const UPSTREAM_COMMIT = 'f6769868c5c0e78ba7977a5c89640df896a8f2f3';
-const UPSTREAM_TAG = 'v0.10.6';
+const UPSTREAM_COMMIT = '9e6861d67c1fbab13083ec6cd97825852678d5dd';
+const UPSTREAM_TAG = 'v0.10.13';
 const args = new Set(process.argv.slice(2));
 const upstreamArg = process.argv.slice(2).find((arg) => arg.startsWith('--upstream-dir='));
 const upstreamIndex = process.argv.indexOf('--upstream-dir');
@@ -116,7 +116,7 @@ const releaseSnapshot = {
   upstream: {
     repository: 'https://github.com/LuxAlgo/Vela',
     base: { version: '0.10.2', commit: UPSTREAM_BASE_COMMIT },
-    release: { version: '0.10.6', tag: UPSTREAM_TAG, commit: UPSTREAM_COMMIT }
+    release: { version: '0.10.13', tag: UPSTREAM_TAG, commit: UPSTREAM_COMMIT }
   },
   comparison: 'Git blob SHA-1 from exact upstream release trees, restricted to src/',
   counts: releaseCounts,
@@ -170,11 +170,11 @@ const serialized = JSON.stringify(snapshot, null, 2) + '\n';
 if (write) {
   fs.writeFileSync(SNAPSHOT, serialized);
   fs.writeFileSync(RELEASE_SNAPSHOT, releaseSerialized);
-  console.log(`[vela-overlay] wrote vendor diffs: ${modified.length} modified/local overlay entries; upstream 0.10.2→0.10.5 changed ${releaseChanges.length} source files`);
+  console.log(`[vela-overlay] wrote vendor diffs: ${modified.length} modified/local overlay entries; upstream 0.10.2→0.10.13 changed ${releaseChanges.length} source files`);
 } else if (check) {
   if (!fs.existsSync(SNAPSHOT)) fail('vendor/vela/UPSTREAM-DIFF.json is missing; rerun with --write');
   if (fs.readFileSync(SNAPSHOT, 'utf8') !== serialized) fail('UPSTREAM-DIFF.json is stale; rerun with --write against the pinned commit');
   if (!fs.existsSync(RELEASE_SNAPSHOT)) fail('vendor/vela/UPSTREAM-RELEASE-DIFF.json is missing; rerun with --write');
-  if (fs.readFileSync(RELEASE_SNAPSHOT, 'utf8') !== releaseSerialized) fail('UPSTREAM-RELEASE-DIFF.json is stale; rerun with --write against the pinned 0.10.2 and 0.10.5 commits');
+  if (fs.readFileSync(RELEASE_SNAPSHOT, 'utf8') !== releaseSerialized) fail('UPSTREAM-RELEASE-DIFF.json is stale; rerun with --write against the pinned 0.10.2 and 0.10.13 commits');
   console.log(`[vela-overlay] verified local overlay: ${modified.length} modified, ${localOnly.length} local-only; upstream release delta: ${releaseChanges.length} source files`);
 }
