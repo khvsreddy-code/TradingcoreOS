@@ -1882,11 +1882,11 @@ export class VelaWorkspace {
 
     // ── internals ───────────────────────────────────────────────
     private resolveLayout(layout: string | LayoutDefinition): LayoutDefinition {
-        if (typeof layout !== 'string') return layout;
-        // Registered ids first, then the picker's self-describing dynamic ids
-        // (`g3x2`) — those synthesize without touching the registry.
-        const def = ensureLayout(layout);
+        const def = typeof layout === 'string' ? ensureLayout(layout) : layout;
         if (!def) throw new Error(`[vela] unknown workspace layout "${layout}" — register it with registerLayout().`);
+        if (!Array.isArray(def.cells) || def.cells.length > WORKSPACE_MAX_CHART_CELLS) {
+            throw new RangeError(`[vela] workspace layouts are limited to ${WORKSPACE_MAX_CHART_CELLS} charts.`);
+        }
         return def;
     }
 
