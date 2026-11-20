@@ -49,6 +49,11 @@ assert.match(workspace, /this\.relinkIdenticalDrawings\(\)/);
 assert.match(sync, /export function pairIdenticalDrawings/);
 assert.match(inputs, /function isFitControl\(type: InputSchema\['type'\]\)/);
 assert.match(inputs, /type === 'color' \|\| type === 'bool' \|\| type === 'session' \|\| type === 'time'/);
-assert.equal(packageJson.dependencies['@luxalgo/vela-ui'], '^0.4.1',
-  'Vela 0.10.6 still targets UI kit 0.4.1; do not introduce an unrelated kit upgrade');
-console.log('VELA_106_RELEASE_CONTRACT_OK');
+assert.match(provenance, /9e6861d67c1fbab13083ec6cd97825852678d5dd/);
+assert.match(renderer, /drawingActionsProvider/);
+assert.match(renderer, /setDrawingActions/);
+assert.match(renderer, /controller\.setDrawingActions\(this\.drawingActionsProvider\)/);
+assert.match(workspace, /duplicateActiveCell\(\)/);
+assert.equal(packageJson.dependencies['@luxalgo/vela-ui'], '^0.4.3',
+  'Vela 0.10.13 is paired with the extracted UI kit 0.4.3');
+console.log('VELA_1013_RELEASE_CONTRACT_OK');
