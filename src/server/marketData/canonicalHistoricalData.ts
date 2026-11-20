@@ -335,7 +335,14 @@ export async function loadCanonicalHistoryForUser(request: CanonicalHistoryReque
       fyersUnavailableReason: fyersUnavailableReason || undefined,
     },
   };
-  return { symbol: instrumentId, timeframe: spec.interval, bars: loaded.bars, metadata, quote: loaded.quote };
+  return {
+    symbol: instrumentId,
+    timeframe: spec.interval,
+    bars: loaded.bars,
+    metadata,
+    quote: loaded.quote,
+    sessionCalendar: loaded.sessionCalendar,
+  };
 }
 
 export function historicalBarsToColumns(rows: readonly HistoricalCandle[], metadata?: any, quote?: HistoricalQuoteSnapshot | null): HistoricalCandleColumns {
