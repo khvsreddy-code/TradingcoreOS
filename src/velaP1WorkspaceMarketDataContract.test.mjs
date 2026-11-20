@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(path, 'utf8');
 const live = read('src/LiveTradingWorkspace.tsx');
 const workspace = read('vendor/vela/src/workspace/VelaWorkspace.ts');
+const workspaceLayouts = read('vendor/vela/src/workspace/layouts.ts');
+const layoutPicker = read('vendor/vela/src/widget/layout-picker.ts');
 const workspaceContext = read('vendor/vela/src/workspace/context.ts');
 const workspaceReplay = read('vendor/vela/src/workspace/WorkspaceReplay.ts');
 const syncModel = read('vendor/vela/src/workspace/sync.ts');
@@ -22,6 +24,18 @@ assert.match(live, /const gridMatch = \/\^g\(\[1-4\]\)x\(\[1-4\]\)\$\/\.exec\(qu
 assert.match(live, /Number\(gridMatch\[1\]\) \* Number\(gridMatch\[2\]\) <= 8/);
 assert.match(live, /isTcoLayoutPreset|TCO_VELA_LAYOUT_PRESETS/);
 assert.ok(workspace.includes('layoutForGrid('), 'Vela must synthesize native grid layouts');
+assert.match(layoutPicker, /sq\.disabled = true/);
+assert.match(layoutPicker, /chartCount > WORKSPACE_MAX_CHART_CELLS/);
+assert.match(workspaceLayouts, /throw new RangeError/);
+assert.match(workspaceLayouts, /rows \* cols > WORKSPACE_MAX_CHART_CELLS/);
+assert.match(workspace, /def\.cells\.length > WORKSPACE_MAX_CHART_CELLS/);
+assert.match(workspace, /duplicateActiveCell\(\)/);
+assert.match(workspace, /source\.dehydrate\(\)/);
+assert.match(workspace, /structuredClone\(state\)/);
+assert.match(live, /duplicateActiveCell\(\)/);
+assert.match(live, /Maximum of eight charts reached/);
+assert.match(workspaceLayouts, /tco-duplicate-grid-5/);
+assert.match(workspaceLayouts, /tco-duplicate-grid-7/);
 assert.ok(workspace.includes('readonly sync ='), 'Vela sync API remains the canonical workspace sync model');
 assert.ok(workspace.includes('readonly replay: WorkspaceReplay'), 'Vela workspace owns the shared replay controller');
 
