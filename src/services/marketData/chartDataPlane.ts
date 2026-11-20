@@ -16,6 +16,7 @@ import { createCandleDatasetChange, type CandleDatasetChange, type CandleMutatio
 import { chartComputeCoordinator } from './chartComputeCoordinator';
 import { patchImmutableArrayLike } from './persistentArrayLike';
 import { hasUnexpectedIntradayGap } from './liveGapPolicy';
+import { getChartSessionCalendar } from './sessionCalendarStore';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -535,6 +536,12 @@ export class ChartDataPlane {
         previousTradeTimeMs: this.state.lastAcceptedTradeTimestampMs,
         currentTradeTimeMs: tradeTimeMs,
         timeframeSeconds: intradayGapTimeframeSeconds(this.timeframe)!,
+        ...(getChartSessionCalendar(this.instrumentKey) ? {
+          sessionOpenMinute: getChartSessionCalendar(this.instrumentKey)!.sessionOpenMinute,
+          sessionCloseMinute: getChartSessionCalendar(this.instrumentKey)!.sessionCloseMinute,
+          calendarHolidays: getChartSessionCalendar(this.instrumentKey)!.calendarHolidays,
+          specialSessions: getChartSessionCalendar(this.instrumentKey)!.specialSessions,
+        } : {}),
       })) {
       this.state.recoveryPending = true;
       this.liveCandle.bufferTick(tick);
