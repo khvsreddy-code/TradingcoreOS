@@ -683,24 +683,31 @@ export class ChartDataPlane {
       .then(columns => {
         if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) return;
         const correctedBars = columns?.time.length ? this.reconcileRecentColumnarHistory(columns) : 0;
+        const reconciled = Boolean(columns?.time.length);
         const pending = this.liveCandle.drainPendingTicks(generation);
         this.state.recoveryInFlight = false;
         this.state.historyReady = this.canonicalPlane.length > 0;
         this.state.lastAcceptedTradeTimestampMs = undefined;
+        // An empty/invalid response is not proof that the gap was repaired. Keep the
+        // last valid candles and retry after the existing five-second recovery cooldown.
+        this.state.recoveryPending = !reconciled;
         this.replayBufferedTicks(pending);
         this.emit({ type: 'snapshot', reason: 'recovery', correctedBars, snapshot: this.snapshot() });
-        this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        this.emit({ type: 'status', status: reconciled ? 'ready' : 'loading', snapshot: this.snapshot() });
+        if (!reconciled) this.maybeRecoverAfterReconnect();
       })
       .catch(() => {
         if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) return;
         const pending = this.liveCandle.drainPendingTicks(generation);
         this.state.recoveryInFlight = false;
+        this.state.recoveryPending = true;
         this.state.lastAcceptedTradeTimestampMs = undefined;
         this.replayBufferedTicks(pending);
-        // Keep the last valid canonical snapshot. Reconnect recovery failure must
-        // not blank the chart or replace it with an LTP-only candle.
+        // Keep the last valid canonical snapshot. Recovery failure must not blank
+        // the chart or replace it with an LTP-only candle. Retry within cooldown.
         this.emit({ type: 'snapshot', reason: 'recovery', correctedBars: 0, snapshot: this.snapshot() });
-        this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
+        this.maybeRecoverAfterReconnect();
       })
       .finally(() => {
         if (this.liveCandle.isCurrentGeneration(generation)) this.state.recoveryInFlight = false;
