@@ -527,20 +527,24 @@ export class ChartDataPlane {
 
     // A healthy websocket can still miss an intraday bar without disconnecting.
     // Use exchange timestamps for NSE/BSE same-session gaps; never infer a broker
-    // sequence gap from the transport's local receive counter. Buffer the current
-    // tick, reconcile a fresh canonical history window, then replay buffered ticks.
+    // sequence gap from the transport's local receive counter. Resolve the calendar
+    // and timeframe once per tick; no network/database work occurs on this path.
+    const gapTimeframeSeconds = intradayGapTimeframeSeconds(this.timeframe);
+    const sessionCalendar = gapTimeframeSeconds !== null
+      ? getChartSessionCalendar(this.instrumentKey)
+      : undefined;
     if (!replaying && hasHistory && !lifecyclePending && this.state.feedStatus === 'connected'
-      && intradayGapTimeframeSeconds(this.timeframe) !== null
+      && gapTimeframeSeconds !== null
       && hasUnexpectedIntradayGap({
         instrumentKey: this.instrumentKey,
         previousTradeTimeMs: this.state.lastAcceptedTradeTimestampMs,
         currentTradeTimeMs: tradeTimeMs,
-        timeframeSeconds: intradayGapTimeframeSeconds(this.timeframe)!,
-        ...(getChartSessionCalendar(this.instrumentKey) ? {
-          sessionOpenMinute: getChartSessionCalendar(this.instrumentKey)!.sessionOpenMinute,
-          sessionCloseMinute: getChartSessionCalendar(this.instrumentKey)!.sessionCloseMinute,
-          calendarHolidays: getChartSessionCalendar(this.instrumentKey)!.calendarHolidays,
-          specialSessions: getChartSessionCalendar(this.instrumentKey)!.specialSessions,
+        timeframeSeconds: gapTimeframeSeconds,
+        ...(sessionCalendar ? {
+          sessionOpenMinute: sessionCalendar.sessionOpenMinute,
+          sessionCloseMinute: sessionCalendar.sessionCloseMinute,
+          calendarHolidays: sessionCalendar.calendarHolidays,
+          specialSessions: sessionCalendar.specialSessions,
         } : {}),
       })) {
       this.state.recoveryPending = true;
