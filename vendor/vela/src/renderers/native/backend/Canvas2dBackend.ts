@@ -622,7 +622,6 @@ export class Canvas2dBackend implements IRenderBackend {
                 const color = candleStickColor(cs, stick, up, barColors.get(b.time) ?? (up ? paint.up : paint.down));
                 return scene.priceStyle === 'volumecandles' ? withAlpha(color, relativeVolumeOpacityFromBars(bars, index)) : color;
             }, stick);
-            });
             return;
         }
         const drawBody = tier === 'full';
