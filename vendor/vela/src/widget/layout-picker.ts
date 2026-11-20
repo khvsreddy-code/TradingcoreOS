@@ -17,6 +17,7 @@ import { announceSurface } from '@luxalgo/vela-ui/surface-events';
 import { holdForExit, type SurfaceExit } from '@luxalgo/vela-ui/surface-exit';
 import { css } from '@luxalgo/vela-ui/css';
 import { t } from '@luxalgo/vela-ui/t';
+import { WORKSPACE_MAX_CHART_CELLS } from '../core/workspace-layout-limits';
 
 const TEXT = {
     gridSize: msg('widget.layoutPicker.gridSize', '{cols} columns × {rows} rows'),
@@ -91,7 +92,13 @@ const CSS = css`@layer vela.chrome {
     cursor: pointer;
     transition: background ${t.dur.fast} ${t.ease}, border-color ${t.dur.fast} ${t.ease};
 }
-.vela-lp-sq:hover { background: ${t.hover.strong}; border-color: ${t.border.strong}; }
+.vela-lp-sq:hover:not(:disabled) { background: ${t.hover.strong}; border-color: ${t.border.strong}; }
+.vela-lp-sq:disabled {
+    cursor: not-allowed;
+    opacity: 0.32;
+    background: transparent;
+    border-color: ${t.border.faint};
+}
 /* Selected/previewed squares — the shared monochrome selection chip. */
 .vela-lp-sq[data-on='1'] {
     background: ${t.selected.bg};
@@ -192,7 +199,12 @@ export function layoutGridCanvas(doc: Document, i18n?: Translator | null): { el:
             sq.className = 'vela-lp-sq';
             sq.dataset.r = String(r);
             sq.dataset.c = String(c);
+            const chartCount = (r + 1) * (c + 1);
             sq.setAttribute('aria-label', textOf(i18n, TEXT.gridSize, { cols: c + 1, rows: r + 1 }));
+            if (chartCount > WORKSPACE_MAX_CHART_CELLS) {
+                sq.disabled = true;
+                sq.title = `Maximum ${WORKSPACE_MAX_CHART_CELLS} charts`;
+            }
             squares.push(sq);
             el.appendChild(sq);
         }
@@ -341,6 +353,7 @@ export class LayoutPicker {
             if (!sq) return;
             e.preventDefault();
             const { r, c } = this.squarePos(sq);
+            if ((r + 1) * (c + 1) > WORKSPACE_MAX_CHART_CELLS) return;
             this.close();
             this.opts.onSelectGrid(r + 1, c + 1);
         });
@@ -348,6 +361,13 @@ export class LayoutPicker {
             const sq = this.squareAt(e);
             if (!sq) return;
             const { r, c } = this.squarePos(sq);
+            if ((r + 1) * (c + 1) > WORKSPACE_MAX_CHART_CELLS) {
+                if (this.hover) {
+                    this.hover = null;
+                    this.render();
+                }
+                return;
+            }
             if (this.hover?.rows !== r + 1 || this.hover?.cols !== c + 1) {
                 this.hover = { rows: r + 1, cols: c + 1 };
                 this.render();
@@ -457,7 +477,11 @@ export class LayoutPicker {
     private renderPresets(): void {
         const doc = this.doc;
         this.presetsEl.replaceChildren();
-        const presets = this.opts.presets();
+        const presets = this.opts.presets().filter((preset) => {
+            const cellCount = preset.cellAreas?.length
+                ?? (Number.isInteger(preset.rows) && Number.isInteger(preset.cols) ? preset.rows! * preset.cols! : 0);
+            return cellCount === 0 || cellCount <= WORKSPACE_MAX_CHART_CELLS;
+        });
         const graphical = presets.length > 0 && presets.every((p) =>
             Number.isInteger(p.rows) && Number.isInteger(p.cols) &&
             (p.areas?.length ?? 0) === p.rows &&
