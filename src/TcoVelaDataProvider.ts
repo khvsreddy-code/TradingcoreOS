@@ -11,6 +11,7 @@ import { marketLatencyTrace } from './services/core/performance/marketLatencyTra
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { tradingApi, readTradingApiJson } from './services/http/tradingApi';
 import { hasValidFyersSession } from './services/marketData/yahooFallback';
+import { setChartSessionCalendar } from './services/marketData/sessionCalendarStore';
 
 const FALLBACK_SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -272,7 +273,13 @@ type TcoChartDataSourceStatus = Readonly<{
 }>;
 
 type CanonicalHistorySource = 'nse' | 'investiny' | 'fyers' | 'tvdatafeed' | 'cache' | 'none';
-type CanonicalHistoryPayload = { success?: boolean; error?: string; data?: unknown; metadata?: { sourceStatus?: Record<string, unknown> } };
+type CanonicalHistoryPayload = {
+  success?: boolean;
+  error?: string;
+  data?: unknown;
+  metadata?: { sourceStatus?: Record<string, unknown> };
+  sessionCalendar?: unknown;
+};
 const MAX_CANONICAL_HISTORY_BARS = 5_000;
 const BROKER_SESSION_CHECK_MS = 5_000;
 
@@ -375,6 +382,7 @@ async function fetchCanonicalHistoryRows(
     const rows = payload.data.filter((row): row is HistoricalCandle =>
       Boolean(row && typeof row === 'object' && typeof (row as HistoricalCandle).timestamp === 'string'),
     );
+    if (payload.sessionCalendar) setChartSessionCalendar(runtimeSymbol(symbol), payload.sessionCalendar);
     return { rows, requested, source };
   } catch (error) {
     if (signal?.aborted) return null;
