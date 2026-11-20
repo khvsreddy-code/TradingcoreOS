@@ -12,13 +12,24 @@ const SOURCE_TIMEOUT_MS = 10_000;
 const CACHE_TABLE = 'historical_dataset_cache';
 const MAPPING_TABLE = 'historical_instrument_mappings';
 
+export type HistoricalSpecialSession = Readonly<{ date: string; openMinute: number; closeMinute: number }>;
+export type HistoricalSessionCalendar = Readonly<{
+  exchange: string;
+  timezone: string;
+  sessionOpen: string;
+  sessionClose: string;
+  calendarHolidays: readonly string[];
+  calendarComplete: boolean;
+  specialSessions: readonly HistoricalSpecialSession[];
+}>;
+
 export interface HistoricalInstrumentMapping {
   instrumentId: string; fyersSymbol: string; tvSymbol?: string; tvExchange?: string;
   exchange: string; instrumentType: string; contractExpiry?: string | null;
   contractIdentity?: string | null; tvContractIdentity?: string | null; tvFutContract?: number | null;
   timezone: string; sessionOpen: string; sessionClose: string; adjustmentPolicy: string;
   fyersAdjustmentPolicy: string; tvAdjustmentPolicy: string;
-  calendarHolidays: string[]; calendarComplete: boolean; enabled: boolean;
+  calendarHolidays: string[]; calendarComplete: boolean; specialSessions: HistoricalSpecialSession[]; enabled: boolean;
 }
 export interface RecentHistoryRange { fromMs: number; toMs: number; fromDate: string; calendarPolicy: string; }
 export interface BoundedHistoryPageRange extends RecentHistoryRange {
@@ -34,7 +45,12 @@ interface CacheRecord {
   sourcePolicy: string; sourceStatus: Record<string, unknown>; degraded: boolean;
   expiresAt: number; updatedAt: number; quote?: HistoricalQuoteSnapshot | null;
 }
-export interface HistoricalLoadResult { bars: HistoricalCandle[]; metadata: HistoricalDataMetadata; quote: HistoricalQuoteSnapshot | null; }
+export interface HistoricalLoadResult {
+  bars: HistoricalCandle[];
+  metadata: HistoricalDataMetadata;
+  quote: HistoricalQuoteSnapshot | null;
+  sessionCalendar: HistoricalSessionCalendar;
+}
 export interface HistoricalLoadRequest {
   instrumentId: string;
   timeframe: string;
@@ -449,7 +465,18 @@ export class HistoricalDataService {
       fyersAdjustmentPolicy: asText(row.fyers_adjustment_policy, asText(row.adjustment_policy, 'none')),
       tvAdjustmentPolicy: asText(row.tv_adjustment_policy, asText(row.adjustment_policy, 'none')),
       calendarHolidays: Array.isArray(row.calendar_holidays) ? row.calendar_holidays.map(String).filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v)) : [],
-      calendarComplete: row.calendar_complete === true, enabled: row.enabled !== false,
+      calendarComplete: row.calendar_complete === true,
+      specialSessions: Array.isArray(row.special_sessions) ? row.special_sessions.flatMap((value): HistoricalSpecialSession[] => {
+        if (!value || typeof value !== 'object') return [];
+        const session = value as Record<string, unknown>;
+        const date = asText(session.date);
+        const openMinute = Number(session.openMinute ?? session.open_minute);
+        const closeMinute = Number(session.closeMinute ?? session.close_minute);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(openMinute)
+          || !Number.isInteger(closeMinute) || openMinute < 0 || closeMinute > 1440 || closeMinute <= openMinute) return [];
+        return [{ date, openMinute, closeMinute }];
+      }) : [],
+      enabled: row.enabled !== false,
     };
   }
 
@@ -520,7 +547,9 @@ export class HistoricalDataService {
         fyers_adjustment_policy: configured.fyersAdjustmentPolicy ?? configured.fyers_adjustment_policy,
         tv_adjustment_policy: configured.tvAdjustmentPolicy ?? configured.tv_adjustment_policy,
         calendar_holidays: configured.calendarHolidays ?? configured.calendar_holidays,
-        calendar_complete: configured.calendarComplete ?? configured.calendar_complete, enabled: configured.enabled,
+        calendar_complete: configured.calendarComplete ?? configured.calendar_complete,
+        special_sessions: configured.specialSessions ?? configured.special_sessions,
+        enabled: configured.enabled,
       });
       if (mapping.enabled && mapping.fyersSymbol === instrumentId) return this.withSafeTvFallback(mapping);
     }
@@ -541,7 +570,7 @@ export class HistoricalDataService {
         instrumentId, fyersSymbol: instrumentId, ...builtInIndex, instrumentType: 'index',
         timezone: 'Asia/Kolkata', sessionOpen: '09:15', sessionClose: '15:30',
         adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
-        calendarHolidays: [], calendarComplete: false, enabled: true,
+        calendarHolidays: [], calendarComplete: false, specialSessions: [], enabled: true,
       };
     }
 
@@ -558,7 +587,7 @@ export class HistoricalDataService {
         tvSymbol, tvExchange: exchange,
         timezone: 'Asia/Kolkata', sessionOpen: '09:15', sessionClose: '15:30',
         adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
-        calendarHolidays: [], calendarComplete: false, enabled: true,
+        calendarHolidays: [], calendarComplete: false, specialSessions: [], enabled: true,
       };
     }
 
@@ -567,7 +596,7 @@ export class HistoricalDataService {
       instrumentType: /-INDEX$/i.test(instrumentId) ? 'index' : 'unknown',
       timezone: 'Asia/Kolkata', sessionOpen: '09:15', sessionClose: '15:30',
       adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
-      calendarHolidays: [], calendarComplete: false, enabled: true,
+      calendarHolidays: [], calendarComplete: false, specialSessions: [], enabled: true,
     };
   }
 
@@ -806,6 +835,15 @@ export class HistoricalDataService {
     const maxBars = Math.max(1, Math.min(HISTORICAL_MAX_BARS, Math.floor(Number(request.maxBars) || HISTORICAL_MAX_BARS)));
     if (!instrumentId || !timeframe) throw new Error('instrumentId and timeframe are required');
     const mapping = await this.resolveMapping(instrumentId);
+    const sessionCalendar: HistoricalSessionCalendar = {
+      exchange: mapping.exchange,
+      timezone: mapping.timezone,
+      sessionOpen: mapping.sessionOpen,
+      sessionClose: mapping.sessionClose,
+      calendarHolidays: [...mapping.calendarHolidays],
+      calendarComplete: mapping.calendarComplete,
+      specialSessions: mapping.specialSessions.map(session => ({ ...session })),
+    };
     const cacheInstrumentId = mapping.instrumentId || instrumentId;
     const cached = await this.readCache(cacheInstrumentId, timeframe);
 
@@ -951,6 +989,7 @@ export class HistoricalDataService {
         sourceStatus: { cache: { status: 'miss' } }, degraded: pageBars.length === 0, expiresAt: 0, updatedAt: 0,
       };
       return {
+        sessionCalendar,
         bars: toPublicBars(page, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
         metadata: this.metadata(record, page, {
           cacheHit: Boolean(cached && pageBars.length === 0),
@@ -980,6 +1019,7 @@ export class HistoricalDataService {
 
     if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && !cached.bars.length && cached.sourceStatus.noValidatedBars === true) {
       return {
+        sessionCalendar,
         bars: [],
         metadata: this.metadata(cached, [], { cacheHit: true, degraded: true, stale: false }),
         quote: cached.quote || null,
@@ -999,6 +1039,7 @@ export class HistoricalDataService {
         const bars = cached.bars.slice(-maxBars);
         const staleFallback = Boolean(cached.sourceStatus.staleCacheFallback);
         return {
+          sessionCalendar,
           bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
           metadata: this.metadata(cached, bars, { cacheHit: true, stale: staleFallback, degraded: cached.degraded || staleFallback }),
           quote: null,
@@ -1034,6 +1075,7 @@ export class HistoricalDataService {
     }
     const bars = refreshed.bars.slice(-maxBars), stale = refreshed.expiresAt <= Date.now() || Boolean(refreshed.sourceStatus.staleCacheFallback);
     return {
+      sessionCalendar,
       bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
       metadata: this.metadata(refreshed, bars, { stale, degraded: refreshed.degraded || stale }),
       quote: refreshed.quote || null,
