@@ -53,6 +53,7 @@ const contracts = [
   ['options-black-scholes', ['src/optionsBlackScholesContract.test.mjs', true]],
   ['vela-p1-workspace-marketdata', ['src/velaP1WorkspaceMarketDataContract.test.mjs', false]],
   ['live-gap-policy', ['src/liveGapPolicyContract.test.ts', true]],
+  ['chart-session-calendar-store', ['src/services/marketData/sessionCalendarStore.test.ts', true]],
   ['vela-anchored-vwap-math', ['src/velaAnchoredVwapMathContract.test.ts', true]],
   ['vela-manual-scale-inversion', ['src/velaManualScaleInversionContract.test.ts', true]],
   ['vela-timezone-dst', ['src/velaTimeZoneTicksContract.test.ts', true]],
