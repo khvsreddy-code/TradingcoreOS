@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { X, UserRound, Plus, Share2, Maximize2, Minimize2, Camera, LayoutGrid, ArrowLeftRight } from 'lucide-react';
+import { X, UserRound, Plus, Copy, Share2, Maximize2, Minimize2, Camera, LayoutGrid, ArrowLeftRight } from 'lucide-react';
 import { loadVelaWorkspace, registerVelaWorkspaceLayouts } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -1174,6 +1174,16 @@ const browserRuntimeMetrics = useRef({
                 </button>
               );
             })}
+            <button
+              type="button"
+              title={velaAppTabs.length >= 8 ? 'Maximum of eight charts reached' : 'Duplicate active chart, including its indicators and drawings'}
+              aria-label="Duplicate active chart"
+              disabled={!activeVelaAppTabId || velaAppTabs.length >= 8}
+              onClick={() => { workspaceRef.current?.duplicateActiveCell(); }}
+              className="ms-1 mt-1 grid size-7 shrink-0 place-items-center rounded-md text-[#949aa5] transition-colors hover:bg-white/[0.06] hover:text-[#f0f2f7] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#7aa7ff] disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <Copy size={13} strokeWidth={1.8}/>
+            </button>
             <button
               type="button"
               title="Search for a symbol on the active chart"
