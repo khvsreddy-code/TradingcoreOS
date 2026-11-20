@@ -38,6 +38,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         data: columnar ? historicalBarsToColumns([], loaded.metadata, loaded.quote) : [],
         metadata: loaded.metadata,
         quote: loaded.quote,
+        sessionCalendar: loaded.sessionCalendar,
       });
     }
     res.setHeader('Cache-Control', 'private, max-age=10');
@@ -56,6 +57,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       historyCompleteness: loaded.metadata.historyCompleteness,
       metadata: loaded.metadata,
       quote: loaded.quote,
+      sessionCalendar: loaded.sessionCalendar,
     });
   } catch (error: unknown) {
     const sourceStatus = error && typeof error === 'object' ? Number((error as Record<string, unknown>).status || (error as Record<string, unknown>).statusCode) : NaN;
