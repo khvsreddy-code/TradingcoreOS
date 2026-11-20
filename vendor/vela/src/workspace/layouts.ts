@@ -41,6 +41,7 @@ export interface LayoutDefinition {
 /** Grid track sizes overriding a layout's declared weights (splitter drags). */
 // TrackSizes is part of the shared state document (`src/state/document.ts`).
 import type { TrackSizes } from '../state/document';
+import { WORKSPACE_MAX_CHART_CELLS } from '../core/workspace-layout-limits';
 import { svg16 } from '../core/icons';
 
 export type { TrackSizes } from '../state/document';
@@ -108,9 +109,9 @@ export function registerBuiltinLayouts(): void {
 // self-describing (`g3x2`) and `ensureLayout` re-synthesizes them, so persisted picks
 // restore across boots without polluting the plugin registry.
 
-/** Picker canvas bound — dynamic layouts stay within a 4×4 grid (16 cells, the
- *  workspace's dormant-state pool capacity). */
+/** Picker canvas dimension. The shared cell-count limit below narrows valid picks. */
 export const GRID_PICKER_MAX = 4;
+export { WORKSPACE_MAX_CHART_CELLS };
 
 /** Classic preset ids by uniform geometry, so grid picks land on the builtins. */
 const GRID_BUILTIN_IDS: Record<string, string> = {
@@ -161,7 +162,12 @@ export function ensureLayout(id: string): LayoutDefinition | undefined {
     const registered = registry.get(id);
     if (registered) return registered;
     const g = GRID_ID_RE.exec(id);
-    if (g) return layoutForGrid(Number(g[1]), Number(g[2]));
+    if (g) {
+        const rows = Number(g[1]);
+        const cols = Number(g[2]);
+        if (rows * cols > WORKSPACE_MAX_CHART_CELLS) return undefined;
+        return layoutForGrid(rows, cols);
+    }
     return undefined;
 }
 
