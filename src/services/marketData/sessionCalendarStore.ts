@@ -17,6 +17,7 @@ export type ChartSessionCalendar = Readonly<{
 
 const calendars = new Map<string, ChartSessionCalendar>();
 const MAX_SESSION_CALENDARS = 128;
+const SESSION_CALENDAR_TTL_MS = 60 * 60_000;
 
 function minuteOfDay(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1440) return value;
@@ -72,6 +73,10 @@ export function getChartSessionCalendar(symbol: string): ChartSessionCalendar | 
   const key = String(symbol || '').trim().toUpperCase();
   const value = calendars.get(key);
   if (!value) return undefined;
+  if (Date.now() - value.observedAt > SESSION_CALENDAR_TTL_MS) {
+    calendars.delete(key);
+    return undefined;
+  }
   calendars.delete(key);
   calendars.set(key, value);
   return value;
