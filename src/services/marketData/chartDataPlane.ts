@@ -55,25 +55,27 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
   '1M': 2592000,
 };
 
-const INTRADAY_TIMEFRAME_SECONDS: Readonly<Record<string, number>> = Object.freeze({
-  '1': 60, '1M': 60,
-  '3': 180, '3M': 180,
-  '5': 300, '5M': 300,
-  '10': 600, '10M': 600,
-  '15': 900, '15M': 900,
-  '30': 1800, '30M': 1800,
-  '45': 2700, '45M': 2700,
-  '60': 3600, '60M': 3600, '1H': 3600,
-  '120': 7200, '120M': 7200, '2H': 7200,
-  '240': 14400, '240M': 14400, '4H': 14400,
+const INTRADAY_TIMEFRAME_MINUTES: Readonly<Record<string, number>> = Object.freeze({
+  '1': 1, '3': 3, '5': 5, '10': 10, '15': 15, '30': 30,
+  '45': 45, '60': 60, '120': 120, '240': 240,
 });
 
 export function intradayGapTimeframeSeconds(timeframe: string): number | null {
-  const normalized = String(timeframe ?? '').trim().toUpperCase();
-  if (!normalized || normalized === 'D' || normalized === '1D'
-    || normalized === 'W' || normalized === '1W'
-    || normalized === 'M' || normalized === '1MO' || normalized === '1MONTH') return null;
-  return INTRADAY_TIMEFRAME_SECONDS[normalized] ?? null;
+  const raw = String(timeframe ?? '').trim();
+  if (!raw || raw === 'D' || raw === '1D' || raw === 'W' || raw === '1W'
+    || raw === 'M' || raw === '1M') return null;
+
+  // Workspace defaults use minute counts ("1", "5", "60"). Some provider
+  // adapters use lowercase m suffixes. Keep case significant so "1M" remains
+  // a monthly interval rather than being misread as one minute.
+  const minutes = INTRADAY_TIMEFRAME_MINUTES[raw]
+    ?? (/^\d+m$/.test(raw) ? Number(raw.slice(0, -1)) : undefined);
+  if (minutes !== undefined && Number.isFinite(minutes) && minutes > 0 && minutes <= 240) {
+    return minutes * 60;
+  }
+
+  const hours: Record<string, number> = { '1H': 3600, '2H': 7200, '4H': 14400 };
+  return hours[raw.toUpperCase()] ?? null;
 }
 
 const MAX_HISTORY_CANDLES = 50_000;
