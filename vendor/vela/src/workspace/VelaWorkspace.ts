@@ -72,6 +72,7 @@ import { buildContext, type WorkspaceWidgetContext } from './context';
 import { WorkspaceReplay } from './WorkspaceReplay';
 import {
     registerBuiltinLayouts,
+    registerLayout,
     layouts,
     gridStyles,
     activeAfterLayout,
@@ -997,6 +998,77 @@ export class VelaWorkspace {
      *  pooled, not live, so they drop out here. */
     cells(): ChartCell[] {
         return this.order.map((id) => this.cellsById.get(id)).filter((c): c is ChartCell => c != null);
+    }
+
+    /**
+     * Duplicate the active chart into the next workspace slot.
+     *
+     * The new cell receives a detached snapshot of its source cell (market,
+     * timeframe, indicators/inputs, drawings, renderer config, scales and host
+     * persistence state). Its identity is new, so subsequent edits stay independent.
+     */
+    duplicateActiveCell(): string | null {
+        if (this.destroyed || this.monoLayout) return null;
+        const currentCount = this.def.cells.length;
+        if (currentCount >= WORKSPACE_MAX_CHART_CELLS) {
+            this.toastHost.show('A workspace supports at most ' + WORKSPACE_MAX_CHART_CELLS + ' charts.', 'info');
+            return null;
+        }
+        const source = this.activeId ? this.cellsById.get(this.activeId) : undefined;
+        if (!source) return null;
+
+        let snapshot: PooledCellState;
+        try {
+            const state = source.dehydrate();
+            snapshot = typeof structuredClone === 'function'
+                ? structuredClone(state)
+                : JSON.parse(JSON.stringify(state)) as PooledCellState;
+        } catch (error) {
+            this.toastHost.show('This chart could not be duplicated because its saved state is not serializable.', 'error');
+            console.warn('[vela] chart duplication snapshot failed:', error);
+            return null;
+        }
+
+        const newId = nextAutoCellId(new Set([
+            ...this.order,
+            ...this.pool.keys(),
+            ...this.cellsById.keys(),
+        ]));
+        const previousOrder = [...this.order];
+        const targetCount = currentCount + 1;
+        const nextLayout = this.duplicateLayoutForCount(targetCount);
+
+        // Put the copied state at the first new slot, ahead of older dormant cells.
+        // setLayout() then hydrates it using the regular Vela cell lifecycle.
+        this.poolSet(newId, snapshot);
+        this.order.splice(currentCount, 0, newId);
+        try {
+            this.setLayout(nextLayout);
+            this.setActiveCell(newId);
+            return newId;
+        } catch (error) {
+            this.pool.delete(newId);
+            this.order = previousOrder;
+            throw error;
+        }
+    }
+
+    /** A compact rectangular geometry with exactly count live slots. */
+    private duplicateLayoutForCount(count: number): LayoutDefinition {
+        const rows = count <= 3 ? 1 : 2;
+        const cols = Math.ceil(count / rows);
+        const base = layoutForGrid(rows, cols, this.localeState);
+        if (base.cells.length === count) return base;
+
+        const id = 'tco-duplicate-grid-' + count;
+        const definition: LayoutDefinition = {
+            ...base,
+            id,
+            label: count + ' charts',
+            cells: base.cells.slice(0, count),
+        };
+        registerLayout({ ...definition, label: definition.label });
+        return definition;
     }
 
     /** The ACTIVE cell — the one the shared chrome reflects and acts on. */
