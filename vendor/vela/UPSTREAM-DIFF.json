@@ -3,14 +3,14 @@
   "generatedBy": "tools/vela-overlay-manifest.mjs",
   "upstream": {
     "repository": "https://github.com/LuxAlgo/Vela",
-    "tag": "v0.10.6",
-    "commit": "f6769868c5c0e78ba7977a5c89640df896a8f2f3"
+    "tag": "v0.10.13",
+    "commit": "9e6861d67c1fbab13083ec6cd97825852678d5dd"
   },
   "comparison": "Git blob SHA-1; only src/ is compared so local provenance/docs remain separate",
   "counts": {
-    "identical": 334,
-    "modified": 59,
-    "localOnly": 79,
+    "identical": 326,
+    "modified": 67,
+    "localOnly": 82,
     "upstreamOnly": 0
   },
   "identical": [
@@ -23,16 +23,32 @@
       "blob": "5f98e9c75fd993b90de184b1c2fa39cb0cdd22bb"
     },
     {
-      "path": "src/chart-types/builtins.ts",
-      "blob": "f6eeec70cf204cf13f21f06d44379871efc557a8"
-    },
-    {
       "path": "src/chart-types/labels.ts",
       "blob": "7fd28adaeaada951b2fc71740077ae8be6af99a7"
     },
     {
       "path": "src/chart-types/registry.ts",
       "blob": "96912c2e9343375d88fd0c7468332e45978a50ff"
+    },
+    {
+      "path": "src/core/DataControl.ts",
+      "blob": "56fc70fb43f6443cf34fb9bbff8831b1f40b6902"
+    },
+    {
+      "path": "src/core/DrawingsControl.ts",
+      "blob": "f8eaa2f14346090bdfbb43a533fd615e0c2e4cc8"
+    },
+    {
+      "path": "src/core/MarksControl.ts",
+      "blob": "f55020ac44655b78c0707c5aade823e9aca84ad0"
+    },
+    {
+      "path": "src/core/PanesControl.ts",
+      "blob": "aa2a8c0b0c3505fac1aebb54a9b972cc78360d24"
+    },
+    {
+      "path": "src/core/ReplayControl.ts",
+      "blob": "65f4c8563dd0a011cfaa8d74affe7334cf94dec3"
     },
     {
       "path": "src/core/color.ts",
@@ -43,8 +59,8 @@
       "blob": "130f4c60ea716234322543b078d2d7e13261ef4f"
     },
     {
-      "path": "src/core/DataControl.ts",
-      "blob": "56fc70fb43f6443cf34fb9bbff8831b1f40b6902"
+      "path": "src/core/drawings/DrawingHistory.ts",
+      "blob": "9c5d7480d0a8c09aef0b482278fb36f6f72ccb0d"
     },
     {
       "path": "src/core/drawings/defaults.ts",
@@ -53,18 +69,6 @@
     {
       "path": "src/core/drawings/document.ts",
       "blob": "2265676d364e18fd360058bdb4ff499f69c048fa"
-    },
-    {
-      "path": "src/core/drawings/Drawing.ts",
-      "blob": "83a8dd9df914ea6671fc5ad6871985f481774756"
-    },
-    {
-      "path": "src/core/drawings/DrawingHistory.ts",
-      "blob": "9c5d7480d0a8c09aef0b482278fb36f6f72ccb0d"
-    },
-    {
-      "path": "src/core/drawings/DrawingStore.ts",
-      "blob": "0d547302425776e5b74b5ad63b7d945605991d40"
     },
     {
       "path": "src/core/drawings/effectiveColor.ts",
@@ -455,10 +459,6 @@
       "blob": "cc92a6c15f9099c9cf48adbb93b917396f346bce"
     },
     {
-      "path": "src/core/DrawingsControl.ts",
-      "blob": "c80e781e9a862dd62f316eaf1ade2976bb37d2a9"
-    },
-    {
       "path": "src/core/engine/DrawingSeriesService.ts",
       "blob": "ed5a176adcfeb747285eb58f32540c6ee91bdd7f"
     },
@@ -476,7 +476,7 @@
     },
     {
       "path": "src/core/events/types.ts",
-      "blob": "6834aadc5c4fc3b2f5b0c5bb5766a2929ace97ed"
+      "blob": "66c46943c1babbad44a17d581bd5878f457be1ad"
     },
     {
       "path": "src/core/format/calendar.ts",
@@ -539,12 +539,12 @@
       "blob": "018d2152440ad67f04ceff7c29a5efd71e8a9df8"
     },
     {
-      "path": "src/core/marks/index.ts",
-      "blob": "89539139cb3bf9cf101828b1d53dd5cf7c11dfa0"
-    },
-    {
       "path": "src/core/marks/MarksController.ts",
       "blob": "a6a197279902b4536452e7fbe46b5ea5c2f6655f"
+    },
+    {
+      "path": "src/core/marks/index.ts",
+      "blob": "89539139cb3bf9cf101828b1d53dd5cf7c11dfa0"
     },
     {
       "path": "src/core/marks/types.ts",
@@ -553,10 +553,6 @@
     {
       "path": "src/core/marks/visibility.ts",
       "blob": "c4e2f78a113a7b99388f16529fb6c0c7efc57fdb"
-    },
-    {
-      "path": "src/core/MarksControl.ts",
-      "blob": "f55020ac44655b78c0707c5aade823e9aca84ad0"
     },
     {
       "path": "src/core/model/drawings.ts",
@@ -568,7 +564,7 @@
     },
     {
       "path": "src/core/model/inputs.ts",
-      "blob": "eb28269a1f1034170a0fe00332649124bd1658e9"
+      "blob": "9b286dead1649d75d7ccb379135a8cc3b3db297c"
     },
     {
       "path": "src/core/model/ohlcv.ts",
@@ -595,16 +591,16 @@
       "blob": "e075d9b92152efc8234eb5920b7b1806f89013ba"
     },
     {
+      "path": "src/core/native-indicators/NativeIndicator.ts",
+      "blob": "d31c016c8e808753fded0d45982a30095874ac6a"
+    },
+    {
       "path": "src/core/native-indicators/classics/averages.ts",
-      "blob": "8ab59fdfc8db0c7e0d14ed9b9ad4308e65957a46"
+      "blob": "d9b828726e1dff7c0b6b436f45dd7beb88efd9a4"
     },
     {
       "path": "src/core/native-indicators/classics/bands.ts",
-      "blob": "3ecd57cf79433757a29d10a9d6e5bd8a8d00671d"
-    },
-    {
-      "path": "src/core/native-indicators/classics/define.ts",
-      "blob": "2037528d0199ae63e4853e40319ea29a002284f0"
+      "blob": "d8fa328d1ab57387115ee4c6069994ca93f2a46a"
     },
     {
       "path": "src/core/native-indicators/classics/index.ts",
@@ -616,31 +612,31 @@
     },
     {
       "path": "src/core/native-indicators/classics/math.ts",
-      "blob": "88850aae36e6977e85410d923ce739dc6dc469fc"
+      "blob": "e43c160b0386517a448902817df3fda2bc4a7ff8"
     },
     {
       "path": "src/core/native-indicators/classics/oscillators.ts",
-      "blob": "b5a3350b7f9c4c004aa7d95fc7ba08a6b1e897b6"
+      "blob": "308738deb1a1e9265c30c215b4ce2bfca40e4e11"
     },
     {
       "path": "src/core/native-indicators/classics/overlays.ts",
-      "blob": "ec3d5325ed940930bfffb16ded57fd92c6c24950"
+      "blob": "350ea4c9abd3672012e5e7cf67fcf3f1df08810e"
     },
     {
       "path": "src/core/native-indicators/classics/shared.ts",
-      "blob": "31bf3c9faee3c991fa89351f0d327fa53f0cf3b1"
+      "blob": "7d7a4fb44b795413ed739914cc5b40331cd647da"
     },
     {
       "path": "src/core/native-indicators/classics/trend.ts",
-      "blob": "57750d79e7f54374ce7c21c34e8fb8d894e643dc"
+      "blob": "65ba3d383cea74748c5278900118aa9d3c07f1da"
     },
     {
       "path": "src/core/native-indicators/classics/volatility.ts",
-      "blob": "056b3977043b5b03fad59aa3ac611c5c4320cdc9"
+      "blob": "96246e96d43a08a48b1d7a8a57f014eb5d2a1c42"
     },
     {
       "path": "src/core/native-indicators/classics/volume.ts",
-      "blob": "73f8d047e9cfbaeb0c9bc7eb770b0aee30ff693d"
+      "blob": "82cc8e768f7ac3abb9b97ad11a9d637e5bd5ca88"
     },
     {
       "path": "src/core/native-indicators/index.ts",
@@ -651,32 +647,24 @@
       "blob": "95e9e47b6a56a747f18cab8066187a89a196be1a"
     },
     {
-      "path": "src/core/native-indicators/NativeIndicator.ts",
-      "blob": "d31c016c8e808753fded0d45982a30095874ac6a"
+      "path": "src/core/native-indicators/volume/VolumeIndicator.ts",
+      "blob": "92e2b168e4c0a03dc27829e1a578439bf878fe46"
     },
     {
       "path": "src/core/native-indicators/volume/index.ts",
       "blob": "a66704421310df3555675623c914718ae6d658a9"
     },
     {
-      "path": "src/core/native-indicators/volume/VolumeIndicator.ts",
-      "blob": "92e2b168e4c0a03dc27829e1a578439bf878fe46"
+      "path": "src/core/native-indicators/vpvr/VpvrIndicator.ts",
+      "blob": "430b9f4047f99a5b207e3e6f24afda9844d08397"
     },
     {
       "path": "src/core/native-indicators/vpvr/index.ts",
       "blob": "d0cb4fa214a2e8312ce6282c29bf33788d195ca0"
     },
     {
-      "path": "src/core/native-indicators/vpvr/VpvrIndicator.ts",
-      "blob": "430b9f4047f99a5b207e3e6f24afda9844d08397"
-    },
-    {
       "path": "src/core/palette.ts",
       "blob": "d39f0546c882deaf37aa8a5c127e8d1d7b99d9ab"
-    },
-    {
-      "path": "src/core/PanesControl.ts",
-      "blob": "aa2a8c0b0c3505fac1aebb54a9b972cc78360d24"
     },
     {
       "path": "src/core/price-styles/BarTransform.ts",
@@ -689,10 +677,6 @@
     {
       "path": "src/core/renderer-defaults.ts",
       "blob": "b088c2d573e951a4dcd99ad855a9d912b41984e3"
-    },
-    {
-      "path": "src/core/ReplayControl.ts",
-      "blob": "65f4c8563dd0a011cfaa8d74affe7334cf94dec3"
     },
     {
       "path": "src/core/replayTicks.ts",
@@ -731,24 +715,24 @@
       "blob": "e516338c6b525db1d044d34e74d310b7df069331"
     },
     {
-      "path": "src/data/providers/binance/index.ts",
-      "blob": "389e8a043827b7ef60a84deb5916ed2520c717a3"
-    },
-    {
       "path": "src/data/providers/binance/RateGate.ts",
       "blob": "b74203885f1b905d35e17fa884812e0706b8014c"
+    },
+    {
+      "path": "src/data/providers/binance/index.ts",
+      "blob": "389e8a043827b7ef60a84deb5916ed2520c717a3"
     },
     {
       "path": "src/data/providers/coinbase/CoinbaseProvider.ts",
       "blob": "3c710bb76eb161492b5ffb9b19cfdf1eefbbfa7a"
     },
     {
-      "path": "src/data/providers/coinbase/index.ts",
-      "blob": "0e5371929119247b30f83eb2decfc61d244a7958"
-    },
-    {
       "path": "src/data/providers/coinbase/RequestGate.ts",
       "blob": "30128e44bf8aef0b144678bdf1441136b91608f1"
+    },
+    {
+      "path": "src/data/providers/coinbase/index.ts",
+      "blob": "0e5371929119247b30f83eb2decfc61d244a7958"
     },
     {
       "path": "src/data/providers/hyperliquid/HyperliquidProvider.ts",
@@ -772,7 +756,7 @@
     },
     {
       "path": "src/locales/ar.json",
-      "blob": "ed9da433972d522c291f52ddc246bac52c65e848"
+      "blob": "3c954d349561e91a387dc7d2f29e267ea49922d9"
     },
     {
       "path": "src/locales/ar.ts",
@@ -780,11 +764,11 @@
     },
     {
       "path": "src/locales/catalog.d.ts",
-      "blob": "8c6469a177681258f135f3c9abef8062794db6c4"
+      "blob": "d37be53007b865388fa2f855f903ec29a1be0fa6"
     },
     {
       "path": "src/locales/de.json",
-      "blob": "c4b673cc73b43499dc65347377939b3102354376"
+      "blob": "bc525ffb0e5388e59e3ddc73c04c02478a422bbc"
     },
     {
       "path": "src/locales/de.ts",
@@ -792,7 +776,7 @@
     },
     {
       "path": "src/locales/en.json",
-      "blob": "9d500b80653126b16f0a6875c6ed4751a12e6583"
+      "blob": "4ba5fdd5164f8d55b13e45149c1a63e20872ff47"
     },
     {
       "path": "src/locales/en.ts",
@@ -800,7 +784,7 @@
     },
     {
       "path": "src/locales/es.json",
-      "blob": "97ee1b906c59eea05fc78cba731a4bbccb76c534"
+      "blob": "32cc1bcd597e44a79d0712f7d4c8f7923ac61529"
     },
     {
       "path": "src/locales/es.ts",
@@ -808,7 +792,7 @@
     },
     {
       "path": "src/locales/fr.json",
-      "blob": "27fa1f2474c11748de59e6d8851ed6e6c526a9c4"
+      "blob": "cb2c12cc1e643589207430cd37c8609ebd53bbf6"
     },
     {
       "path": "src/locales/fr.ts",
@@ -816,7 +800,7 @@
     },
     {
       "path": "src/locales/he.json",
-      "blob": "5144a26aefd3c21769a5ac8ff1c85a2cf4bbd9ef"
+      "blob": "4c992f869bf9b70e66363ad009bea98a552a247a"
     },
     {
       "path": "src/locales/he.ts",
@@ -824,7 +808,7 @@
     },
     {
       "path": "src/locales/hi.json",
-      "blob": "0a3f01dfbea37c6319607c08ae856fabd999a2e8"
+      "blob": "bf503380cc4ea239d093f7946a4b552d48de4ecb"
     },
     {
       "path": "src/locales/hi.ts",
@@ -832,7 +816,7 @@
     },
     {
       "path": "src/locales/id.json",
-      "blob": "ce86cebfcbb4b0e8f32e271c902f4814fb545b0d"
+      "blob": "bb49c028a3fe7d946f870ce413a212218ff98f13"
     },
     {
       "path": "src/locales/id.ts",
@@ -840,7 +824,7 @@
     },
     {
       "path": "src/locales/it.json",
-      "blob": "964729b6160dc4f668a9889b5e0469f2c9512f6f"
+      "blob": "b4cd35817cd984a7b0b20a200a43f5efeb14bc93"
     },
     {
       "path": "src/locales/it.ts",
@@ -848,7 +832,7 @@
     },
     {
       "path": "src/locales/ja.json",
-      "blob": "8ac786d2e1d5bd7dfd83555a7cc11857e0c7b4e4"
+      "blob": "7152db83a6426e902b5cc4c3553ab4248e928d06"
     },
     {
       "path": "src/locales/ja.ts",
@@ -856,7 +840,7 @@
     },
     {
       "path": "src/locales/ko.json",
-      "blob": "b51258777068adbe0f8c385ee05690fafc1b6468"
+      "blob": "eaf89d59c8a50a3ed59a5c2d6c16f1eecebcc870"
     },
     {
       "path": "src/locales/ko.ts",
@@ -864,7 +848,7 @@
     },
     {
       "path": "src/locales/ms.json",
-      "blob": "c24aba5e8399ae9d53b0c4ea20af130b63a0c225"
+      "blob": "ac9333dac723b92e88ae398678bec73c00703982"
     },
     {
       "path": "src/locales/ms.ts",
@@ -872,7 +856,7 @@
     },
     {
       "path": "src/locales/pl.json",
-      "blob": "827ee31c7db59fa856dcc6a025f1509df3608b63"
+      "blob": "a8859672a87d65cadc7b899bff82b083b77272fb"
     },
     {
       "path": "src/locales/pl.ts",
@@ -880,7 +864,7 @@
     },
     {
       "path": "src/locales/pt-BR.json",
-      "blob": "4783a59d43f9eed3cb46521c448caa804c413e3c"
+      "blob": "43ce7fdd34c085fdcac057f24f42e076279e2b07"
     },
     {
       "path": "src/locales/pt-BR.ts",
@@ -888,7 +872,7 @@
     },
     {
       "path": "src/locales/ru.json",
-      "blob": "0921330be668d4de9eb860e1b378ce66420ca178"
+      "blob": "25560d719efa534033f6e9a75269d57b539a1cae"
     },
     {
       "path": "src/locales/ru.ts",
@@ -896,7 +880,7 @@
     },
     {
       "path": "src/locales/th.json",
-      "blob": "dccb7a3165ca1a5c6aa1bf557f8ecaef6914d67f"
+      "blob": "502972e27a5dd1c4f0218f54a34ed3e6aec6e943"
     },
     {
       "path": "src/locales/th.ts",
@@ -904,7 +888,7 @@
     },
     {
       "path": "src/locales/tr.json",
-      "blob": "eac0ddb50eb258be2c6f5bdc26e6ee9c46db2aeb"
+      "blob": "73ef3b094dd955fc96c1d3eb0efd87d8284c10d7"
     },
     {
       "path": "src/locales/tr.ts",
@@ -912,7 +896,7 @@
     },
     {
       "path": "src/locales/vi.json",
-      "blob": "da61f3f1e28ce1a5fe6e076939517ade016862f3"
+      "blob": "9464f6f05c7c13b495ec5c239c9adce33045bf5b"
     },
     {
       "path": "src/locales/vi.ts",
@@ -920,7 +904,7 @@
     },
     {
       "path": "src/locales/zh-Hans.json",
-      "blob": "3291c67c15ac5ff997d017130ba87cfa669c0a14"
+      "blob": "64abbaf1215395ca98a88be81fb2cf83da8709a5"
     },
     {
       "path": "src/locales/zh-Hans.ts",
@@ -928,7 +912,7 @@
     },
     {
       "path": "src/locales/zh-Hant.json",
-      "blob": "689fc57a2c22077c9b959f547239a115f94d6139"
+      "blob": "ca59f77ead68d1116f83d9025d36b34cffcceb7c"
     },
     {
       "path": "src/locales/zh-Hant.ts",
@@ -936,15 +920,11 @@
     },
     {
       "path": "src/plugin.ts",
-      "blob": "6223287b9a70e81488dc0ffa6ed0785f57f9c926"
+      "blob": "720c4a1c509562701abdc3073d4031f4b81ba6fb"
     },
     {
       "path": "src/renderers/native/backdrop/BackdropRenderer.ts",
-      "blob": "061bd357f312f5e1e75b93ba5cb1f3614a4a5799"
-    },
-    {
-      "path": "src/renderers/native/backend/candle-lod.ts",
-      "blob": "64ea63524e184315a9aafea7dbd5f6315c1945c1"
+      "blob": "3022660248deda1edd2cedffb60f90cc373f04dc"
     },
     {
       "path": "src/renderers/native/backend/close-styles.ts",
@@ -955,24 +935,8 @@
       "blob": "f4f5f597e8e60d1bbf62834da67f3b51dd9a4c56"
     },
     {
-      "path": "src/renderers/native/backend/IRenderBackend.ts",
-      "blob": "f1c926b2cf5744217daa4ee84084ba27ceabd5d9"
-    },
-    {
-      "path": "src/renderers/native/capabilities.ts",
-      "blob": "053083faa7dd4db4b9a6042a6ad2bc2ffc511bc3"
-    },
-    {
-      "path": "src/renderers/native/chrome/axisLayout.ts",
-      "blob": "e52503a3f5258e8be76c55e1f6c71e570b673248"
-    },
-    {
       "path": "src/renderers/native/chrome/AxisScaleButtons.ts",
       "blob": "36e5d9badb30c29dd1e50125123bcc9f56f2656b"
-    },
-    {
-      "path": "src/renderers/native/chrome/contrast.ts",
-      "blob": "87fe208874fb56a9973a7c2ed566d42c4ee50e59"
     },
     {
       "path": "src/renderers/native/chrome/CrosshairRenderer.ts",
@@ -983,20 +947,28 @@
       "blob": "63e36093ea1d637e650a6139c9e5ff449c4924ad"
     },
     {
-      "path": "src/renderers/native/chrome/marks/layout.ts",
-      "blob": "6e7b008b0848ecb192985722fbc12a8046a603aa"
+      "path": "src/renderers/native/chrome/PaneControls.ts",
+      "blob": "e954188a7b49275503381cd76c7c5ca08cf3b443"
+    },
+    {
+      "path": "src/renderers/native/chrome/axisLayout.ts",
+      "blob": "e52503a3f5258e8be76c55e1f6c71e570b673248"
+    },
+    {
+      "path": "src/renderers/native/chrome/contrast.ts",
+      "blob": "87fe208874fb56a9973a7c2ed566d42c4ee50e59"
     },
     {
       "path": "src/renderers/native/chrome/marks/MarkPopover.ts",
       "blob": "021f090c2c972cd15011464de769541e479be57c"
     },
     {
-      "path": "src/renderers/native/chrome/marks/paint.ts",
-      "blob": "01187ca440e39a375080a760a7bd2dd470ae8fb0"
+      "path": "src/renderers/native/chrome/marks/layout.ts",
+      "blob": "6e7b008b0848ecb192985722fbc12a8046a603aa"
     },
     {
-      "path": "src/renderers/native/chrome/PaneControls.ts",
-      "blob": "e954188a7b49275503381cd76c7c5ca08cf3b443"
+      "path": "src/renderers/native/chrome/marks/paint.ts",
+      "blob": "01187ca440e39a375080a760a7bd2dd470ae8fb0"
     },
     {
       "path": "src/renderers/native/chrome/priceAxisTicks.ts",
@@ -1023,12 +995,16 @@
       "blob": "aaf2e66e448ece56591df2cc3ebaa072f2cb5346"
     },
     {
-      "path": "src/renderers/native/core/layerStacking.ts",
-      "blob": "76a4f531d4c77432bc1f534f063d888ccc4108d3"
+      "path": "src/renderers/native/core/Scheduler.ts",
+      "blob": "6d0a0b3458485d48253bcf08236461ed08e43f95"
     },
     {
-      "path": "src/renderers/native/core/manualScale.ts",
-      "blob": "744b7ec92abae374ddd89af3c4c29f42cd89f31e"
+      "path": "src/renderers/native/core/ViewportState.ts",
+      "blob": "89930f893b69ba33cff8f7a56446ab9fdd91768c"
+    },
+    {
+      "path": "src/renderers/native/core/layerStacking.ts",
+      "blob": "76a4f531d4c77432bc1f534f063d888ccc4108d3"
     },
     {
       "path": "src/renderers/native/core/overlayStack.ts",
@@ -1041,14 +1017,6 @@
     {
       "path": "src/renderers/native/core/plotDirection.ts",
       "blob": "8ce3a2430ff70077b54494fdff54eeaf1aabffb9"
-    },
-    {
-      "path": "src/renderers/native/core/Scheduler.ts",
-      "blob": "6d0a0b3458485d48253bcf08236461ed08e43f95"
-    },
-    {
-      "path": "src/renderers/native/core/ViewportState.ts",
-      "blob": "89930f893b69ba33cff8f7a56446ab9fdd91768c"
     },
     {
       "path": "src/renderers/native/drawings/DrawingHitTester.ts",
@@ -1064,7 +1032,7 @@
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPopup.ts",
-      "blob": "23d569e1f0f82f953f5bd584b418edb5712c63ed"
+      "blob": "756205d57d300f321bde146b6d92ff2256002314"
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsSections.ts",
@@ -1083,12 +1051,16 @@
       "blob": "de1fdc41f10401c06779f05fad24f7cbd386a4e0"
     },
     {
+      "path": "src/renderers/native/volume/VolumeRenderer.ts",
+      "blob": "b8439b71b34a5b2813e9082d17eb7a9226e7f60f"
+    },
+    {
       "path": "src/renderers/native/volume/paintVolume.ts",
       "blob": "a9b84941f0ad1c2bb7ccbfea894d97a78b2c5b63"
     },
     {
-      "path": "src/renderers/native/volume/VolumeRenderer.ts",
-      "blob": "b8439b71b34a5b2813e9082d17eb7a9226e7f60f"
+      "path": "src/renderers/native/vpvr/VpvrRenderer.ts",
+      "blob": "60c722eb7fc5d1be914c5fc9b9b657822414287c"
     },
     {
       "path": "src/renderers/native/vpvr/paintVpvr.ts",
@@ -1099,12 +1071,28 @@
       "blob": "0adc6ac8d7ddd647581435bd86beba58c3983554"
     },
     {
-      "path": "src/renderers/native/vpvr/VpvrRenderer.ts",
-      "blob": "60c722eb7fc5d1be914c5fc9b9b657822414287c"
+      "path": "src/renderers/shared/DrawingSceneRenderer.ts",
+      "blob": "77d9b87893ca45c256344a84dd20919268cd88c1"
+    },
+    {
+      "path": "src/renderers/shared/IndicatorInputsDialog.ts",
+      "blob": "6b395737a0a85b065d5cba55b9d3c0e704e4a64c"
+    },
+    {
+      "path": "src/renderers/shared/InputsUI.ts",
+      "blob": "6578109fa9bfb7a8cec105f96580d1eb3ba3e75d"
+    },
+    {
+      "path": "src/renderers/shared/TableCanvasRenderer.ts",
+      "blob": "32453a353ad299dc10189722c7bf70ea9e0b8c42"
+    },
+    {
+      "path": "src/renderers/shared/TableOverlay.ts",
+      "blob": "0adf04d14c50a0d3112f0d1816662b682036d283"
     },
     {
       "path": "src/renderers/shared/chrome-tooltip.ts",
-      "blob": "0b8850c0398e3c32eac889b62858ff6b8f7d9e9d"
+      "blob": "85e51d7251c0e324973af55d89e5d2db0bd17335"
     },
     {
       "path": "src/renderers/shared/dom-raster.ts",
@@ -1115,28 +1103,8 @@
       "blob": "26101c1af281b562fcbd3093a0b981a7db76a8de"
     },
     {
-      "path": "src/renderers/shared/DrawingSceneRenderer.ts",
-      "blob": "77d9b87893ca45c256344a84dd20919268cd88c1"
-    },
-    {
-      "path": "src/renderers/shared/IndicatorInputsDialog.ts",
-      "blob": "c34214d5dd727b6c4d2bc8c367e29109c5c14030"
-    },
-    {
-      "path": "src/renderers/shared/InputsUI.ts",
-      "blob": "6578109fa9bfb7a8cec105f96580d1eb3ba3e75d"
-    },
-    {
       "path": "src/renderers/shared/marks-state.ts",
       "blob": "dde7946ce9543d7ef445d9c206f262a00592d2b9"
-    },
-    {
-      "path": "src/renderers/shared/TableCanvasRenderer.ts",
-      "blob": "32453a353ad299dc10189722c7bf70ea9e0b8c42"
-    },
-    {
-      "path": "src/renderers/shared/TableOverlay.ts",
-      "blob": "0adf04d14c50a0d3112f0d1816662b682036d283"
     },
     {
       "path": "src/renderers/shared/text-wrap.ts",
@@ -1169,6 +1137,10 @@
     {
       "path": "src/ui/sanitize-html.ts",
       "blob": "79de5f02be9bfc3d23481ccb2ddbf3ae2d2f3e61"
+    },
+    {
+      "path": "src/widget/VelaWidget.ts",
+      "blob": "b98ba750ce1af68984f0b1a8b55f4673be701170"
     },
     {
       "path": "src/widget/bottombar.ts",
@@ -1208,7 +1180,7 @@
     },
     {
       "path": "src/widget/history.ts",
-      "blob": "51f8a9a8c2a0dd1324f14ddb84747cd8fcdeedba"
+      "blob": "3d9b8911f1e8a1481a6b5ff77888ab61c5e2e55a"
     },
     {
       "path": "src/widget/index.ts",
@@ -1244,7 +1216,7 @@
     },
     {
       "path": "src/widget/object-tree.ts",
-      "blob": "ccfddf99753e9c147716638a39190146e92b3d4b"
+      "blob": "1e006d1b7eb990fbfab42085de5fd7d6dbd18651"
     },
     {
       "path": "src/widget/persist.ts",
@@ -1264,7 +1236,11 @@
     },
     {
       "path": "src/widget/shell-options.ts",
-      "blob": "1b3edbdb05eb031ce3e5c8ab47ef383944e57b58"
+      "blob": "1bb500b919032b95440e219a3285e8fd94e68d6b"
+    },
+    {
+      "path": "src/widget/shortcuts-help.ts",
+      "blob": "a17f86b69cf5700159cb65bb9816580cfe2a5b1c"
     },
     {
       "path": "src/widget/side-panel.ts",
@@ -1311,12 +1287,12 @@
       "blob": "527a49c260b04507dd21f41c66bc8fef194942fe"
     },
     {
-      "path": "src/widget/VelaWidget.ts",
-      "blob": "b98ba750ce1af68984f0b1a8b55f4673be701170"
-    },
-    {
       "path": "src/widget/watermark.ts",
       "blob": "ba4c2140f51691c90706a0a3036531bf7d1a5ad1"
+    },
+    {
+      "path": "src/workspace/WorkspaceReplay.ts",
+      "blob": "703e7d80b7c6f9180f20e504d00af920a824d04d"
     },
     {
       "path": "src/workspace/context.ts",
@@ -1325,10 +1301,6 @@
     {
       "path": "src/workspace/index.ts",
       "blob": "cf2f51bc6cdf9f8ecd8de8a0f2500759ae8f6791"
-    },
-    {
-      "path": "src/workspace/layouts.ts",
-      "blob": "5e2e587fc5b7b022bf6a81e24bdba5d84c536ad3"
     },
     {
       "path": "src/workspace/persist.ts",
@@ -1345,17 +1317,49 @@
     {
       "path": "src/workspace/sync.ts",
       "blob": "76d71498ec8df1b62388de3ae5e58a81f233ac84"
-    },
-    {
-      "path": "src/workspace/WorkspaceReplay.ts",
-      "blob": "703e7d80b7c6f9180f20e504d00af920a824d04d"
     }
   ],
   "modified": [
     {
+      "path": "src/Vela.ts",
+      "upstreamBlob": "804628744ba1486f0f054619845754106df7af26",
+      "localBlob": "d383a5272a32c46128040f821f6fe77db6187bee",
+      "patchId": "engine-and-indicator-lifecycle"
+    },
+    {
+      "path": "src/chart-types/builtins.ts",
+      "upstreamBlob": "f6eeec70cf204cf13f21f06d44379871efc557a8",
+      "localBlob": "ae7c8bcc163767be73b224a9e6d112d0fa8d50e4",
+      "patchId": "chart-types-and-graphics"
+    },
+    {
+      "path": "src/core/IndicatorHandle.ts",
+      "upstreamBlob": "32b692c593f2a9960d441b37c15eb52b49f80345",
+      "localBlob": "b500f42882263363bc73f86a34c4f5e87e120660",
+      "patchId": "engine-and-indicator-lifecycle"
+    },
+    {
+      "path": "src/core/RendererControl.ts",
+      "upstreamBlob": "a88ec4549aa21a969476a0183a02f3ef737a0399",
+      "localBlob": "dee9e189f9cc935340bf9d4d09a4e6f0afb05f06",
+      "patchId": "provider-and-sdk-compatibility"
+    },
+    {
+      "path": "src/core/drawings/Drawing.ts",
+      "upstreamBlob": "83a8dd9df914ea6671fc5ad6871985f481774756",
+      "localBlob": "de9e76fd4f01584d355629d5568a83fcc750b49b",
+      "patchId": "drawing-registries-and-state"
+    },
+    {
       "path": "src/core/drawings/DrawingController.ts",
-      "upstreamBlob": "1fa1637fabc46f762a23c3d52dcb65698d012348",
-      "localBlob": "cd73d3388f6ef7475975d33a6102a87d76053dce",
+      "upstreamBlob": "1082cda14ece17af7455957a83d06b1eee0fa120",
+      "localBlob": "638334a7e273af950b2819b71035f3ccbdccb015",
+      "patchId": "drawing-registries-and-state"
+    },
+    {
+      "path": "src/core/drawings/DrawingStore.ts",
+      "upstreamBlob": "0d547302425776e5b74b5ad63b7d945605991d40",
+      "localBlob": "ddf34e038f5dbbe97b0ddbe00b99084afa1dcd20",
       "patchId": "drawing-registries-and-state"
     },
     {
@@ -1372,8 +1376,8 @@
     },
     {
       "path": "src/core/drawings/toolbar.ts",
-      "upstreamBlob": "4f94a478e9b3b299b12e5219a4b4d906a573c5fd",
-      "localBlob": "80041031c8e76fa2a74d96a3832c522410023fca",
+      "upstreamBlob": "a0de0f974946ad6f5375a43dd36cd764d61d55ca",
+      "localBlob": "d41090ab7134c54e958f87f5cd377288a5c292d7",
       "patchId": "drawing-registries-and-state"
     },
     {
@@ -1390,8 +1394,8 @@
     },
     {
       "path": "src/core/engine/EngineOrchestrator.ts",
-      "upstreamBlob": "7697a5ee3f7e01e83e886bad9295552775b74c45",
-      "localBlob": "40724b469da652284be5ba0eaab3c79c3fe91f7b",
+      "upstreamBlob": "874c43a04482cb9557b7eeb58bd66b7cd4133f1b",
+      "localBlob": "becf85cb3890e553c551f2cc4f29ab1287b7070a",
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
@@ -1407,15 +1411,9 @@
       "patchId": "engine-and-indicator-lifecycle"
     },
     {
-      "path": "src/core/IndicatorHandle.ts",
-      "upstreamBlob": "32b692c593f2a9960d441b37c15eb52b49f80345",
-      "localBlob": "b500f42882263363bc73f86a34c4f5e87e120660",
-      "patchId": "engine-and-indicator-lifecycle"
-    },
-    {
       "path": "src/core/model/index.ts",
-      "upstreamBlob": "3dcb8e3934891bcbd1855f1ce295eba6a2878ba2",
-      "localBlob": "c85fe067dde9562e57ffbc611a224feb16a75b87",
+      "upstreamBlob": "d4a431fef3dbba6e2a0398f1a8ffdd97469caac3",
+      "localBlob": "0d34fbff9bb64e82e01d985e83483e93e3a288e8",
       "patchId": "columnar-history-and-scene-patches"
     },
     {
@@ -1437,6 +1435,12 @@
       "patchId": "columnar-history-and-scene-patches"
     },
     {
+      "path": "src/core/native-indicators/classics/define.ts",
+      "upstreamBlob": "2037528d0199ae63e4853e40319ea29a002284f0",
+      "localBlob": "46b6107f2a323f74364eda97a4790e620df5e110",
+      "patchId": "engine-and-indicator-lifecycle"
+    },
+    {
       "path": "src/core/options.ts",
       "upstreamBlob": "7163a9b427cadbdb9a301f44159828131792864e",
       "localBlob": "c876d46eb138902a796f62e4656d818433ad88b3",
@@ -1450,8 +1454,8 @@
     },
     {
       "path": "src/core/ports/IChartRenderer.ts",
-      "upstreamBlob": "71a5d4974d528cc85de58af19323f3fb034b855a",
-      "localBlob": "5a0930e4fa772c10b7c543b3cbbf640f00f15e3e",
+      "upstreamBlob": "3e0811a18a1d6b926e9b93d65561bd385acf0d4c",
+      "localBlob": "ba82e16d7795054ea2f925278d226c4c5338b5b1",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1464,12 +1468,6 @@
       "path": "src/core/ports/ScriptingEngine.ts",
       "upstreamBlob": "137cee7c6aa849f5efe884185a55e74de7cc53c7",
       "localBlob": "e067feb5b6d718e156e2418b07c1e46c79eed4c2",
-      "patchId": "provider-and-sdk-compatibility"
-    },
-    {
-      "path": "src/core/RendererControl.ts",
-      "upstreamBlob": "b9662d202b9a08912f4ad1f40c672e6bb3e02366",
-      "localBlob": "dc244f27c224e7e7eefeb3de405594a1c6805662",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
@@ -1504,26 +1502,50 @@
     },
     {
       "path": "src/index.ts",
-      "upstreamBlob": "4ce8c06eab46c1a390698b15411ba95b796560a8",
-      "localBlob": "9620a6fffbdb694d10377693ce28deea5d822dd0",
+      "upstreamBlob": "8dcdf30b0aae707d4ef8fa1ef5c9ba45e373862b",
+      "localBlob": "e6e2b28f1fe1b3ca2a18fe65fd35e42ea660817a",
       "patchId": "provider-and-sdk-compatibility"
     },
     {
-      "path": "src/renderers/native/backend/Canvas2dBackend.ts",
-      "upstreamBlob": "fd99e19430075439891d00b5db72648dcfe1cd4e",
-      "localBlob": "1b90fad00787fb09ae51eadfe87e8857a687c1ad",
+      "path": "src/renderers/native/NativeRenderer.ts",
+      "upstreamBlob": "ec93485d57d08b1710d633129fe0c570155003b5",
+      "localBlob": "b3b6cb77311517285bc7629e823c4e8d4ff09039",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
-      "path": "src/renderers/native/backend/gl/Batch.ts",
-      "upstreamBlob": "9748ab866022c60765413738065bda0208f0c95b",
-      "localBlob": "14cf6bbf51da39924f2f4c98f012a6dd061cf816",
+      "path": "src/renderers/native/backend/Canvas2dBackend.ts",
+      "upstreamBlob": "9cafbb0381203dd1c8fa94ee7c6e3bee5059a386",
+      "localBlob": "ff53525e6357215e8b22ca42a8bfdcc277a828de",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/backend/IRenderBackend.ts",
+      "upstreamBlob": "f1c926b2cf5744217daa4ee84084ba27ceabd5d9",
+      "localBlob": "fd2708f7302f1657ef56b48ca65cd31df39820ad",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
       "path": "src/renderers/native/backend/WebGL2Backend.ts",
-      "upstreamBlob": "697c16d418dc2e843c240a127006ce56e09d0660",
-      "localBlob": "e5866e0aba28673fbf42a008dde6cd286a1020b7",
+      "upstreamBlob": "0dabb0b754024ea144a790b79153d0256b297fd1",
+      "localBlob": "1e8723feb30ed515df72d63b4efec8ee60df5ad5",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/backend/candle-lod.ts",
+      "upstreamBlob": "173324b6ec075b84e98fd22e58263387a6eefef5",
+      "localBlob": "4570aa20bb9a6b35cf8f1317baed4945e9472bf0",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/backend/gl/Batch.ts",
+      "upstreamBlob": "bfbb51a7a69ff2ea138e06e017c0b9f5036d7155",
+      "localBlob": "a9dc379bf7f477b1faf9624bff6933efdf26f87d",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/capabilities.ts",
+      "upstreamBlob": "053083faa7dd4db4b9a6042a6ad2bc2ffc511bc3",
+      "localBlob": "0e9a480e4131c5982ca7fef7c60bb911e392cd98",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1534,14 +1556,8 @@
     },
     {
       "path": "src/renderers/native/chrome/ChromeRenderer.ts",
-      "upstreamBlob": "2d03e3c791d1d9f54b8a592b843bbfb08397a063",
-      "localBlob": "eb3b0aecba2a36a706bdcfc0ea1a66a1a88f0ade",
-      "patchId": "native-renderer-and-chart-chrome"
-    },
-    {
-      "path": "src/renderers/native/chrome/countdown.ts",
-      "upstreamBlob": "12d2649f6030edf737173a224687e0312fad0065",
-      "localBlob": "6c4c9e39afb1f80081255d4cdec6c38e9b71d150",
+      "upstreamBlob": "88798decee9515d2dcacb633a1595ee00d014536",
+      "localBlob": "126dddf24a482daf4ee2bc46161b67cf5fbe9d9a",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1551,27 +1567,15 @@
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
+      "path": "src/renderers/native/chrome/countdown.ts",
+      "upstreamBlob": "12d2649f6030edf737173a224687e0312fad0065",
+      "localBlob": "6c4c9e39afb1f80081255d4cdec6c38e9b71d150",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
       "path": "src/renderers/native/chrome/ticks.ts",
-      "upstreamBlob": "cbb85e9943af27047cce0abce574d24be117fc40",
-      "localBlob": "241ff8c476bc4a0d7f07ffc2a206b5ad785c225b",
-      "patchId": "native-renderer-and-chart-chrome"
-    },
-    {
-      "path": "src/renderers/native/core/autoscale.ts",
-      "upstreamBlob": "20819ab962aadcf4f09c143a3e7eae2b199c3f92",
-      "localBlob": "ef613fe34fb902a655b25baff8bd1f03ab3fcb42",
-      "patchId": "native-renderer-and-chart-chrome"
-    },
-    {
-      "path": "src/renderers/native/core/bar-time.ts",
-      "upstreamBlob": "5bd86d67532c07856683803797462b5b6fc648be",
-      "localBlob": "e7f8e71f8f9716b71f66bafc45954fb515e4aa95",
-      "patchId": "native-renderer-and-chart-chrome"
-    },
-    {
-      "path": "src/renderers/native/core/chartConfig.ts",
-      "upstreamBlob": "2267df9e03ca60da32470096cf5e4a0172333fd6",
-      "localBlob": "9ec1ca7b064c39770e6ee7f8e89545064852bf1a",
+      "upstreamBlob": "1a8fe2b6b9e0a0619357c5650150c425b785918b",
+      "localBlob": "ade09719935b53a0054beff3a2dfab38f6307e76",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1593,15 +1597,39 @@
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
+      "path": "src/renderers/native/core/autoscale.ts",
+      "upstreamBlob": "20819ab962aadcf4f09c143a3e7eae2b199c3f92",
+      "localBlob": "ef613fe34fb902a655b25baff8bd1f03ab3fcb42",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/core/bar-time.ts",
+      "upstreamBlob": "5bd86d67532c07856683803797462b5b6fc648be",
+      "localBlob": "e7f8e71f8f9716b71f66bafc45954fb515e4aa95",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/core/chartConfig.ts",
+      "upstreamBlob": "2267df9e03ca60da32470096cf5e4a0172333fd6",
+      "localBlob": "7272b697f2dc531f6c42ca6f805800be698cf101",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
+      "path": "src/renderers/native/core/manualScale.ts",
+      "upstreamBlob": "744b7ec92abae374ddd89af3c4c29f42cd89f31e",
+      "localBlob": "1933bf099d1207972f6e0cefab3089c17bf6dc13",
+      "patchId": "native-renderer-and-chart-chrome"
+    },
+    {
       "path": "src/renderers/native/drawings/DrawingInteraction.ts",
       "upstreamBlob": "8617ec645d1517a1d2aa0b28d36d1c0de0a569fa",
-      "localBlob": "4135a1d7cd735b8444bbfc1dff23be3a9d64093b",
+      "localBlob": "aa0cbb7030f7fef4ea81970794804a879adee329",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
       "path": "src/renderers/native/drawings/DrawingSettingsPanel.ts",
-      "upstreamBlob": "fcf920328100b43474b99039ca3b0597c8453732",
-      "localBlob": "b2413d983eb81067f8aac654458384746e9de43a",
+      "upstreamBlob": "a295f5487d176cea0f56554d11c5495547ac6287",
+      "localBlob": "3c29588b52ecba40219a9271b6d029f8a26f972c",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1618,14 +1646,8 @@
     },
     {
       "path": "src/renderers/native/drawings/UserDrawingController.ts",
-      "upstreamBlob": "95d0792531412ae33727c2c08691759ac8a49ae3",
-      "localBlob": "220535fbe70d2f6c56a21e2982b361ba270b31dd",
-      "patchId": "native-renderer-and-chart-chrome"
-    },
-    {
-      "path": "src/renderers/native/NativeRenderer.ts",
-      "upstreamBlob": "608909d012819bbd3c5c255f1db8bb1c5f6d6d7f",
-      "localBlob": "c643b904edfbcc2f8f54f28f6adfa889b83f2873",
+      "upstreamBlob": "60ae8f23f57cd7ce66d26468da2d29061544a005",
+      "localBlob": "5ee5b4d425e0d2bfdaa0fbbc6c6b2500c7b44411",
       "patchId": "native-renderer-and-chart-chrome"
     },
     {
@@ -1635,33 +1657,21 @@
       "patchId": "pane-layout-persistence"
     },
     {
-      "path": "src/Vela.ts",
-      "upstreamBlob": "804628744ba1486f0f054619845754106df7af26",
-      "localBlob": "d383a5272a32c46128040f821f6fe77db6187bee",
-      "patchId": "engine-and-indicator-lifecycle"
-    },
-    {
       "path": "src/widget/contributions.ts",
-      "upstreamBlob": "fccfe2a6bec655e4854bdd4757019d687f0686b6",
-      "localBlob": "ae3a698778d5f5ac3b3e6ac02fa6de5e5b449881",
+      "upstreamBlob": "a334f04f8f326b102a5da472e2402a9266c2d7aa",
+      "localBlob": "fbcd07530f1ed0fa9eda49e37b8af2f7e86f1035",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
       "path": "src/widget/layout-picker.ts",
       "upstreamBlob": "0a330fbc5463df2a4f96cec94ee2b0fdcc468d71",
-      "localBlob": "64f8afd14f4b8cd71bcda23432a7935d48f35e93",
+      "localBlob": "d9215f897c4771205b9ec2bd14bc71775f8c5786",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
       "path": "src/widget/panel-dock.ts",
       "upstreamBlob": "85d07a8e1e27022095af22af2aa426274c7b5e5a",
       "localBlob": "a9db0e8870d7dc5a8bfb5a2be378c9401fbfc15c",
-      "patchId": "widget-workspace-and-local-catalog"
-    },
-    {
-      "path": "src/widget/shortcuts-help.ts",
-      "upstreamBlob": "4a84aeed00c9d62911258ea3c3f1414facfaf883",
-      "localBlob": "0006e28ff883be4c1696e094809aa10266586efa",
       "patchId": "widget-workspace-and-local-catalog"
     },
     {
@@ -1696,15 +1706,21 @@
     },
     {
       "path": "src/workspace/ChartCell.ts",
-      "upstreamBlob": "cd2598ef787a35040e8780dcc7eb4ffd96bb1bf2",
-      "localBlob": "7018b3a92b9a10ac59190ac0fb3f7d7126a6e8f8",
+      "upstreamBlob": "05f5e90733865e215d1372aa31b378b5b881fd4f",
+      "localBlob": "92857f77db354a8beab9eb1c037e00238f199307",
       "patchId": "pane-layout-persistence"
     },
     {
       "path": "src/workspace/VelaWorkspace.ts",
-      "upstreamBlob": "9bbbf33e9d46bd5daf1fcdbd6050cf12b97f7afb",
-      "localBlob": "7b2dd8b0070f65f1b2c074f84c2ed566f39060af",
+      "upstreamBlob": "9744c83155be17e5c216510c58054dc15c46bc25",
+      "localBlob": "1af3e39b77613c0718f6189a5c0cbae875b7d208",
       "patchId": "pane-layout-persistence"
+    },
+    {
+      "path": "src/workspace/layouts.ts",
+      "upstreamBlob": "5e2e587fc5b7b022bf6a81e24bdba5d84c536ad3",
+      "localBlob": "e627b76246b187678f3db2559eefbd1b36a2473f",
+      "patchId": "widget-workspace-and-local-catalog"
     }
   ],
   "localOnly": [
@@ -1724,13 +1740,18 @@
       "patchId": "drawing-registries-and-state"
     },
     {
-      "path": "src/core/model/columnar-bars.ts",
-      "localBlob": "eec620453b8a6dc3cb5ad08d846cf653bbefc567",
-      "patchId": "columnar-history-and-scene-patches"
+      "path": "src/core/graphics.ts",
+      "localBlob": "98ae2a5b2019d55174b188d87707177344afc44b",
+      "patchId": "chart-types-and-graphics"
     },
     {
       "path": "src/core/model/ColumnarHistoryTape.ts",
       "localBlob": "f1d53658c2a97118088121618924dcee3274d21f",
+      "patchId": "columnar-history-and-scene-patches"
+    },
+    {
+      "path": "src/core/model/columnar-bars.ts",
+      "localBlob": "9a234eec27915ae4aa1a1c7deb7ccc1b0c59fd13",
       "patchId": "columnar-history-and-scene-patches"
     },
     {
@@ -1750,8 +1771,18 @@
     },
     {
       "path": "src/core/native-indicators/lazyCatalog.ts",
-      "localBlob": "54ec800dd6679cec89dba6242c2ff065fc6cebb5",
+      "localBlob": "32160e32eac7e21295e73356e152b00ba7d597fc",
       "patchId": "engine-and-indicator-lifecycle"
+    },
+    {
+      "path": "src/core/price-styles/synthetic.ts",
+      "localBlob": "dc4a0606b75ab6219a26f2b371a9861ec6523367",
+      "patchId": "chart-types-and-graphics"
+    },
+    {
+      "path": "src/core/workspace-layout-limits.ts",
+      "localBlob": "c18753219f8b031fbd42e56697f6c2a5f3d8ab2e",
+      "patchId": "chart-types-and-graphics"
     },
     {
       "path": "src/renderers/native/chrome/luxalgo-logos.ts",
