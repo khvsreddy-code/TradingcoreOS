@@ -2382,7 +2382,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (/^(CE|CALL)$/.test(providerRight)) return 'CE';
         if (/^(PE|PUT)$/.test(providerRight)) return 'PE';
         const contractText = `${instrument.symbol} ${instrument.label} ${instrument.description || ''}`.toUpperCase();
-        const match = contractText.match(/(?:^|[\\s:_-])(CE|PE|CALL|PUT)(?:$|[\\s:_-])/);
+        const match = contractText.match(/(?:^|[\s:_-])(CE|PE|CALL|PUT)(?:$|[\s:_-])/);
         if (!match) return null;
         return /^(CE|CALL)$/.test(match[1]!) ? 'CE' : 'PE';
       };
@@ -3325,7 +3325,7 @@ const optionsPanel: SidePanelDescriptor = {
         expirySelect.appendChild(nearest);
         for (const item of expiryChoices) {
           const value = String(item?.value || '');
-          if (!/^\\d{10,13}$/.test(value)) continue;
+          if (!/^\d{10,13}$/.test(value)) continue;
           const option = document.createElement('option');
           option.value = value;
           option.textContent = String(item?.label || value);
