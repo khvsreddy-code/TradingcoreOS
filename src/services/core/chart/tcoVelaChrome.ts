@@ -2416,20 +2416,19 @@ const bookmarksPanel: SidePanelDescriptor = {
         .map(instrument => {
           const ticker = String(instrument.label || instrument.symbol).trim();
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
-          const contractShort = instrument.optionType
-            ? `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${instrument.optionType}`.trim()
-            : ticker.split(/\s+/)[0] || symbol;
+          const resolvedRight = optionRight(instrument);
+          const contractShort = `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${resolvedRight || ''}`.trim();
           const item: WatchlistItem = {
             symbol, label: ticker, short: contractShort,
             ...(instrument.exchange ? { exchange: instrument.exchange } : {}),
             ...(instrument.type ? { type: instrument.type } : { type: 'option' }),
             ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
             ...(Number.isFinite(Number(instrument.strike)) ? { strike: Number(instrument.strike) } : {}),
-            ...(optionRight(instrument) ? { optionType: optionRight(instrument)! } : {}),
+            ...(resolvedRight ? { optionType: resolvedRight } : {}),
             ...(Number.isFinite(Number(instrument.lotSize)) ? { lotSize: Number(instrument.lotSize) } : {}),
           };
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
-          return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${instrument.optionType || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
+          return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${resolvedRight || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
       const indexSuggestionSymbols = new Set(indexSuggestions.map(entry => entry.item.symbol.toUpperCase()));
       const instrumentEntries = [...unique.values()]
