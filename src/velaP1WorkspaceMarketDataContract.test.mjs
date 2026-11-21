@@ -55,7 +55,7 @@ for (const kind of ['symbol', 'timeframe', 'crosshair', 'viewport', 'style', 'dr
 }
 for (const group of ['A', 'B', 'C', 'D']) assert.ok(terminalChrome.includes(`value: '${group}'`), `sync group ${group} missing`);
 assert.match(terminalChrome, /sync\.get\(kind\)/);
-assert.match(terminalChrome, /sync\.set\(kind, next\)/);
+assert.match(terminalChrome, /sync\.set\(kind, Object\.keys\(next\)\.length \? next : undefined\)/);
 assert.match(terminalChrome, /workspace\?\.saveNow/);
 
 // Replay is a single Vela workspace clock. Multi-timeframe cells advance by the
@@ -118,6 +118,9 @@ assert.match(optionPanel, /modelImpliedVolatility/);
 assert.match(optionPanel, /modelSkew/);
 assert.match(optionPanel, /hasCompleteRowOi/);
 assert.match(optionPanel, /Load IV term structure/);
+assert.match(optionPanel, /ivTermStructureRequestRef\.current \+= 1/);
+assert.match(optionPanel, /requestId !== ivTermStructureRequestRef\.current/);
+assert.match(optionPanel, /setOptionExpiry\('current_week'\)/);
 
 // Same-session NSE/BSE gaps trigger bounded canonical history reconciliation
 // even if the websocket stays connected. The triggering tick is buffered first.
