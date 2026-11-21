@@ -268,6 +268,7 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
       if (symbolText === query || symbolText.endsWith(`:${query}-eq`) || symbolText.includes(`:${query}-eq`)) exact.push(row);
       else partial.push(row);
     }
+    const total = exact.length + partial.length;
     const data = [...exact, ...partial].slice(0, limit).map(row => ({
       key: row.symbol,
       label: row.description || row.symbol,
@@ -281,7 +282,7 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
       optionType: row.optionType,
       lotSize: row.lotSize ? Number(row.lotSize) : undefined,
     }));
-    return res.json({ success: true, data, total: data.length, source: 'fyers-symbol-master' });
+    return res.json({ success: true, data, total, source: 'fyers-symbol-master' });
   } catch (err: any) {
     return res.status(502).json({ success: false, error: err?.message || 'Unable to load FYERS symbol master' });
   }
