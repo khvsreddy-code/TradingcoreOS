@@ -4152,7 +4152,14 @@ const syncGroupsPanel: SidePanelDescriptor = {
       { value: 'C', label: 'Group C' },
       { value: 'D', label: 'Group D' },
     ];
+    type WorkspaceSyncCell = {
+      id: string;
+      chart: { market: { symbol: string; timeframe: string } };
+    };
     type WorkspaceSyncHost = {
+      cells: () => WorkspaceSyncCell[];
+      activeCellId: string | null;
+      setActiveCell: (id: string | null) => void;
       sync?: {
         get: (kind: TerminalSyncKind) => TerminalSyncSetting;
         set: (kind: TerminalSyncKind, setting: Readonly<Record<string, string>> | false | undefined) => void;
@@ -4177,7 +4184,7 @@ const syncGroupsPanel: SidePanelDescriptor = {
       }
       const current = sync.get(kind);
       const next: Record<string, string> = current === true
-        ? Object.fromEntries(ctx.cells.map(cell => [cell.id, 'A']))
+        ? Object.fromEntries((workspace?.cells() ?? []).map(cell => [cell.id, 'A']))
         : current && typeof current === 'object' ? { ...current } : {};
       if (group) next[cellId] = group;
       else delete next[cellId];
@@ -4188,8 +4195,8 @@ const syncGroupsPanel: SidePanelDescriptor = {
     };
 
     const render = (): void => {
-      const cells = [...ctx.cells];
       const workspace = getWorkspace();
+      const cells = workspace?.cells() ?? [];
       table.textContent = '';
       if (!workspace?.sync) {
         const unavailable = document.createElement('div');
@@ -4221,15 +4228,17 @@ const syncGroupsPanel: SidePanelDescriptor = {
         row.style.cssText = 'display:grid;grid-template-columns:minmax(110px,1fr) repeat(6,minmax(62px,.8fr));gap:5px;align-items:center;padding:6px 2px;border-top:1px solid var(--vela-border,rgba(128,128,128,.18));';
         const identity = document.createElement('button');
         identity.type = 'button';
-        identity.textContent = cell.symbol ? cell.symbol.split(':').pop() || cell.symbol : cell.id;
-        identity.title = `Activate ${cell.symbol || cell.id} · ${cell.timeframe}`;
+        const symbol = cell.chart.market.symbol;
+        const timeframe = cell.chart.market.timeframe;
+        identity.textContent = symbol ? symbol.split(':').pop() || symbol : cell.id;
+        identity.title = `Activate ${symbol || cell.id} · ${timeframe}`;
         identity.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;color:var(--vela-fg-bright);font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;';
-        identity.addEventListener('click', () => ctx.setActiveCell(cell.id));
-        if (ctx.activeCellId === cell.id) identity.style.color = 'var(--vela-accent,#8b7cff)';
+        identity.addEventListener('click', () => workspace.setActiveCell(cell.id));
+        if (workspace.activeCellId === cell.id) identity.style.color = 'var(--vela-accent,#8b7cff)';
         row.appendChild(identity);
         for (const { kind, label } of kinds) {
           const select = document.createElement('select');
-          select.setAttribute('aria-label', `${label} sync group for ${cell.symbol || cell.id}`);
+          select.setAttribute('aria-label', `${label} sync group for ${cell.chart.market.symbol || cell.id}`);
           select.title = `${label} synchronization group`;
           select.style.cssText = 'width:100%;min-width:0;border:1px solid var(--vela-border,rgba(128,128,128,.25));border-radius:5px;padding:4px 2px;background:var(--vela-bg,#111319);color:var(--vela-fg-bright);font:9px Inter,ui-sans-serif,system-ui,sans-serif;';
           for (const choice of groupChoices) {
