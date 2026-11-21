@@ -77,9 +77,9 @@ assert.ok(chrome.includes("filterInput.setAttribute('aria-label', 'Search instru
 assert.ok(chrome.includes("filterInput.addEventListener('input'"), 'typing filters watchlist rows and starts instrument search');
 assert.ok(chrome.includes("suggestionList.setAttribute('role', 'listbox')"), 'instrument suggestions expose a listbox role');
 assert.ok(chrome.includes("filterInput.addEventListener('keydown'"), 'watchlist suggestions support keyboard navigation and selection');
-assert.ok(chrome.includes('const requestedStrike = strikeMatch ? Number(strikeMatch[1]) : undefined;'), 'numeric searches extract the requested strike');
+assert.ok(chrome.includes("const requestedStrike = strikeMatch ? Number(strikeMatch[1]!.replaceAll(',', '')) : undefined;"), 'numeric searches extract and normalize the requested strike');
 assert.ok(chrome.includes('const indexMatches = INDEX_SEARCH_UNIVERSE'), 'numeric and text queries can surface index candidates');
-assert.ok(chrome.includes("searchFyersInstruments(query, 'all', 100)"), 'suggestions search the complete FYERS instrument master');
+assert.ok(chrome.includes("searchFyersInstruments(masterQuery, 'all', 100)"), 'suggestions search the complete FYERS instrument master with a canonical strike query');
 assert.ok(chrome.includes('chooseSuggestion(suggestionItems[activeSuggestionIndex]!)'), 'keyboard Enter selects the active instrument suggestion');
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
