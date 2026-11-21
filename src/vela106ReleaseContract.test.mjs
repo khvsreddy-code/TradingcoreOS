@@ -48,7 +48,7 @@ assert.match(workspace, /private relinkIdenticalDrawings\(\): void/);
 assert.match(workspace, /this\.relinkIdenticalDrawings\(\)/);
 assert.match(sync, /export function pairIdenticalDrawings/);
 assert.match(inputs, /function isFitControl\(inp: InputSchema\): boolean/);
-assert.match(inputs, /type === 'color' \|\| type === 'bool' \|\| type === 'session' \|\| type === 'time'/);
+assert.match(inputs, /inp\.type === 'color' \|\| inp\.type === 'bool' \|\| inp\.type === 'session' \|\| inp\.type === 'time'/);
 assert.match(provenance, /9e6861d67c1fbab13083ec6cd97825852678d5dd/);
 assert.match(renderer, /drawingActionsProvider/);
 assert.match(renderer, /setDrawingActions/);
