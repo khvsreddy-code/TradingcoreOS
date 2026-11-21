@@ -125,6 +125,7 @@ assert.match(optionPanel, /optionChainRequestRef\.current \+= 1/);
 assert.match(optionPanel, /requestId === optionChainRequestRef\.current/);
 assert.match(optionPanel, /const optionExpiryForSelected = optionChain\?\.underlyingKey === selectedKey/);
 assert.match(optionPanel, /setOptionExpiry\('current_week'\)/);
+assert.match(optionPanel, /setIvTermStructureLoading\(false\)/);
 
 // Same-session NSE/BSE gaps trigger bounded canonical history reconciliation
 // even if the websocket stays connected. The triggering tick is buffered first.
