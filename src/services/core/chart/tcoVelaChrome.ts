@@ -2389,7 +2389,10 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (/^(CE|CALL)$/.test(providerRight)) return 'CE';
         if (/^(PE|PUT)$/.test(providerRight)) return 'PE';
         const contractText = `${instrument.symbol} ${instrument.label} ${instrument.description || ''}`.toUpperCase();
-        const match = contractText.match(/(?:^|[\s:_-])(CE|PE|CALL|PUT)(?:$|[\s:_-])/);
+        // Descriptions often separate the right with spaces, while compact FYERS
+        // symbols append it directly to the strike (e.g. NIFTY26NOV22700PE).
+        const match = contractText.match(/(?:^|[\s:_-])(CE|PE|CALL|PUT)(?:$|[\s:_-])/)
+          ?? String(instrument.symbol || '').toUpperCase().match(/(CE|PE|CALL|PUT)$/);
         if (!match) return null;
         return /^(CE|CALL)$/.test(match[1]!) ? 'CE' : 'PE';
       };
