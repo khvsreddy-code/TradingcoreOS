@@ -80,7 +80,8 @@ assert.match(terminalChrome, /case 'W': case 'WEEK': return amount \* 7 \* 86_40
 assert.match(watchlist, /function normalizeWatchlistGroups/);
 assert.match(watchlist, /activeWatchlistId/);
 assert.match(watchlist, /version: 3/);
-assert.match(watchlist, /function optionRight\(/);
+assert.match(watchlist, /const optionRight = \(instrument: SearchInstrument\)/);
+assert.match(watchlist, /match\(\/\(CE\|PE\|CALL\|PUT\)\$\/\)/);
 assert.match(watchlist, /const resolvedRight = optionRight\(instrument\)/);
 assert.match(watchlist, /optionType: resolvedRight/);
 assert.ok(watchlist.includes('[\\s:_-]'), 'CE/PE parsing must recognize contract separators');
