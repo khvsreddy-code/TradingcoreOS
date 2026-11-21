@@ -124,6 +124,21 @@
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "src/vela101FoundationContract.test.mjs"
       ]
+    },
+    {
+      "id": "chart-types-and-graphics",
+      "pathPatterns": [
+        "src/chart-types/**",
+        "src/core/graphics.ts",
+        "src/core/price-styles/synthetic.ts",
+        "src/core/workspace-layout-limits.ts"
+      ],
+      "purpose": "Retain TradingCoreOS chart-type defaults, synthetic price styles, adaptive graphics policy, and bounded native multi-chart layout behavior.",
+      "tests": [
+        "src/velaP1WorkspaceMarketDataContract.test.mjs",
+        "src/velaP1ChartTerminalContract.test.mjs",
+        "src/vela101FoundationContract.test.mjs"
+      ]
     }
   ]
 }
