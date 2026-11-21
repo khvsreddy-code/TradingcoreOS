@@ -378,7 +378,7 @@ export class FyersAdapter extends BaseBroker {
       // FYERS max is 50 ITM + ATM + 50 OTM; wider coverage improves PCR / OI walls / max pain.
       strikecount: '50',
       greeks: '1',
-      ...(requestedExpiry !== 'current_week' && /^\\d{10,13}$/.test(requestedExpiry)
+      ...(requestedExpiry !== 'current_week' && /^\d{10,13}$/.test(requestedExpiry)
         ? { timestamp: requestedExpiry }
         : {}),
     };
