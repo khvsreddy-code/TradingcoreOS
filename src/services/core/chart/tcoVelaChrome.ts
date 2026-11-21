@@ -3027,7 +3027,8 @@ const replayPanel: SidePanelDescriptor = {
       const from = selectedStart();
       startButton.disabled = !bounds || from == null || from >= bounds.last || state.playing || starting;
       stepButton.disabled = !state.active || state.playing || state.remaining <= 0;
-      playButton.disabled = !bounds || starting;
+      // Vela's play() is a no-op until start() creates a replay session.
+      playButton.disabled = !state.active || starting;
       playButton.textContent = state.playing ? 'Pause' : 'Play';
       stopButton.disabled = !state.active;
       startButton.style.opacity = startButton.disabled ? '.45' : '1';
