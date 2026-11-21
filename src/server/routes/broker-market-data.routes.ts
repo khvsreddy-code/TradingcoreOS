@@ -243,7 +243,9 @@ function mastersForSegment(segment: string): string[] {
 brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const session = await getFyersSession(req, res); if (!session) return;
-  const query = String(req.query.q || '').trim().toLowerCase();
+  const query = String(req.query.q || '').trim().toLowerCase()
+    .replace(/(\\d),(?=\\d{3}(?:\\D|$))/g, '$1');
+  const queryTokens = query.split(/\\s+/).filter(Boolean);
   const segment = String(req.query.segment || 'all').toLowerCase();
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
   if (query.length < 2) return res.json({ success: true, data: [], total: 0, hint: 'Enter at least 2 characters.' });
@@ -255,7 +257,10 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
     const partial: SymbolMasterRow[] = [];
     const seen = new Set<string>();
     for (const row of rows) {
-      if (!row.searchable.includes(query)) continue;
+      // Match all tokens across symbol/description/expiry/strike/right fields.
+      // A derivative label can place the expiry between "NIFTY" and "22700",
+      // so requiring the entire phrase contiguously would miss valid contracts.
+      if (!queryTokens.every(token => row.searchable.includes(token))) continue;
       const key = row.symbol;
       if (seen.has(key)) continue;
       seen.add(key);
