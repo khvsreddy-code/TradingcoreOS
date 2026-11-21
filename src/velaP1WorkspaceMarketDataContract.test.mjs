@@ -80,6 +80,8 @@ assert.match(watchlist, /function normalizeWatchlistGroups/);
 assert.match(watchlist, /activeWatchlistId/);
 assert.match(watchlist, /version: 3/);
 assert.match(watchlist, /function optionRight\(/);
+assert.match(watchlist, /const resolvedRight = optionRight\(instrument\)/);
+assert.match(watchlist, /optionType: resolvedRight/);
 assert.ok(watchlist.includes('[\\s:_-]'), 'CE/PE parsing must recognize contract separators');
 assert.match(watchlist, /replaceAll\(',', ''\)/, 'smart price search normalizes formatted strikes such as 22,700');
 assert.match(watchlist, /const masterQuery = requestedStrike !== undefined/, 'the instrument master receives a normalized strike query');
