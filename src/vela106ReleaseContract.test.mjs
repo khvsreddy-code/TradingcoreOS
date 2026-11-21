@@ -18,9 +18,9 @@ const sync = read('../vendor/vela/src/workspace/sync.ts');
 const inputs = read('../vendor/vela/src/renderers/shared/IndicatorInputsDialog.ts');
 const packageJson = json('../package.json');
 
-assert.match(provenance, /Upstream source version: \*\*0\.10\.6\*\*/);
-assert.match(provenance, /v0\.10\.6/);
-assert.match(changelog, /^## \[0\.10\.6\]/m);
+assert.match(provenance, /Upstream source version: \*\*0\.10\.13\*\*/);
+assert.match(provenance, /v0\.10\.13/);
+assert.match(changelog, /^## \[0\.10\.13\]/m);
 assert.match(options, /export interface FreePanEvent/);
 assert.match(options, /export type FreePanTrigger = boolean \| 'drag' \| 'alt' \| 'shift' \| 'mod'/);
 assert.match(options, /freePan\?: FreePanTrigger/);
