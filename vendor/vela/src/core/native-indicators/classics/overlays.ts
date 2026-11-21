@@ -36,6 +36,68 @@ function barInterval(bars: readonly OHLCV[]): number {
     return gaps[Math.floor(gaps.length / 2)] ?? 0;
 }
 
+/** Rolling high/low midpoint used by each Ichimoku line. Warm-up bars remain NaN. */
+function ichimokuMidpoint(bars: readonly OHLCV[], period: number): number[] {
+    const length = Math.max(1, Math.trunc(period));
+    const values = new Array<number>(bars.length).fill(Number.NaN);
+    for (let i = length - 1; i < bars.length; i += 1) {
+        let highest = Number.NEGATIVE_INFINITY;
+        let lowest = Number.POSITIVE_INFINITY;
+        for (let j = i - length + 1; j <= i; j += 1) {
+            highest = Math.max(highest, bars[j]!.high);
+            lowest = Math.min(lowest, bars[j]!.low);
+        }
+        if (Number.isFinite(highest) && Number.isFinite(lowest)) values[i] = (highest + lowest) / 2;
+    }
+    return values;
+}
+
+function ichimokuAverage(left: readonly number[], right: readonly number[]): number[] {
+    return left.map((value, index) => Number.isFinite(value) && Number.isFinite(right[index])
+        ? (value + right[index]!) / 2
+        : Number.NaN);
+}
+
+/** Ichimoku Kinko Hyo — conversion/base midpoints, forward cloud spans and lagging close. */
+export const ichimokuCloud: ClassicIndicatorSpec = {
+    type: 'ichimoku-cloud',
+    title: msg('indicator.ichimokuCloud.title', 'Ichimoku Cloud'),
+    shortTitle: msg('indicator.ichimokuCloud.shortTitle', 'Ichimoku'),
+    overlay: true,
+    inputs: [
+        intInput('conversionPeriod', msg('indicator.ichimokuCloud.conversionPeriod', 'Conversion Line Period'), 9, 1, 200),
+        intInput('basePeriod', msg('indicator.ichimokuCloud.basePeriod', 'Base Line Period'), 26, 1, 300),
+        intInput('spanBPeriod', msg('indicator.ichimokuCloud.spanBPeriod', 'Leading Span B Period'), 52, 1, 500),
+        intInput('displacement', msg('indicator.ichimokuCloud.displacement', 'Displacement'), 26, 0, 300),
+        colorInput(INFO, msg('indicator.ichimokuCloud.conversionColor', 'Conversion Line'), 'conversionColor'),
+        colorInput(WARNING, msg('indicator.ichimokuCloud.baseColor', 'Base Line'), 'baseColor'),
+        colorInput(BULLISH, msg('indicator.ichimokuCloud.spanAColor', 'Leading Span A'), 'spanAColor'),
+        colorInput(BEARISH, msg('indicator.ichimokuCloud.spanBColor', 'Leading Span B'), 'spanBColor'),
+        colorInput(NEUTRAL, msg('indicator.ichimokuCloud.chikouColor', 'Lagging Span'), 'chikouColor'),
+    ],
+    compute: (bars, inputs) => {
+        const conversionPeriod = Math.max(1, Math.trunc(num(inputs, 'conversionPeriod', 9)));
+        const basePeriod = Math.max(1, Math.trunc(num(inputs, 'basePeriod', 26)));
+        const spanBPeriod = Math.max(1, Math.trunc(num(inputs, 'spanBPeriod', 52)));
+        const displacement = Math.max(0, Math.trunc(num(inputs, 'displacement', 26)));
+        const conversion = ichimokuMidpoint(bars, conversionPeriod);
+        const base = ichimokuMidpoint(bars, basePeriod);
+        const spanA = ichimokuAverage(conversion, base);
+        const spanB = ichimokuMidpoint(bars, spanBPeriod);
+        const chikou = bars.map((bar) => bar.close);
+
+        return {
+            plots: [
+                { key: 'conversion', title: msg('indicator.ichimokuCloud.plot.conversion', 'Conversion Line'), values: conversion, color: str(inputs, 'conversionColor', INFO) },
+                { key: 'base', title: msg('indicator.ichimokuCloud.plot.base', 'Base Line'), values: base, color: str(inputs, 'baseColor', WARNING) },
+                { key: 'spanA', title: msg('indicator.ichimokuCloud.plot.spanA', 'Leading Span A'), values: spanA, color: str(inputs, 'spanAColor', BULLISH), offset: displacement },
+                { key: 'spanB', title: msg('indicator.ichimokuCloud.plot.spanB', 'Leading Span B'), values: spanB, color: str(inputs, 'spanBColor', BEARISH), offset: displacement },
+                { key: 'chikou', title: msg('indicator.ichimokuCloud.plot.chikou', 'Lagging Span'), values: chikou, color: str(inputs, 'chikouColor', NEUTRAL), offset: -displacement },
+            ],
+        };
+    },
+};
+
 const parabolicSar: ClassicIndicatorSpec = {
     type: 'parabolic-sar',
     title: msg('indicator.parabolicSar.title', 'Parabolic SAR'),
@@ -470,4 +532,4 @@ const averagePrice = priceStudy('average-price', 'OHLC4', {
     colorTooltip: msg('indicator.averagePrice.color.tooltip', 'Color of the line through the average of each bar’s open, high, low and close.'),
 });
 
-export const overlaySpecs: ClassicIndicatorSpec[] = [parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal, medianPrice, typicalPrice, averagePrice];
+export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal, medianPrice, typicalPrice, averagePrice];
