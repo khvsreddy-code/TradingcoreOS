@@ -65,6 +65,7 @@ assert.match(workspaceReplay, /private stepGroup\(\)/);
 assert.match(workspaceReplay, /Math\.min\(next, barClose\(t, c\.chart\.market\.timeframe\)\)/);
 assert.match(workspaceReplay, /lastOpenClosedBy\(clock, cell\.chart\.market\.timeframe\)/);
 assert.match(terminalChrome, /ctx\.replay/);
+assert.match(terminalChrome, /playButton\.disabled = !state\.active \|\| starting/);
 for (const action of ['start', 'play', 'pause', 'step', 'stop', 'bounds']) {
   assert.ok(terminalChrome.includes(`replay.${action}`), `Vela replay control missing: ${action}`);
 }
