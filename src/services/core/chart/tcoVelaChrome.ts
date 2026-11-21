@@ -2954,12 +2954,23 @@ const replayPanel: SidePanelDescriptor = {
 
     const timeframeMs = (value: string): number => {
       const normalized = String(value || '60').trim().toUpperCase();
-      const minutes = Number(normalized);
-      if (Number.isFinite(minutes) && minutes > 0) return minutes * 60_000;
-      if (normalized === 'D') return 86_400_000;
-      if (normalized === 'W') return 7 * 86_400_000;
-      if (normalized === 'M') return 30 * 86_400_000;
-      return 60 * 60_000;
+      // Vela timeframes use minute counts (1, 5, 60) and calendar units
+      // (1D, 1W, 1M); tolerate human-readable aliases for imported workspaces.
+      const numericMinutes = Number(normalized);
+      if (Number.isFinite(numericMinutes) && numericMinutes > 0) return numericMinutes * 60_000;
+      const match = /^(\\d+)?(S|SEC|SECOND|MIN|H|HR|HOUR|D|DAY|W|WEEK|M|MO|MON|MONTH|Y|YR|YEAR)$/.exec(normalized);
+      if (!match) return 60 * 60_000;
+      const amount = Math.max(1, Number(match[1] || 1));
+      switch (match[2]) {
+        case 'S': case 'SEC': case 'SECOND': return amount * 1_000;
+        case 'MIN': return amount * 60_000;
+        case 'H': case 'HR': case 'HOUR': return amount * 60 * 60_000;
+        case 'D': case 'DAY': return amount * 86_400_000;
+        case 'W': case 'WEEK': return amount * 7 * 86_400_000;
+        case 'M': case 'MO': case 'MON': case 'MONTH': return amount * 30 * 86_400_000;
+        case 'Y': case 'YR': case 'YEAR': return amount * 365 * 86_400_000;
+        default: return 60 * 60_000;
+      }
     };
     // datetime-local has no timezone. Format and parse it explicitly as IST.
     const toIstInput = (timestamp: number): string =>
