@@ -159,8 +159,22 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   const [orderLatencyMs, setOrderLatencyMs] = useState<number>();
   const ticksRef = useRef<Record<string, NormalizedMarketTick>>({});
   const tickFrameRef = useRef<number | null>(null);
+  const ivTermStructureRequestRef = useRef(0);
+  const previousOptionUnderlyingRef = useRef(selectedKey);
   const selectedTick = ticks[selectedKey];
   const selectedInstrument = watchlist.find((x: any) => x.key === selectedKey) || instrumentResults.find((x: any) => x.key === selectedKey) || { key: selectedKey, label: selectedKey, short: selectedKey, type: 'Custom' };
+
+  useEffect(() => {
+    if (previousOptionUnderlyingRef.current === selectedKey) return;
+    previousOptionUnderlyingRef.current = selectedKey;
+    ivTermStructureRequestRef.current += 1;
+    setOptionExpiry('current_week');
+    setOptionChain(null);
+    setOptionError('');
+    setIvTermStructure([]);
+    setIvTermStructureError('');
+    setIvTermStructureLoading(false);
+  }, [selectedKey]);
 
   useEffect(() => {
     const refreshBrokerRoute = () => {
@@ -169,8 +183,13 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         ticksRef.current = {};
         setTicks({});
         setAnalytics(null);
+        ivTermStructureRequestRef.current += 1;
         setOptionChain(null);
+        setOptionExpiry('current_week');
         setOptionError('');
+        setIvTermStructure([]);
+        setIvTermStructureError('');
+        setIvTermStructureLoading(false);
         setFeedError(undefined);
         setFeedStatus('connecting');
       }
@@ -236,6 +255,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
     }
   };
   const loadIvTermStructure = async () => {
+    const requestId = ++ivTermStructureRequestRef.current;
     const underlying = selectedKey;
     const choices = Array.isArray(optionChain?.expiryOptions) ? optionChain.expiryOptions : [];
     if (!underlying || choices.length < 2) {
@@ -253,6 +273,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         const chain = choice.value === optionExpiry && optionChain
           ? optionChain
           : await tradingCoreRuntime.getOptionChain(underlying, choice.value);
+        if (requestId !== ivTermStructureRequestRef.current) return;
         const contracts = Array.isArray(chain?.contracts) ? chain.contracts : [];
         const spot = Number(chain?.spot);
         if (!contracts.length || !Number.isFinite(spot) || spot <= 0) continue;
@@ -288,14 +309,16 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
           source: sources.join(' · ') || 'IV unavailable',
         });
       }
-      if (underlying === selectedKey) {
+      if (requestId === ivTermStructureRequestRef.current && underlying === selectedKey) {
         setIvTermStructure(output);
         if (!output.length) setIvTermStructureError('No valid ATM IV values were returned for the selected expiry set.');
       }
     } catch (error: any) {
-      setIvTermStructureError(error?.message || 'Unable to load IV term structure.');
+      if (requestId === ivTermStructureRequestRef.current) {
+        setIvTermStructureError(error?.message || 'Unable to load IV term structure.');
+      }
     } finally {
-      setIvTermStructureLoading(false);
+      if (requestId === ivTermStructureRequestRef.current) setIvTermStructureLoading(false);
     }
   };
 
