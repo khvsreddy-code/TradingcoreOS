@@ -99,6 +99,10 @@ assert.ok(fallbackInstrumentSearch.includes("const queryTokens = query.split(/\\
   'fallback FYERS search must split terms into whitespace tokens');
 assert.ok(fallbackInstrumentSearch.includes(".replace(/(\\d),(?=\\d{3}(?:\\D|$))/g, '$1')"),
   'fallback FYERS search must normalize comma-grouped numeric queries');
+assert.ok(fallbackInstrumentSearch.includes('Promise.allSettled(masters.map(loadSymbolMaster))'),
+  'one unavailable exchange master must not disable all fallback search results');
+assert.ok(fallbackInstrumentSearch.includes('partial: failedMasters > 0'),
+  'fallback search must disclose partial instrument-master coverage');
 assert.ok(fallbackInstrumentSearch.includes('queryTokens.every(token => row.searchable.includes(token))'),
   'fallback FYERS search must require every token to match across instrument fields');
 assert.match(optionAdapter, /aggregateCallOi:/);
