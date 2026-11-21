@@ -68,6 +68,7 @@ import { syncTargets, syncGroups, pairIdenticalDrawings, drawingLinkContent, ran
 import { encodeState, decodeState, sanitizeState, type DrawingToolsState, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { localStorageAdapter } from '../widget/persist';
 import { ChartCell, seedDefaults, cellChartDefaults, type CellSeed, type CellBoot, type PooledCellState } from './ChartCell';
+import { WORKSPACE_MAX_CHART_CELLS } from '../core/workspace-layout-limits';
 import { buildContext, type WorkspaceWidgetContext } from './context';
 import { WorkspaceReplay } from './WorkspaceReplay';
 import {
@@ -998,6 +999,11 @@ export class VelaWorkspace {
      *  pooled, not live, so they drop out here. */
     cells(): ChartCell[] {
         return this.order.map((id) => this.cellsById.get(id)).filter((c): c is ChartCell => c != null);
+    }
+
+    /** Stable identity of the currently active chart cell (null before activation). */
+    get activeCellId(): string | null {
+        return this.activeId;
     }
 
     /**
