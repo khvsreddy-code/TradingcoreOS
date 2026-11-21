@@ -302,19 +302,18 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         const timeToExpiryYears = optionTimeToExpiryYears(expiryTimestamp, observedAt);
         if (timeToExpiryYears == null || timeToExpiryYears <= 0) continue;
         const getIv = (quote: any, right: 'CE' | 'PE'): { value: number; source: string } | undefined => {
+          // FYERS returns greeks.iv on each CE/PE option row. Keep the provider
+          // observation attached to that exact leg; do not merge or mirror IVs.
+          const supplied = finite(quote?.impliedVolatility);
+          if (supplied !== undefined && supplied > 0) return { value: supplied, source: 'FYERS IV' };
           const premium = valuationPremium(quote || {});
-          if (premium != null) {
-            const inferred = impliedVolatility({
-              right, spot, strike: Number(atm.strike), timeToExpiryYears,
-              optionPrice: premium, riskFreeRate: 0.06, dividendYield: 0.01,
-            });
-            if (inferred != null && inferred > 0) return { value: inferred, source: `${right} model IV` };
-          }
-          // Provider IV is one OTM-derived value mirrored across both rights;
-          // use it only when a leg cannot be independently solved from premium.
-          const supplied = Number(quote?.impliedVolatility);
-          return Number.isFinite(supplied) && supplied > 0
-            ? { value: supplied, source: 'FYERS shared IV fallback' }
+          if (premium == null) return undefined;
+          const inferred = impliedVolatility({
+            right, spot, strike: Number(atm.strike), timeToExpiryYears,
+            optionPrice: premium, riskFreeRate: 0.06, dividendYield: 0.01,
+          });
+          return inferred != null && inferred > 0
+            ? { value: inferred, source: `${right} model IV fallback` }
             : undefined;
         };
         const callIv = getIv(atm.call, 'CE');
@@ -573,19 +572,16 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
     if (timeToExpiryYears == null || timeToExpiryYears <= 0) return null;
     const common = { right, spot, strike, timeToExpiryYears, riskFreeRate, dividendYield };
     const premium = valuationPremium(quote || {});
-    // FYERS documents one OTM-derived IV per strike/expiry and mirrors it
-    // onto both CE and PE. Retain it as provider IV, but solve each leg from
-    // its own premium when computing a genuine model CE/PE skew.
+    // Provider IV belongs to this exact option contract (the CE row or PE row).
+    // Prefer it for the displayed IV and local Greek fallback; retain the
+    // independently premium-solved IV separately for model-only skew analysis.
     const suppliedIv = finite(quote?.impliedVolatility);
     const modelImpliedVolatility = premium != null
       ? impliedVolatility({ ...common, optionPrice: premium })
       : null;
-    // The provider's IV is shared by CE/PE at a strike; prefer each leg's
-    // independently solved IV for local Greek fallback. Use shared FYERS IV only
-    // when this leg has no valid premium from which to solve its own volatility.
-    const volatility = modelImpliedVolatility != null && modelImpliedVolatility > 0
-      ? modelImpliedVolatility
-      : suppliedIv;
+    const volatility = suppliedIv !== undefined && suppliedIv > 0
+      ? suppliedIv
+      : modelImpliedVolatility;
     if (volatility == null || volatility <= 0) return null;
     const modelGreeks = blackScholes({ ...common, volatility });
     const provider = quote?.providerGreeks || {};
@@ -600,9 +596,11 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
       volatility,
       modelImpliedVolatility,
       premium,
-      source: modelImpliedVolatility != null && modelImpliedVolatility > 0
-        ? (hasProviderGreeks ? 'MODEL IV + FYERS GREEKS' : 'MODEL IV + GREEKS')
-        : suppliedIv != null ? 'FYERS SHARED IV FALLBACK' : 'IV UNAVAILABLE',
+      source: suppliedIv !== undefined && suppliedIv > 0
+        ? (hasProviderGreeks ? 'FYERS IV + GREEKS' : 'FYERS IV + MODEL GREEKS')
+        : modelImpliedVolatility != null && modelImpliedVolatility > 0
+          ? (hasProviderGreeks ? 'MODEL IV + FYERS GREEKS' : 'MODEL IV + GREEKS')
+          : 'IV UNAVAILABLE',
       greeks: {
         delta: providerValues.delta ?? modelGreeks.delta,
         gamma: providerValues.gamma ?? modelGreeks.gamma,
@@ -641,7 +639,11 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
   const atmRow = rows.find((row: any) => Number(row.strike) === Number(atmStrike));
   const atmCall = atmRow ? modelFor(atmRow.call, 'CE', Number(atmRow.strike), atmRow.expiry) : null;
   const atmPut = atmRow ? modelFor(atmRow.put, 'PE', Number(atmRow.strike), atmRow.expiry) : null;
-  const providerAtmIv = finite(atmRow?.call?.impliedVolatility) ?? finite(atmRow?.put?.impliedVolatility);
+  const providerCallIv = finite(atmRow?.call?.impliedVolatility);
+  const providerPutIv = finite(atmRow?.put?.impliedVolatility);
+  const providerIvSkew = providerCallIv !== undefined && providerPutIv !== undefined
+    ? providerPutIv - providerCallIv
+    : undefined;
   const modelSkew = atmCall?.modelImpliedVolatility != null && atmPut?.modelImpliedVolatility != null
     ? atmPut.modelImpliedVolatility - atmCall.modelImpliedVolatility
     : undefined;
@@ -712,10 +714,10 @@ function OptionChainPanel({ loading, error, chain, expiry, onExpiryChange, termS
       <div className="mb-3 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3">
         <div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Volatility surface snapshot</div>
         <div className="mt-1 text-[10px] text-[var(--tco-muted)]">
-          FYERS shared ATM IV {formatPercent(providerAtmIv)} · CE model IV {formatPercent(atmCall?.modelImpliedVolatility)} · PE model IV {formatPercent(atmPut?.modelImpliedVolatility)} · model PE−CE skew {modelSkew == null ? '—' : `${(modelSkew * 100).toFixed(1)} vol pts`}
+          FYERS CE IV {formatPercent(providerCallIv)} · FYERS PE IV {formatPercent(providerPutIv)} · provider PE−CE skew {providerIvSkew == null ? '—' : `${(providerIvSkew * 100).toFixed(1)} vol pts`}
         </div>
         <div className="mt-1 text-[8px] text-[var(--tco-dim)]">
-          FYERS IV is a shared OTM-derived strike/expiry value, not separate CE/PE skew. Model CE/PE IVs solve each leg's premium independently using bid/ask midpoint (LTP fallback), ACT/365, r {(riskFreeRate * 100).toFixed(1)}%, q {(dividendYield * 100).toFixed(1)}%. Rho is model-derived.
+          Model CE IV {formatPercent(atmCall?.modelImpliedVolatility)} · model PE IV {formatPercent(atmPut?.modelImpliedVolatility)} · model PE−CE skew {modelSkew == null ? '—' : `${(modelSkew * 100).toFixed(1)} vol pts`}. Provider IVs and Greeks are kept per contract; missing IV is solved from bid/ask midpoint (LTP fallback), ACT/365, r {(riskFreeRate * 100).toFixed(1)}%, q {(dividendYield * 100).toFixed(1)}%. Rho is model-derived.
         </div>
         <div className="mt-1 text-[8px] text-[var(--tco-dim)]">{next}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
