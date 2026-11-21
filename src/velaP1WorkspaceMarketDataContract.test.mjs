@@ -93,6 +93,10 @@ assert.match(watchlist, /lotSize/);
 
 // FYERS option-chain fields retain provider provenance and do not invent an exchange.
 assert.match(optionAdapter, /strikecount: '50'/);
+const fallbackInstrumentSearch = read('src/server/routes/broker-market-data.routes.ts');
+assert.match(fallbackInstrumentSearch, /const queryTokens = query\.split\(\/\\\\s\+\/\)\.filter\(Boolean\)/);
+assert.match(fallbackInstrumentSearch, /queryTokens\.every\(token => row\.searchable\.includes\(token\)\)/);
+assert.match(fallbackInstrumentSearch, /replace\(\/\(\\\\d\),\(\?=\\\\d\{3\}/);
 assert.match(optionAdapter, /greeks: '1'/);
 assert.match(optionAdapter, /timestamp: requestedExpiry/);
 assert.ok(optionAdapter.includes('/^\\d{10,13}$/'), 'FYERS expiry timestamp must accept numeric Unix timestamps');
