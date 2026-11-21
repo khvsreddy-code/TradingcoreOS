@@ -408,7 +408,6 @@ export class FyersAdapter extends BaseBroker {
         label: String(entry?.date ?? entry?.expiryDate ?? entry?.expiry ?? '').trim(),
       }))
       .filter((entry: { value: string; label: string }) => /^\d{10,13}$/.test(entry.value));
-    const requestedExpiry = String(expiryDate || 'current_week').trim();
     const matchingExpiry = expiryOptions.find((entry: { value: string; label: string }) =>
       entry.value === requestedExpiry || entry.label === requestedExpiry,
     );
