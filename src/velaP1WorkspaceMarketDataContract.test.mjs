@@ -70,6 +70,9 @@ for (const action of ['start', 'play', 'pause', 'step', 'stop', 'bounds']) {
 }
 assert.match(terminalChrome, /value \+ ':00\+05:30'/);
 assert.match(terminalChrome, /330 \* 60_000/);
+assert.match(terminalChrome, /const numericMinutes = Number\(normalized\)/);
+assert.match(terminalChrome, /case 'D': case 'DAY': return amount \* 86_400_000/);
+assert.match(terminalChrome, /case 'W': case 'WEEK': return amount \* 7 \* 86_400_000/);
 
 // Watchlists retain named-group persistence and only show active, known-expiry option contracts.
 // A numeric price query and an explicit CE/PE request are resolved separately.
