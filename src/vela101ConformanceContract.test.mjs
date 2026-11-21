@@ -20,12 +20,12 @@ const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
 const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 
-assert.match(provenance, /Upstream source commit: `f6769868c5c0e78ba7977a5c89640df896a8f2f3`/, 'conformance must target the pinned Vela 0.10.6 source commit');
+assert.match(provenance, /Upstream source commit: `9e6861d67c1fbab13083ec6cd97825852678d5dd`/, 'conformance must target the pinned Vela 0.10.13 source commit');
 assert.match(provenance, /Previous source base: Vela 0\.10\.2/, 'the overlay uses Vela 0.10.2 as its three-way merge base');
-assert.equal(sourceSnapshot.upstream.commit, 'f6769868c5c0e78ba7977a5c89640df896a8f2f3', 'the machine-generated source diff must use the Vela 0.10.2 pin');
+assert.equal(sourceSnapshot.upstream.commit, '9e6861d67c1fbab13083ec6cd97825852678d5dd', 'the machine-generated source diff must use the Vela 0.10.2 pin');
 assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
 assert.equal(releaseSnapshot.upstream.base.version, '0.10.2', 'upstream release delta starts at Vela 0.10.2');
-assert.equal(releaseSnapshot.upstream.release.version, '0.10.6', 'upstream release delta ends at Vela 0.10.6');
+assert.equal(releaseSnapshot.upstream.release.version, '0.10.13', 'upstream release delta ends at Vela 0.10.13');
 assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
 
 assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
