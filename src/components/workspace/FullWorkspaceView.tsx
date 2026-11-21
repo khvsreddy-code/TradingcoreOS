@@ -277,6 +277,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
     if (!underlying || choices.length < 2) {
       setIvTermStructureError('The broker did not return multiple active expiries for this underlying.');
       setIvTermStructure([]);
+      setIvTermStructureLoading(false);
       return;
     }
     setIvTermStructureLoading(true);
