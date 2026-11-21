@@ -15,6 +15,53 @@
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { CandleStyle } from '../core/chartConfig';
 
+/** Opacity driven by the bar's volume versus the preceding 20 valid observations.
+ * Missing or zero-only history leaves the candle fully visible rather than inventing
+ * a relative-volume signal. The floor keeps quiet-market candles legible.
+ */
+function opacityFromVolume(current: number, average: number): number {
+    if (!Number.isFinite(current) || current < 0 || !Number.isFinite(average) || average <= 0) return 1;
+    const ratio = current / average;
+    return Math.max(0.35, Math.min(1, 0.35 + 0.65 * ratio));
+}
+
+export function relativeVolumeOpacity(volume: ArrayLike<number> | undefined, index: number): number {
+    if (!volume || !Number.isInteger(index) || index < 0 || index >= volume.length) return 1;
+    const current = Number(volume[index]);
+    if (!Number.isFinite(current) || current < 0) return 1;
+    const start = Math.max(0, index - 20);
+    let total = 0;
+    let count = 0;
+    for (let i = start; i < index; i += 1) {
+        const value = Number(volume[i]);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        total += value;
+        count += 1;
+    }
+    return count ? opacityFromVolume(current, total / count) : 1;
+}
+
+export function relativeVolumeOpacityFromBars(bars: ArrayLike<OHLCV | undefined>, index: number): number {
+    if (!Number.isInteger(index) || index < 0 || index >= bars.length) return 1;
+    const current = Number(bars[index]?.volume);
+    if (!Number.isFinite(current) || current < 0) return 1;
+    const start = Math.max(0, index - 20);
+    let total = 0;
+    let count = 0;
+    for (let i = start; i < index; i += 1) {
+        const value = Number(bars[i]?.volume);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        total += value;
+        count += 1;
+    }
+    return count ? opacityFromVolume(current, total / count) : 1;
+}
+
+/** Up candles in Hollow Candles style have an outline and no filled body. */
+export function isHollowUpCandle(priceStyle: string, isUp: boolean): boolean {
+    return priceStyle === 'hollowcandles' && isUp;
+}
+
 export type CandleTier = 'full' | 'wick' | 'aggregate';
 
 /**
