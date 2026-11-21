@@ -159,6 +159,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   const [orderLatencyMs, setOrderLatencyMs] = useState<number>();
   const ticksRef = useRef<Record<string, NormalizedMarketTick>>({});
   const tickFrameRef = useRef<number | null>(null);
+  const optionChainRequestRef = useRef(0);
   const ivTermStructureRequestRef = useRef(0);
   const previousOptionUnderlyingRef = useRef(selectedKey);
   const selectedTick = ticks[selectedKey];
@@ -167,9 +168,11 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   useEffect(() => {
     if (previousOptionUnderlyingRef.current === selectedKey) return;
     previousOptionUnderlyingRef.current = selectedKey;
+    optionChainRequestRef.current += 1;
     ivTermStructureRequestRef.current += 1;
     setOptionExpiry('current_week');
     setOptionChain(null);
+    setOptionLoading(false);
     setOptionError('');
     setIvTermStructure([]);
     setIvTermStructureError('');
@@ -183,8 +186,10 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         ticksRef.current = {};
         setTicks({});
         setAnalytics(null);
+        optionChainRequestRef.current += 1;
         ivTermStructureRequestRef.current += 1;
         setOptionChain(null);
+        setOptionLoading(false);
         setOptionExpiry('current_week');
         setOptionError('');
         setIvTermStructure([]);
@@ -242,16 +247,27 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
 
   const sync = async () => { try { const snapshot = await tradingCoreRuntime.syncPortfolio(); setFunds(snapshot.funds); setPositions(snapshot.positions); setOrders(snapshot.orders); setTrades(snapshot.trades); setHoldings(snapshot.holdings); } catch (error: any) { setFeedError(error.message || 'Portfolio synchronization failed'); } };
 
+  const optionExpiryForSelected = optionChain?.underlyingKey === selectedKey
+    ? optionExpiry
+    : 'current_week';
+
   const refreshOptionChain = async () => {
+    const requestId = ++optionChainRequestRef.current;
+    const instrumentKey = selectedKey;
+    const expiry = optionExpiryForSelected;
     setOptionLoading(true);
     setOptionError('');
     try {
-      const chain = await tradingCoreRuntime.getOptionChain(selectedKey, optionExpiry);
-      setOptionChain(chain);
+      const chain = await tradingCoreRuntime.getOptionChain(instrumentKey, expiry);
+      if (requestId === optionChainRequestRef.current && instrumentKey === selectedKey) {
+        setOptionChain(chain);
+      }
     } catch (error: any) {
-      setOptionError(error?.message || 'Unable to load option chain');
+      if (requestId === optionChainRequestRef.current) {
+        setOptionError(error?.message || 'Unable to load option chain');
+      }
     } finally {
-      setOptionLoading(false);
+      if (requestId === optionChainRequestRef.current) setOptionLoading(false);
     }
   };
   const loadIvTermStructure = async () => {
@@ -327,22 +343,31 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
     if (activeSection !== 'option-chain' || !selectedKey) return;
     let dead = false;
     const load = async () => {
+      const requestId = ++optionChainRequestRef.current;
+      const instrumentKey = selectedKey;
+      const expiry = optionExpiryForSelected;
       try {
-        const chain = await tradingCoreRuntime.getOptionChain(selectedKey, optionExpiry);
-        if (!dead) {
+        const chain = await tradingCoreRuntime.getOptionChain(instrumentKey, expiry);
+        if (!dead && requestId === optionChainRequestRef.current && instrumentKey === selectedKey) {
           setOptionChain(chain);
           setOptionError('');
         }
       } catch (error: any) {
-        if (!dead) setOptionError(error?.message || 'Unable to load option chain');
+        if (!dead && requestId === optionChainRequestRef.current) {
+          setOptionError(error?.message || 'Unable to load option chain');
+        }
       } finally {
-        if (!dead) setOptionLoading(false);
+        if (!dead && requestId === optionChainRequestRef.current) setOptionLoading(false);
       }
     };
     setOptionLoading(true);
     void load();
     const id = window.setInterval(() => void load(), 15_000);
-    return () => { dead = true; window.clearInterval(id); };
+    return () => {
+      dead = true;
+      optionChainRequestRef.current += 1;
+      window.clearInterval(id);
+    };
   }, [activeSection, selectedKey, brokerId, optionExpiry]);
 
   useEffect(() => {
