@@ -2329,13 +2329,17 @@ const bookmarksPanel: SidePanelDescriptor = {
       const requestId = ++suggestionRequest;
       if (query.length < 2) { hideSuggestions(); return; }
       const upper = query.toUpperCase();
-      const strikeMatch = query.match(/\b(\d{4,6})\b/);
-      const requestedStrike = strikeMatch ? Number(strikeMatch[1]) : undefined;
+      // Accept both raw and exchange-formatted prices/strikes, e.g. 22700 and 22,700.
+      const strikeMatch = query.match(/\b((?:\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?)\b/);
+      const requestedStrike = strikeMatch ? Number(strikeMatch[1]!.replaceAll(',', '')) : undefined;
       const rightMatch = upper.match(/\b(CE|PE|CALL|PUT)\b/);
       const requestedRight = rightMatch
         ? (/^(CE|CALL)$/i.test(rightMatch[1]!) ? 'CE' : 'PE')
         : undefined;
-      const underlyingQuery = upper.replace(/\d{4,6}/g, '').replace(/\b(CE|PE|CALL|PUT)\b/g, '').trim();
+      const underlyingQuery = upper
+        .replace(/\b(?:\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?\b/g, '')
+        .replace(/\b(CE|PE|CALL|PUT)\b/g, '')
+        .trim();
       const indexMatches = INDEX_SEARCH_UNIVERSE
         .map(item => {
           const quote = quoteView(item.symbol);
@@ -2362,7 +2366,10 @@ const bookmarksPanel: SidePanelDescriptor = {
         try {
           // One full-master query is enough: the server applies exact strike/CE/PE
           // intent, and this panel orders returned option contracts by expiry locally.
-          instruments = await searchFyersInstruments(query, 'all', 100);
+          const masterQuery = requestedStrike !== undefined
+            ? [underlyingQuery, String(requestedStrike)].filter(Boolean).join(' ')
+            : query;
+          instruments = await searchFyersInstruments(masterQuery, 'all', 100);
         } catch { /* immediate index matches remain useful while broker search recovers */ }
       }
       if (requestId !== suggestionRequest) return;
