@@ -121,6 +121,9 @@ assert.match(optionPanel, /hasCompleteRowOi/);
 assert.match(optionPanel, /Load IV term structure/);
 assert.match(optionPanel, /ivTermStructureRequestRef\.current \+= 1/);
 assert.match(optionPanel, /requestId !== ivTermStructureRequestRef\.current/);
+assert.match(optionPanel, /optionChainRequestRef\.current \+= 1/);
+assert.match(optionPanel, /requestId === optionChainRequestRef\.current/);
+assert.match(optionPanel, /const optionExpiryForSelected = optionChain\?\.underlyingKey === selectedKey/);
 assert.match(optionPanel, /setOptionExpiry\('current_week'\)/);
 
 // Same-session NSE/BSE gaps trigger bounded canonical history reconciliation
