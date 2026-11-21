@@ -265,6 +265,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
     }
     setIvTermStructureLoading(true);
     setIvTermStructureError('');
+    setIvTermStructure([]);
     const output: Array<{ expiry: string; callIv?: number; putIv?: number; source: string }> = [];
     try {
       // Deliberately opt-in and sequential: each additional expiry is a broker
