@@ -63,10 +63,14 @@ const STATUS_CLASS: Record<InstrumentDataStatus, string> = {
 function snapshotQuote(symbol: string): QuoteView {
   const snapshot = tradingCoreRuntime.getMarketSnapshot(symbol) as (Record<string, unknown> & { ltp?: number }) | undefined;
   const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
+  const source = String(snapshot?.source ?? '').toLowerCase();
+  const providerConnected = source === 'fyers' || source === 'upstox'
+    ? broker?.status === 'Connected'
+    : source ? undefined : broker?.status !== 'Connected' ? false : undefined;
   const health = classifyMarketDataHealth({
-    source: String(snapshot?.source ?? ''),
+    source,
     lastUpdateAt: (snapshot?.lastTradeTimestamp ?? snapshot?.timestamp ?? snapshot?.receivedAt) as string | number | undefined,
-    providerConnected: broker?.status === 'Connected',
+    providerConnected,
     expectedIntervalMs: 5_000,
   });
   const ltp = Number(snapshot?.ltp ?? snapshot?.lastPrice ?? snapshot?.close);
@@ -291,7 +295,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     ? broker?.status === 'Read Only' ? 'This broker session is read-only.' : 'Connect a broker before submitting an order.'
     : !tradable ? 'Spot indices and unclassified symbols cannot be sent as order instruments. Select a listed option or future contract.'
       : !Number.isInteger(quantityValue) || quantityValue < 1 ? 'Enter a valid whole-number quantity.'
-        : orderType !== 'Market' && !positiveNumber(limitPrice) ? 'Enter a valid limit/execution price.'
+        : orderType === 'Market' && livePrice === undefined ? 'No current price is available. Reconnect market data or use a limit order.'
+          : orderType !== 'Market' && !positiveNumber(limitPrice) ? 'Enter a valid limit/execution price.'
           : (orderType === 'SL' || orderType === 'SL-M') && !trigger ? 'Enter a valid trigger price.'
             : needsFreshnessAcknowledgement && !freshnessAcknowledged ? 'Acknowledge that the displayed market data is not confirmed live.'
               : null;
