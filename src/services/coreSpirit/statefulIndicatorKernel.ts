@@ -608,8 +608,10 @@ export class ATRState {
 
     if (mode === 'append') {
       this.previousBarClose = this.currentClose;
-      this.currentClose = c;
     }
+    // Keep the latest forming-bar close after every replacement. The next append
+    // must calculate true range from the revised close, not the first tick's close.
+    this.currentClose = c;
 
     return result;
   }

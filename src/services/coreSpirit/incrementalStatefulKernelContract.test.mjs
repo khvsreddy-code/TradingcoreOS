@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { ema, rma } from './numericalKernels.ts';
+import { ATRState } from './statefulIndicatorKernel.ts';
 import { CoreSpiritIncrementalSmoother, compareCoreSpiritSmootherToBatch } from './incrementalStatefulKernel.ts';
 
 const close = (a, b, eps = 1e-10) => {
@@ -46,6 +47,19 @@ for (const kind of ['ema', 'rma']) {
   committed.push(appended);
   close(restored.update(committed.length - 1, appended, true), reference(committed, period).at(-1));
   assert.deepEqual(Array.from(restored.replay(committed)), Array.from(reference(committed, period)), `${kind} replay/reset parity`);
+}
+
+// ATR replacements must advance the forming close without changing the stable prior close.
+// A later append must use the latest replacement close when computing true range.
+{
+  const atr = new ATRState(3);
+  close(atr.update(10, 9, 9.5), 1);
+  close(atr.update(11, 10, 10.5), 1.5);
+  close(atr.update(12, 10, 11), 2);
+  close(atr.update(14, 12, 13), 2);
+  close(atr.update(15, 12, 12.5, 'replace'), 8 / 3);
+  close(atr.update(16, 12.1, 12.2, 'replace'), 3);
+  close(atr.update(14, 13.8, 13.9, 'append'), 2.6);
 }
 
 // Dataset reset, session-like invalid gaps, and invalid checkpoint rejection.
