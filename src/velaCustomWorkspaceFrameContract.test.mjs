@@ -179,7 +179,7 @@ assert.doesNotMatch(liveWorkspace, /Open Data Window|Open Objects Tree|Open Pape
 assert.doesNotMatch(liveWorkspace, /TradingCoreOS application navigation|left-\[48px\]/, 'the app does not add a second left rail beside Vela drawing tools');
 assert.doesNotMatch(topbarComposition, /'tco\.workspace-frame'|'tco\.trading'/, 'Workspace and Trade are promoted to the global application header instead of duplicating Vela chart chrome');
 assert.match(liveWorkspace, /data-tco-header-action="workspace"[\s\S]{0,260}openTerminalPanel\('tco\.workspace-frame'\)/, 'global Workspace opens the existing Vela saved-layout panel');
-assert.match(liveWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}openTerminalPanel\('tco\.trading'\)/, 'global Trade opens the existing broker-aware trading panel');
+assert.match(liveWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}openTerminalPanel\('tco\.order-ticket'\)/, 'global Trade opens the compact broker-aware order ticket');
 assert.match(liveWorkspace, /navigator\.share/, 'Share uses the native share sheet when available');
 assert.match(liveWorkspace, /sharedChartContext\.symbol[\s\S]{0,300}setSymbol\(sharedChartContext\.symbol\)/, 'shared links validate and restore the requested instrument after workspace restore');
 assert.match(liveWorkspace, /setTimeframe\(sharedChartContext\.timeframe\)/, 'shared links restore the requested timeframe');
