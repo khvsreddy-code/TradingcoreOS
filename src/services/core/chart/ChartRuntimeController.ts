@@ -267,7 +267,8 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
         try{
           if (hasRequiredIndicatorHistory(data.length)) {
-            chartIndicatorController.renderStudies(data);
+            // Keep the last committed worker series visible until this history revision commits.
+            chartIndicatorController.renderStudies(data,true);
             chartIndicatorController.requestIndicatorWorker(data);
           } else {
             // Keep the candle view responsive while required history is loading.

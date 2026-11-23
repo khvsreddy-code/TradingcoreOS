@@ -18,6 +18,9 @@ assert.ok(tickBranch > statusGuard, 'the tick fast path must run after non-candl
 assert.ok(fullHistoryRewrite > tickBranch, 'full history projection must only run after the tick fast path returns');
 assert.ok(snapshotHandler.includes('realtimeController.handleTick('), 'live ticks must flow through the forming-bar renderer path');
 assert.ok(snapshotHandler.includes('realtimeController.hydrateHistory('), 'history mutations must still rehydrate calculation state');
+assert.ok(snapshotHandler.includes('chartIndicatorController.renderStudies(data,true)'), 'history refreshes must preserve committed worker indicator output until replacement data commits');
+assert.ok(indicator.includes('const activeIds=new Set(nextIndicators.filter(item=>item.enabled).map(item=>item.id))'), 'disabled or removed indicators must release their retained worker series');
+assert.ok(indicator.includes('workerSeriesMap.delete(id)'), 'removed worker series must be removed from the worker output registry');
 assert.ok(snapshotHandler.includes('snapshot.columns?.time.length'), 'columnar history must not be reported as empty during a broker status error');
 
 const workerStart = indicator.indexOf('const requestIndicatorWorker=');

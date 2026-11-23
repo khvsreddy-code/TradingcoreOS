@@ -268,7 +268,19 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
 
   return {
     setInputs(next:{indicators:IndicatorConfig[];timeframe:string}){
-      indicators=next.indicators; timeframe=next.timeframe;
+      const nextIndicators=next.indicators;
+      const activeIds=new Set(nextIndicators.filter(item=>item.enabled).map(item=>item.id));
+      // A disabled/removed worker indicator is the only reason its committed output
+      // should be dropped before a replacement calculation succeeds.
+      for(const [id,group] of workerSeriesMap){
+        if(activeIds.has(id))continue;
+        group.forEach(series=>{
+          try{chart.current?.removeSeries(series as any)}catch{}
+          try{oscChart.current?.removeSeries(series as any)}catch{}
+        });
+        workerSeriesMap.delete(id);
+      }
+      indicators=nextIndicators; timeframe=next.timeframe;
     },
     getIndicatorSeries(){return indicatorSeries.current;},
     getMaps(){return {indicatorSeriesMap,markerDataByIndicator,indicatorFillMap,workerSeriesMap};},
