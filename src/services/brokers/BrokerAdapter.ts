@@ -23,6 +23,10 @@ export interface OrderRequest {
 
 export interface OrderResult {
   orderId: string;
+  /** Canonical TradingCore identity for downstream order/position reconciliation. */
+  instrumentId?: string;
+  /** Chart/data-plane symbol associated with the broker order. */
+  symbol?: string;
   status: 'COMPLETE' | 'REJECTED' | 'PENDING';
   message?: string;
   timestamp: string;
