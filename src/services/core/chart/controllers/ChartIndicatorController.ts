@@ -147,7 +147,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
   const renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
      clearChartMarkers();
   
-     indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();indicatorFillMap.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.clear();oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
+     indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();if(!preserveWorkerSeries){indicatorFillMap.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.clear();}oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
      if(!preserveWorkerSeries){workerSeriesMap.forEach(group=>group.forEach(s=>{try{chart.current?.removeSeries(s as any)}catch{} try{oscChart.current?.removeSeries(s as any)}catch{}})); workerSeriesMap.clear();}
      const active=indicators.filter(x=>x.enabled); const needsOsc=oscillatorKinds(active); const chartMarkers:any[]=[];
      if(needsOsc&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createVelaNativeChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
@@ -278,6 +278,9 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
           try{chart.current?.removeSeries(series as any)}catch{}
           try{oscChart.current?.removeSeries(series as any)}catch{}
         });
+        const fills=indicatorFillMap.get(id)||[];
+        fills.forEach(handle=>{try{handle.remove()}catch{}});
+        indicatorFillMap.delete(id);
         workerSeriesMap.delete(id);
       }
       indicators=nextIndicators; timeframe=next.timeframe;
