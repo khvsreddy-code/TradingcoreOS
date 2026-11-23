@@ -562,16 +562,20 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
       data-editor-surface="corespirit-luxalgo-inspired"
     >
       <header className="flex h-11 min-h-11 items-center gap-2 border-b border-[#252b39] bg-[#171b26] px-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#354258] bg-[#202a3a]">
-          <svg width="19" height="19" viewBox="0 0 32 32" aria-hidden="true">
-            <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="#f0a35a" strokeWidth="2" strokeLinejoin="round"/>
-            <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#182235" stroke="#77a9ff" strokeWidth="1.3" strokeLinejoin="round"/>
-            <circle cx="16" cy="17" r="2.5" fill="none" stroke="#c6d8fa" strokeWidth="1.2"/>
-          </svg>
-        </div>
+        {!embedded && (
+          <>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#354258] bg-[#202a3a]">
+              <svg width="19" height="19" viewBox="0 0 32 32" aria-hidden="true">
+                <path d="M16 2 C18 8 27 10 26 19 C25 26 20 30 14 29 C6 28 3 22 6 16 C8 12 12 10 12 5 C15 8 17 10 17 13 C20 10 18 6 16 2Z" fill="none" stroke="#f0a35a" strokeWidth="2" strokeLinejoin="round"/>
+                <path d="M16 10 L18 12 L21 12 L21 15 L23 17 L21 19 L21 22 L18 22 L16 24 L14 22 L11 22 L11 19 L9 17 L11 15 L11 12 L14 12Z" fill="#182235" stroke="#77a9ff" strokeWidth="1.3" strokeLinejoin="round"/>
+                <circle cx="16" cy="17" r="2.5" fill="none" stroke="#c6d8fa" strokeWidth="1.2"/>
+              </svg>
+            </div>
+            <span className="shrink-0 text-[10px] font-bold tracking-[.12em] text-[#e5e9f2]">CORESPIRIT</span>
+            <span className="hidden text-[9px] text-[#68758a] sm:inline">/</span>
+          </>
+        )}
         <div className="min-w-0 flex items-center gap-2">
-          <span className="shrink-0 text-[10px] font-bold tracking-[.12em] text-[#e5e9f2]">CORESPIRIT</span>
-          <span className="hidden text-[9px] text-[#68758a] sm:inline">/</span>
           <input
             id="corespirit-script-name"
             value={nameDraft}
@@ -634,12 +638,16 @@ export function CoreSpiritDock({ onClose, onAddToChart, embedded = false, onFull
           <button type="button" onClick={() => setMinimized(value => !value)} aria-label={minimized ? "Restore CoreSpirit editor" : "Minimize CoreSpirit editor"} title={minimized ? "Restore editor" : "Minimize editor"} className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#293244] hover:text-white">
             {minimized ? <Plus size={14}/> : <Minus size={14}/>}
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label={fullscreen ? "Restore CoreSpirit panel size" : "Fullscreen CoreSpirit editor"} title={fullscreen ? "Restore" : "Fullscreen"} className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#293244] hover:text-white">
-            {fullscreen ? <Minimize2 size={14}/> : <Maximize2 size={14}/>}
-          </button>
-          <button type="button" onClick={closeTerminal} aria-label="Close CoreSpirit terminal" title="Close terminal" className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#3b2830] hover:text-[#f58b8b]">
-            <X size={14}/>
-          </button>
+          {!embedded && (
+            <>
+              <button type="button" onClick={toggleFullscreen} aria-label={fullscreen ? "Restore CoreSpirit panel size" : "Fullscreen CoreSpirit editor"} title={fullscreen ? "Restore" : "Fullscreen"} className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#293244] hover:text-white">
+                {fullscreen ? <Minimize2 size={14}/> : <Maximize2 size={14}/>}
+              </button>
+              <button type="button" onClick={closeTerminal} aria-label="Close CoreSpirit terminal" title="Close terminal" className="grid h-7 w-7 place-items-center rounded text-[#8793a6] hover:bg-[#3b2830] hover:text-[#f58b8b]">
+                <X size={14}/>
+              </button>
+            </>
+          )}
         </div>
       </header>
 
