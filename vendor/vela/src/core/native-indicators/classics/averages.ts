@@ -109,7 +109,7 @@ interface FixedAverageText {
 }
 
 /** A single-kind average: the same inputs as the generic study minus the type picker. */
-function fixedAverage(type: string, text: FixedAverageText, shortTitle: 'SMA' | 'EMA', smooth: (src: number[], len: number) => number[]): ClassicIndicatorSpec {
+function fixedAverage(type: string, text: FixedAverageText, shortTitle: string, smooth: (src: number[], len: number, bars: readonly OHLCV[]) => number[]): ClassicIndicatorSpec {
     return {
         type,
         title: text.title,
@@ -118,7 +118,7 @@ function fixedAverage(type: string, text: FixedAverageText, shortTitle: 'SMA' | 
         inputs: [lengthInput(20, 'length', msg('indicator.common.length', 'Length'), 5000, text.lengthTooltip), sourceInput('Close', 'source', msg('indicator.common.source', 'Source'), text.sourceTooltip), offsetInput, colorInput()],
         compute: (bars, inputs) => {
             const len = num(inputs, 'length', 20);
-            let values = smooth(sourceValues(bars, str(inputs, 'source', 'Close')), len);
+            let values = smooth(sourceValues(bars, str(inputs, 'source', 'Close')), len, bars);
             const offset = Math.trunc(num(inputs, 'offset', 0));
             if (offset !== 0) values = shift(values, offset);
             return { plots: [{ key: shortTitle.toLowerCase(), title: text.shortTitle, values, color: str(inputs, 'color', INFO), width: 2 }] };
@@ -147,6 +147,39 @@ const exponentialMa = fixedAverage(
     },
     'EMA',
     ema,
+);
+const weightedMa = fixedAverage(
+    'wma',
+    {
+        title: msg('indicator.wma.title', 'Weighted Moving Average'),
+        shortTitle: msg('indicator.wma.shortTitle', 'WMA'),
+        lengthTooltip: msg('indicator.wma.length.tooltip', 'Number of bars in the linearly weighted average. The newest bar receives the greatest weight.'),
+        sourceTooltip: msg('indicator.wma.source.tooltip', 'Price series the WMA is calculated on.'),
+    },
+    'WMA',
+    wma,
+);
+const volumeWeightedMa = fixedAverage(
+    'vwma',
+    {
+        title: msg('indicator.vwma.title', 'Volume Weighted Moving Average'),
+        shortTitle: msg('indicator.vwma.shortTitle', 'VWMA'),
+        lengthTooltip: msg('indicator.vwma.length.tooltip', 'Number of bars in the price-volume weighted average.'),
+        sourceTooltip: msg('indicator.vwma.source.tooltip', 'Price series weighted by each bar’s traded volume.'),
+    },
+    'VWMA',
+    (src, len, bars) => vwma(src, volumes(bars), len),
+);
+const hullMa = fixedAverage(
+    'hma',
+    {
+        title: msg('indicator.hma.title', 'Hull Moving Average'),
+        shortTitle: msg('indicator.hma.shortTitle', 'HMA'),
+        lengthTooltip: msg('indicator.hma.length.tooltip', 'Lookback used by the Hull moving average’s weighted-average stages.'),
+        sourceTooltip: msg('indicator.hma.source.tooltip', 'Price series the HMA is calculated on.'),
+    },
+    'HMA',
+    hma,
 );
 
 const movingAverage: ClassicIndicatorSpec = {
@@ -532,4 +565,4 @@ const guppy: ClassicIndicatorSpec = {
     },
 };
 
-export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope, maCross, emaCross, maWithEmaCross, maDouble, maTriple, maMultiple, guppy];
+export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, weightedMa, volumeWeightedMa, hullMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope, maCross, emaCross, maWithEmaCross, maDouble, maTriple, maMultiple, guppy];
