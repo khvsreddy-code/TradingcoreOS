@@ -10,6 +10,7 @@ import {
   normalizeInstrumentType,
 } from '../../services/marketData/instrumentIdentity';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
+import { BrokerAdapterRegistry } from '../../services/brokers/adapters';
 
 type OrderSide = OrderRequest['side'];
 type OrderType = OrderRequest['orderType'];
@@ -149,7 +150,6 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const [triggerPrice, setTriggerPrice] = useState('');
   const [stopLoss, setStopLoss] = useState('');
   const [target, setTarget] = useState('');
-  const [trailingStop, setTrailingStop] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [freshnessAcknowledged, setFreshnessAcknowledged] = useState(false);
@@ -159,6 +159,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const [expiry, setExpiry] = useState('current_week');
   const [selectedOptionId, setSelectedOptionId] = useState('');
   const [quote, setQuote] = useState<QuoteView>(() => snapshotQuote(symbol));
+  const [selectedOptionQuote, setSelectedOptionQuote] = useState<QuoteView | null>(null);
   const [funds, setFunds] = useState<{ availableMargin?: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -172,7 +173,6 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     setTriggerPrice('');
     setStopLoss('');
     setTarget('');
-    setTrailingStop('');
     setReviewOpen(false);
     setFreshnessAcknowledged(false);
     setChain(null);
@@ -204,6 +204,27 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
       .catch(() => { if (!cancelled) setFunds(null); });
     return () => { cancelled = true; };
   }, [brokerId]);
+
+  useEffect(() => {
+    const nativeKey = selectedOption?.instrument.brokerInstrumentKey || selectedOption?.instrument.symbol;
+    if (!nativeKey) {
+      setSelectedOptionQuote(null);
+      return;
+    }
+    let cancelled = false;
+    const refresh = () => {
+      const next = snapshotQuote(nativeKey);
+      if (!cancelled) setSelectedOptionQuote(next);
+    };
+    refresh();
+    const stop = tradingCoreRuntime.subscribeTicks([nativeKey], refresh);
+    const timer = window.setInterval(refresh, 2_000);
+    return () => {
+      cancelled = true;
+      stop();
+      window.clearInterval(timer);
+    };
+  }, [selectedOption?.instrument.id, brokerId]);
 
   useEffect(() => {
     if (!isIndex) {
@@ -240,6 +261,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const instrument = selectedOption?.instrument ?? baseInstrument;
   const activeQuote = useMemo(() => {
     if (selectedOption) {
+      if (selectedOptionQuote?.ltp !== undefined) return selectedOptionQuote;
       const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
       const rawAt = selectedOption.quote.observedAt ?? chain?.observedAt;
       const health = classifyMarketDataHealth({
@@ -257,9 +279,10 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
       } satisfies QuoteView;
     }
     return quote;
-  }, [selectedOption, chain, brokerId, quote]);
+  }, [selectedOption, selectedOptionQuote, chain, brokerId, quote]);
   const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
   const brokerConnected = broker?.status === 'Connected';
+  const supportsBracketOrders = BrokerAdapterRegistry.getAdapter(brokerId)?.capabilities.supportsBracketOrders === true;
   const tradable = instrument.instrumentType !== 'index' && instrument.instrumentType !== 'unknown';
   const lotSize = selectedOption?.lotSize ?? instrument.lotSize;
   const quantityValue = Number(quantity);
@@ -268,7 +291,6 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const trigger = (orderType === 'SL' || orderType === 'SL-M') ? positiveNumber(triggerPrice) : undefined;
   const stop = positiveNumber(stopLoss);
   const takeProfit = positiveNumber(target);
-  const trailing = positiveNumber(trailingStop);
   const estimatedStopRisk = typedPrice !== undefined && stop !== undefined
     ? Math.abs(typedPrice - stop) * quantityValue
     : undefined;
@@ -315,7 +337,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
                 : invalidPrice(orderType === 'Limit' || orderType === 'SL' ? positiveNumber(limitPrice) : undefined) ? `Price must follow the ${instrument.tickSize} tick size.`
                   : (orderType === 'SL' || orderType === 'SL-M') && !trigger ? 'Enter a valid trigger price.'
                     : invalidPrice(trigger) ? `Trigger price must follow the ${instrument.tickSize} tick size.`
-                      : invalidRiskDirection(typedPrice) ? 'Stop loss and target must be on the correct side of the entry price.'
+                      : invalidPrice(stop) || invalidPrice(takeProfit) ? `Stop and target prices must follow the ${instrument.tickSize} tick size.`
+                        : invalidRiskDirection(typedPrice) ? 'Stop loss and target must be on the correct side of the entry price.'
                         : needsFreshnessAcknowledgement && !freshnessAcknowledged ? 'Acknowledge that the displayed market data is not confirmed live.'
                           : null;
 
@@ -340,9 +363,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
         orderType,
         side,
         product,
-        ...(stop ? { stopLoss: stop } : {}),
-        ...(takeProfit ? { takeProfit } : {}),
-        ...(trailing ? { trailingStopLoss: trailing } : {}),
+        ...(supportsBracketOrders && stop ? { stopLoss: stop } : {}),
+        ...(supportsBracketOrders && takeProfit ? { takeProfit } : {}),
         idempotencyKey: globalThis.crypto?.randomUUID?.(),
       };
       const result = await tradingCoreRuntime.placeOrder(request);
@@ -363,7 +385,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const labelBase = 'block text-[9px] font-semibold uppercase tracking-[.09em] text-[#8693a7]';
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 bg-[#0d1118] p-3 text-[#dce4ef]" data-testid="compact-order-ticket">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain bg-[#0d1118] p-3 text-[#dce4ef]" data-testid="compact-order-ticket">
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.07] pb-3">
         <div className="min-w-0">
           <div className="text-[9px] font-semibold uppercase tracking-[.12em] text-[#75849b]">Order ticket</div>
@@ -460,10 +482,15 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
 
       {advancedOpen && (
         <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/[0.07] bg-[#111722] p-3">
-          <div><label className={labelBase}>Stop loss · price</label><input className={fieldBase} type="number" value={stopLoss} onChange={event => { setStopLoss(event.target.value); setReviewOpen(false); }} placeholder="Optional"/></div>
-          <div><label className={labelBase}>Target · price</label><input className={fieldBase} type="number" value={target} onChange={event => { setTarget(event.target.value); setReviewOpen(false); }} placeholder="Optional"/></div>
-          <div className="col-span-2"><label className={labelBase}>Trailing stop · price distance</label><input className={fieldBase} type="number" value={trailingStop} onChange={event => { setTrailingStop(event.target.value); setReviewOpen(false); }} placeholder="Optional · adapter support varies"/></div>
-          <p className="col-span-2 text-[8px] leading-4 text-[#7f8ca0]">Risk fields are passed only when the selected broker adapter supports them. Validate broker-specific price semantics before submission.</p>
+          {supportsBracketOrders ? (
+            <>
+              <div><label className={labelBase}>Stop loss · price</label><input className={fieldBase} type="number" value={stopLoss} onChange={event => { setStopLoss(event.target.value); setReviewOpen(false); }} placeholder="Optional"/></div>
+              <div><label className={labelBase}>Target · price</label><input className={fieldBase} type="number" value={target} onChange={event => { setTarget(event.target.value); setReviewOpen(false); }} placeholder="Optional"/></div>
+              <p className="col-span-2 text-[8px] leading-4 text-[#7f8ca0]">Attached stop-loss and target are sent only to broker adapters that declare bracket-order support.</p>
+            </>
+          ) : (
+            <p className="col-span-2 text-[9px] leading-4 text-[#aab6c7]">This broker adapter does not advertise attached bracket orders. Place protective exit orders separately after entry.</p>
+          )}
         </div>
       )}
 
@@ -471,7 +498,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[9px]">
           <span className="text-[#7f8ca0]">Available margin</span><span className="text-right tabular-nums text-[#d7e0ed]">{funds?.availableMargin !== undefined ? `₹${formatMoney(funds.availableMargin)}` : '—'}</span>
           <span className="text-[#7f8ca0]">Margin required</span><span className="text-right text-[#8f9db0]">Broker-calculated on order</span>
-          <span className="text-[#7f8ca0]">Risk to stop</span><span className="text-right tabular-nums text-[#d7e0ed]">{estimatedStopRisk !== undefined ? `₹${formatMoney(estimatedStopRisk)} · estimate` : 'Set stop to estimate'}</span>
+          <span className="text-[#7f8ca0]">Risk to stop</span><span className="text-right tabular-nums text-[#d7e0ed]">{!supportsBracketOrders ? 'Broker does not support attached exits' : estimatedStopRisk !== undefined ? `₹${formatMoney(estimatedStopRisk)} · estimate` : 'Set stop to estimate'}</span>
           <span className="text-[#7f8ca0]">Max loss</span><span className="text-right tabular-nums text-[#d7e0ed]">{maxLoss !== undefined ? `₹${formatMoney(maxLoss)} · long premium` : instrument.instrumentType === 'option' && side === 'Sell' ? 'Not capped' : 'Not estimated'}</span>
         </div>
 
