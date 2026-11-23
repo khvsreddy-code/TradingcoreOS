@@ -96,6 +96,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'tco.research',
     'tco.automation',
     'tco.trading',
+    'tco.order-ticket',
     'tco.workspace-frame',
     'tco.panels',
   ],
