@@ -29,7 +29,7 @@ import { buildWatchlistAdvancedTechnicalSummary, type WatchlistAdvancedTechnical
 import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../terminal/terminalDataService';
 import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { classifyMarketDataHealth } from '../../marketData/dataHealth';
-import { createInstrument, registerInstrument, publishInstrumentSelection } from '../../marketData/instrumentIdentity';
+import { registerInstrument, publishInstrumentSelection } from '../../marketData/instrumentIdentity';
 import type { InstrumentDataStatus, InstrumentType } from '../../../types/instrument';
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
@@ -285,7 +285,7 @@ function deleteWatchlistGroup(id: string, ctx?: { stateChanged?: () => void }): 
 function symbolDescriptor(item: WatchlistItem) {
   const instrument = registerInstrument({
     symbol: item.symbol, provider: item.provider ?? 'unknown', exchange: item.exchange,
-    instrumentType: item.instrumentType, type: item.type, underlying: item.underlying,
+    instrumentType: item.instrumentType, type: item.type, underlying: item.underlying, isin: item.isin,
     expiry: item.expiry, strike: item.strike, optionType: item.optionType,
     lotSize: item.lotSize, tickSize: item.tickSize, brokerInstrumentKey: item.brokerInstrumentKey,
     dataStatus: 'unknown', name: item.label,
@@ -2656,7 +2656,7 @@ const bookmarksPanel: SidePanelDescriptor = {
             publishInstrumentSelection(registerInstrument({
               symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
               exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
-              underlying: item.underlying, expiry: item.expiry, strike: item.strike,
+              underlying: item.underlying, isin: item.isin, expiry: item.expiry, strike: item.strike,
               optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
               brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
             }));
