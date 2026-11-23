@@ -222,7 +222,7 @@ for (const family of ['channels', 'fibonacci', 'patterns']) {
 assert.match(drawingToolbar, /allDrawingTypeMetadata\(\)/, 'the native toolbar derives its complete catalog from registered drawing metadata');
 assert.match(terminal, /sidebar:\s*\{[\s\S]*'tco\.bookmarks'[\s\S]*'tco\.panels'/, 'the right rail uses an intentional grouped native sidebar composition');
 assert.match(chrome, /const panelsHubPanel: SidePanelDescriptor/, 'occasional panels have a native More panels hub');
-assert.match(chrome, /registerSidePanel\(panelsHubPanel\)/, 'the More panels hub is registered with Vela');
+assert.match(chrome, /registerTcoSidePanel\(panelsHubPanel\)/, 'the More panels hub is registered with Vela');
 for (const id of ['tco.market-health', 'tco.orderbook', 'tco.options', 'tco.automation', 'tco.risk', 'tco.journal']) {
   assert.ok(chrome.includes("{ id: '" + id + "'"), 'More panels provides ' + id);
 }
