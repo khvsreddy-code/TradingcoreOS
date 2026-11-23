@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { TerminalJournalPanel } from '../../../components/workspace/TerminalJournalPanel';
+import { CompactOrderTicket } from '../../../components/workspace/CompactOrderTicket';
 import { CoreSpiritChartAssistant } from '../../../components/workspace/CoreSpiritChartAssistant';
 import { createRoot } from 'react-dom/client';
 import { CORESPIRIT_LUXALGO_SMC_SOURCE } from '../../coreSpirit/luxAlgoSmcCoreSource';
@@ -3710,6 +3711,38 @@ const automationPanel:SidePanelDescriptor={
   },
 };
 
+const orderTicketPanel: SidePanelDescriptor = {
+  id: 'tco.order-ticket',
+  title: 'Order Ticket',
+  icon: 'briefcase',
+  order: 7,
+  width: 400,
+  resizable: true,
+  minWidth: 340,
+  maxWidth: 560,
+  overlay: true,
+  mount(ctx, body, header) {
+    header.setTitle('Order Ticket');
+    body.style.padding = '0';
+    body.style.overflow = 'hidden';
+    const root = createRoot(body);
+    const render = () => root.render(createElement(CompactOrderTicket, {
+      symbol: String(ctx.symbol || ''),
+      timeframe: String(ctx.timeframe || ''),
+    }));
+    render();
+    return {
+      onOpen: render,
+      onChart: render,
+      destroy() {
+        root.unmount();
+        body.style.padding = '';
+        body.style.overflow = '';
+      },
+    };
+  },
+};
+
 const tradingPanel:SidePanelDescriptor={
   id:'tco.trading',
   title:'Trading',
@@ -4401,6 +4434,8 @@ const panelsHubPanel: SidePanelDescriptor = {
           { id: 'tco.market-health', label: 'Market Health', detail: 'Provider status and data freshness' },
           { id: 'tco.orderbook', label: 'Order Book', detail: 'Bid, ask and market depth' },
           { id: 'tco.options', label: 'Options Chain', detail: 'Expiry, strikes and option metrics' },
+          { id: 'tco.order-ticket', label: 'Order Ticket', detail: 'Compact broker-routed order entry' },
+          { id: 'tco.trading', label: 'Trading Summary', detail: 'Margin, positions and account context' },
         ],
       },
       {
@@ -4454,6 +4489,7 @@ registerTcoSidePanel(quantPanel);
 registerTcoSidePanel(bookmarksPanel);
 registerTcoSidePanel(researchPanel);
 registerTcoSidePanel(automationPanel);
+registerTcoSidePanel(orderTicketPanel);
 registerTcoSidePanel(tradingPanel);
 registerTcoSidePanel(journalPanel);
 registerTcoSidePanel(dataWindowPanel);
