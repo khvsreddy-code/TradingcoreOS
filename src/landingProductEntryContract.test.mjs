@@ -32,7 +32,7 @@ assert.match(belowFold, /illustrative, not live market data/);
 assert.match(belowFold, /FAQSection/);
 assert.match(belowFold, /Footer/);
 
-assert.match(landing, /<LandingBelowFold onLaunchPlatform=\\{onLaunchPlatform\\} \\/>/, 'compact product and access links must exist when the page navigation renders');
+assert.ok(landing.includes('<LandingBelowFold onLaunchPlatform={onLaunchPlatform} />'), 'compact product and access links must exist when the page navigation renders');
 assert.match(nav, /href: '#access-model-title'/);
 assert.match(app, /const handleLaunchPlatform = \(\) => \{/);
 assert.match(app, /setIsAuthModalOpen\(true\)/);
