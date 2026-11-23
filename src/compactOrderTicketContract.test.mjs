@@ -21,6 +21,14 @@ assert.ok(ticket.includes('quantityValue % lotSize'), 'lot-size multiples are en
 assert.ok(ticket.includes('tick size'), 'price increments are validated against the instrument tick');
 assert.ok(ticket.includes('Stop loss and target must be on the correct side'));
 assert.ok(ticket.includes('Broker-calculated on order'), 'required margin is not fabricated in the browser');
+assert.ok(ticket.includes('BrokerAdapterRegistry.getAdapter(brokerId)?.capabilities.supportsBracketOrders === true'),
+  'attached exits are only sent when the selected broker advertises bracket-order support');
+assert.ok(ticket.includes("tradingCoreRuntime.subscribeTicks([nativeKey], refresh)"),
+  'the selected option premium subscribes using the broker-native contract key');
+assert.ok(ticket.includes('selectedOptionQuote?.symbol === nativeKey'),
+  'an old option stream cannot bleed into a newly selected contract');
+assert.ok(ticket.includes('overflow-y-auto overscroll-contain'),
+  'the compact ticket remains usable on short workspace viewports');
 assert.ok(ticket.includes('I have independently verified the current price with my broker.'));
 assert.ok(ticket.includes('instrumentId: instrument.id'));
 assert.ok(ticket.includes('instrument_token: instrument.brokerInstrumentKey || instrument.symbol'));
