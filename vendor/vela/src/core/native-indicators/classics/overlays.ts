@@ -7,7 +7,7 @@ import { BULLISH, BEARISH, INFO, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicBand, ClassicIndicatorSpec, ClassicPlot } from './define';
 import { bool, num, str } from './define';
 import { SETTINGS, STYLE, boolInput, colorInput, floatInput, intInput, optionInput, sourceInput, transp } from './shared';
-import { sourceValues, type SourceName } from './math';
+import { sourceValues, volumes, type SourceName } from './math';
 
 /** Price-anchored specials: stops, anchored averages, levels, pivots, patterns. */
 
@@ -249,6 +249,79 @@ const vwap: ClassicIndicatorSpec = {
             if (bool(inputs, 'fill', true)) fills.push({ key: `band${i}`, from: `up${i}`, to: `down${i}`, color: fillColor });
         });
         return { plots, bands: fills };
+    },
+};
+
+/**
+ * A manually anchored VWAP. `anchorTime` accepts Unix seconds or milliseconds;
+ * zero anchors at the oldest loaded bar. The running calculation is volume weighted,
+ * with an equal-weight fallback only when the selected range contains no usable volume.
+ */
+const anchoredVwap: ClassicIndicatorSpec = {
+    type: 'anchored-vwap',
+    title: msg('indicator.anchoredVwap.title', 'Anchored VWAP'),
+    shortTitle: msg('indicator.anchoredVwap.shortTitle', 'AVWAP'),
+    overlay: true,
+    inputs: [
+        intInput('anchorTime', msg('indicator.anchoredVwap.anchorTime', 'Anchor Time (Unix)'), 0, 0, Number.MAX_SAFE_INTEGER, msg('indicator.anchoredVwap.anchorTime.tooltip', 'Unix timestamp in seconds or milliseconds for the first included bar. Use 0 to anchor at the oldest loaded bar.')),
+        sourceInput('HLC3', 'source', msg('indicator.anchoredVwap.source', 'Source'), msg('indicator.anchoredVwap.source.tooltip', 'Price series accumulated from the selected anchor.')),
+        boolInput('showBands', msg('indicator.anchoredVwap.showBands', 'Show Deviation Bands'), false, SETTINGS, msg('indicator.anchoredVwap.showBands.tooltip', 'Display one standard-deviation envelope around the anchored VWAP.')),
+        floatInput('bandMultiplier', msg('indicator.anchoredVwap.bandMultiplier', 'Band Multiplier'), 1, 0, 10, 0.25, msg('indicator.anchoredVwap.bandMultiplier.tooltip', 'Number of volume-weighted standard deviations above and below the anchored VWAP.')),
+        colorInput(INFO, msg('indicator.anchoredVwap.midColor', 'VWAP'), 'color'),
+        colorInput(BEARISH, msg('indicator.anchoredVwap.upperColor', 'Upper Band'), 'upperColor'),
+        colorInput(BULLISH, msg('indicator.anchoredVwap.lowerColor', 'Lower Band'), 'lowerColor'),
+    ],
+    compute: (bars, inputs) => {
+        const rawAnchor = Math.max(0, num(inputs, 'anchorTime', 0));
+        const anchorTime = rawAnchor === 0 ? Number.NEGATIVE_INFINITY : rawAnchor > 1e12 ? rawAnchor : rawAnchor * 1000;
+        let start = 0;
+        if (Number.isFinite(anchorTime)) {
+            start = bars.findIndex((bar) => bar.time >= anchorTime);
+            if (start < 0) start = bars.length;
+        }
+        const source = sourceValues(bars, str(inputs, 'source', 'HLC3'));
+        const volume = volumes(bars);
+        let hasUsableVolume = false;
+        for (let i = start; i < bars.length; i += 1) {
+            if (Number.isFinite(volume[i]) && volume[i]! > 0) {
+                hasUsableVolume = true;
+                break;
+            }
+        }
+        const values = new Array<number>(bars.length).fill(Number.NaN);
+        const upper = new Array<number>(bars.length).fill(Number.NaN);
+        const lower = new Array<number>(bars.length).fill(Number.NaN);
+        const multiplier = Math.max(0, num(inputs, 'bandMultiplier', 1));
+        let cumWeight = 0;
+        let cumPrice = 0;
+        let cumPriceSquared = 0;
+        for (let i = start; i < bars.length; i += 1) {
+            const price = source[i]!;
+            if (!Number.isFinite(price)) continue;
+            const barVolume = volume[i]!;
+            const weight = hasUsableVolume ? (Number.isFinite(barVolume) && barVolume > 0 ? barVolume : 0) : 1;
+            if (weight <= 0) continue;
+            cumWeight += weight;
+            cumPrice += price * weight;
+            cumPriceSquared += price * price * weight;
+            const mean = cumPrice / cumWeight;
+            const deviation = Math.sqrt(Math.max(0, cumPriceSquared / cumWeight - mean * mean)) * multiplier;
+            values[i] = mean;
+            upper[i] = mean + deviation;
+            lower[i] = mean - deviation;
+        }
+        const plots: ClassicPlot[] = [
+            { key: 'avwap', title: msg('indicator.anchoredVwap.plot.mid', 'Anchored VWAP'), values, color: str(inputs, 'color', INFO), width: 2 },
+        ];
+        const bands: ClassicBand[] = [];
+        if (bool(inputs, 'showBands', false)) {
+            plots.push(
+                { key: 'upper', title: msg('indicator.anchoredVwap.plot.upper', 'Upper Band'), values: upper, color: str(inputs, 'upperColor', BEARISH) },
+                { key: 'lower', title: msg('indicator.anchoredVwap.plot.lower', 'Lower Band'), values: lower, color: str(inputs, 'lowerColor', BULLISH) },
+            );
+            bands.push({ key: 'avwap-band', from: 'upper', to: 'lower', color: transp(NEUTRAL, 90) });
+        }
+        return { plots, bands };
     },
 };
 
@@ -532,4 +605,4 @@ const averagePrice = priceStudy('average-price', 'OHLC4', {
     colorTooltip: msg('indicator.averagePrice.color.tooltip', 'Color of the line through the average of each bar’s open, high, low and close.'),
 });
 
-export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal, medianPrice, typicalPrice, averagePrice];
+export const overlaySpecs: ClassicIndicatorSpec[] = [ichimokuCloud, parabolicSar, vwap, anchoredVwap, pivotPoints, fiftyTwoWeek, zigzag, williamsFractal, medianPrice, typicalPrice, averagePrice];
