@@ -33,7 +33,9 @@ assert.match(live, /Dismiss chart status notification/, 'chart status banner mus
 assert.ok(live.includes('if (host.current) applySavedTcoVelaAppearance(host.current);'), 'saved live-terminal theme settings must be restored at chart startup');
 
 assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
-assert(/const initialLayout = .*defaults\.layout/.test(live));
+assert(/const initialLayout = isNativeGridLayout \\|\\| isTcoLayoutPreset \\|\\| isBuiltinLayout/.test(live));
+assert(/: \\(defaults\\.layout \\|\\| '1'\\);/.test(live), 'unsupported layout links must fall back to the saved Vela layout');
+assert(/Number\\(gridMatch\\[1\\]\\) \\* Number\\(gridMatch\\[2\\]\\) <= 8/.test(live), 'deep-linked chart grids must remain capped at eight cells');
 assert(live.includes("layout: initialLayout"));
 assert(!live.includes('tco-live-shell'), 'restore the original TradingCoreOS live page shell instead of wrapping it with a new app header');
 assert(!live.includes('TradingCoreOS navigation'), 'the live page should retain the previous layout without the added navigation rail');
