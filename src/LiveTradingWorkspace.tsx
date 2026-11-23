@@ -249,6 +249,12 @@ const browserRuntimeMetrics = useRef({
       const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unhandled rejection');
       pushBrowserError('unhandledrejection', reason);
     };
+    const onIndicatorWorkerError = (event: Event) => {
+      const detail = (event as CustomEvent<{ chartId?: string; datasetKey?: string; revision?: number; message?: string }>).detail;
+      const target = detail?.chartId || detail?.datasetKey || 'unknown chart';
+      const revision = Number.isFinite(detail?.revision) ? ` · revision ${detail?.revision}` : '';
+      pushBrowserError('error', `Indicator worker failure · ${target}${revision} · ${detail?.message || 'Unknown computation failure'}`);
+    };
     const onWebGLContextLost = (event: Event) => {
       browserRuntimeMetrics.webglContextLossCount += 1;
       const target = event.target as HTMLElement | null;
@@ -257,6 +263,7 @@ const browserRuntimeMetrics = useRef({
     const onWebGLContextRestored = () => { browserRuntimeMetrics.webglContextRestoreCount += 1; };
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
+    window.addEventListener('tco:chart:indicator-worker-error', onIndicatorWorkerError);
     document.addEventListener('webglcontextlost', onWebGLContextLost, true);
     document.addEventListener('webglcontextrestored', onWebGLContextRestored, true);
     (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [];
@@ -847,6 +854,7 @@ const browserRuntimeMetrics = useRef({
       workspace?.destroy();
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      window.removeEventListener('tco:chart:indicator-worker-error', onIndicatorWorkerError);
       document.removeEventListener('webglcontextlost', onWebGLContextLost, true);
       document.removeEventListener('webglcontextrestored', onWebGLContextRestored, true);
       longTaskObserver?.disconnect();

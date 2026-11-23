@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const runtime = read('./services/core/chart/ChartRuntimeController.ts');
 const indicator = read('./services/core/chart/controllers/ChartIndicatorController.ts');
+const workspace = read('./LiveTradingWorkspace.tsx');
 
 const snapshotStart = runtime.indexOf('const applySnapshot=(event:any)=>{');
 const snapshotEnd = runtime.indexOf('const interactionController=', snapshotStart);
@@ -17,6 +18,7 @@ assert.ok(tickBranch > statusGuard, 'the tick fast path must run after non-candl
 assert.ok(fullHistoryRewrite > tickBranch, 'full history projection must only run after the tick fast path returns');
 assert.ok(snapshotHandler.includes('realtimeController.handleTick('), 'live ticks must flow through the forming-bar renderer path');
 assert.ok(snapshotHandler.includes('realtimeController.hydrateHistory('), 'history mutations must still rehydrate calculation state');
+assert.ok(snapshotHandler.includes('snapshot.columns?.time.length'), 'columnar history must not be reported as empty during a broker status error');
 
 const workerStart = indicator.indexOf('const requestIndicatorWorker=');
 const workerEnd = indicator.indexOf('\n\n  return {', workerStart);
@@ -31,5 +33,7 @@ assert.ok(workerRequest.includes('tco:chart:indicator-worker-error'), 'unexpecte
 const drawings = readFileSync(new URL('../../vendor/vela/src/core/DrawingsControl.ts', import.meta.url), 'utf8');
 assert.ok(drawings.includes('group(ids?: readonly string[])'), 'public chart.drawings facade must expose grouping');
 assert.ok(drawings.includes('ungroup(ids?: readonly string[])'), 'public chart.drawings facade must expose ungrouping');
+assert.ok(workspace.includes("addEventListener('tco:chart:indicator-worker-error', onIndicatorWorkerError)"), 'workspace must capture indicator worker failures in bounded diagnostics');
+assert.ok(workspace.includes("removeEventListener('tco:chart:indicator-worker-error', onIndicatorWorkerError)"), 'workspace must release its indicator failure listener on teardown');
 
 console.log('CHART_RUNTIME_RELIABILITY_CONTRACT_OK');

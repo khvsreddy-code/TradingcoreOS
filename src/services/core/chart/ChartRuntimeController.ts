@@ -232,7 +232,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
 
         if(event.type==='status'){
           if(event.status==='loading')publishLifecycle('loading');
-          if(event.status==='error'&&!snapshot.candles.length){
+          if(event.status==='error'&&!snapshot.candles.length&&!snapshot.columns?.time.length){
             deps.setError(`History unavailable for ${deps.resolvedInstrumentKey} · ${CHART_TIMEFRAME_INTERVALS[deps.timeframe]||deps.timeframe} · ${event.error||'Historical candles unavailable'}`);
             publishLifecycle('error');
           }
