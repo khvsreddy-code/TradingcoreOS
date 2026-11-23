@@ -311,7 +311,7 @@ const anchoredVwap: ClassicIndicatorSpec = {
             lower[i] = mean - deviation;
         }
         const plots: ClassicPlot[] = [
-            { key: 'avwap', title: msg('indicator.anchoredVwap.plot.mid', 'Anchored VWAP'), values, color: str(inputs, 'color', INFO), width: 2 },
+            { key: 'vwap', title: msg('indicator.anchoredVwap.plot.mid', 'Anchored VWAP'), values, color: str(inputs, 'color', INFO), width: 2 },
         ];
         const bands: ClassicBand[] = [];
         if (bool(inputs, 'showBands', false)) {
