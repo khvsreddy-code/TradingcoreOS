@@ -106,6 +106,36 @@ export function instrumentIdentityKey(instrument: Pick<Instrument, 'id'>): strin
   return String(instrument.id || '').trim();
 }
 
+
+const instrumentsById = new Map<string, Instrument>();
+const instrumentIdBySymbol = new Map<string, string>();
+
+/** Register the latest metadata/status snapshot under the stable instrument identity. */
+export function registerInstrument(input: InstrumentIdentityInput | Instrument): Instrument {
+  const instrument = createInstrument(input);
+  instrumentsById.set(instrument.id, instrument);
+  instrumentIdBySymbol.set(instrument.symbol.toUpperCase(), instrument.id);
+  return instrument;
+}
+
+export function getInstrumentById(id: string): Instrument | undefined {
+  return instrumentsById.get(String(id ?? '').trim());
+}
+
+export function getInstrumentBySymbol(symbol: string): Instrument | undefined {
+  const id = instrumentIdBySymbol.get(String(symbol ?? '').trim().toUpperCase());
+  return id ? instrumentsById.get(id) : undefined;
+}
+
+export const INSTRUMENT_SELECTED_EVENT = 'tradingcore:instrument-selected';
+
+/** Notify workspace modules when the active chart instrument changes. */
+export function publishInstrumentSelection(instrument: Instrument): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<Instrument>(INSTRUMENT_SELECTED_EVENT, { detail: instrument }));
+}
+
+
 /** FYERS-native symbol spellings are adapted once, at the market identity boundary. */
 export function canonicalInstrumentKey(brokerId: string, key: string): string {
   const value = String(key || '').trim();
