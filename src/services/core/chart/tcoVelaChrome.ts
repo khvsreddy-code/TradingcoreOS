@@ -2038,7 +2038,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           })();
       // A cached row quote carries an explicit local receive time. Prefer it whenever
       // the broker snapshot has no timestamp; never make an old retained LTP look live.
-      const cachedIsNewest = !!cached && (parsedSnapshotTime === undefined || cached.receivedAt >= parsedSnapshotTime);
+      const cachedIsNewest = !!cached && (parsedSnapshotTime === undefined || (cached.receivedAt !== undefined && cached.receivedAt >= parsedSnapshotTime));
       const receivedAt = cachedIsNewest ? cached?.receivedAt : parsedSnapshotTime ?? cached?.receivedAt;
       const ltp = asFinite(cachedIsNewest ? cached?.ltp : snapshot.ltp, cached?.ltp, snapshot.ltp);
       const previousClose = asFinite(cachedIsNewest ? cached?.previousClose : snapshot.previousClose, snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close, cached?.previousClose);
