@@ -1522,7 +1522,6 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     header.setTitle('CoreSpirit Studio');
     body.style.padding = '0';
     body.style.overflow = 'hidden';
-    const panel = body.closest('.vela-panel') as HTMLElement | null;
     const root = createRoot(body);
     let cancelled = false;
     body.textContent = 'Loading CoreSpirit Studio…';
@@ -1579,7 +1578,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       destroy() {
         cancelled = true;
         root.unmount();
-        panel?.removeAttribute('data-maximized');
+        header.setMaximized(false);
         body.style.padding = '';
         body.style.overflow = '';
       },
