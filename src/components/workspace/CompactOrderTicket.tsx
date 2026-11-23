@@ -159,7 +159,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const [expiry, setExpiry] = useState('current_week');
   const [selectedOptionId, setSelectedOptionId] = useState('');
   const [quote, setQuote] = useState<QuoteView>(() => snapshotQuote(symbol));
-  const [selectedOptionQuote, setSelectedOptionQuote] = useState<QuoteView | null>(null);
+  const [selectedOptionQuote, setSelectedOptionQuote] = useState<{ symbol: string; quote: QuoteView } | null>(null);
   const [funds, setFunds] = useState<{ availableMargin?: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -214,7 +214,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     let cancelled = false;
     const refresh = () => {
       const next = snapshotQuote(nativeKey);
-      if (!cancelled) setSelectedOptionQuote(next);
+      if (!cancelled) setSelectedOptionQuote({ symbol: nativeKey, quote: next });
     };
     refresh();
     const stop = tradingCoreRuntime.subscribeTicks([nativeKey], refresh);
@@ -261,7 +261,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const instrument = selectedOption?.instrument ?? baseInstrument;
   const activeQuote = useMemo(() => {
     if (selectedOption) {
-      if (selectedOptionQuote?.ltp !== undefined) return selectedOptionQuote;
+      const nativeKey = selectedOption.instrument.brokerInstrumentKey || selectedOption.instrument.symbol;
+      if (selectedOptionQuote?.symbol === nativeKey && selectedOptionQuote.quote.ltp !== undefined) return selectedOptionQuote.quote;
       const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
       const rawAt = selectedOption.quote.observedAt ?? chain?.observedAt;
       const health = classifyMarketDataHealth({
