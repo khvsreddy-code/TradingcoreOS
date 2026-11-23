@@ -28,7 +28,7 @@ assert.ok(!chrome.includes("panel?.removeAttribute('data-maximized')"),
   'TCO content must not mutate Vela panel state through DOM selectors');
 assert.ok(chrome.includes("id: 'tco.order-ticket'"));
 assert.ok(chrome.includes('registerTcoSidePanel(orderTicketPanel)'));
-assert.ok(chrome.includes("id:'tco.trading'"), 'account/positions summary remains separate from order entry');
+assert.ok(chrome.includes("id: 'tco.trading'"), 'account/positions summary remains separate from order entry');
 assert.ok(chrome.includes("{ id: 'tco.order-ticket', label: 'Order Ticket'"));
 assert.ok(terminal.includes("'tco.order-ticket'"));
 assert.ok(workspace.includes("openTerminalPanel('tco.order-ticket')"),
