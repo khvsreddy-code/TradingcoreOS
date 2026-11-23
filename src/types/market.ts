@@ -25,6 +25,8 @@ export interface NormalizedOHLC {
 
 export interface NormalizedMarketTick {
   instrumentKey: string;
+  /** Provider-neutral identity; instrumentKey remains the transport symbol. */
+  instrumentId?: string;
   ltp?: number;
   open?: number;
   high?: number;
@@ -60,6 +62,7 @@ export type MarketFeedEvent =
 
 export interface OptionQuote {
   instrumentKey?: string;
+  instrumentId?: string;
   ltp?: number;
   volume?: number;
   oi?: number;
