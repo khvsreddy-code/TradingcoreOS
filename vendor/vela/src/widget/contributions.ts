@@ -332,6 +332,8 @@ export interface SidePanelDescriptor {
      *  column that shrinks the chart). For panels wide enough that a column would crush
      *  the plot. The dock stays exclusive either way. */
     overlay?: boolean;
+    /** Show the shell's maximize/restore control for panels that can become a temporary work surface. */
+    maximizable?: boolean;
     /** `'none'` drops the shell's header row (title, header buttons, close) so the panel
      *  draws its own in its body, wiring its close control to {@link SidePanelHeader.close}
      *  (default `'default'`). On the mobile layout the header's close is the panel's only
