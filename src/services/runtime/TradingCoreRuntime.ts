@@ -203,7 +203,19 @@ export class TradingCoreRuntime {
     if (!this.portfolioPollTimer) { void this.syncPortfolio(); this.portfolioPollTimer = setInterval(() => { if (this.brokerMgr.getPrimaryBrokerInfo()?.status === 'Connected') void this.syncPortfolio(); }, Math.max(5000, intervalMs)); }
     return () => { this.portfolioPollRefs = Math.max(0, this.portfolioPollRefs - 1); if (this.portfolioPollRefs === 0 && this.portfolioPollTimer) { clearInterval(this.portfolioPollTimer); this.portfolioPollTimer = undefined; } };
   }
-  public async placeOrder(order: OrderRequest): Promise<OrderResult> { const result = await this.engine.placeOrder(order); this.emit('ORDER_EXECUTED', result); return result; }
+  public async placeOrder(order: OrderRequest): Promise<OrderResult> {
+    const brokerId = this.getPrimaryBrokerId() || 'unknown';
+    const instrument = registerInstrument({ symbol: order.symbol, provider: brokerId });
+    const routedOrder = { ...order, instrumentId: order.instrumentId || instrument.id };
+    const result = await this.engine.placeOrder(routedOrder);
+    const normalized: OrderResult = {
+      ...result,
+      symbol: result.symbol || routedOrder.symbol,
+      instrumentId: result.instrumentId || routedOrder.instrumentId,
+    };
+    this.emit('ORDER_EXECUTED', normalized);
+    return normalized;
+  }
   public async modifyOrder(orderId: string, updates: Partial<OrderRequest>): Promise<OrderResult> { return this.engine.modifyOrder(orderId, updates); }
   public async cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }> { return this.engine.cancelOrder(orderId); }
   public async squareOff(positionId: string): Promise<{ success: boolean; message?: string }> { return this.engine.squareOff(positionId); }
@@ -211,7 +223,13 @@ export class TradingCoreRuntime {
   public async getPositions(): Promise<Position[]> { return (await this.engine.getPositions()).map(record => this.attachInstrumentIdentity(record)); }
   public async getHoldings(): Promise<Holding[]> { return (await this.engine.getHoldings()).map(record => this.attachInstrumentIdentity(record)); }
   public async getFunds(): Promise<AccountFunds | null> { return this.engine.getFunds(); }
-  public async getOrders(): Promise<OrderResult[]> { return this.engine.getOrders(); }
+  public async getOrders(): Promise<OrderResult[]> {
+    return (await this.engine.getOrders()).map(order => {
+      if (order.instrumentId || !order.symbol) return order;
+      const instrument = registerInstrument({ symbol: order.symbol, provider: this.getPrimaryBrokerId() || 'unknown' });
+      return { ...order, instrumentId: instrument.id };
+    });
+  }
   public async getTradeHistory(): Promise<TradeRecord[]> { return (await this.engine.getTradeHistory()).map(record => this.attachInstrumentIdentity(record)); }
   public setMarketDataProvider(type: MarketDataProviderType): void { this.currentMarketDataProviderType = type; }
   public getMarketDataProviderType(): MarketDataProviderType { return this.currentMarketDataProviderType; }
