@@ -304,7 +304,9 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
         const getIv = (quote: any, right: 'CE' | 'PE'): { value: number; source: string } | undefined => {
           // FYERS returns greeks.iv on each CE/PE option row. Keep the provider
           // observation attached to that exact leg; do not merge or mirror IVs.
-          const supplied = finite(quote?.impliedVolatility);
+          const rawSuppliedIv = quote?.impliedVolatility;
+          const parsedSuppliedIv = rawSuppliedIv == null || rawSuppliedIv === '' ? Number.NaN : Number(rawSuppliedIv);
+          const supplied = Number.isFinite(parsedSuppliedIv) ? parsedSuppliedIv : undefined;
           if (supplied !== undefined && supplied > 0) return { value: supplied, source: 'FYERS IV' };
           const premium = valuationPremium(quote || {});
           if (premium == null) return undefined;

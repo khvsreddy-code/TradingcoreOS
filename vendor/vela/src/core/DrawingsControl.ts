@@ -165,6 +165,18 @@ export class DrawingsControl {
         return this;
     }
 
+    /** Group independent native drawings. Omit ids to group the current selection. */
+    group(ids?: readonly string[]): this {
+        if (this.ok('group')) this.ctrl.group(ids);
+        return this;
+    }
+
+    /** Remove group membership without changing drawing geometry or styling. */
+    ungroup(ids?: readonly string[]): this {
+        if (this.ok('ungroup')) this.ctrl.ungroup(ids);
+        return this;
+    }
+
     /** Open a drawing's settings popup on the chart (selecting it) — the twin of clicking it. */
     openSettings(id: string): this {
         if (this.ok('openSettings')) this.ctrl.openSettings(id);

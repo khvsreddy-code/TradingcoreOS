@@ -29,6 +29,7 @@ const contracts = [
   ['chart-data-flow-observability', ['src/chartDataFlowObservabilityContract.test.mjs', false]],
   ['chart-candle-event-canonicalization', ['src/services/marketData/chartCandleEvents.test.ts', true]],
   ['chart-compute-revision-fence', ['src/chartComputeRevisionContract.test.mjs', false]],
+  ['chart-runtime-reliability', ['src/chartRuntimeReliabilityContract.test.mjs', false]],
   ['indicator-dependency-invalidation', ['src/services/marketData/indicatorDependencyInvalidation.test.ts', true]],
   ['history-store-late-response-merge', ['src/services/marketData/HistoryStoreRevision.test.ts', true]],
   ['history-store-persistence-recovery', ['src/services/marketData/HistoryStorePersistenceLifecycle.test.ts', true]],

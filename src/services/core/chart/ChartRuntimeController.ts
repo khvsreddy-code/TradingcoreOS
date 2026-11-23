@@ -238,11 +238,10 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           }
         }
 
-        // Quote-only events may refresh LTP UI state but must never trigger candle or indicator updates.
-        if(event.type==='quote')return;
+        // Quote and transport-status events update market health above; they do not
+        // change canonical candles and must not replay history or indicator work.
+        if(event.type==='quote'||event.type==='status')return;
 
-        const canonical = deps.chartDataPlane.readCanonical();
-        if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
         const data=snapshot.candles.length?snapshot.candles:deps.chartDataPlane.getCompatibilityCandles();
         if(!data.length){
           // Keep the chart honest while broker history is loading or unavailable; never fabricate OHLC.
@@ -251,11 +250,16 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         deps.candles.current=data;
         deps.setError('');
 
+        // The live path patches only the forming bar on the next renderer frame.
+        // Re-running setData(history) here turns every tick into a full series rewrite.
         if(event.type==='tick'){
           realtimeController.handleTick({...snapshot,candles:data},Boolean(event.bucketChanged));
           return;
         }
 
+        // Only history/cache/backfill/recovery snapshots replace the complete series.
+        const canonical = deps.chartDataPlane.readCanonical();
+        if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
         realtimeController.hydrateHistory({...snapshot,candles:data});
         chartAnnotationController.renderAutomations(deps.automationsRef.current,data);
         if(!canonical.length)deps.rendererController.setHistory(data,deps.appearanceRef.current,false);

@@ -252,6 +252,17 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      void chartComputeCoordinator.runIndicators(chartDatasetKey,revision,market,indicators,{mode,operation,incrementalKey,range},data).then(results=>{
        if(requestSeq!==indicatorRequestSeq.current||!lifecycle.current.isAlive()||revision!==dataRevisionRef.current||data!==candles.current||!chart.current)return;
        chartUpdateScheduler.current.scheduleLatest('shared-worker-indicators',()=>{try{renderWorkerIndicators(results);}catch(indicatorError){console.warn('[TradingCore] Shared indicator render skipped invalid data:',indicatorError);}});
+     }).catch(error=>{
+       const errorName=error&&typeof error==='object'&&'name' in error?String((error as {name?:unknown}).name??''):'';
+       // Superseded work is expected during symbol/timeframe changes and history correction.
+       if(errorName==='AbortError'||requestSeq!==indicatorRequestSeq.current||!lifecycle.current.isAlive()||revision!==dataRevisionRef.current||data!==candles.current)return;
+       const message=error instanceof Error?error.message:String(error??'Unknown indicator computation failure');
+       console.warn('[TradingCore] Shared indicator computation failed; previous indicator output was retained.',{chartId:chartId.current,revision,message,error});
+       if(typeof window!=='undefined'&&typeof CustomEvent!=='undefined'){
+         try{
+           window.dispatchEvent(new CustomEvent('tco:chart:indicator-worker-error',{detail:Object.freeze({chartId:chartId.current,datasetKey:chartDatasetKey,revision,message})}));
+         }catch{/* Diagnostics must never affect chart availability. */}
+       }
      });
    };
 
