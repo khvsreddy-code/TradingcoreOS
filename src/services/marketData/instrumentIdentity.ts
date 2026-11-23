@@ -139,13 +139,15 @@ export function publishInstrumentSelection(instrument: Instrument): void {
 /** FYERS-native symbol spellings are adapted once, at the market identity boundary. */
 export function canonicalInstrumentKey(brokerId: string, key: string): string {
   const value = String(key || '').trim();
-  if (String(brokerId).toLowerCase() !== 'fyers') return value;
   const n = value.toLowerCase().replace(/\s+/g, '');
+  // Index aliases are normalized before broker-specific logic so FYERS and Upstox
+  // resolve the same underlying contract identity.
   if (n === 'nse_index|nifty50' || n === 'nse_index|nifty50index' || n === 'nifty' || n === 'nifty50' || n === 'nifty50index' || n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
   if (n === 'nse_index|niftybank' || n === 'nse_index|banknifty' || n === 'banknifty' || n === 'niftybank' || n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
   if (n === 'nse_index|finnifty' || n === 'nse_index|niftyfinancialservices' || n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
   if (n === 'nse_index|niftymidcapselect' || n === 'nse_index|midcap' || n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
   if (n === 'bse_index|sensex' || n === 'sensex' || n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
+  if (String(brokerId).toLowerCase() !== 'fyers') return value;
   const pipe = value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
   if (pipe) {
     const exchange = pipe[1].toUpperCase();
