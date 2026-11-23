@@ -206,27 +206,6 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   }, [brokerId]);
 
   useEffect(() => {
-    const nativeKey = selectedOption?.instrument.brokerInstrumentKey || selectedOption?.instrument.symbol;
-    if (!nativeKey) {
-      setSelectedOptionQuote(null);
-      return;
-    }
-    let cancelled = false;
-    const refresh = () => {
-      const next = snapshotQuote(nativeKey);
-      if (!cancelled) setSelectedOptionQuote({ symbol: nativeKey, quote: next });
-    };
-    refresh();
-    const stop = tradingCoreRuntime.subscribeTicks([nativeKey], refresh);
-    const timer = window.setInterval(refresh, 2_000);
-    return () => {
-      cancelled = true;
-      stop();
-      window.clearInterval(timer);
-    };
-  }, [selectedOption?.instrument.id, brokerId]);
-
-  useEffect(() => {
     if (!isIndex) {
       setChain(null);
       setChainError('');
@@ -259,6 +238,27 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const choices = useMemo(() => buildOptionChoices(chain, brokerId, symbol), [chain, brokerId, symbol]);
   const selectedOption = choices.find(choice => choice.instrument.id === selectedOptionId);
   const instrument = selectedOption?.instrument ?? baseInstrument;
+
+  useEffect(() => {
+    const nativeKey = selectedOption?.instrument.brokerInstrumentKey || selectedOption?.instrument.symbol;
+    if (!nativeKey) {
+      setSelectedOptionQuote(null);
+      return;
+    }
+    let cancelled = false;
+    const refresh = () => {
+      const next = snapshotQuote(nativeKey);
+      if (!cancelled) setSelectedOptionQuote({ symbol: nativeKey, quote: next });
+    };
+    refresh();
+    const stop = tradingCoreRuntime.subscribeTicks([nativeKey], refresh);
+    const timer = window.setInterval(refresh, 2_000);
+    return () => {
+      cancelled = true;
+      stop();
+      window.clearInterval(timer);
+    };
+  }, [selectedOption?.instrument.id, brokerId]);
   const activeQuote = useMemo(() => {
     if (selectedOption) {
       const nativeKey = selectedOption.instrument.brokerInstrumentKey || selectedOption.instrument.symbol;
