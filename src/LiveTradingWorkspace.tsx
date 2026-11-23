@@ -1243,9 +1243,9 @@ const browserRuntimeMetrics = useRef({
               type="button"
               disabled={workspaceLoadState.phase !== 'ready'}
               data-tco-header-action="trade"
-              title="Open trading, positions and risk tools"
-              aria-label="Open trading, positions and risk tools"
-              onClick={() => openTerminalPanel('tco.trading')}
+              title="Open the compact broker order ticket"
+              aria-label="Open the compact broker order ticket"
+              onClick={() => openTerminalPanel('tco.order-ticket')}
               className="tco-live-header-action tco-live-header-action-primary"
             >
               <ArrowLeftRight size={13} strokeWidth={1.8}/>
