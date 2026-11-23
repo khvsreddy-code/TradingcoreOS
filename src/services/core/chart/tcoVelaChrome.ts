@@ -1177,6 +1177,17 @@ registerStatePersistence(coreSpiritLiveEditorState);
 
 const CORESPIRIT_STARTER = CORESPIRIT_LUXALGO_SMC_SOURCE;
 
+const TCO_PANEL_DEFAULTS = Object.freeze({ resizable: true, minWidth: 280, maxWidth: 560 });
+function registerTcoSidePanel(descriptor: SidePanelDescriptor): void {
+  registerSidePanel({
+    ...TCO_PANEL_DEFAULTS,
+    ...descriptor,
+    minWidth: descriptor.minWidth ?? TCO_PANEL_DEFAULTS.minWidth,
+    maxWidth: descriptor.maxWidth ?? TCO_PANEL_DEFAULTS.maxWidth,
+  });
+}
+
+
 const workspaceFramePanel: SidePanelDescriptor = {
   id:'tco.workspace-frame', title:'Workspace', icon:'layout', order:1, width:360, resizable:true, minWidth:320, maxWidth:480,
   mount(ctx,body,header){
@@ -1499,15 +1510,15 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   resizable: true,
   minWidth: 380,
   maxWidth: 760,
+  overlay: true,
+  maximizable: true,
   mount(ctx, body, header) {
-    // CoreSpirit lives in Vela's actual side-panel column. The chart grid therefore
-    // resizes around the editor instead of drawing a popup over live candles.
-    header.setTitle('');
+    // CoreSpirit is a wide secondary work surface: it opens as an overlay to preserve
+    // chart width, and Vela owns pin/dock, resize, maximize and close state.
+    header.setTitle('CoreSpirit Studio');
     body.style.padding = '0';
     body.style.overflow = 'hidden';
     const panel = body.closest('.vela-panel') as HTMLElement | null;
-    const shellHeader = panel?.querySelector('.vela-panel-header') as HTMLElement | null;
-    if (shellHeader) shellHeader.style.display = 'none';
     const root = createRoot(body);
     let cancelled = false;
     body.textContent = 'Loading CoreSpirit Studio…';
@@ -1533,13 +1544,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
           const compiler = await import('../../coreSpirit/coreSpiritCompilerClient');
           return compiler.compileCoreSpiritSourceOffThread(source, sourceVersion, contextId, options);
         },
-        onClose: () => {
-          panel?.removeAttribute('data-maximized');
-          ctx.togglePanel('tco.corespirit-code', false);
-        },
-        onFullscreenChange: (fullscreen: boolean) => {
-          panel?.toggleAttribute('data-maximized', fullscreen);
-        },
+        onClose: () => header.close(),
+        onFullscreenChange: (fullscreen: boolean) => header.setMaximized(fullscreen),
         onAddToChart: async (scriptName: string, scriptSource: string, artifact: CoreSpiritExecutableArtifact, scriptId?: string | null) => {
           // Use the chart controller already registered by the active workspace.
           // This keeps Compile & Run on the same worker/transactional Vela output
@@ -1570,7 +1576,6 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         cancelled = true;
         root.unmount();
         panel?.removeAttribute('data-maximized');
-        if (shellHeader) shellHeader.style.display = '';
         body.style.padding = '';
         body.style.overflow = '';
       },
@@ -4443,23 +4448,23 @@ const panelsHubPanel: SidePanelDescriptor = {
   },
 };
 
-registerSidePanel(workspaceFramePanel);
-registerSidePanel(coreSpiritCodePanel);
-registerSidePanel(quantPanel);
-registerSidePanel(bookmarksPanel);
-registerSidePanel(researchPanel);
-registerSidePanel(automationPanel);
-registerSidePanel(tradingPanel);
-registerSidePanel(journalPanel);
-registerSidePanel(dataWindowPanel);
-registerSidePanel(healthPanel);
-registerSidePanel(replayPanel);
-registerSidePanel(positionsPanel);
-registerSidePanel(riskPanel);
-registerSidePanel(orderBookPanel);
-registerSidePanel(optionsPanel);
-registerSidePanel(syncGroupsPanel);
-registerSidePanel(panelsHubPanel);
+registerTcoSidePanel(workspaceFramePanel);
+registerTcoSidePanel(coreSpiritCodePanel);
+registerTcoSidePanel(quantPanel);
+registerTcoSidePanel(bookmarksPanel);
+registerTcoSidePanel(researchPanel);
+registerTcoSidePanel(automationPanel);
+registerTcoSidePanel(tradingPanel);
+registerTcoSidePanel(journalPanel);
+registerTcoSidePanel(dataWindowPanel);
+registerTcoSidePanel(healthPanel);
+registerTcoSidePanel(replayPanel);
+registerTcoSidePanel(positionsPanel);
+registerTcoSidePanel(riskPanel);
+registerTcoSidePanel(orderBookPanel);
+registerTcoSidePanel(optionsPanel);
+registerTcoSidePanel(syncGroupsPanel);
+registerTcoSidePanel(panelsHubPanel);
 registerWidgetAttachment(tradeMarksAttachment);
 registerWidgetAttachment(newsMarksAttachment);
 registerWidgetAction(researchAction);
