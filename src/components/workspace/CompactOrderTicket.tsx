@@ -334,7 +334,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
         instrumentId: instrument.id,
         instrument_token: instrument.brokerInstrumentKey || instrument.symbol,
         quantity: quantityValue,
-        ...(orderType === 'Market' ? {} : { price: positiveNumber(limitPrice) }),
+        ...(orderType === 'Market' || orderType === 'SL-M' ? {} : { price: positiveNumber(limitPrice) }),
         ...(trigger ? { triggerPrice: trigger } : {}),
         orderType,
         side,
