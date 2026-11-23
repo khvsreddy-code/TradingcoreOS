@@ -221,7 +221,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
         const choices = buildOptionChoices(value, brokerId, symbol);
         setSelectedOptionId(current => choices.some(choice => choice.instrument.id === current)
           ? current
-          : choices[0]?.instrument.id || '');
+          : '');
       })
       .catch(error => {
         if (!cancelled) {
@@ -263,7 +263,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const lotSize = selectedOption?.lotSize ?? instrument.lotSize;
   const quantityValue = Math.max(1, Math.floor(Number(quantity) || 1));
   const livePrice = activeQuote.ltp;
-  const typedPrice = orderType === 'Market' ? livePrice : positiveNumber(limitPrice);
+  const typedPrice = orderType === 'Market' || orderType === 'SL-M' ? livePrice : positiveNumber(limitPrice);
   const trigger = (orderType === 'SL' || orderType === 'SL-M') ? positiveNumber(triggerPrice) : undefined;
   const stop = positiveNumber(stopLoss);
   const takeProfit = positiveNumber(target);
@@ -291,15 +291,32 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     ? [1, 2, 3].map(lots => ({ label: `${lots}L`, value: lots * lotSize }))
     : [1, 5, 10, 25].map(units => ({ label: String(units), value: units }));
 
+  const priceOnTick = (value: number | undefined): boolean => {
+    if (value === undefined || !instrument.tickSize || instrument.tickSize <= 0) return true;
+    const units = value / instrument.tickSize;
+    return Math.abs(units - Math.round(units)) < 1e-6;
+  };
+  const invalidPrice = (value: number | undefined): boolean => value !== undefined && !priceOnTick(value);
+  const invalidRiskDirection = (entry: number | undefined): boolean => {
+    if (entry === undefined) return false;
+    if (stop !== undefined && (side === 'Buy' ? stop >= entry : stop <= entry)) return true;
+    if (takeProfit !== undefined && (side === 'Buy' ? takeProfit <= entry : takeProfit >= entry)) return true;
+    return false;
+  };
   const validationError = !brokerConnected
     ? broker?.status === 'Read Only' ? 'This broker session is read-only.' : 'Connect a broker before submitting an order.'
     : !tradable ? 'Spot indices and unclassified symbols cannot be sent as order instruments. Select a listed option or future contract.'
       : !Number.isInteger(quantityValue) || quantityValue < 1 ? 'Enter a valid whole-number quantity.'
-        : orderType === 'Market' && livePrice === undefined ? 'No current price is available. Reconnect market data or use a limit order.'
-          : orderType !== 'Market' && !positiveNumber(limitPrice) ? 'Enter a valid limit/execution price.'
-          : (orderType === 'SL' || orderType === 'SL-M') && !trigger ? 'Enter a valid trigger price.'
-            : needsFreshnessAcknowledgement && !freshnessAcknowledged ? 'Acknowledge that the displayed market data is not confirmed live.'
-              : null;
+        : lotSize && quantityValue % lotSize !== 0 ? `Quantity must be a multiple of the ${lotSize}-unit lot size.`
+          : instrument.instrumentType !== 'equity' && product === 'CNC' ? 'CNC is only available for eligible equity instruments.'
+            : orderType === 'Market' && livePrice === undefined ? 'No current price is available. Reconnect market data or use a limit order.'
+              : (orderType === 'Limit' || orderType === 'SL') && !positiveNumber(limitPrice) ? 'Enter a valid execution price.'
+                : invalidPrice(orderType === 'Limit' || orderType === 'SL' ? positiveNumber(limitPrice) : undefined) ? `Price must follow the ${instrument.tickSize} tick size.`
+                  : (orderType === 'SL' || orderType === 'SL-M') && !trigger ? 'Enter a valid trigger price.'
+                    : invalidPrice(trigger) ? `Trigger price must follow the ${instrument.tickSize} tick size.`
+                      : invalidRiskDirection(typedPrice) ? 'Stop loss and target must be on the correct side of the entry price.'
+                        : needsFreshnessAcknowledgement && !freshnessAcknowledged ? 'Acknowledge that the displayed market data is not confirmed live.'
+                          : null;
 
   const beginReview = () => {
     setMessage('');
@@ -373,7 +390,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
             ))}
           </select>
           <label className={labelBase}>Contract · strike · right</label>
-          <select className={fieldBase} value={selectedOptionId} onChange={event => setSelectedOptionId(event.target.value)} disabled={chainLoading || choices.length === 0}>
+          <select className={fieldBase} value={selectedOptionId} onChange={event => { setSelectedOptionId(event.target.value); setReviewOpen(false); }} disabled={chainLoading || choices.length === 0}>
+            <option value="">Choose a listed contract…</option>
             {choices.map(choice => <option key={choice.instrument.id} value={choice.instrument.id}>{choice.caption}</option>)}
           </select>
           {chainLoading && <div className="flex items-center gap-2 text-[9px] text-[#9bb2d1]"><LoaderCircle size={12} className="animate-spin"/> Loading broker option chain…</div>}
