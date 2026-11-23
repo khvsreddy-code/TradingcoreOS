@@ -2,6 +2,8 @@ import type { OptionChain, NormalizedMarketTick } from '../../types/market';
 
 export interface OrderRequest {
   symbol: string;
+  /** Stable TradingCore identity; adapters may still route with instrument_token. */
+  instrumentId?: string;
   /** Optional broker-native instrument identifier (for example Upstox instrument_key). */
   instrument_token?: string;
   quantity: number;
@@ -28,6 +30,7 @@ export interface OrderResult {
 
 export interface Position {
   id: string;
+  instrumentId?: string;
   symbol: string;
   quantity: number;
   avgPrice: number;
@@ -38,6 +41,7 @@ export interface Position {
 
 export interface Holding {
   id: string;
+  instrumentId?: string;
   symbol: string;
   quantity: number;
   avgPrice: number;
@@ -48,6 +52,7 @@ export interface Holding {
 
 export interface TradeRecord {
   tradeId: string;
+  instrumentId?: string;
   orderId: string;
   symbol: string;
   side: 'Buy' | 'Sell';
