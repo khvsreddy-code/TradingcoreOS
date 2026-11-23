@@ -198,7 +198,8 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     let cancelled = false;
     void tradingCoreRuntime.getFunds()
       .then(value => {
-        if (!cancelled) setFunds(value ? { availableMargin: Number(value.availableMargin) } : null);
+        const availableMargin = Number(value?.availableMargin);
+        if (!cancelled) setFunds(value && Number.isFinite(availableMargin) ? { availableMargin } : null);
       })
       .catch(() => { if (!cancelled) setFunds(null); });
     return () => { cancelled = true; };
@@ -261,7 +262,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const brokerConnected = broker?.status === 'Connected';
   const tradable = instrument.instrumentType !== 'index' && instrument.instrumentType !== 'unknown';
   const lotSize = selectedOption?.lotSize ?? instrument.lotSize;
-  const quantityValue = Math.max(1, Math.floor(Number(quantity) || 1));
+  const quantityValue = Number(quantity);
   const livePrice = activeQuote.ltp;
   const typedPrice = orderType === 'Market' || orderType === 'SL-M' ? livePrice : positiveNumber(limitPrice);
   const trigger = (orderType === 'SL' || orderType === 'SL-M') ? positiveNumber(triggerPrice) : undefined;
