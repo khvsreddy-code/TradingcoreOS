@@ -28,7 +28,18 @@ function safePositive(value: unknown): number | undefined {
 
 function normalizedExpiry(value?: string): string | undefined {
   const raw = String(value ?? '').trim();
-  return raw || undefined;
+  if (!raw) return undefined;
+  const compactDate = /^(\d{4})(\d{2})(\d{2})$/.exec(raw);
+  if (compactDate) return `${compactDate[1]}-${compactDate[2]}-${compactDate[3]}`;
+  if (/^\d{10,13}$/.test(raw)) {
+    const numeric = Number(raw);
+    const date = new Date(raw.length === 10 ? numeric * 1000 : numeric);
+    if (Number.isFinite(date.getTime())) return date.toISOString().slice(0, 10);
+  }
+  const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(raw);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : raw.toUpperCase();
 }
 
 export function normalizeOptionType(value?: string): 'CE' | 'PE' | undefined {
@@ -164,6 +175,8 @@ export function canonicalInstrumentKey(brokerId: string, key: string): string {
     return `${exchange}:${ticker}`;
   }
   if (!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
+  if (/^(?:NSE|BSE):[A-Z0-9&._-]+(?:FUT|CE|PE)$/i.test(value)
+    || /^(?:NSE|BSE):[A-Z0-9&._-]+-(?:FUT|CE|PE)$/i.test(value)) return value;
   if (/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
   if (/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
   return value;
