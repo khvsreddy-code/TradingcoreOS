@@ -110,7 +110,7 @@ assert.match(optionAdapter, /aggregateCallOi:/);
 assert.match(optionAdapter, /aggregatePutOi:/);
 assert.match(optionAdapter, /indiaVix:/);
 assert.match(optionAdapter, /providerGreeks:/);
-assert.match(optionAdapter, /impliedVolatility: providerIvPercent \/ 100/);
+assert.match(optionAdapter, /impliedVolatility: providerIvPercent !== undefined \? providerIvPercent \/ 100 : undefined/);
 assert.match(optionAdapter, /row\?\.exchange === 'NSE' \|\| row\?\.exchange === 'BSE'/);
 assert.doesNotMatch(optionAdapter, /exchange: row\?\.exchange === 'BSE' \? 'BSE' : 'NSE'/);
 assert.match(marketTypes, /expiryOptions\?: OptionExpiryChoice\[\]/);
