@@ -6,7 +6,7 @@ const ticket = read('./components/workspace/CompactOrderTicket.tsx');
 const chrome = read('./services/core/chart/tcoVelaChrome.ts');
 const runtime = read('./services/runtime/TradingCoreRuntime.ts');
 const adapter = read('./services/brokers/BrokerAdapter.ts');
-const watchlist = chrome.slice(chrome.indexOf("id: 'tco.bookmarks'"), chrome.indexOf("const dataWindowPanel"));
+const watchlist = chrome.slice(chrome.indexOf("id: 'tco.bookmarks'"), chrome.indexOf("const healthPanel"));
 
 for (const token of ['Order type', 'Product', 'Quantity', 'BUY', 'SELL', 'Risk controls', 'Review order', 'Confirm {side}']) {
   assert.ok(ticket.includes(token), 'compact ticket is missing ' + token);
