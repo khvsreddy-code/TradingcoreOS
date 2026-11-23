@@ -27,11 +27,11 @@ import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news
 // Advanced watchlist metrics extend buildWatchlistTechnicalSummary (RSI, EMA20/50 and MACD) with ATR, ADX, VWAP and relative volume.
 import { buildWatchlistAdvancedTechnicalSummary, type WatchlistAdvancedTechnicalSummary } from '../../marketData/watchlistAdvancedTechnicals';
 import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../terminal/terminalDataService';
-import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
+import { searchBrokerInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { classifyMarketDataHealth } from '../../marketData/dataHealth';
 import { registerInstrument, publishInstrumentSelection } from '../../marketData/instrumentIdentity';
 import type { InstrumentDataStatus, InstrumentType } from '../../../types/instrument';
-import { hasValidFyersSession } from '../../marketData/yahooFallback';
+
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { parseOptionExpiryTimestamp } from '../../marketData/options/optionPricing';
 import { historyStore } from '../../marketData/HistoryStore';
@@ -2068,13 +2068,16 @@ const bookmarksPanel: SidePanelDescriptor = {
       };
     };
 
+    const activeInstrumentProvider = (): 'fyers' | 'upstox' | null => {
+      const brokerId = String(tradingCoreRuntime.getPrimaryBrokerId() || '').toLowerCase();
+      return tradingCoreRuntime.hasConnectedBroker() && (brokerId === 'fyers' || brokerId === 'upstox') ? brokerId : null;
+    };
     let quoteSourceMode: 'fyers' | 'upstox' | 'none' | null = null;
     let quoteSymbolsSignature = '';
     const quoteSubscribe = (): void => {
       const symbols = watchlist.map((item) => item.symbol);
       if (!symbols.length) return;
-      const primaryBroker = String(tradingCoreRuntime.getPrimaryBrokerId() || '').toLowerCase();
-      const nextMode = tradingCoreRuntime.hasConnectedBroker() && (primaryBroker === 'fyers' || primaryBroker === 'upstox') ? primaryBroker : 'none';
+      const nextMode = activeInstrumentProvider() ?? 'none';
       const symbolsSignature = symbols.join(',');
       if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && (nextMode === 'none' || quoteStop)) return;
       const sourceChanged = quoteSourceMode !== null && quoteSourceMode !== nextMode;
@@ -2452,19 +2455,20 @@ const bookmarksPanel: SidePanelDescriptor = {
       const shouldSearchOptions = Boolean(requestedStrike || /\b(CE|PE|CALL|PUT|NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b/i.test(query));
       // Search the full instrument master for every query, not just option contracts.
       // The dedicated options pass preserves exact-strike/nearest-expiry behavior.
+      const searchProvider = activeInstrumentProvider();
       if (indexSuggestions.length) renderSuggestions(indexSuggestions);
-      else showSuggestionStatus(hasValidFyersSession(tradingCoreRuntime.getAllConnections())
+      else showSuggestionStatus(searchProvider
         ? 'Searching instruments…'
-        : 'Connect FYERS to search the instrument master.');
+        : 'Connect FYERS or Upstox to search the instrument master.');
       let instruments: SearchInstrument[] = [];
-      if (hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+      if (searchProvider) {
         try {
           // One full-master query is enough: the server applies exact strike/CE/PE
           // intent, and this panel orders returned option contracts by expiry locally.
           const masterQuery = requestedStrike !== undefined
             ? [underlyingQuery, String(requestedStrike)].filter(Boolean).join(' ')
             : query;
-          instruments = await searchFyersInstruments(masterQuery, 'all', 100);
+          instruments = await searchBrokerInstruments(searchProvider, masterQuery, 'all', 100);
         } catch { /* immediate index matches remain useful while broker search recovers */ }
       }
       if (requestId !== suggestionRequest) return;
@@ -2517,7 +2521,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const resolvedRight = optionRight(instrument);
           const contractShort = `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${resolvedRight || ''}`.trim();
           const model = registerInstrument({
-            symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
+            symbol, provider: instrument.provider ?? searchProvider ?? 'unknown', exchange: instrument.exchange,
             type: instrument.type || 'option', instrumentType: 'option',
             underlying: instrument.underlying || underlyingQuery || undefined, isin: instrument.isin, expiry: instrument.expiry,
             strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
@@ -2538,7 +2542,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
           const label = String(instrument.label || instrument.description || ticker);
           const model = registerInstrument({
-            symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
+            symbol, provider: instrument.provider ?? searchProvider ?? 'unknown', exchange: instrument.exchange,
             type: instrument.type, underlying: instrument.underlying, isin: instrument.isin, expiry: instrument.expiry,
             strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
             optionType: instrument.optionType, lotSize: Number.isFinite(Number(instrument.lotSize)) ? Number(instrument.lotSize) : undefined,
@@ -2553,8 +2557,8 @@ const bookmarksPanel: SidePanelDescriptor = {
           ? [...indexSuggestions, ...optionEntries, ...instrumentEntries]
           : [...indexSuggestions, ...optionEntries, ...instrumentEntries];
       if (combined.length) renderSuggestions(combined);
-      else if (shouldSearchOptions && !hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
-        showSuggestionStatus('Connect FYERS to discover option contracts.');
+      else if (shouldSearchOptions && !searchProvider) {
+        showSuggestionStatus('Connect FYERS or Upstox to discover option contracts.');
       } else {
         showSuggestionStatus('No matching instruments found.');
       }
@@ -2707,7 +2711,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         const technicalTask = !cachedTechnical || cachedTechnical.expiresAt <= now
           ? (async () => {
               try {
-                if (!hasValidFyersSession(tradingCoreRuntime.getAllConnections())) {
+                if (!tradingCoreRuntime.hasConnectedBroker()) {
                   const canonicalBars = await loadTcoCanonicalHistoryBars(item.symbol, '5m', 5_000, AbortSignal.timeout(12_000));
                   const canonicalCandles = canonicalBars.map(bar => ({
                     timestamp: new Date(bar.time).toISOString(), open: Number(bar.open), high: Number(bar.high),
@@ -2790,7 +2794,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     // Refresh the stale marker while the market is quiet or closed; otherwise an old
     // quote can remain visually LIVE simply because no later tick arrived to repaint it.
     const freshnessTimer = window.setInterval(() => {
-      const expectedMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'none';
+      const expectedMode = activeInstrumentProvider() ?? 'none';
       if (expectedMode !== quoteSourceMode) {
         quoteSubscribe();
         // Recompute technicals after an expiry or reauthorization changes the history source.
