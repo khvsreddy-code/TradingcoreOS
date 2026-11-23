@@ -27,6 +27,9 @@ import { fetchTradingCoreNewsBundle, type TradingCoreNewsItem } from '../../news
 import { buildWatchlistAdvancedTechnicalSummary, type WatchlistAdvancedTechnicalSummary } from '../../marketData/watchlistAdvancedTechnicals';
 import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../../terminal/terminalDataService';
 import { searchFyersInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
+import { classifyMarketDataHealth } from '../../marketData/dataHealth';
+import { createInstrument, registerInstrument, publishInstrumentSelection } from '../../marketData/instrumentIdentity';
+import type { InstrumentDataStatus, InstrumentType } from '../../../types/instrument';
 import { hasValidFyersSession } from '../../marketData/yahooFallback';
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { parseOptionExpiryTimestamp } from '../../marketData/options/optionPricing';
@@ -80,25 +83,30 @@ const TCO_CHROME_ICONS: Record<string, string> = {
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
 type WatchlistItem = {
+  id?: string;
   symbol: string;
   label: string;
   short: string;
   exchange?: string;
   type?: string;
+  instrumentType?: InstrumentType;
+  underlying?: string;
   expiry?: string;
   strike?: number;
   optionType?: string;
   lotSize?: number;
   tickSize?: number;
+  provider?: string;
+  brokerInstrumentKey?: string;
 };
 type WatchlistGroup = { id: string; name: string; items: WatchlistItem[] };
 
 const DEFAULT_WATCHLIST: readonly WatchlistItem[] = [
-  { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', short: 'NIFTY' },
-  { symbol: 'NSE:NIFTYBANK-INDEX', label: 'NIFTY BANK', short: 'BANKNIFTY' },
-  { symbol: 'NSE:FINNIFTY-INDEX', label: 'NIFTY FIN SERVICE', short: 'FINNIFTY' },
-  { symbol: 'NSE:MIDCPNIFTY-INDEX', label: 'NIFTY MIDCAP SELECT', short: 'MIDCPNIFTY' },
-  { symbol: 'BSE:SENSEX-INDEX', label: 'S&P BSE SENSEX', short: 'SENSEX' },
+  { ...registerInstrument({ symbol: 'NSE:NIFTY50-INDEX', provider: 'unknown', instrumentType: 'index', name: 'NIFTY 50' }), label: 'NIFTY 50', short: 'NIFTY', type: 'index' },
+  { ...registerInstrument({ symbol: 'NSE:NIFTYBANK-INDEX', provider: 'unknown', instrumentType: 'index', name: 'NIFTY BANK' }), label: 'NIFTY BANK', short: 'BANKNIFTY', type: 'index' },
+  { ...registerInstrument({ symbol: 'NSE:FINNIFTY-INDEX', provider: 'unknown', instrumentType: 'index', name: 'NIFTY FIN SERVICE' }), label: 'NIFTY FIN SERVICE', short: 'FINNIFTY', type: 'index' },
+  { ...registerInstrument({ symbol: 'NSE:MIDCPNIFTY-INDEX', provider: 'unknown', instrumentType: 'index', name: 'NIFTY MIDCAP SELECT' }), label: 'NIFTY MIDCAP SELECT', short: 'MIDCPNIFTY', type: 'index' },
+  { ...registerInstrument({ symbol: 'BSE:SENSEX-INDEX', provider: 'unknown', instrumentType: 'index', name: 'S&P BSE SENSEX' }), label: 'S&P BSE SENSEX', short: 'SENSEX', type: 'index' },
 ];
 const WATCHLIST_STATE_KEY = 'tco.watchlist.v2';
 const WATCHLIST_LOCAL_KEY = 'tradingcore:vela:watchlist:v2';
@@ -121,27 +129,49 @@ function normalizeWatchlist(value: unknown, allowEmpty = false): WatchlistItem[]
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const source = item as Record<string, unknown>;
-    const symbol = String(source.symbol ?? '').trim().toUpperCase();
-    if (!symbol || seen.has(symbol)) continue;
-    const ticker = symbol.includes(':') ? symbol.split(':', 2)[1] ?? symbol : symbol;
+    const rawSymbol = String(source.symbol ?? '').trim().toUpperCase();
+    if (!rawSymbol) continue;
+    const ticker = rawSymbol.includes(':') ? rawSymbol.split(':', 2)[1] ?? rawSymbol : rawSymbol;
     const numeric = (key: string): number | undefined => {
       const value = Number(source[key]);
       return source[key] == null || source[key] === '' || !Number.isFinite(value) ? undefined : value;
     };
-    const itemValue: WatchlistItem = {
-      symbol,
-      label: String(source.label ?? ticker ?? symbol).trim() || symbol,
-      short: String(source.short ?? ticker).trim() || symbol,
-      ...(source.exchange ? { exchange: String(source.exchange) } : {}),
-      ...(source.type ? { type: String(source.type) } : {}),
-      ...(source.expiry ? { expiry: String(source.expiry) } : {}),
-      ...(numeric('strike') !== undefined ? { strike: numeric('strike') } : {}),
-      ...(source.optionType ? { optionType: String(source.optionType).toUpperCase() } : {}),
-      ...(numeric('lotSize') !== undefined ? { lotSize: numeric('lotSize') } : {}),
-      ...(numeric('tickSize') !== undefined ? { tickSize: numeric('tickSize') } : {}),
-    };
-    result.push(itemValue);
-    seen.add(symbol);
+    const label = String(source.label ?? ticker ?? rawSymbol).trim() || rawSymbol;
+    const instrument = registerInstrument({
+      symbol: rawSymbol,
+      provider: String(source.provider ?? 'unknown'),
+      exchange: source.exchange ? String(source.exchange) : undefined,
+      type: source.type ? String(source.type) : undefined,
+      instrumentType: source.instrumentType ? String(source.instrumentType) : undefined,
+      underlying: source.underlying ? String(source.underlying) : undefined,
+      expiry: source.expiry ? String(source.expiry) : undefined,
+      strike: numeric('strike'),
+      optionType: source.optionType ? String(source.optionType) : undefined,
+      lotSize: numeric('lotSize'),
+      tickSize: numeric('tickSize'),
+      brokerInstrumentKey: source.brokerInstrumentKey ? String(source.brokerInstrumentKey) : source.key ? String(source.key) : undefined,
+      dataStatus: 'unknown',
+      name: label,
+    });
+    if (seen.has(instrument.symbol)) continue;
+    result.push({
+      id: instrument.id,
+      symbol: instrument.symbol,
+      label,
+      short: String(source.short ?? ticker).trim() || ticker,
+      exchange: instrument.exchange,
+      type: String(source.type ?? instrument.instrumentType),
+      instrumentType: instrument.instrumentType,
+      ...(instrument.underlying ? { underlying: instrument.underlying } : {}),
+      ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
+      ...(instrument.strike !== undefined ? { strike: instrument.strike } : {}),
+      ...(instrument.optionType ? { optionType: instrument.optionType } : {}),
+      ...(instrument.lotSize !== undefined ? { lotSize: instrument.lotSize } : {}),
+      ...(instrument.tickSize !== undefined ? { tickSize: instrument.tickSize } : {}),
+      provider: instrument.provider,
+      ...(instrument.brokerInstrumentKey ? { brokerInstrumentKey: instrument.brokerInstrumentKey } : {}),
+    });
+    seen.add(instrument.symbol);
     if (result.length >= 50) break;
   }
   return result.length || allowEmpty ? result : [...DEFAULT_WATCHLIST];
@@ -249,13 +279,18 @@ function deleteWatchlistGroup(id: string, ctx?: { stateChanged?: () => void }): 
 }
 
 function symbolDescriptor(item: WatchlistItem) {
-  const [prefix, ticker] = item.symbol.includes(':') ? item.symbol.split(':', 2) : ['NSE', item.symbol];
+  const instrument = registerInstrument({
+    symbol: item.symbol, provider: item.provider ?? 'unknown', exchange: item.exchange,
+    instrumentType: item.instrumentType, type: item.type, underlying: item.underlying,
+    expiry: item.expiry, strike: item.strike, optionType: item.optionType,
+    lotSize: item.lotSize, tickSize: item.tickSize, brokerInstrumentKey: item.brokerInstrumentKey,
+    dataStatus: 'unknown', name: item.label,
+  });
+  const [prefix, ticker] = instrument.symbol.includes(':') ? instrument.symbol.split(':', 2) : [instrument.exchange, instrument.symbol];
   return {
-    ticker: ticker || item.symbol,
-    prefix: prefix || 'NSE',
-    description: item.label,
-    type: 'index',
-    provider: 'tco',
+    ticker: ticker || instrument.symbol, prefix: prefix || instrument.exchange,
+    description: item.label, type: instrument.instrumentType, provider: instrument.provider,
+    instrumentId: instrument.id,
   };
 }
 
@@ -645,9 +680,14 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       flex:1 1 auto!important;min-height:90px!important;overflow:auto!important;gap:3px!important;
       padding:1px 2px 6px 0!important;scrollbar-width:thin;scrollbar-color:#3a3e47 transparent;
     }
+    .tco-watchlist-column-head {
+      flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:3px 33px 5px 10px;color:#697587;font:700 8px/1 Inter,ui-sans-serif,system-ui,sans-serif;
+      letter-spacing:.09em;text-transform:uppercase;
+    }
     .tco-watchlist-row {
       position:relative;display:flex!important;align-items:center!important;gap:3px!important;
-      width:100%!important;min-height:48px!important;padding:1px 3px!important;box-sizing:border-box!important;
+      width:100%!important;min-height:44px!important;padding:1px 3px!important;box-sizing:border-box!important;
       border:1px solid transparent!important;border-radius:8px!important;background:transparent!important;
       transition:background 110ms ease,border-color 110ms ease!important;
     }
@@ -663,7 +703,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       font:inherit!important;text-align:left!important;cursor:pointer!important;
     }
     .tco-watchlist-select:hover { background:transparent!important; }
-    .tco-watchlist-instrument { min-width:0;display:flex;flex-direction:column;gap:3px; }
+    .tco-watchlist-instrument { min-width:0;display:flex;align-items:center; }
     .tco-watchlist-ticker {
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf0f5;
       font:700 12px Inter,ui-sans-serif,system-ui,sans-serif;
@@ -673,21 +713,24 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#858d99;
       font:400 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
     }
-    .tco-watchlist-price-block { position:relative;display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-end;gap:3px;padding-inline-end:9px; }
+    .tco-watchlist-price-block { position:relative;display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-end;gap:3px;padding-inline-end:6px; }
     .tco-watchlist-last {
       color:#e9edf3;font:700 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
       font-variant-numeric:tabular-nums;
     }
     .tco-watchlist-change {
-      color:#959daa;font:550 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+      color:#959daa;font:650 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
       font-variant-numeric:tabular-nums;white-space:nowrap;
     }
-    .tco-watchlist-price-block::after {
-      content:"";position:absolute;inset-inline-end:0;top:4px;width:5px;height:5px;border-radius:50%;background:#68717e;
+    .tco-watchlist-status {
+      font:750 7px/1 Inter,ui-sans-serif,system-ui,sans-serif;
+      letter-spacing:.08em;white-space:nowrap;
     }
-    .tco-watchlist-row[data-quote-state="live"] .tco-watchlist-price-block::after { background:#16a887; }
-    .tco-watchlist-row[data-quote-state="delayed"] .tco-watchlist-price-block::after { background:#3aa9d1; }
-    .tco-watchlist-row[data-quote-state="stale"] .tco-watchlist-price-block::after { background:#d8a546; }
+    .tco-watchlist-row[data-quote-state="live"] .tco-watchlist-status { color:#42c6a5; }
+    .tco-watchlist-row[data-quote-state="delayed"] .tco-watchlist-status { color:#55b7dc; }
+    .tco-watchlist-row[data-quote-state="stale"] .tco-watchlist-status { color:#e4b55f; }
+    .tco-watchlist-row[data-quote-state="disconnected"] .tco-watchlist-status { color:#e4777e; }
+    .tco-watchlist-row[data-quote-state="unknown"] .tco-watchlist-status { color:#7e8999; }
     .tco-watchlist-remove {
       flex:0 0 22px!important;width:22px!important;height:22px!important;padding:0!important;opacity:0;
       border:0!important;border-radius:6px!important;background:transparent!important;color:#747d8b!important;
@@ -1812,6 +1855,10 @@ const bookmarksPanel: SidePanelDescriptor = {
     filters.appendChild(sort);
     root.appendChild(filters);
 
+    const columnHead = document.createElement('div');
+    columnHead.className = 'tco-watchlist-column-head';
+    columnHead.innerHTML = '<span>SYMBOL</span><span>LTP · CHANGE</span>';
+
     const rows = document.createElement('div');
     rows.className = 'tco-watchlist-list';
     rows.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
@@ -1883,7 +1930,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     newsSection.append(newsHeading, newsList);
 
     detailCard.append(detailHead, metrics, detailHint, technicalSection, newsSection);
-    root.append(rows, resizeHandle, detailCard);
+    root.append(columnHead, rows, resizeHandle, detailCard);
     const DETAIL_HEIGHT_KEY = 'tradingcore:vela:watchlist-detail-height:v2';
     const clampDetailHeight = (height: number) => Math.max(185, Math.min(Math.round(body.clientHeight * 0.52), height));
     let detailHeight = 228;
@@ -1929,11 +1976,15 @@ const bookmarksPanel: SidePanelDescriptor = {
       high?: number;
       low?: number;
       receivedAt: number;
-      source: 'fyers' | 'yahoo';
+      source: string;
       volume?: number;
       oi?: number;
     };
-    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; volume?: number; oi?: number; receivedAt?: number; stale: boolean; source?: 'fyers' | 'yahoo' };
+    type MarketQuoteView = {
+      ltp?: number; change?: number; changePercent?: number; high?: number; low?: number;
+      volume?: number; oi?: number; receivedAt?: number; stale: boolean; source?: string;
+      dataStatus: InstrumentDataStatus; healthReason: string;
+    };
     const quotes = new Map<string, Quote>();
     let quoteStop: (() => void) | undefined;
 
@@ -1985,18 +2036,26 @@ const bookmarksPanel: SidePanelDescriptor = {
         percent = (change / (ltp - change)) * 100;
       }
       const hasFreshTimestamp = receivedAt !== undefined && Number.isFinite(receivedAt);
-      const source: 'fyers' | 'yahoo' | undefined = cachedIsNewest ? cached?.source : parsedSnapshotTime !== undefined ? 'fyers' : cached?.source;
+      const snapshotSource = String(snapshot.source ?? snapshot.provider ?? '').trim().toLowerCase();
+      const source = cachedIsNewest ? cached?.source : snapshotSource || cached?.source;
+      const providerConnected = source === 'fyers' || source === 'upstox'
+        ? tradingCoreRuntime.hasConnectedBroker()
+        : undefined;
+      const health = classifyMarketDataHealth({
+        source, lastUpdateAt: receivedAt, providerConnected, expectedIntervalMs: 5_000,
+      });
+      const dataStatus: InstrumentDataStatus = ltp === undefined
+        ? providerConnected === false ? 'disconnected' : 'unknown'
+        : health.state;
       return {
-        ltp,
-        change,
-        changePercent: percent,
-        ...(source ? { source } : {}),
+        ltp, change, changePercent: percent, ...(source ? { source } : {}),
         high: asFinite(cachedIsNewest ? cached?.high : snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
         low: asFinite(cachedIsNewest ? cached?.low : snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
         volume: asFinite(cachedIsNewest ? cached?.volume : snapshot.volume, snapshot.volume, cached?.volume),
         oi: asFinite(cachedIsNewest ? cached?.oi : snapshot.oi, snapshot.oi, snapshot.openInterest, cached?.oi),
         ...(hasFreshTimestamp ? { receivedAt } : {}),
-        stale: !hasFreshTimestamp || Date.now() - receivedAt! > STALE_AFTER_MS,
+        stale: dataStatus === 'stale', dataStatus,
+        healthReason: ltp === undefined ? 'No current quote has been received for this instrument.' : health.reason,
       };
     };
 
@@ -2058,6 +2117,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       button: HTMLButtonElement;
       value: HTMLSpanElement;
       change: HTMLSpanElement;
+      status: HTMLSpanElement;
       technicals: HTMLSpanElement;
       news: HTMLSpanElement;
     };
@@ -2168,16 +2228,71 @@ const bookmarksPanel: SidePanelDescriptor = {
       ref.news.title = headline?.title || 'Latest ticker headline';
     };
 
+    const dataStatusLabel: Record<InstrumentDataStatus, string> = {
+      live: 'LIVE', delayed: 'DELAYED', stale: 'STALE', disconnected: 'OFFLINE', unknown: 'NO FEED',
+    };
+    const dataStatusColor: Record<InstrumentDataStatus, string> = {
+      live: '#42c6a5', delayed: '#55b7dc', stale: '#e4b55f', disconnected: '#e4777e', unknown: '#7e8999',
+    };
+    const updateQuoteRow = (item: WatchlistItem, ref: RowRef, current: string): void => {
+      const quote = quoteView(item.symbol);
+      const pct = quote.changePercent;
+      const absolute = quote.change;
+      const instrument = registerInstrument({
+        symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
+        exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
+        underlying: item.underlying, expiry: item.expiry, strike: item.strike,
+        optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
+        brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
+      });
+      ref.row.dataset.instrumentId = instrument.id;
+      ref.button.dataset.instrumentId = instrument.id;
+      ref.row.dataset.selected = item.symbol === current ? '1' : '';
+      ref.row.dataset.quoteState = quote.dataStatus;
+      ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
+      const selected = item.symbol === current;
+      ref.row.style.background = selected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
+      ref.row.style.borderColor = selected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
+      ref.value.textContent = quote.ltp === undefined ? '—' : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      const direction = pct === undefined ? '·' : pct > 0 ? '↑' : pct < 0 ? '↓' : '→';
+      ref.change.textContent = pct === undefined ? '—' : `${direction} ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+      ref.change.style.color = pct === undefined ? 'var(--vela-fg-muted)' : pct > 0 ? '#22c55e' : pct < 0 ? '#f23645' : 'var(--vela-fg-bright)';
+      ref.status.textContent = dataStatusLabel[quote.dataStatus];
+      ref.status.style.color = dataStatusColor[quote.dataStatus];
+      ref.status.title = quote.healthReason;
+      ref.value.style.color = quote.dataStatus === 'delayed' ? '#75cde9' : quote.dataStatus === 'stale' ? '#e7bf6e' : 'var(--vela-fg-bright)';
+      ref.row.title = `${item.label} · ${instrument.exchange} · ${instrument.instrumentType} · ${dataStatusLabel[quote.dataStatus]} · ${quote.healthReason}`;
+      ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'last price unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}, ${pct === undefined ? 'day change unavailable' : `${pct >= 0 ? 'up' : 'down'} ${Math.abs(pct).toFixed(2)} percent`}, data ${dataStatusLabel[quote.dataStatus]}`);
+      ref.change.title = absolute === undefined ? dataStatusLabel[quote.dataStatus] : `Absolute change ${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    };
+
+    let lastPublishedInstrument = '';
+    const publishActiveInstrument = (): void => {
+      const current = String(ctx.symbol || '').trim().toUpperCase();
+      if (!current) return;
+      const selected = watchlist.find(item => item.symbol.toUpperCase() === current);
+      const quote = quoteView(current);
+      const instrument = registerInstrument({
+        symbol: current, provider: quote.source ?? selected?.provider ?? 'unknown',
+        exchange: selected?.exchange, type: selected?.type, instrumentType: selected?.instrumentType,
+        underlying: selected?.underlying, expiry: selected?.expiry, strike: selected?.strike,
+        optionType: selected?.optionType, lotSize: selected?.lotSize, tickSize: selected?.tickSize,
+        brokerInstrumentKey: selected?.brokerInstrumentKey, dataStatus: quote.dataStatus, name: selected?.label,
+      });
+      const signature = `${instrument.id}|${instrument.provider}|${instrument.dataStatus}`;
+      if (signature === lastPublishedInstrument) return;
+      lastPublishedInstrument = signature;
+      publishInstrumentSelection(instrument);
+    };
+
     const updateRows = (changedSymbol?: string): void => {
       const current = String(ctx.symbol || '').toUpperCase();
       meta.textContent = `${current} · ${ctx.timeframe} · ${watchlist.length} symbols`;
 
-      // Tick-hot path: most packets affect one instrument. Keep existing row DOM and
-      // focus stable rather than walking every row; full passes remain for filters,
-      // sort changes, list edits and quote-freshness sweeps.
+      // Tick-hot path: update one row and preserve focus/DOM identity.
       if (changedSymbol) {
         const normalized = changedSymbol.toUpperCase();
-        const item = watchlist.find((candidate) => candidate.symbol === normalized);
+        const item = watchlist.find(candidate => candidate.symbol === normalized);
         const ref = item ? rowRefs.get(item.symbol) : undefined;
         if (!item || !ref) {
           if (normalized === current) updateDetails();
@@ -2185,39 +2300,23 @@ const bookmarksPanel: SidePanelDescriptor = {
         }
         const query = filterInput.value.trim().toUpperCase();
         const searchable = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
-        const quote = quoteView(item.symbol);
-        const pct = quote.changePercent;
+        const pct = quoteView(item.symbol).changePercent;
         const matchesText = !query || searchable.includes(query);
         const matchesFilter = filterMode === 'all'
           || (filterMode === 'gainers' && Number.isFinite(pct) && Number(pct) > 0)
           || (filterMode === 'losers' && Number.isFinite(pct) && Number(pct) < 0);
         ref.row.hidden = !(matchesText && matchesFilter);
-        const isSelected = item.symbol === current;
-        ref.row.dataset.selected = isSelected ? '1' : '';
-        ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
-        ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
-        const absolute = quote.change;
-        ref.value.textContent = quote.ltp === undefined ? '—' : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
-        const changeParts: string[] = [];
-        if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
-        if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
-        ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
-        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote — checked every 4 seconds; not real-time' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
-        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'stale quote' : 'live quote'}`}`);
-        ref.value.style.color = quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
-        ref.change.textContent = quote.ltp === undefined
-          ? 'WAITING FOR QUOTE'
-          : `${quote.source === 'yahoo' ? 'YAHOO DELAYED · ' : quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
-        const changeTone = absolute !== undefined ? absolute : pct;
-        ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        updateQuoteRow(item, ref, current);
         updateEnrichmentRow(item, ref);
-        if (isSelected) updateDetails();
+        if (item.symbol === current) {
+          updateDetails();
+          publishActiveInstrument();
+        }
         return;
       }
 
       const query = filterInput.value.trim().toUpperCase();
-      const filtered = watchlist.filter((item) => {
+      const filtered = watchlist.filter(item => {
         const text = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
         if (query && !text.includes(query)) return false;
         const pct = quoteView(item.symbol).changePercent;
@@ -2225,37 +2324,16 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (filterMode === 'losers' && !(Number.isFinite(pct) && Number(pct) < 0)) return false;
         return true;
       });
-      const visible = new Set(filtered.map((item) => item.symbol));
+      const visible = new Set(filtered.map(item => item.symbol));
       for (const item of watchlist) {
         const ref = rowRefs.get(item.symbol);
         if (!ref) continue;
         ref.row.hidden = !visible.has(item.symbol);
-        const isSelected = item.symbol === current;
-        ref.row.dataset.selected = isSelected ? '1' : '';
-        ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
-        ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
-        const quote = quoteView(item.symbol);
-        const pct = quote.changePercent;
-        const absolute = quote.change;
-        ref.value.textContent = quote.ltp === undefined
-          ? '—'
-          : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
-        const changeParts: string[] = [];
-        if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
-        if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
-        ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
-        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote — checked every 4 seconds; not real-time' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
-        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'stale quote' : 'live quote'}`}`);
-        ref.value.style.color = quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
-        ref.change.textContent = quote.ltp === undefined
-          ? 'WAITING FOR QUOTE'
-          : `${quote.source === 'yahoo' ? 'YAHOO DELAYED · ' : quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
-        const changeTone = absolute !== undefined ? absolute : pct;
-        ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        updateQuoteRow(item, ref, current);
         updateEnrichmentRow(item, ref);
       }
       updateDetails();
+      publishActiveInstrument();
     };
 
     const INDEX_SEARCH_UNIVERSE: readonly WatchlistItem[] = [
@@ -2421,15 +2499,16 @@ const bookmarksPanel: SidePanelDescriptor = {
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
           const resolvedRight = optionRight(instrument);
           const contractShort = `${ticker.split(/\s+/)[0] || 'OPTION'} ${instrument.strike ?? ''} ${resolvedRight || ''}`.trim();
-          const item: WatchlistItem = {
-            symbol, label: ticker, short: contractShort,
-            ...(instrument.exchange ? { exchange: instrument.exchange } : {}),
-            ...(instrument.type ? { type: instrument.type } : { type: 'option' }),
-            ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
-            ...(Number.isFinite(Number(instrument.strike)) ? { strike: Number(instrument.strike) } : {}),
-            ...(resolvedRight ? { optionType: resolvedRight } : {}),
-            ...(Number.isFinite(Number(instrument.lotSize)) ? { lotSize: Number(instrument.lotSize) } : {}),
-          };
+          const model = registerInstrument({
+            symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
+            type: instrument.type || 'option', instrumentType: 'option',
+            underlying: instrument.underlying || underlyingQuery || undefined, expiry: instrument.expiry,
+            strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
+            optionType: resolvedRight || instrument.optionType,
+            lotSize: Number.isFinite(Number(instrument.lotSize)) ? Number(instrument.lotSize) : undefined,
+            tickSize: instrument.tickSize, brokerInstrumentKey: instrument.key, name: ticker,
+          });
+          const item: WatchlistItem = { ...model, label: ticker, short: contractShort, type: instrument.type || 'option' };
           const expiry = instrument.expiry ? new Date(optionExpiryTime(instrument.expiry)).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : 'expiry unavailable';
           return { item, caption: `OPTION · ${instrument.strike ?? '—'} ${resolvedRight || ''} · ${expiry}`, rank: requestedStrike ? Math.abs(Number(instrument.strike || 0) - requestedStrike) : 0 };
         });
@@ -2440,17 +2519,15 @@ const bookmarksPanel: SidePanelDescriptor = {
         .map(instrument => {
           const ticker = String(instrument.symbol || instrument.key).split(':').pop() || String(instrument.symbol || instrument.key);
           const symbol = String(instrument.symbol || instrument.key).trim().toUpperCase();
-          const item: WatchlistItem = {
-            symbol,
-            label: String(instrument.label || instrument.description || ticker),
-            short: ticker,
-            ...(instrument.exchange ? { exchange: instrument.exchange } : {}),
-            ...(instrument.type ? { type: instrument.type } : {}),
-            ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
-            ...(Number.isFinite(Number(instrument.strike)) ? { strike: Number(instrument.strike) } : {}),
-            ...(instrument.optionType ? { optionType: instrument.optionType.toUpperCase() } : {}),
-            ...(Number.isFinite(Number(instrument.lotSize)) ? { lotSize: Number(instrument.lotSize) } : {}),
-          };
+          const label = String(instrument.label || instrument.description || ticker);
+          const model = registerInstrument({
+            symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
+            type: instrument.type, underlying: instrument.underlying, expiry: instrument.expiry,
+            strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
+            optionType: instrument.optionType, lotSize: Number.isFinite(Number(instrument.lotSize)) ? Number(instrument.lotSize) : undefined,
+            tickSize: instrument.tickSize, brokerInstrumentKey: instrument.key, name: label,
+          });
+          const item: WatchlistItem = { ...model, label, short: ticker, type: instrument.type || model.instrumentType };
           return { item, caption: `${instrument.type || 'INSTRUMENT'} · ${instrument.exchange || 'FYERS'}`, rank: 0 };
         });
       const combined = requestedStrike && underlyingQuery
@@ -2544,10 +2621,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const label = document.createElement('span');
           label.className = 'tco-watchlist-ticker';
           label.textContent = item.short;
-          const detail = document.createElement('span');
-          detail.className = 'tco-watchlist-instrument-name';
-          detail.textContent = item.label;
-          left.append(label, detail);
+          left.append(label);
 
           const right = document.createElement('span');
           right.className = 'tco-watchlist-price-block';
@@ -2555,9 +2629,21 @@ const bookmarksPanel: SidePanelDescriptor = {
           value.className = 'tco-watchlist-last';
           const change = document.createElement('span');
           change.className = 'tco-watchlist-change';
-          right.append(value, change);
+          const status = document.createElement('span');
+          status.className = 'tco-watchlist-status';
+          right.append(value, change, status);
           button.append(left, right);
-          button.addEventListener('click', () => ctx.setSymbol(item.symbol));
+          button.addEventListener('click', () => {
+            ctx.setSymbol(item.symbol);
+            const quote = quoteView(item.symbol);
+            publishInstrumentSelection(registerInstrument({
+              symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
+              exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
+              underlying: item.underlying, expiry: item.expiry, strike: item.strike,
+              optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
+              brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
+            }));
+          });
 
           const remove = document.createElement('button');
           remove.type = 'button';
@@ -2573,7 +2659,7 @@ const bookmarksPanel: SidePanelDescriptor = {
 
           row.append(button, remove);
           rows.appendChild(row);
-          ref = { row, button, value, change, technicals: document.createElement('span'), news: document.createElement('span') };
+          ref = { row, button, value, change, status, technicals: document.createElement('span'), news: document.createElement('span') };
           rowRefs.set(item.symbol, ref);
         }
         rows.appendChild(ref.row);
@@ -2662,6 +2748,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     };
 
     const refresh = (): void => {
+      publishActiveInstrument();
       buildRows();
       if (watchlist.length) quoteSubscribe();
       void warmWatchlistEnrichment();
@@ -2675,11 +2762,8 @@ const bookmarksPanel: SidePanelDescriptor = {
         return;
       }
       const [prefix, ticker] = symbol.includes(':') ? symbol.split(':', 2) : ['NSE', symbol];
-      applyWatchlist([...watchlist, {
-        symbol,
-        label: ticker || symbol,
-        short: ticker || symbol,
-      }], ctx);
+      const model = registerInstrument({ symbol, provider: tradingCoreRuntime.getPrimaryBrokerId() || 'unknown', name: ticker || symbol });
+      applyWatchlist([...watchlist, { ...model, label: ticker || symbol, short: ticker || symbol }], ctx);
       quoteSubscribe();
       ctx.toast(`${symbol} added to watchlist`, 'success');
     });
@@ -2697,6 +2781,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         void warmWatchlistEnrichment();
       }
       updateRows();
+      publishActiveInstrument();
     }, 5000);
     const enrichmentTimer = window.setInterval(() => void warmWatchlistEnrichment(), 30_000);
     const cloudRevisionAtLoad = watchlistMutationRevision;
