@@ -28,6 +28,8 @@ export interface Instrument {
   exchange: string;
   instrumentType: InstrumentType;
   underlying?: string;
+  /** Exchange-issued identifier used to match the same equity across broker tokens. */
+  isin?: string;
   expiry?: string;
   strike?: number;
   optionType?: 'CE' | 'PE';
