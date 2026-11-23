@@ -10,7 +10,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Workspace', href: '#workspace-entry' },
   { label: 'CoreSpirit', href: '/explore/indicators' },
   { label: 'Modules', href: '#workspace-modules' },
-  { label: 'FAQ', href: '#faq' },
+  { label: 'Access', href: '#access-model-title' },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({

@@ -32,8 +32,8 @@ assert.match(belowFold, /illustrative, not live market data/);
 assert.match(belowFold, /FAQSection/);
 assert.match(belowFold, /Footer/);
 
-assert.match(landing, /new IntersectionObserver/);
-assert.doesNotMatch(landing, /setTimeout\(/, 'below-fold marketing content must not be forced into the initial load by a timer');
+assert.match(landing, /<LandingBelowFold onLaunchPlatform=\\{onLaunchPlatform\\} \\/>/, 'compact product and access links must exist when the page navigation renders');
+assert.match(nav, /href: '#access-model-title'/);
 assert.match(app, /const handleLaunchPlatform = \(\) => \{/);
 assert.match(app, /setIsAuthModalOpen\(true\)/);
 assert.match(app, /navigate\('\/dashboard'\)/);

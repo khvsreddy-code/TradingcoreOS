@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Activity, Bot, Layers3, ShieldCheck, Wallet } from 'lucide-react';
+import { Activity, Layers3, ShieldCheck, Wallet } from 'lucide-react';
 
 const FAQSection = lazy(() => import('../components/faq/FAQSection').then(m => ({ default: m.FAQSection })));
 const Footer = lazy(() => import('../components/footer/Footer').then(m => ({ default: m.Footer })));
