@@ -66,7 +66,7 @@ assert(tcoVelaChrome.includes("import('../../coreSpirit/monacoAdapter')"), 'Mona
 assert(tcoVelaChrome.includes("import('../../coreSpirit/coreSpiritCompilerClient')"), 'compiler client must load only when CoreSpirit is run');
 assert(tcoVelaChrome.includes('updateRows(symbol)'), 'watchlist quote ticks must update only the changed symbol on the default sort');
 assert(tcoVelaChrome.includes('quoteUpdatedAt'), 'watchlist rows must retain an explicit quote freshness marker');
-assert(tcoVelaChrome.includes('STALE ·') && tcoVelaChrome.includes('WAITING FOR QUOTE'), 'watchlist must distinguish stale and missing quotes');
+assert(tcoVelaChrome.includes("stale: 'STALE'") && tcoVelaChrome.includes("unknown: 'NO FEED'") && tcoVelaChrome.includes("disconnected: 'OFFLINE'"), 'watchlist must distinguish stale, unverified and disconnected quotes with explicit labels');
 assert(tcoVelaChrome.includes('previousClose?: number;'), 'watchlist quote normalization must retain previous close');
 assert(tcoVelaChrome.includes('rawSnapshotTime * 1000'), 'watchlist quote freshness must normalize Unix seconds and milliseconds before comparison');
 assert(tcoVelaChrome.includes('Quote freshness'), 'Trading context must report active-chart quote freshness');
