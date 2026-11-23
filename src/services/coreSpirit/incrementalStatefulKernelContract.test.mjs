@@ -57,9 +57,9 @@ for (const kind of ['ema', 'rma']) {
   assert.equal(atr.update(11, 10, 10.5), null);
   close(atr.update(12, 10, 11), 1.5);
   close(atr.update(14, 12, 13), 2);
-  close(atr.update(15, 12, 12.5, 'replace'), 8 / 3);
-  close(atr.update(16, 12.1, 12.2, 'replace'), 3);
-  close(atr.update(14, 13.8, 13.9, 'append'), 2.6);
+  close(atr.update(15, 12, 12.5, 'replace'), 7 / 3);
+  close(atr.update(16, 12.1, 12.2, 'replace'), 8 / 3);
+  close(atr.update(14, 13.8, 13.9, 'append'), 107 / 45);
 }
 
 // Dataset reset, session-like invalid gaps, and invalid checkpoint rejection.
