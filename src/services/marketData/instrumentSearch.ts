@@ -10,6 +10,11 @@ export type InstrumentSearchSegment = 'all' | 'stocks' | 'futures' | 'options' |
 
 export interface SearchInstrument {
   key: string;
+  /** Provider-neutral identity once adapted by instrumentIdentity.ts. */
+  instrumentId?: string;
+  provider?: string;
+  underlying?: string;
+  tickSize?: number;
   label: string;
   symbol: string;
   description?: string;
