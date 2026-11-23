@@ -92,6 +92,7 @@ type WatchlistItem = {
   type?: string;
   instrumentType?: InstrumentType;
   underlying?: string;
+  isin?: string;
   expiry?: string;
   strike?: number;
   optionType?: string;
@@ -145,6 +146,7 @@ function normalizeWatchlist(value: unknown, allowEmpty = false): WatchlistItem[]
       type: source.type ? String(source.type) : undefined,
       instrumentType: source.instrumentType ? String(source.instrumentType) : undefined,
       underlying: source.underlying ? String(source.underlying) : undefined,
+      isin: source.isin ? String(source.isin) : undefined,
       expiry: source.expiry ? String(source.expiry) : undefined,
       strike: numeric('strike'),
       optionType: source.optionType ? String(source.optionType) : undefined,
@@ -164,6 +166,7 @@ function normalizeWatchlist(value: unknown, allowEmpty = false): WatchlistItem[]
       type: String(source.type ?? instrument.instrumentType),
       instrumentType: instrument.instrumentType,
       ...(instrument.underlying ? { underlying: instrument.underlying } : {}),
+      ...(instrument.isin ? { isin: instrument.isin } : {}),
       ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
       ...(instrument.strike !== undefined ? { strike: instrument.strike } : {}),
       ...(instrument.optionType ? { optionType: instrument.optionType } : {}),
@@ -2255,7 +2258,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       const instrument = registerInstrument({
         symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
         exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
-        underlying: item.underlying, expiry: item.expiry, strike: item.strike,
+        underlying: item.underlying, isin: item.isin, expiry: item.expiry, strike: item.strike,
         optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
         brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
       });
@@ -2289,7 +2292,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       const instrument = registerInstrument({
         symbol: current, provider: quote.source ?? selected?.provider ?? 'unknown',
         exchange: selected?.exchange, type: selected?.type, instrumentType: selected?.instrumentType,
-        underlying: selected?.underlying, expiry: selected?.expiry, strike: selected?.strike,
+        underlying: selected?.underlying, isin: selected?.isin, expiry: selected?.expiry, strike: selected?.strike,
         optionType: selected?.optionType, lotSize: selected?.lotSize, tickSize: selected?.tickSize,
         brokerInstrumentKey: selected?.brokerInstrumentKey, dataStatus: quote.dataStatus, name: selected?.label,
       });
@@ -2516,7 +2519,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const model = registerInstrument({
             symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
             type: instrument.type || 'option', instrumentType: 'option',
-            underlying: instrument.underlying || underlyingQuery || undefined, expiry: instrument.expiry,
+            underlying: instrument.underlying || underlyingQuery || undefined, isin: instrument.isin, expiry: instrument.expiry,
             strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
             optionType: resolvedRight || instrument.optionType,
             lotSize: Number.isFinite(Number(instrument.lotSize)) ? Number(instrument.lotSize) : undefined,
@@ -2536,7 +2539,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           const label = String(instrument.label || instrument.description || ticker);
           const model = registerInstrument({
             symbol, provider: instrument.provider ?? 'fyers', exchange: instrument.exchange,
-            type: instrument.type, underlying: instrument.underlying, expiry: instrument.expiry,
+            type: instrument.type, underlying: instrument.underlying, isin: instrument.isin, expiry: instrument.expiry,
             strike: Number.isFinite(Number(instrument.strike)) ? Number(instrument.strike) : undefined,
             optionType: instrument.optionType, lotSize: Number.isFinite(Number(instrument.lotSize)) ? Number(instrument.lotSize) : undefined,
             tickSize: instrument.tickSize, brokerInstrumentKey: instrument.key, name: label,
