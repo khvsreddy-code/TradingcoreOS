@@ -126,13 +126,15 @@ export function instrumentIdentityKey(instrument: Pick<Instrument, 'id'>): strin
 
 
 const instrumentsById = new Map<string, Instrument>();
-const instrumentIdBySymbol = new Map<string, string>();
+// The same economic contract can have different provider-native routing keys.
+// Keep a per-symbol snapshot as well as the shared economic identity.
+const instrumentsBySymbol = new Map<string, Instrument>();
 
 /** Register the latest metadata/status snapshot under the stable instrument identity. */
 export function registerInstrument(input: InstrumentIdentityInput | Instrument): Instrument {
   const instrument = createInstrument(input);
   instrumentsById.set(instrument.id, instrument);
-  instrumentIdBySymbol.set(instrument.symbol.toUpperCase(), instrument.id);
+  instrumentsBySymbol.set(instrument.symbol.toUpperCase(), instrument);
   return instrument;
 }
 
@@ -140,9 +142,9 @@ export function getInstrumentById(id: string): Instrument | undefined {
   return instrumentsById.get(String(id ?? '').trim());
 }
 
+/** Resolve the provider-specific record for an exact chart/data-plane symbol. */
 export function getInstrumentBySymbol(symbol: string): Instrument | undefined {
-  const id = instrumentIdBySymbol.get(String(symbol ?? '').trim().toUpperCase());
-  return id ? instrumentsById.get(id) : undefined;
+  return instrumentsBySymbol.get(String(symbol ?? '').trim().toUpperCase());
 }
 
 export const INSTRUMENT_SELECTED_EVENT = 'tradingcore:instrument-selected';
