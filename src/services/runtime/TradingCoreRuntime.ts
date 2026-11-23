@@ -548,6 +548,7 @@ export class TradingCoreRuntime {
         if (event.type === 'error') {
           coreEventBus.emit('market.error', { brokerId: currentBrokerId, message: event.error, timestamp: Date.now() });
         }
+        let forwardedEvent: MarketFeedEvent = event;
         if (event.type === 'tick' && event.tick) {
           const key = String(event.tick.instrumentKey || '');
           const raw = (event.tick as any).lastTradeTimestamp ?? (event.tick as any).receivedAt ?? (event.tick as any).timestamp;
@@ -566,19 +567,13 @@ export class TradingCoreRuntime {
             ...event.tick,
             ...(instrument ? { instrumentId: instrument.id } : {}),
           };
-          const normalizedEvent: MarketFeedEvent = { ...event, tick: normalizedTick };
+          forwardedEvent = { ...event, tick: normalizedTick };
           this.market.set(normalizedTick.instrumentKey, normalizedTick);
           this.emit('TICK_UPDATE', normalizedTick);
           coreEventBus.emit('market.tick', { symbol: String(normalizedTick.instrumentKey || ''), tick: normalizedTick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
         }
-        const deliveredEvent = event.type === 'tick' && event.tick
-          ? ({ ...event, tick: {
-              ...event.tick,
-              instrumentId: registerInstrument({ symbol: event.tick.instrumentKey, provider: currentBrokerId, dataStatus: 'live' }).id,
-            } } as MarketFeedEvent)
-          : event;
-        listener(deliveredEvent);
-        this.marketListeners.forEach((subscriber) => subscriber(deliveredEvent));
+        listener(forwardedEvent);
+        this.marketListeners.forEach((subscriber) => subscriber(forwardedEvent));
       };
       let currentBrokerId = initial.brokerId;
       stopFeed = brokerMarketDataClient.subscribe(currentBrokerId, instrumentKeys, relay, depthInstrumentKey);
