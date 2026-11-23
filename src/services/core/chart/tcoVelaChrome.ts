@@ -1983,7 +1983,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       previousClose?: number;
       high?: number;
       low?: number;
-      receivedAt: number;
+      receivedAt?: number;
       source: string;
       volume?: number;
       oi?: number;
@@ -2001,6 +2001,19 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (value == null || value === '') continue;
         const number = Number(value);
         if (Number.isFinite(number)) return number;
+      }
+      return undefined;
+    };
+    const timestampMs = (...values: unknown[]): number | undefined => {
+      for (const value of values) {
+        if (value == null || value === '') continue;
+        if (typeof value === 'number' && Number.isFinite(value)) return value < 1e12 ? value * 1000 : value;
+        const text = String(value).trim();
+        if (!text) continue;
+        const numeric = Number(text);
+        if (Number.isFinite(numeric)) return numeric < 1e12 ? numeric * 1000 : numeric;
+        const parsed = Date.parse(text);
+        if (Number.isFinite(parsed)) return parsed;
       }
       return undefined;
     };
@@ -2113,8 +2126,10 @@ const bookmarksPanel: SidePanelDescriptor = {
           previousClose,
           high: asFinite(tick.dayHigh, tick.high, daily?.high),
           low: asFinite(tick.dayLow, tick.low, daily?.low),
-          receivedAt: Date.now(),
-          source: nextMode,
+          // Never stamp an old/undated provider update with local wall-clock time.
+          // Missing provider time remains unverified instead of being presented as LIVE.
+          receivedAt: timestampMs(tick.brokerTimestamp, tick.lastTradeTimestamp, tick.timestamp, tick.receivedAtEpoch, tick.receivedAt),
+          source: String(tick.source || nextMode).toLowerCase(),
           volume: asFinite(tick.volume),
           oi: asFinite(tick.oi, tick.openInterest),
         });
