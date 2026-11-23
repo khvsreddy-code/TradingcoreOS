@@ -6,7 +6,7 @@ import {
   getInstrumentBySymbol,
   normalizeOptionType,
   registerInstrument,
-} from './instrumentIdentity';
+} from './services/marketData/instrumentIdentity';
 
 const fyersIndex = canonicalInstrumentKey('fyers', 'NSE_INDEX|Nifty 50');
 const upstoxIndex = canonicalInstrumentKey('upstox', 'NSE_INDEX|Nifty 50');
