@@ -10,6 +10,7 @@ const contracts = [
   ['vela-adaptive-graphics-budget', ['src/velaAdaptiveGraphicsBudgetContract.test.ts', true]],
   ['vela-adaptive-graphics-integration', ['src/velaAdaptiveGraphicsIntegrationContract.test.mjs', false]],
   ['frontend-bundle-architecture', ['src/frontendBundleArchitectureContract.test.mjs', false]],
+  ['landing-product-entry', ['src/landingProductEntryContract.test.mjs', false]],
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
   ['chart-data-plane-persistent-sidecars', ['src/services/marketData/chartDataPlanePersistentSidecars.test.ts', true]],

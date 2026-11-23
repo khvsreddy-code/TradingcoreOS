@@ -18,37 +18,31 @@ export function LandingPage({
     const sentinel = loadSentinelRef.current;
     if (!sentinel) return;
 
-    let loaded = false;
-    const load = () => {
-      if (loaded) return;
-      loaded = true;
+    if (!('IntersectionObserver' in window)) {
       setLoadBelowFold(true);
-      observer.disconnect();
-      window.clearTimeout(fallbackTimer);
-    };
+      return;
+    }
 
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) load();
-    }, { rootMargin: '0px 0px 500px 0px' });
+      if (entry.isIntersecting) {
+        setLoadBelowFold(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '480px 0px' });
 
     observer.observe(sentinel);
-    const fallbackTimer = window.setTimeout(load, 1200);
-
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(fallbackTimer);
-    };
+    return () => observer.disconnect();
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--tco-surface-2)] text-[var(--tco-text)] font-sans selection:bg-[#3b82f6]/30 selection:text-[#3b82f6] overflow-x-hidden">
+    <div className="min-h-screen overflow-x-hidden bg-[var(--tco-surface-2)] font-sans text-[var(--tco-text)] selection:bg-[#3b82f6]/30 selection:text-[#3b82f6]">
       <Navbar
         onOpenAuthModal={onOpenAuthModal}
         onLaunchPlatform={onLaunchPlatform}
         onNavigate={onNavigate}
         currentView={currentView}
       />
-      <main className="pt-16">
+      <main className="pt-14">
         <Hero onLaunch={onLaunchPlatform} />
         <div ref={loadSentinelRef} aria-hidden="true" className="h-px" />
         {loadBelowFold && (
