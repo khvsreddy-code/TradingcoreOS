@@ -8,6 +8,7 @@ export interface InstrumentIdentityInput {
   instrumentType?: string;
   type?: string;
   underlying?: string;
+  isin?: string;
   expiry?: string;
   strike?: number;
   optionType?: string;
@@ -79,9 +80,14 @@ export function createInstrument(input: InstrumentIdentityInput): Instrument {
 
   // A fully described option contract is identified by its economic terms, not by
   // a provider-specific token. Other instruments use exchange + canonical symbol.
+  const isin = String(input.isin ?? '').trim().toUpperCase() || undefined;
   const identity = instrumentType === 'option' && underlying && expiry && strike !== undefined && optionType
     ? [exchange, 'option', underlying, expiry, String(strike), optionType].join('|')
-    : [exchange, instrumentType, symbol].join('|');
+    : instrumentType === 'future' && underlying && expiry
+      ? [exchange, 'future', underlying, expiry].join('|')
+      : instrumentType === 'equity' && isin
+        ? [exchange, 'equity', 'isin', isin].join('|')
+        : [exchange, instrumentType, symbol].join('|');
   const id = `tco-instrument:${encodeURIComponent(identity.toLowerCase())}`;
 
   return Object.freeze({
@@ -90,6 +96,7 @@ export function createInstrument(input: InstrumentIdentityInput): Instrument {
     exchange,
     instrumentType,
     ...(underlying ? { underlying } : {}),
+    ...(isin ? { isin } : {}),
     ...(expiry ? { expiry } : {}),
     ...(strike !== undefined ? { strike } : {}),
     ...(optionType ? { optionType } : {}),
