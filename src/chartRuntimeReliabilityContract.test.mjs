@@ -30,7 +30,7 @@ assert.ok(workerRequest.includes('requestSeq!==indicatorRequestSeq.current'), 'l
 assert.ok(workerRequest.includes('previous indicator output was retained'), 'worker failure reporting must state that retained output was not replaced');
 assert.ok(workerRequest.includes('tco:chart:indicator-worker-error'), 'unexpected current worker failures must be observable by the workspace');
 
-const drawings = readFileSync(new URL('../../vendor/vela/src/core/DrawingsControl.ts', import.meta.url), 'utf8');
+const drawings = readFileSync(new URL('../vendor/vela/src/core/DrawingsControl.ts', import.meta.url), 'utf8');
 assert.ok(drawings.includes('group(ids?: readonly string[])'), 'public chart.drawings facade must expose grouping');
 assert.ok(drawings.includes('ungroup(ids?: readonly string[])'), 'public chart.drawings facade must expose ungrouping');
 assert.ok(workspace.includes("addEventListener('tco:chart:indicator-worker-error', onIndicatorWorkerError)"), 'workspace must capture indicator worker failures in bounded diagnostics');
