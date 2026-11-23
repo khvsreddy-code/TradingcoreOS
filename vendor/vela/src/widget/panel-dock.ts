@@ -97,6 +97,7 @@ export class PanelDock {
                 minWidth: desc.minWidth,
                 maxWidth: desc.maxWidth,
                 overlay: desc.overlay,
+                maximizable: desc.maximizable,
                 ...(desc.header ? { header: desc.header } : {}),
                 ...(this.deps.i18n ? { i18n: this.deps.i18n } : {}),
             });
