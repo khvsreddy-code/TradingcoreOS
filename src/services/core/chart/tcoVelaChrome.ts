@@ -2038,9 +2038,10 @@ const bookmarksPanel: SidePanelDescriptor = {
       const hasFreshTimestamp = receivedAt !== undefined && Number.isFinite(receivedAt);
       const snapshotSource = String(snapshot.source ?? snapshot.provider ?? '').trim().toLowerCase();
       const source = cachedIsNewest ? cached?.source : snapshotSource || cached?.source;
+      const brokerConnected = tradingCoreRuntime.hasConnectedBroker();
       const providerConnected = source === 'fyers' || source === 'upstox'
-        ? tradingCoreRuntime.hasConnectedBroker()
-        : undefined;
+        ? brokerConnected
+        : source === 'yahoo' ? undefined : brokerConnected ? undefined : false;
       const health = classifyMarketDataHealth({
         source, lastUpdateAt: receivedAt, providerConnected, expectedIntervalMs: 5_000,
       });
@@ -2145,10 +2146,17 @@ const bookmarksPanel: SidePanelDescriptor = {
       const { ltp, change, changePercent, high, low } = quote;
       detailTitle.textContent = ticker || 'Active instrument';
       detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${instrumentDetails || 'Instrument details unavailable'}`;
-      liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.source === 'yahoo' ? 'YAHOO DELAYED' : quote.stale ? 'STALE' : 'LIVE';
-      liveBadge.dataset.quoteState = ltp === undefined ? 'waiting' : quote.source === 'yahoo' ? 'delayed' : quote.stale ? 'stale' : 'live';
-      liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.source === 'yahoo' ? 'Yahoo Finance delayed quote' : quote.stale ? 'Stale quote' : 'Live quote');
-      liveBadge.style.color = ltp === undefined ? 'var(--vela-fg-muted)' : quote.source === 'yahoo' ? '#38bdf8' : quote.stale ? '#fbbf24' : '#34d399';
+      const dataLabel = quote.dataStatus === 'live' ? 'LIVE'
+        : quote.dataStatus === 'delayed' ? 'DELAYED'
+          : quote.dataStatus === 'stale' ? 'STALE'
+            : quote.dataStatus === 'disconnected' ? 'DISCONNECTED' : 'NO FEED';
+      liveBadge.textContent = dataLabel;
+      liveBadge.dataset.quoteState = quote.dataStatus;
+      liveBadge.setAttribute('aria-label', `${dataLabel} market data`);
+      liveBadge.style.color = quote.dataStatus === 'live' ? '#34d399'
+        : quote.dataStatus === 'delayed' ? '#38bdf8'
+          : quote.dataStatus === 'stale' ? '#fbbf24'
+            : quote.dataStatus === 'disconnected' ? '#f87171' : 'var(--vela-fg-muted)';
       const setMetric = (key: string, value: string, tone?: string) => {
         const element = metricRefs.get(key);
         if (!element) return;
@@ -2162,17 +2170,17 @@ const bookmarksPanel: SidePanelDescriptor = {
       setMetric('changePercent', changePercent === undefined ? '—' : `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`, tone(changePercent));
       setMetric('high', fmt(high));
       setMetric('low', fmt(low));
-      detailHint.textContent = ltp !== undefined
-        ? quote.stale
-          ? quote.source === 'yahoo'
-            ? 'YAHOO DELAYED · Prices are delayed and only refreshed by periodic Yahoo Finance checks. Do not treat them as live execution data.'
-            : 'STALE QUOTE · The last received price is older than 15 seconds. Recheck the live feed before acting.'
-          : quote.source === 'yahoo'
-            ? 'YAHOO DELAYED · Day range and change are sourced from Yahoo Finance; execution still requires a valid broker session.'
-            : high !== undefined && low !== undefined
-              ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
-              : 'Live broker quote · waiting for complete day-range fields from the market feed.'
-        : 'Waiting for a market quote for this instrument. No sample price is shown.';
+      detailHint.textContent = quote.dataStatus === 'delayed'
+        ? 'DELAYED DATA · This quote is not suitable for treating the chart as a live execution reference.'
+        : quote.dataStatus === 'stale'
+          ? 'STALE QUOTE · The last received update is older than the freshness threshold. Recheck the broker feed before acting.'
+          : quote.dataStatus === 'disconnected'
+            ? 'DISCONNECTED · No connected broker market-data session is available for this instrument.'
+            : quote.dataStatus === 'unknown'
+              ? 'NO VERIFIED FEED · A current quote source and timestamp have not been confirmed.'
+              : high !== undefined && low !== undefined
+                ? 'Live broker quote · day range and change use the available market snapshot fields.'
+                : 'Live broker quote · waiting for complete day-range fields from the market feed.';
 
       const technical = technicalBySymbol.get(current.toUpperCase())?.summary;
       technicalSummary.textContent = technical
