@@ -33,6 +33,7 @@ const indicatorsPage = read('./pages/IndicatorsPage.tsx');
 const copilotRoute = read('./server/routes/coreSpirit-copilot.routes.ts');
 const cell = read('../vendor/vela/src/workspace/ChartCell.ts');
 const contributions = read('../vendor/vela/src/widget/contributions.ts');
+const panelDock = read('../vendor/vela/src/widget/panel-dock.ts');
 
 const includes = (source, snippet, message) => assert.ok(source.includes(snippet), message);
 const excludes = (source, snippet, message) => assert.ok(!source.includes(snippet), message);
@@ -49,7 +50,10 @@ includes(live, 'activeCell.addExternalIndicator(', 'Add to Chart uses Vela exter
 includes(live, '__TCO_ADD_CORESPIRIT_TO_CHART__', 'active-chart bridge is installed and disposed with the workspace');
 includes(chrome, 'createRoot(body)', 'CoreSpirit React terminal is mounted inside Vela panel body');
 includes(chrome, 'embedded: true', 'CoreSpirit is docked rather than rendered as an overlay popup');
-includes(chrome, "ctx.togglePanel('tco.corespirit-code', false)", 'terminal close button closes the Vela side panel');
+includes(chrome, 'onClose: () => header.close()', 'the CoreSpirit content can close through the native Vela panel API');
+includes(chrome, 'overlay: true', 'CoreSpirit opens over the chart without shrinking the primary plot');
+includes(chrome, 'maximizable: true', 'CoreSpirit supports the native Vela maximize control');
+excludes(chrome, 'shellHeader.style.display = \'none\'', 'CoreSpirit must not hide the Vela panel header or its dock controls');
 includes(chrome, 'onAddToChart: async', 'embedded terminal uses the active-chart bridge for Add to Chart');
 includes(dock, 'compileCoreSpiritSourceOffThread', 'CoreSpirit source compiles through its worker pipeline');
 includes(editorPage, "import { CoreSpiritEditorModel } from '../services/coreSpirit/editorModel'", 'the full-page Coder uses the canonical CoreSpiritEditorModel');
@@ -235,6 +239,8 @@ includes(dock, 'Minimize CoreSpirit editor', 'terminal provides a minimize contr
 includes(dock, 'Close CoreSpirit terminal', 'terminal provides a close control');
 includes(cell, 'addExternalIndicator(entry: ExternalIndicatorEntry)', 'Vela external-indicator entry point remains available');
 includes(contributions, 'export interface ExternalIndicatorEntry', 'dock uses Vela public external-indicator entry type');
+includes(contributions, 'maximizable?: boolean', 'contributed panels may opt into native maximize/restore controls');
+includes(panelDock, 'maximizable: desc.maximizable', 'Vela forwards the contributor maximize option into the panel shell');
 for (const label of ['Compile', 'Compile & Run', 'Save', 'Publish', 'Add to chart', 'Rename']) {
   assert.ok(dock.includes(label), label + ' action visible');
 }
