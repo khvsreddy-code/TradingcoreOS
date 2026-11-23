@@ -61,7 +61,7 @@ const STATUS_CLASS: Record<InstrumentDataStatus, string> = {
 };
 
 function snapshotQuote(symbol: string): QuoteView {
-  const snapshot = tradingCoreRuntime.getMarketSnapshot(symbol) as (Record<string, unknown> & { ltp?: number }) | undefined;
+  const snapshot = tradingCoreRuntime.getMarketSnapshot(symbol) as unknown as (Record<string, unknown> & { ltp?: number }) | undefined;
   const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
   const source = String(snapshot?.source ?? '').toLowerCase();
   const providerConnected = source === 'fyers' || source === 'upstox'
