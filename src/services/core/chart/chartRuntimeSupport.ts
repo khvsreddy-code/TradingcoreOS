@@ -21,23 +21,7 @@ export type PersistedChartState = {
   showDepth?: boolean;
 };
 
-export function canonicalInstrumentKey(brokerId: string, key: string): string {
-  const value=String(key||'').trim();
-  if(String(brokerId).toLowerCase()!=='fyers') return value;
-  const n=value.toLowerCase().replace(/\s+/g,'');
-  if(n==='nse_index|nifty50'||n==='nse_index|nifty50index'||n==='nifty'||n==='nifty50'||n==='nifty50index'||n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
-  if(n==='nse_index|niftybank'||n==='nse_index|banknifty'||n==='banknifty'||n==='niftybank'||n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
-  if(n==='nse_index|finnifty'||n==='nse_index|niftyfinancialservices'||n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
-  if(n==='nse_index|niftymidcapselect'||n==='nse_index|midcap'||n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
-  if(n==='bse_index|sensex'||n==='sensex'||n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
-  const pipe=value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
-  if(pipe){const exchange=pipe[1].toUpperCase(),segment=pipe[2].toUpperCase(),ticker=pipe[3];if(segment==='CM'&&!/-(EQ|BE|SM|ST)$/i.test(ticker))return `${exchange}:${ticker}-EQ`;return `${exchange}:${ticker}`;}
-  if(!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
-  if(/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
-  if(/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
-  return value;
-}
-
+export { canonicalInstrumentKey } from '../../marketData/instrumentIdentity';
 export function chartStateKey(brokerId:string,instrumentKey:string):string {
   return `tradingcore:chart-state:${brokerId}:${encodeURIComponent(instrumentKey)}`;
 }
