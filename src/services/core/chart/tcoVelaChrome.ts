@@ -2068,12 +2068,13 @@ const bookmarksPanel: SidePanelDescriptor = {
       };
     };
 
-    let quoteSourceMode: 'fyers' | 'none' | null = null;
+    let quoteSourceMode: 'fyers' | 'upstox' | 'none' | null = null;
     let quoteSymbolsSignature = '';
     const quoteSubscribe = (): void => {
       const symbols = watchlist.map((item) => item.symbol);
       if (!symbols.length) return;
-      const nextMode = hasValidFyersSession(tradingCoreRuntime.getAllConnections()) ? 'fyers' : 'none';
+      const primaryBroker = String(tradingCoreRuntime.getPrimaryBrokerId() || '').toLowerCase();
+      const nextMode = tradingCoreRuntime.hasConnectedBroker() && (primaryBroker === 'fyers' || primaryBroker === 'upstox') ? primaryBroker : 'none';
       const symbolsSignature = symbols.join(',');
       if (quoteSourceMode === nextMode && quoteSymbolsSignature === symbolsSignature && (nextMode === 'none' || quoteStop)) return;
       const sourceChanged = quoteSourceMode !== null && quoteSourceMode !== nextMode;
@@ -2110,7 +2111,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           high: asFinite(tick.dayHigh, tick.high, daily?.high),
           low: asFinite(tick.dayLow, tick.low, daily?.low),
           receivedAt: Date.now(),
-          source: 'fyers',
+          source: nextMode,
           volume: asFinite(tick.volume),
           oi: asFinite(tick.oi, tick.openInterest),
         });
