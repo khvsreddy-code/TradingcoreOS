@@ -53,9 +53,9 @@ for (const kind of ['ema', 'rma']) {
 // A later append must use the latest replacement close when computing true range.
 {
   const atr = new ATRState(3);
-  close(atr.update(10, 9, 9.5), 1);
-  close(atr.update(11, 10, 10.5), 1.5);
-  close(atr.update(12, 10, 11), 2);
+  assert.equal(atr.update(10, 9, 9.5), null);
+  assert.equal(atr.update(11, 10, 10.5), null);
+  close(atr.update(12, 10, 11), 1.5);
   close(atr.update(14, 12, 13), 2);
   close(atr.update(15, 12, 12.5, 'replace'), 8 / 3);
   close(atr.update(16, 12.1, 12.2, 'replace'), 3);
