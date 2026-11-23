@@ -5,6 +5,7 @@ import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market';
 import { coreEventBus } from '../core/event/eventBus';
 import { historyStore } from '../marketData/HistoryStore';
+import { registerInstrument } from '../marketData/instrumentIdentity';
 
 export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_EXECUTED' | 'TICK_UPDATE' | 'PORTFOLIO_SYNCED' | 'SESSION_REFRESHED' | 'STATUS_CHANGED';
 export type EventListener = (payload: any) => void;
@@ -168,13 +169,31 @@ export class TradingCoreRuntime {
   public async testLatency(brokerId: string): Promise<number> { return this.brokerMgr.testLatency(brokerId); }
   public async testConnectivity(brokerId: string): Promise<{ success: boolean; latencyMs: number; message: string }> { return this.brokerMgr.testConnectivity(brokerId); }
 
+  private attachInstrumentIdentity<T extends { symbol?: string; instrumentId?: string }>(record: T, provider = this.getPrimaryBrokerId() || 'unknown'): T {
+    const symbol = String(record.symbol || '').trim();
+    if (!symbol || record.instrumentId) return record;
+    const instrument = registerInstrument({ symbol, provider, name: symbol });
+    return { ...record, instrumentId: instrument.id };
+  }
+
   public syncPortfolio(brokerId?: string): Promise<any> {
     const targetId = (brokerId || this.brokerMgr.getPrimaryBrokerInfo()?.brokerId)?.toLowerCase();
     if (!targetId) return Promise.resolve({ funds: null, holdings: [], positions: [], orders: [], trades: [] });
     const existing = this.portfolioSyncPromises.get(targetId);
     if (existing) return existing;
     const promise = this.brokerMgr.syncPortfolio(targetId)
-      .then((data) => { if (this.brokerMgr.getPrimaryBrokerInfo()?.brokerId.toLowerCase() === targetId) this.emit('PORTFOLIO_SYNCED', { ...data, brokerId: targetId }); return data; })
+      .then((data) => {
+        const normalized = {
+          ...data,
+          holdings: (data.holdings || []).map((record: Holding) => this.attachInstrumentIdentity(record, targetId)),
+          positions: (data.positions || []).map((record: Position) => this.attachInstrumentIdentity(record, targetId)),
+          trades: (data.trades || []).map((record: TradeRecord) => this.attachInstrumentIdentity(record, targetId)),
+        };
+        if (this.brokerMgr.getPrimaryBrokerInfo()?.brokerId.toLowerCase() === targetId) {
+          this.emit('PORTFOLIO_SYNCED', { ...normalized, brokerId: targetId });
+        }
+        return normalized;
+      })
       .finally(() => this.portfolioSyncPromises.delete(targetId));
     this.portfolioSyncPromises.set(targetId, promise);
     return promise;
@@ -189,11 +208,11 @@ export class TradingCoreRuntime {
   public async cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }> { return this.engine.cancelOrder(orderId); }
   public async squareOff(positionId: string): Promise<{ success: boolean; message?: string }> { return this.engine.squareOff(positionId); }
   public async exitAll(): Promise<{ success: boolean; closedCount: number }> { return this.engine.exitAll(); }
-  public async getPositions(): Promise<Position[]> { return this.engine.getPositions(); }
-  public async getHoldings(): Promise<Holding[]> { return this.engine.getHoldings(); }
+  public async getPositions(): Promise<Position[]> { return (await this.engine.getPositions()).map(record => this.attachInstrumentIdentity(record)); }
+  public async getHoldings(): Promise<Holding[]> { return (await this.engine.getHoldings()).map(record => this.attachInstrumentIdentity(record)); }
   public async getFunds(): Promise<AccountFunds | null> { return this.engine.getFunds(); }
   public async getOrders(): Promise<OrderResult[]> { return this.engine.getOrders(); }
-  public async getTradeHistory(): Promise<TradeRecord[]> { return this.engine.getTradeHistory(); }
+  public async getTradeHistory(): Promise<TradeRecord[]> { return (await this.engine.getTradeHistory()).map(record => this.attachInstrumentIdentity(record)); }
   public setMarketDataProvider(type: MarketDataProviderType): void { this.currentMarketDataProviderType = type; }
   public getMarketDataProviderType(): MarketDataProviderType { return this.currentMarketDataProviderType; }
   /** Broker-routed quote snapshot used by Vela only as a last-resort seed. */
@@ -220,7 +239,39 @@ export class TradingCoreRuntime {
     const existing = this.optionChainPromises.get(key);
     if (existing) return existing;
     const promise = broker.getOptionChain(instrumentKey, expiryDate)
-      .then((data) => { this.optionChainCache.set(key, { data, expiresAt: Date.now() + 3_000 }); return data; })
+      .then((data) => {
+        const provider = brokerInfo.brokerId.toLowerCase();
+        const contracts = (data.contracts || []).map(contract => {
+          const normalizeLeg = (quote: typeof contract.call, side: 'CE' | 'PE') => {
+            if (!quote) return quote;
+            const brokerInstrumentKey = String(quote.instrumentKey || '').trim();
+            if (!brokerInstrumentKey) return quote;
+            const instrument = registerInstrument({
+              symbol: brokerInstrumentKey,
+              provider,
+              exchange: contract.exchange || 'NSE',
+              instrumentType: 'option',
+              underlying: instrumentKey,
+              expiry: contract.expiry || data.expiry,
+              strike: contract.strike,
+              optionType: side,
+              lotSize: contract.lotSize,
+              tickSize: contract.tickSize,
+              brokerInstrumentKey,
+              name: `${instrumentKey} ${contract.strike} ${side}`,
+            });
+            return { ...quote, instrumentId: instrument.id };
+          };
+          return {
+            ...contract,
+            call: normalizeLeg(contract.call, 'CE'),
+            put: normalizeLeg(contract.put, 'PE'),
+          };
+        });
+        const normalized = { ...data, contracts };
+        this.optionChainCache.set(key, { data: normalized, expiresAt: Date.now() + 3_000 });
+        return normalized;
+      })
       .finally(() => this.optionChainPromises.delete(key));
     this.optionChainPromises.set(key, promise);
     return promise;
@@ -510,12 +561,24 @@ export class TradingCoreRuntime {
           // appear frozen even though the transport is alive. Transport order
           // is the authoritative order for live UI updates.
           if (key) this.lastTickTime.set(key, Date.now());
-          this.market.set(event.tick.instrumentKey, event.tick);
-          this.emit('TICK_UPDATE', event.tick);
-          coreEventBus.emit('market.tick', { symbol: String(event.tick.instrumentKey || ''), tick: event.tick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
+          const instrument = key ? registerInstrument({ symbol: key, provider: currentBrokerId, dataStatus: 'live' }) : undefined;
+          const normalizedTick: NormalizedMarketTick = {
+            ...event.tick,
+            ...(instrument ? { instrumentId: instrument.id } : {}),
+          };
+          const normalizedEvent: MarketFeedEvent = { ...event, tick: normalizedTick };
+          this.market.set(normalizedTick.instrumentKey, normalizedTick);
+          this.emit('TICK_UPDATE', normalizedTick);
+          coreEventBus.emit('market.tick', { symbol: String(normalizedTick.instrumentKey || ''), tick: normalizedTick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
         }
-        listener(event);
-        this.marketListeners.forEach((subscriber) => subscriber(event));
+        const deliveredEvent = event.type === 'tick' && event.tick
+          ? ({ ...event, tick: {
+              ...event.tick,
+              instrumentId: registerInstrument({ symbol: event.tick.instrumentKey, provider: currentBrokerId, dataStatus: 'live' }).id,
+            } } as MarketFeedEvent)
+          : event;
+        listener(deliveredEvent);
+        this.marketListeners.forEach((subscriber) => subscriber(deliveredEvent));
       };
       let currentBrokerId = initial.brokerId;
       stopFeed = brokerMarketDataClient.subscribe(currentBrokerId, instrumentKeys, relay, depthInstrumentKey);
