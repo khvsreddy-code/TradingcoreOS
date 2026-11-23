@@ -2549,7 +2549,7 @@ const bookmarksPanel: SidePanelDescriptor = {
             tickSize: instrument.tickSize, brokerInstrumentKey: instrument.key, name: label,
           });
           const item: WatchlistItem = { ...model, label, short: ticker, type: instrument.type || model.instrumentType };
-          return { item, caption: `${instrument.type || 'INSTRUMENT'} · ${instrument.exchange || 'FYERS'}`, rank: 0 };
+          return { item, caption: `${instrument.type || 'INSTRUMENT'} · ${instrument.exchange || searchProvider?.toUpperCase() || 'MARKET'}`, rank: 0 };
         });
       const combined = requestedStrike && underlyingQuery
         ? [...optionEntries, ...instrumentEntries]
