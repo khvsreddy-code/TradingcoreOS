@@ -75,6 +75,8 @@ assert.match(chrome, /pendingTcoChartThemeTimer/, 'custom color drag must deboun
 assert.ok(chrome.includes("providerRoutes: Array.isArray(source.providerRoutes)"), 'watchlists restore all known provider routes for each canonical instrument');
 assert.ok(chrome.includes("seen.has(instrument.id)"), 'watchlists deduplicate cross-provider contracts by stable instrument identity');
 assert.ok(chrome.includes("const registerWatchlistInstrument = (item: WatchlistItem, quote: MarketQuoteView): Instrument"), 'watchlist keeps broker routing tokens separate from the current quote source');
+assert.ok(chrome.includes("provider: activeInstrumentProvider() ?? quote.source ?? 'unknown'"),
+  'an active chart symbol without a watchlist row still inherits the connected broker route, not a delayed quote source');
 assert.ok(chrome.includes("filterInput.type = 'search'"), 'watchlist search is a real search input');
 assert.ok(chrome.includes("filterInput.setAttribute('aria-label', 'Search instruments and filter watchlist')"), 'watchlist search has a stable accessible name independent of placeholder copy');
 assert.ok(chrome.includes("filterInput.addEventListener('input'"), 'typing filters watchlist rows and starts instrument search');

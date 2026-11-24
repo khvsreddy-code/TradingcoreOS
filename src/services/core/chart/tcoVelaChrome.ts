@@ -2335,7 +2335,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       const quote = quoteView(current);
       const activeItem: WatchlistItem = selected ?? {
         symbol: current, label: current.split(':').pop() || current, short: current.split(':').pop() || current,
-        provider: quote.source ?? 'unknown',
+        provider: activeInstrumentProvider() ?? quote.source ?? 'unknown',
       };
       const instrument = registerWatchlistInstrument(activeItem, quote);
       const signature = `${instrument.id}|${instrument.provider}|${instrument.dataStatus}`;
