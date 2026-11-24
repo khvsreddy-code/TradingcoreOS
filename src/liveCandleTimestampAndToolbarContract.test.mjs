@@ -29,7 +29,7 @@ assert.match(
 );
 const appWorkspace = read('./LiveTradingWorkspace.tsx');
 assert.match(appWorkspace, /data-tco-header-action="workspace"[\s\S]{0,260}openTerminalPanel\('tco\.workspace-frame'\)/, 'the application header owns the native Workspace panel action');
-assert.match(appWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}openTerminalPanel\('tco\.trading'\)/, 'the application header owns the broker-aware Trade panel action');
+assert.match(appWorkspace, /data-tco-header-action="trade"[\s\S]{0,260}openTerminalPanel\('tco\.order-ticket'\)/, 'the application header opens the compact broker-aware order ticket; account and positions stay in the separate Trading panel');
 assert.doesNotMatch(terminal, /tco\.brand/, 'remove the redundant TRADINGCOREOS × VELA label');
 assert.doesNotMatch(terminal, /'panels'|tco\.profile|tco\.broker-connection|'screenshot'/, 'remove the unused icon-only toolbar cluster and extras');
 const topbar = terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '';
