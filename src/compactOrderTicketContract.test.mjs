@@ -30,8 +30,16 @@ assert.ok(ticket.includes('selectedOptionQuote?.symbol === nativeKey'),
 assert.ok(ticket.includes('overflow-y-auto overscroll-contain'),
   'the compact ticket remains usable on short workspace viewports');
 assert.ok(ticket.includes('I have independently verified the current price with my broker.'));
-assert.ok(ticket.includes('instrumentId: instrument.id'));
-assert.ok(ticket.includes('instrument_token: instrument.brokerInstrumentKey || instrument.symbol'));
+assert.ok(ticket.includes('instrumentId: registeredInstrument.id'));
+assert.ok(ticket.includes('instrument_token: brokerInstrumentKey || routedInstrument.symbol'));
+assert.ok(ticket.includes('getInstrumentForProvider') && ticket.includes('getInstrumentRoute'),
+  'order execution resolves the connected broker route without changing canonical contract identity');
+assert.ok(ticket.includes("no routing key for the connected broker"),
+  'an option contract without the selected broker native key fails closed');
+assert.ok(ticket.includes('This instrument has no route for the connected broker'),
+  'all tradable instruments must resolve to the connected broker route before submission');
+assert.ok(ticket.includes('brokerQuoteIsCurrent') && ticket.includes('selectedBrokerRoute?.dataStatus'),
+  'delayed fallback quotes cannot overwrite the freshness state of the broker execution route');
 assert.ok(ticket.includes('tradingCoreRuntime.placeOrder(request)'));
 assert.ok(ticket.includes("orderType === 'Market' || orderType === 'SL-M'"),
   'stop-market orders must not send a limit price');

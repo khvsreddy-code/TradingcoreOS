@@ -1,4 +1,4 @@
-import type { Instrument, InstrumentDataStatus, InstrumentType } from '../../types/instrument';
+import type { Instrument, InstrumentDataStatus, InstrumentProviderRoute, InstrumentType } from '../../types/instrument';
 
 export interface InstrumentIdentityInput {
   id?: string;
@@ -16,6 +16,7 @@ export interface InstrumentIdentityInput {
   tickSize?: number;
   brokerInstrumentKey?: string;
   dataStatus?: InstrumentDataStatus;
+  providerRoutes?: readonly InstrumentProviderRoute[];
   name?: string;
 }
 
@@ -116,6 +117,7 @@ export function createInstrument(input: InstrumentIdentityInput): Instrument {
     provider,
     dataStatus: input.dataStatus ?? 'unknown',
     ...(input.brokerInstrumentKey ? { brokerInstrumentKey: String(input.brokerInstrumentKey) } : {}),
+    ...(input.providerRoutes?.length ? { providerRoutes: input.providerRoutes } : {}),
     ...(input.name ? { name: String(input.name) } : {}),
   });
 }
@@ -126,16 +128,89 @@ export function instrumentIdentityKey(instrument: Pick<Instrument, 'id'>): strin
 
 
 const instrumentsById = new Map<string, Instrument>();
-// The same economic contract can have different provider-native routing keys.
-// Keep a per-symbol snapshot as well as the shared economic identity.
+// One economic instrument can be routed through several brokers. Index route keys
+// separately so updating the active provider cannot overwrite another broker token.
 const instrumentsBySymbol = new Map<string, Instrument>();
+const instrumentsByProviderKey = new Map<string, string>();
 
-/** Register the latest metadata/status snapshot under the stable instrument identity. */
+function providerRouteKey(provider: string, key: string): string {
+  return `${String(provider ?? '').trim().toLowerCase()}:${String(key ?? '').trim().toUpperCase()}`;
+}
+
+function normalizeProviderRoute(route: InstrumentProviderRoute): InstrumentProviderRoute | undefined {
+  const provider = String(route?.provider ?? '').trim().toLowerCase();
+  const symbol = String(route?.symbol ?? '').trim();
+  if (!provider || !symbol) return undefined;
+  const brokerInstrumentKey = String(route.brokerInstrumentKey ?? '').trim();
+  return Object.freeze({
+    provider,
+    symbol,
+    ...(brokerInstrumentKey ? { brokerInstrumentKey } : {}),
+    ...(route.dataStatus ? { dataStatus: route.dataStatus } : {}),
+  });
+}
+
+/** Register a metadata snapshot while retaining every known provider route. */
 export function registerInstrument(input: InstrumentIdentityInput | Instrument): Instrument {
   const instrument = createInstrument(input);
-  instrumentsById.set(instrument.id, instrument);
-  instrumentsBySymbol.set(instrument.symbol.toUpperCase(), instrument);
-  return instrument;
+  const existing = instrumentsById.get(instrument.id);
+  const routes = new Map<string, InstrumentProviderRoute>();
+
+  for (const candidate of existing?.providerRoutes ?? []) {
+    const route = normalizeProviderRoute(candidate);
+    if (route) routes.set(route.provider, route);
+  }
+  for (const candidate of input.providerRoutes ?? []) {
+    const route = normalizeProviderRoute(candidate);
+    if (route) routes.set(route.provider, route);
+  }
+
+  const previousRoute = routes.get(instrument.provider);
+  const currentRoute = normalizeProviderRoute({
+    provider: instrument.provider,
+    symbol: instrument.symbol,
+    ...(instrument.brokerInstrumentKey || previousRoute?.brokerInstrumentKey
+      ? { brokerInstrumentKey: instrument.brokerInstrumentKey || previousRoute?.brokerInstrumentKey }
+      : {}),
+    dataStatus: instrument.dataStatus,
+  });
+  if (currentRoute) routes.set(instrument.provider, currentRoute);
+
+  if (previousRoute?.brokerInstrumentKey
+    && previousRoute.brokerInstrumentKey !== currentRoute?.brokerInstrumentKey) {
+    const previousKey = providerRouteKey(instrument.provider, previousRoute.brokerInstrumentKey);
+    if (instrumentsByProviderKey.get(previousKey) === instrument.id) instrumentsByProviderKey.delete(previousKey);
+  }
+  if (previousRoute?.symbol && previousRoute.symbol !== currentRoute?.symbol) {
+    const previousSymbol = previousRoute.symbol.toUpperCase();
+    if (instrumentsBySymbol.get(previousSymbol)?.id === instrument.id) instrumentsBySymbol.delete(previousSymbol);
+  }
+
+  const providerRoutes = Object.freeze([...routes.values()]);
+  const registered = Object.freeze({ ...instrument, providerRoutes });
+  instrumentsById.set(registered.id, registered);
+
+  for (const route of providerRoutes) {
+    const routedSnapshot = Object.freeze({
+      ...registered,
+      provider: route.provider,
+      symbol: route.symbol,
+      brokerInstrumentKey: route.brokerInstrumentKey,
+      dataStatus: route.dataStatus ?? registered.dataStatus,
+    });
+    instrumentsBySymbol.set(route.symbol.toUpperCase(), routedSnapshot);
+    if (route.brokerInstrumentKey) {
+      instrumentsByProviderKey.set(providerRouteKey(route.provider, route.brokerInstrumentKey), registered.id);
+    }
+  }
+  instrumentsBySymbol.set(instrument.symbol.toUpperCase(), Object.freeze({
+    ...registered,
+    provider: instrument.provider,
+    symbol: instrument.symbol,
+    brokerInstrumentKey: currentRoute?.brokerInstrumentKey,
+    dataStatus: currentRoute?.dataStatus ?? instrument.dataStatus,
+  }));
+  return registered;
 }
 
 export function getInstrumentById(id: string): Instrument | undefined {
@@ -147,12 +222,63 @@ export function getInstrumentBySymbol(symbol: string): Instrument | undefined {
   return instrumentsBySymbol.get(String(symbol ?? '').trim().toUpperCase());
 }
 
+/** Resolve one broker route without changing the instrument's stable economic id. */
+export function getInstrumentRoute(
+  instrumentOrId: Instrument | string,
+  provider: string,
+): InstrumentProviderRoute | undefined {
+  const instrument = typeof instrumentOrId === 'string'
+    ? getInstrumentById(instrumentOrId)
+    : instrumentOrId;
+  if (!instrument) return undefined;
+  const normalizedProvider = String(provider ?? '').trim().toLowerCase();
+  const route = instrument.providerRoutes?.find(candidate =>
+    String(candidate.provider).trim().toLowerCase() === normalizedProvider);
+  if (route) return route;
+  if (instrument.provider.toLowerCase() !== normalizedProvider) return undefined;
+  return Object.freeze({
+    provider: instrument.provider,
+    symbol: instrument.symbol,
+    ...(instrument.brokerInstrumentKey ? { brokerInstrumentKey: instrument.brokerInstrumentKey } : {}),
+    dataStatus: instrument.dataStatus,
+  });
+}
+
+/** Return the same economics paired with the requested provider's symbol and token. */
+export function getInstrumentForProvider(
+  instrumentOrId: Instrument | string,
+  provider: string,
+): Instrument | undefined {
+  const instrument = typeof instrumentOrId === 'string'
+    ? getInstrumentById(instrumentOrId)
+    : instrumentsById.get(instrumentOrId.id) ?? instrumentOrId;
+  if (!instrument) return undefined;
+  const route = getInstrumentRoute(instrument, provider);
+  if (!route) return undefined;
+  return Object.freeze({
+    ...instrument,
+    provider: route.provider,
+    symbol: route.symbol,
+    ...(route.brokerInstrumentKey
+      ? { brokerInstrumentKey: route.brokerInstrumentKey }
+      : { brokerInstrumentKey: undefined }),
+    dataStatus: route.dataStatus ?? instrument.dataStatus,
+  });
+}
+
+/** Resolve a broker-native token back to its cross-provider instrument identity. */
+export function getInstrumentByProviderKey(provider: string, brokerInstrumentKey: string): Instrument | undefined {
+  const id = instrumentsByProviderKey.get(providerRouteKey(provider, brokerInstrumentKey));
+  return id ? getInstrumentForProvider(id, provider) : undefined;
+}
+
 export const INSTRUMENT_SELECTED_EVENT = 'tradingcore:instrument-selected';
 
 /** Notify workspace modules when the active chart instrument changes. */
 export function publishInstrumentSelection(instrument: Instrument): void {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent<Instrument>(INSTRUMENT_SELECTED_EVENT, { detail: instrument }));
+  const registered = registerInstrument(instrument);
+  window.dispatchEvent(new CustomEvent<Instrument>(INSTRUMENT_SELECTED_EVENT, { detail: registered }));
 }
 
 

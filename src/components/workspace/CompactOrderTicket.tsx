@@ -7,7 +7,10 @@ import { classifyMarketDataHealth } from '../../services/marketData/dataHealth';
 import {
   createInstrument,
   getInstrumentBySymbol,
+  getInstrumentForProvider,
+  getInstrumentRoute,
   normalizeInstrumentType,
+  registerInstrument,
 } from '../../services/marketData/instrumentIdentity';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import { BrokerAdapterRegistry } from '../../services/brokers/adapters';
@@ -132,7 +135,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const brokerId = tradingCoreRuntime.getPrimaryBrokerId() || 'unknown';
   const baseInstrument = useMemo(() => {
     const registered = getInstrumentBySymbol(symbol);
-    if (registered) return registered;
+    if (registered) return getInstrumentForProvider(registered.id, brokerId) ?? registered;
     return createInstrument({
       symbol,
       provider: brokerId,
@@ -238,6 +241,7 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const choices = useMemo(() => buildOptionChoices(chain, brokerId, symbol), [chain, brokerId, symbol]);
   const selectedOption = choices.find(choice => choice.instrument.id === selectedOptionId);
   const instrument = selectedOption?.instrument ?? baseInstrument;
+  const selectedBrokerRoute = getInstrumentRoute(instrument, brokerId);
 
   useEffect(() => {
     const nativeKey = selectedOption?.instrument.brokerInstrumentKey || selectedOption?.instrument.symbol;
@@ -330,7 +334,11 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
   const validationError = !brokerConnected
     ? broker?.status === 'Read Only' ? 'This broker session is read-only.' : 'Connect a broker before submitting an order.'
     : !tradable ? 'Spot indices and unclassified symbols cannot be sent as order instruments. Select a listed option or future contract.'
-      : !Number.isInteger(quantityValue) || quantityValue < 1 ? 'Enter a valid whole-number quantity.'
+      : !selectedBrokerRoute
+        ? 'This instrument has no route for the connected broker. Select it from the connected broker instrument master.'
+        : instrument.instrumentType === 'option' && !selectedBrokerRoute.brokerInstrumentKey
+          ? 'The selected option contract has no routing key for the connected broker. Refresh the option chain before submitting.'
+          : !Number.isInteger(quantityValue) || quantityValue < 1 ? 'Enter a valid whole-number quantity.'
         : lotSize && quantityValue % lotSize !== 0 ? `Quantity must be a multiple of the ${lotSize}-unit lot size.`
           : instrument.instrumentType !== 'equity' && product === 'CNC' ? 'CNC is only available for eligible equity instruments.'
             : orderType === 'Market' && livePrice === undefined ? 'No current price is available. Reconnect market data or use a limit order.'
@@ -354,10 +362,26 @@ export function CompactOrderTicket({ symbol, timeframe }: Props) {
     setBusy(true);
     setMessage('');
     try {
+      // Keep the economic contract id provider-neutral, but resolve the native
+      // order token from this session's broker route at the execution boundary.
+      const brokerQuoteIsCurrent = String(activeQuote.source || '').toLowerCase() === brokerId.toLowerCase();
+      const routeDataStatus = brokerQuoteIsCurrent
+        ? activeQuote.status
+        : selectedBrokerRoute?.dataStatus ?? instrument.dataStatus;
+      const registeredInstrument = registerInstrument({ ...instrument, dataStatus: routeDataStatus });
+      const providerRoute = getInstrumentRoute(registeredInstrument, brokerId);
+      const routedInstrument = getInstrumentForProvider(registeredInstrument.id, brokerId) ?? registeredInstrument;
+      const brokerInstrumentKey = providerRoute?.brokerInstrumentKey
+        ?? (routedInstrument.provider.toLowerCase() === brokerId.toLowerCase()
+          ? routedInstrument.brokerInstrumentKey
+          : undefined);
+      if (instrument.instrumentType === 'option' && !brokerInstrumentKey) {
+        throw new Error('The selected option contract has no routing key for the connected broker. Refresh the option chain before submitting.');
+      }
       const request: OrderRequest = {
-        symbol: instrument.symbol,
-        instrumentId: instrument.id,
-        instrument_token: instrument.brokerInstrumentKey || instrument.symbol,
+        symbol: routedInstrument.symbol,
+        instrumentId: registeredInstrument.id,
+        instrument_token: brokerInstrumentKey || routedInstrument.symbol,
         quantity: quantityValue,
         ...(orderType === 'Market' || orderType === 'SL-M' ? {} : { price: positiveNumber(limitPrice) }),
         ...(trigger ? { triggerPrice: trigger } : {}),

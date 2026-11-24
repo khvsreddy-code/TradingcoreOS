@@ -20,6 +20,18 @@ export type InstrumentDataStatus =
   | 'disconnected'
   | 'unknown';
 
+/** One provider's routing identity for a canonical instrument or contract. */
+export interface InstrumentProviderRoute {
+  /** Lowercase provider id, e.g. fyers or upstox. */
+  provider: string;
+  /** Provider-compatible symbol accepted by that provider's market/order adapter. */
+  symbol: string;
+  /** Provider-native token/key. Never use this as the cross-provider identity. */
+  brokerInstrumentKey?: string;
+  /** Freshness is provider-specific, not shared between broker connections. */
+  dataStatus?: InstrumentDataStatus;
+}
+
 export interface Instrument {
   /** Stable identity shared across chart, watchlist, option, order and research adapters. */
   id: string;
@@ -35,8 +47,10 @@ export interface Instrument {
   optionType?: 'CE' | 'PE';
   lotSize?: number;
   tickSize?: number;
-  /** Data/quote provider, e.g. fyers, upstox, yahoo, investiny, replay. */
+  /** Most recently selected data/route provider. Provider routes retain other brokers. */
   provider: string;
+  /** Provider-native routes for this same economic instrument. */
+  providerRoutes?: readonly InstrumentProviderRoute[];
   dataStatus: InstrumentDataStatus;
   /** Provider-native identity retained for order/search requests. */
   brokerInstrumentKey?: string;

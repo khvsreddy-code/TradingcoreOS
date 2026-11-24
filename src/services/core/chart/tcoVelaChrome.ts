@@ -30,7 +30,7 @@ import { loadDefaultTerminalWatchlist, saveDefaultTerminalWatchlist } from '../.
 import { searchBrokerInstruments, type SearchInstrument } from '../../marketData/instrumentSearch';
 import { classifyMarketDataHealth } from '../../marketData/dataHealth';
 import { registerInstrument, publishInstrumentSelection } from '../../marketData/instrumentIdentity';
-import type { InstrumentDataStatus, InstrumentType } from '../../../types/instrument';
+import type { Instrument, InstrumentDataStatus, InstrumentProviderRoute, InstrumentType } from '../../../types/instrument';
 
 import { loadTcoCanonicalHistoryBars } from '../../../TcoVelaDataProvider';
 import { parseOptionExpiryTimestamp } from '../../marketData/options/optionPricing';
@@ -100,6 +100,8 @@ type WatchlistItem = {
   tickSize?: number;
   provider?: string;
   brokerInstrumentKey?: string;
+  dataStatus?: InstrumentDataStatus;
+  providerRoutes?: readonly InstrumentProviderRoute[];
 };
 type WatchlistGroup = { id: string; name: string; items: WatchlistItem[] };
 
@@ -153,29 +155,24 @@ function normalizeWatchlist(value: unknown, allowEmpty = false): WatchlistItem[]
       lotSize: numeric('lotSize'),
       tickSize: numeric('tickSize'),
       brokerInstrumentKey: source.brokerInstrumentKey ? String(source.brokerInstrumentKey) : source.key ? String(source.key) : undefined,
+      providerRoutes: Array.isArray(source.providerRoutes) ? source.providerRoutes as InstrumentProviderRoute[] : undefined,
       dataStatus: 'unknown',
       name: label,
     });
-    if (seen.has(instrument.symbol)) continue;
+    if (seen.has(instrument.id)) {
+      const existingIndex = result.findIndex(candidate => candidate.id === instrument.id);
+      if (existingIndex >= 0) {
+        result[existingIndex] = { ...result[existingIndex]!, providerRoutes: instrument.providerRoutes };
+      }
+      continue;
+    }
     result.push({
-      id: instrument.id,
-      symbol: instrument.symbol,
+      ...instrument,
       label,
       short: String(source.short ?? ticker).trim() || ticker,
-      exchange: instrument.exchange,
       type: String(source.type ?? instrument.instrumentType),
-      instrumentType: instrument.instrumentType,
-      ...(instrument.underlying ? { underlying: instrument.underlying } : {}),
-      ...(instrument.isin ? { isin: instrument.isin } : {}),
-      ...(instrument.expiry ? { expiry: instrument.expiry } : {}),
-      ...(instrument.strike !== undefined ? { strike: instrument.strike } : {}),
-      ...(instrument.optionType ? { optionType: instrument.optionType } : {}),
-      ...(instrument.lotSize !== undefined ? { lotSize: instrument.lotSize } : {}),
-      ...(instrument.tickSize !== undefined ? { tickSize: instrument.tickSize } : {}),
-      provider: instrument.provider,
-      ...(instrument.brokerInstrumentKey ? { brokerInstrumentKey: instrument.brokerInstrumentKey } : {}),
     });
-    seen.add(instrument.symbol);
+    seen.add(instrument.id);
     if (result.length >= 50) break;
   }
   return result.length || allowEmpty ? result : [...DEFAULT_WATCHLIST];
@@ -288,7 +285,7 @@ function symbolDescriptor(item: WatchlistItem) {
     instrumentType: item.instrumentType, type: item.type, underlying: item.underlying, isin: item.isin,
     expiry: item.expiry, strike: item.strike, optionType: item.optionType,
     lotSize: item.lotSize, tickSize: item.tickSize, brokerInstrumentKey: item.brokerInstrumentKey,
-    dataStatus: 'unknown', name: item.label,
+    providerRoutes: item.providerRoutes, dataStatus: item.dataStatus ?? 'unknown', name: item.label,
   });
   const [prefix, ticker] = instrument.symbol.includes(':') ? instrument.symbol.split(':', 2) : [instrument.exchange, instrument.symbol];
   return {
@@ -2269,17 +2266,46 @@ const bookmarksPanel: SidePanelDescriptor = {
     const dataStatusColor: Record<InstrumentDataStatus, string> = {
       live: '#42c6a5', delayed: '#55b7dc', stale: '#e4b55f', disconnected: '#e4777e', unknown: '#7e8999',
     };
+    const registerWatchlistInstrument = (item: WatchlistItem, quote: MarketQuoteView): Instrument => {
+      const quoteProvider = String(quote.source || '').trim().toLowerCase();
+      const storedProvider = String(item.provider || 'unknown').trim().toLowerCase() || 'unknown';
+      const routeProvider = storedProvider !== 'unknown'
+        ? storedProvider
+        : activeInstrumentProvider() || (quoteProvider === 'fyers' || quoteProvider === 'upstox' ? quoteProvider : 'unknown');
+      const knownRouteStatus = item.providerRoutes?.find(route =>
+        String(route.provider ?? '').toLowerCase() === routeProvider)?.dataStatus;
+      const brokerRouteStatus = quoteProvider === routeProvider
+        ? quote.dataStatus
+        : knownRouteStatus ?? item.dataStatus ?? 'unknown';
+      const metadata = {
+        symbol: item.symbol, exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
+        underlying: item.underlying, isin: item.isin, expiry: item.expiry, strike: item.strike,
+        optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
+        brokerInstrumentKey: item.brokerInstrumentKey, providerRoutes: item.providerRoutes, name: item.label,
+      };
+      const brokerInstrument = registerInstrument({
+        ...metadata, provider: routeProvider, dataStatus: brokerRouteStatus,
+      });
+      let activeInstrument = brokerInstrument;
+      if (quoteProvider && quoteProvider !== routeProvider) {
+        // Quote source (e.g. delayed Yahoo) is a data route, not the broker's native
+        // execution token. Keep the token attached only to its actual broker route.
+        activeInstrument = registerInstrument({
+          ...metadata, provider: quoteProvider, brokerInstrumentKey: undefined,
+          providerRoutes: brokerInstrument.providerRoutes, dataStatus: quote.dataStatus,
+        });
+      } else if (quoteProvider) {
+        item.dataStatus = quote.dataStatus;
+      }
+      item.providerRoutes = activeInstrument.providerRoutes;
+      return activeInstrument;
+    };
+
     const updateQuoteRow = (item: WatchlistItem, ref: RowRef, current: string): void => {
       const quote = quoteView(item.symbol);
       const pct = quote.changePercent;
       const absolute = quote.change;
-      const instrument = registerInstrument({
-        symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
-        exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
-        underlying: item.underlying, isin: item.isin, expiry: item.expiry, strike: item.strike,
-        optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
-        brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
-      });
+      const instrument = registerWatchlistInstrument(item, quote);
       ref.row.dataset.instrumentId = instrument.id;
       ref.button.dataset.instrumentId = instrument.id;
       ref.row.dataset.selected = item.symbol === current ? '1' : '';
@@ -2307,13 +2333,11 @@ const bookmarksPanel: SidePanelDescriptor = {
       if (!current) return;
       const selected = watchlist.find(item => item.symbol.toUpperCase() === current);
       const quote = quoteView(current);
-      const instrument = registerInstrument({
-        symbol: current, provider: quote.source ?? selected?.provider ?? 'unknown',
-        exchange: selected?.exchange, type: selected?.type, instrumentType: selected?.instrumentType,
-        underlying: selected?.underlying, isin: selected?.isin, expiry: selected?.expiry, strike: selected?.strike,
-        optionType: selected?.optionType, lotSize: selected?.lotSize, tickSize: selected?.tickSize,
-        brokerInstrumentKey: selected?.brokerInstrumentKey, dataStatus: quote.dataStatus, name: selected?.label,
-      });
+      const activeItem: WatchlistItem = selected ?? {
+        symbol: current, label: current.split(':').pop() || current, short: current.split(':').pop() || current,
+        provider: quote.source ?? 'unknown',
+      };
+      const instrument = registerWatchlistInstrument(activeItem, quote);
       const signature = `${instrument.id}|${instrument.provider}|${instrument.dataStatus}`;
       if (signature === lastPublishedInstrument) return;
       lastPublishedInstrument = signature;
@@ -2672,13 +2696,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           button.addEventListener('click', () => {
             ctx.setSymbol(item.symbol);
             const quote = quoteView(item.symbol);
-            publishInstrumentSelection(registerInstrument({
-              symbol: item.symbol, provider: quote.source ?? item.provider ?? 'unknown',
-              exchange: item.exchange, type: item.type, instrumentType: item.instrumentType,
-              underlying: item.underlying, isin: item.isin, expiry: item.expiry, strike: item.strike,
-              optionType: item.optionType, lotSize: item.lotSize, tickSize: item.tickSize,
-              brokerInstrumentKey: item.brokerInstrumentKey, dataStatus: quote.dataStatus, name: item.label,
-            }));
+            publishInstrumentSelection(registerWatchlistInstrument(item, quote));
           });
 
           const remove = document.createElement('button');

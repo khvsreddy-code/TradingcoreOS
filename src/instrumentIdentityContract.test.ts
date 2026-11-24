@@ -3,7 +3,9 @@ import {
   canonicalInstrumentKey,
   createInstrument,
   getInstrumentById,
+  getInstrumentByProviderKey,
   getInstrumentBySymbol,
+  getInstrumentForProvider,
   normalizeOptionType,
   registerInstrument,
 } from './services/marketData/instrumentIdentity';
@@ -90,5 +92,18 @@ assert.equal(getInstrumentById(registered.id)?.dataStatus, 'live');
 assert.equal(getInstrumentBySymbol('nse:nifty50-index')?.id, registered.id);
 assert.equal(createInstrument({ symbol: 'NSE:NIFTY50-INDEX' }).dataStatus, 'unknown',
   'absence of a feed must not be misrepresented as a disconnect');
+
+// A cross-provider option is one economic instrument with independently retained
+// broker-native routes. Registering the second broker must not erase the first.
+const registeredFyersOption = registerInstrument({ ...fyersOption, dataStatus: 'live' });
+const registeredUpstoxOption = registerInstrument({ ...upstoxOption, dataStatus: 'delayed' });
+assert.equal(registeredFyersOption.id, registeredUpstoxOption.id);
+assert.equal(getInstrumentById(fyersOption.id)?.providerRoutes?.length, 2);
+assert.equal(getInstrumentForProvider(fyersOption.id, 'fyers')?.brokerInstrumentKey, 'NSE_FO|NIFTY26NOV25000CE');
+assert.equal(getInstrumentForProvider(fyersOption.id, 'upstox')?.brokerInstrumentKey, 'NSE_FO|UPSTOX_NATIVE_TOKEN_123');
+assert.equal(getInstrumentByProviderKey('fyers', 'NSE_FO|NIFTY26NOV25000CE')?.id, fyersOption.id);
+assert.equal(getInstrumentByProviderKey('upstox', 'NSE_FO|UPSTOX_NATIVE_TOKEN_123')?.id, upstoxOption.id);
+assert.equal(getInstrumentForProvider(fyersOption.id, 'fyers')?.dataStatus, 'live');
+assert.equal(getInstrumentForProvider(upstoxOption.id, 'upstox')?.dataStatus, 'delayed');
 
 console.log('INSTRUMENT_IDENTITY_CONTRACT_OK');
