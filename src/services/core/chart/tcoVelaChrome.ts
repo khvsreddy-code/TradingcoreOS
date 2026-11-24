@@ -2313,10 +2313,11 @@ const bookmarksPanel: SidePanelDescriptor = {
       const instrument = registerWatchlistInstrument(item, quote);
       ref.row.dataset.instrumentId = instrument.id;
       ref.button.dataset.instrumentId = instrument.id;
-      ref.row.dataset.selected = item.symbol === current ? '1' : '';
+      const isSelected = item.symbol === current;
+      ref.row.dataset.selected = isSelected ? '1' : '';
       ref.row.dataset.quoteState = quote.dataStatus;
       ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
-      const selected = item.symbol === current;
+      const selected = isSelected;
       ref.row.style.background = selected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
       ref.row.style.borderColor = selected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
       ref.value.textContent = quote.ltp === undefined ? '—' : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
