@@ -715,6 +715,11 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
       font:400 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
     }
     .tco-watchlist-price-block { position:relative;display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-end;gap:3px;padding-inline-end:6px; }
+    .tco-watchlist-price-block::after {
+      content:attr(data-source);position:absolute;left:0;bottom:0;max-width:36px;overflow:hidden;
+      color:#667181;font:650 6px/1 Inter,ui-sans-serif,system-ui,sans-serif;letter-spacing:.04em;
+      text-overflow:ellipsis;white-space:nowrap;
+    }
     .tco-watchlist-last {
       color:#e9edf3;font:700 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
       font-variant-numeric:tabular-nums;
@@ -2320,7 +2325,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       ref.change.style.color = pct === undefined ? 'var(--vela-fg-muted)' : pct > 0 ? '#22c55e' : pct < 0 ? '#f23645' : 'var(--vela-fg-bright)';
       ref.status.textContent = dataStatusLabel[quote.dataStatus];
       ref.status.style.color = dataStatusColor[quote.dataStatus];
-      ref.status.title = quote.healthReason;
+      const sourceLabel = String(quote.source ?? 'NO SOURCE').replace(/[^a-z0-9_-]/gi, '').slice(0, 12).toUpperCase() || '—';
+      ref.status.parentElement?.setAttribute('data-source', sourceLabel);
+      ref.status.title = `${quote.source ?? 'Unknown quote source'} · ${quote.healthReason}`;
       ref.value.style.color = quote.dataStatus === 'delayed' ? '#75cde9' : quote.dataStatus === 'stale' ? '#e7bf6e' : 'var(--vela-fg-bright)';
       ref.row.title = `${item.label} · ${instrument.exchange} · ${instrument.instrumentType} · ${dataStatusLabel[quote.dataStatus]} · ${quote.healthReason}`;
       ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'last price unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}, ${pct === undefined ? 'day change unavailable' : `${pct >= 0 ? 'up' : 'down'} ${Math.abs(pct).toFixed(2)} percent`}, data ${dataStatusLabel[quote.dataStatus]}`);
