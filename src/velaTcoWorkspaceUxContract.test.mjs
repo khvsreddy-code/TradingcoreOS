@@ -83,9 +83,9 @@ assert.match(chrome, /function registerTcoSidePanel\(descriptor: SidePanelDescri
 const panelDeclarations = [...chrome.matchAll(/const\s+(\w+)\s*:\s*SidePanelDescriptor\s*=\s*\{([\s\S]*?)\n\};/g)];
 const panelIds = panelDeclarations.map(([, , body]) => body.match(/\bid:\s*['"]([^'"]+)['"]/)?.[1]).filter(Boolean);
 assert.equal(new Set(panelIds).size, panelIds.length, 'each contributed panel descriptor must have a unique id');
-const registeredPanelNames = [...chrome.matchAll(/registerTcoSidePanel\(([A-Za-z_$][\w$]*)\);/g)].map(([, name]) => name);
+const registeredPanelNames = [...chrome.matchAll(/register(?:Tco)?SidePanel\(([A-Za-z_$][\w$]*)\);/g)].map(([, name]) => name);
 assert.equal(registeredPanelNames.filter(name => name === 'journalPanel').length, 1,
-  'journal must be registered exactly once through the host wrapper');
+  'journal must be registered exactly once through Vela, directly or through the TCO wrapper');
 assert(registeredPanelNames.includes('panelsHubPanel'), 'the Panels hub must be registered through the same host wrapper');
 assert.match(panelRegistry, /export function sidePanels\(\): SidePanelDescriptor\[\] \{[\s\S]*?return \[\.\.\.panels\.values\(\)\]/,
   'Vela must expose the current contributed-panel registry');
@@ -97,8 +97,14 @@ assert.match(panelDock, /if \(open\) entry\.handle\?\.onOpen\?\.\(\)/,
   'the Vela dock must invoke a panel’s open lifecycle');
 assert.match(panelDock, /entry\.handle\?\.destroy\?\.\(\)/,
   'the Vela dock must release a panel handle when the contribution is removed');
-assert(live.includes("from './services/core/chart/tcoVelaChrome'"),
-  'the live workspace must import TCO contributions before Vela workspace initialization');
+assert.match(panelDock, /toggle\(id: string, open\?: boolean\): void[\s\S]*?this\.entries\.find\(\(e\) => e\.id === id\)\?\.panel\.toggle\(open\)/,
+  'the dock must support both explicit open and close operations for a registered panel');
+assert.match(panelDock, /if \(openBefore && !this\.openId\) this\.toggle\(openBefore, true\)/,
+  'a registry refresh must preserve an already-open contributed panel');
+const chromeImportPosition = live.indexOf("from './services/core/chart/tcoVelaChrome'");
+const workspaceInitializationPosition = live.indexOf('loadVelaWorkspace()');
+assert(chromeImportPosition >= 0 && (workspaceInitializationPosition < 0 || chromeImportPosition < workspaceInitializationPosition),
+  'TCO panel contributions must be evaluated before Vela workspace initialization');
 assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
 assert(!live.includes("'quant'"));
