@@ -5,7 +5,7 @@ import { buildChartLayoutUrls } from './browser-test-urls.mjs';
 const base = String(process.env.TCO_BROWSER_BASE_URL || process.env.TCO_BROWSER_URL || '').trim();
 if (!base) throw new Error('TCO_BROWSER_BASE_URL or TCO_BROWSER_URL must point to an authenticated /live TradingCoreOS terminal.');
 
-const layouts = String(process.env.TCO_BROWSER_LAYOUTS || '1,4,8')
+const layouts = String(process.env.TCO_BROWSER_LAYOUTS || '1,4,5,8')
   .split(',')
   .map(value => value.trim())
   .filter(Boolean);
