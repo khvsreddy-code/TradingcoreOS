@@ -61,7 +61,7 @@ assert.match(runtimeController, /event\.type==='quote'/, 'quote-only packets mus
 assert.doesNotMatch(dataPlane, /void this\.ensureHistory\(\)/, 'subscription must not start object history before the typed loader');
 assert.match(dataPlane, /this\.ensureReadyColumns\(limit\)\.catch/, 'typed columnar history must be the first cold-start path');
 assert.match(runtimeController, /setHistoryFromCanonical/);
-assert.match(velaChrome, /registerSidePanel\(bookmarksPanel\)/);
+assert.match(velaChrome, /registerTcoSidePanel\(bookmarksPanel\)/, 'Watchlist must be registered through the TCO defaults wrapper into Vela’s shared panel registry');
 assert.match(velaChrome, /registerStatePersistence\(watchlistStatePersistence\)/);
 assert.match(velaChrome, /registerSymbolRanking\(watchlistSymbolRanking\)/);
 assert.match(velaExtensions, /registerRendererLayer/);
