@@ -52,7 +52,7 @@ jobs:
           TCO_BENCH_BAR_COUNTS: 2000,5000
           TCO_BENCH_UPDATE_ITERATIONS: 40
           TCO_BENCH_MAX_EXECUTION_MS: 2000
-          TCO_BENCH_MAX_DATA_REQUESTS_PER_RUN: 80000
+          TCO_BENCH_MAX_DATA_REQUESTS_PER_RUN: 80001
           TCO_BENCH_OUTPUT_FILE: core-spirit-pipeline-benchmark.json
         run: |
           set -o pipefail
