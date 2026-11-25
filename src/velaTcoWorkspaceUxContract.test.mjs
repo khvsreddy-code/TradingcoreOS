@@ -5,6 +5,8 @@ const read = (p) => fs.readFileSync(p, 'utf8');
 const live = read('src/LiveTradingWorkspace.tsx');
 const topology = read('src/services/core/chart/tcoVelaTerminal.ts');
 const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
+const panelRegistry = read('vendor/vela/src/widget/contributions.ts');
+const panelDock = read('vendor/vela/src/widget/panel-dock.ts');
 const settingsDialog = read('vendor/vela/src/renderers/native/chrome/SettingsDialog.ts');
 const drawingSettingsPanel = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPanel.ts');
 const drawingSettingsPopup = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPopup.ts');
@@ -66,7 +68,37 @@ assert(topology.includes('topbar: TCO_VELA_TOPBAR_COMPOSITION'),
 assert(!topbarComposition.includes("'tco.watchlist'"), 'Watchlist must not occupy a topbar slot');
 assert(!topbarComposition.includes("'tco.corespirit-code'"), 'CoreSpirit must not occupy a topbar slot');
 assert(topbarComposition.includes("'tco.chart-settings'"), 'the native chart-settings command must be pinned into the live topbar');
-assert(chrome.includes("registerSidePanel(journalPanel)"), "journal should remain registered as a dockable panel");
+const journalDescriptorMatch = chrome.match(/const journalPanel: SidePanelDescriptor = \{([\s\S]*?)\n\};/);
+assert(journalDescriptorMatch, 'journal descriptor must remain a first-class Vela side panel');
+const journalDescriptor = journalDescriptorMatch[1];
+assert.match(journalDescriptor, /id:\s*'tco\.journal'/);
+assert.match(journalDescriptor, /title:\s*'Journal'/);
+assert.match(journalDescriptor, /icon:\s*'calendar'/);
+assert.match(journalDescriptor, /mount\(ctx, body, header\)/);
+assert.match(journalDescriptor, /onOpen:\s*render/);
+assert.match(journalDescriptor, /onChart:\s*render/);
+assert.match(journalDescriptor, /destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/);
+assert.match(chrome, /function registerTcoSidePanel\(descriptor: SidePanelDescriptor\): void \{[\s\S]*?registerSidePanel\(\{/,
+  'TCO panel registration must apply shared defaults through Vela’s contribution registry');
+const panelDeclarations = [...chrome.matchAll(/const\s+(\w+)\s*:\s*SidePanelDescriptor\s*=\s*\{([\s\S]*?)\n\};/g)];
+const panelIds = panelDeclarations.map(([, , body]) => body.match(/\bid:\s*['"]([^'"]+)['"]/)?.[1]).filter(Boolean);
+assert.equal(new Set(panelIds).size, panelIds.length, 'each contributed panel descriptor must have a unique id');
+const registeredPanelNames = [...chrome.matchAll(/registerTcoSidePanel\(([A-Za-z_$][\w$]*)\);/g)].map(([, name]) => name);
+assert.equal(registeredPanelNames.filter(name => name === 'journalPanel').length, 1,
+  'journal must be registered exactly once through the host wrapper');
+assert(registeredPanelNames.includes('panelsHubPanel'), 'the Panels hub must be registered through the same host wrapper');
+assert.match(panelRegistry, /export function sidePanels\(\): SidePanelDescriptor\[\] \{[\s\S]*?return \[\.\.\.panels\.values\(\)\]/,
+  'Vela must expose the current contributed-panel registry');
+assert.match(panelDock, /refresh\(\): void \{[\s\S]*?for \(const desc of sidePanels\(\)\)/,
+  'the Vela dock must materialize registered contributions during refresh');
+assert.match(panelDock, /const mountedHandle = desc\.mount\(/,
+  'the Vela dock must mount each registered panel');
+assert.match(panelDock, /if \(open\) entry\.handle\?\.onOpen\?\.\(\)/,
+  'the Vela dock must invoke a panel’s open lifecycle');
+assert.match(panelDock, /entry\.handle\?\.destroy\?\.\(\)/,
+  'the Vela dock must release a panel handle when the contribution is removed');
+assert(live.includes("from './services/core/chart/tcoVelaChrome'"),
+  'the live workspace must import TCO contributions before Vela workspace initialization');
 assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
 assert(!live.includes("'quant'"));
@@ -79,7 +111,7 @@ assert(topology.includes('bottombar:false'), 'live Vela terminal must use the to
 assert(chrome.includes("id: 'tco.chart-settings'") || chrome.includes("id: 'tco.chart-settings'"), 'native Vela chart settings must be available from the topbar');
 assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchlist'"));
 assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
-assert(chrome.includes('const panelsHubPanel: SidePanelDescriptor') && chrome.includes('registerSidePanel(panelsHubPanel)'), 'the Panels hub must remain a native dock panel');
+assert(chrome.includes('const panelsHubPanel: SidePanelDescriptor') && chrome.includes('registerTcoSidePanel(panelsHubPanel)'), 'the Panels hub must remain a native dock panel');
 assert(!/const \w+Action: WidgetActionDescriptor = \{\s*id: 'tco\.panels'/.test(chrome), 'remove only the redundant Panels topbar shortcut, not the sidebar hub');
 assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
 assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
