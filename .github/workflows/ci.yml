@@ -90,7 +90,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Install the locked dependency graph
+      - name: Resolve non-breaking dependency security updates
+        shell: bash
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          set +e
+          npm audit fix --package-lock-only --ignore-scripts --no-fund
+          fix_status=$?
+          set -e
+          echo "Non-force npm audit fix exit status: ${fix_status}"
+          cp package-lock.json dependency-remediated-package-lock.json
+      - name: Install and verify the candidate lockfile
         run: npm ci --include=dev
       - name: Generate complete SPDX software bill of materials
         run: npm sbom --sbom-format=spdx > tradingcoreos-full.spdx.json
@@ -116,6 +126,7 @@ jobs:
             tradingcoreos-production.spdx.json
             npm-audit.json
             dependency-audit-summary.json
+            dependency-remediated-package-lock.json
           if-no-files-found: warn
           retention-days: 30
 

@@ -45,7 +45,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
+    "vite": "^6.4.6",
     "ws": "^8.21.3",
     "@zag-js/core": "^1.42.0",
     "@zag-js/dialog": "^1.42.0",
@@ -54,7 +54,7 @@
     "@zag-js/tooltip": "^1.42.0",
     "@zag-js/types": "^1.42.0",
     "@zag-js/vanilla": "^1.42.0",
-    "@vercel/queue": "^0.7.0",
+    "@vercel/queue": "^0.11.0",
     "@luxalgo/vela-ui": "^0.4.3"
   },
   "devDependencies": {
@@ -64,12 +64,15 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
+    "vite": "^6.4.6",
     "esbuild": "^0.25.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0"
   },
   "engines": {
     "node": "24.x"
+  },
+  "overrides": {
+    "qs": "6.16.1"
   }
 }
