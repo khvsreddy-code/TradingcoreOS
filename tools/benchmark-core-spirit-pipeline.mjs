@@ -207,6 +207,23 @@ function benchmarkExecutionBudgetMs() {
   return value;
 }
 
+function benchmarkDataRequestBudget() {
+  // A multi-symbol market() graph performs several bounded field reads per
+  // historical bar. Scale only the isolated benchmark run cap with the largest
+  // configured history; per-revision limits and all production defaults stay
+  // unchanged. Keep this report-visible so benchmark results are reproducible.
+  const configuredBars = Math.max(...barCounts());
+  const derived = Math.max(10_000, configuredBars * 16 + 1);
+  const value = Number(process.env.TCO_BENCH_MAX_DATA_REQUESTS_PER_RUN ?? derived);
+  if (!Number.isSafeInteger(value) || value < 10_000 || value > 1_000_000) {
+    throw new Error('TCO_BENCH_MAX_DATA_REQUESTS_PER_RUN must be an integer in [10000, 1000000]');
+  }
+  if (value < derived) {
+    throw new Error(`TCO_BENCH_MAX_DATA_REQUESTS_PER_RUN must cover the configured bar-count budget (${derived})`);
+  }
+  return value;
+}
+
 function makeRuntime(tier, workload, inputValues = {}) {
   return new CoreSpiritRuntime({
     executionTarget: 'chart',
@@ -216,7 +233,10 @@ function makeRuntime(tier, workload, inputValues = {}) {
     symbol: workload.symbol,
     timeframe: workload.timeframe,
     maxStepsPerBar: 10_000,
-    resourceBudget: { maxExecutionTimeMs: benchmarkExecutionBudgetMs() },
+    resourceBudget: {
+      maxExecutionTimeMs: benchmarkExecutionBudgetMs(),
+      maxDataRequestsPerRun: benchmarkDataRequestBudget(),
+    },
     dataResolver: fixtureResolver(),
     inputValues,
   });
@@ -308,6 +328,14 @@ async function main() {
     environment: { node: process.version, platform: process.platform, arch: process.arch },
     barCounts: sizes,
     liveUpdateSamples: updateCount,
+    resourceBudgets: {
+      productionDefaults: { maxExecutionTimeMsPerRevision: 150, maxDataRequestsPerRun: 10_000 },
+      benchmarkOverrides: {
+        maxExecutionTimeMsPerRevision: benchmarkExecutionBudgetMs(),
+        maxDataRequestsPerRun: benchmarkDataRequestBudget(),
+      },
+      note: 'Overrides apply only to benchmark-created runtimes; they do not change application resource budgets or live execution policy.',
+    },
     liveLatencyQuantilesNote: 'P95/P99 are descriptive sample quantiles; compare runs on the same machine with identical settings.',
     performancePolicy: 'No universal Pine Script speed claim; only same-process reference/optimized parity and measured latencies are reported.',
     memoryPolicy: 'Heap/ArrayBuffer values are retained-memory deltas, not allocation counts; browser paint time is not measured.',
