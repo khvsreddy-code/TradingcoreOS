@@ -83,24 +83,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # one-time lockfile migration; removed after the audited lockfile is committed
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - name: Resolve non-breaking dependency security updates
-        shell: bash
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          set +e
-          npm audit fix --package-lock-only --ignore-scripts --no-fund
-          fix_status=$?
-          set -e
-          echo "Non-force npm audit fix exit status: ${fix_status}"
-          cp package-lock.json dependency-remediated-package-lock.json
-      - name: Install and verify the candidate lockfile
+      - name: Install the locked dependency graph
         run: npm ci --include=dev
       - name: Generate complete SPDX software bill of materials
         run: npm sbom --sbom-format=spdx > tradingcoreos-full.spdx.json
@@ -116,18 +106,6 @@ jobs:
           test -s npm-audit.json || { echo "npm audit did not produce a JSON report."; exit 1; }
       - name: Classify dependency paths and enforce release threshold
         run: node tools/report-dependency-audit.mjs npm-audit.json package-lock.json
-      - name: Persist the audited lockfile to main (one-time migration)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          if git diff --cached --quiet; then
-            echo "The audited lockfile already matches main."
-          else
-            git commit -m "chore: persist audited dependency security updates"
-            git push origin HEAD:main
-          fi
       - name: Archive SBOM and dependency audit evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -138,7 +116,6 @@ jobs:
             tradingcoreos-production.spdx.json
             npm-audit.json
             dependency-audit-summary.json
-            dependency-remediated-package-lock.json
           if-no-files-found: warn
           retention-days: 30
 
