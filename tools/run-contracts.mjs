@@ -108,6 +108,7 @@ const contracts = [
   ['vela-columnar-live-renderer', ['tools/velaColumnarLiveRendererContract.mjs', true]],
   ['vela-columnar-history-tape-runtime', ['tools/velaColumnarHistoryTapeRuntimeContract.mjs', true]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
+  ['engineering-ownership-map', ['src/engineeringOwnershipMapContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['canonical-market-data-transport-runtime', ['src/services/core/data/canonicalMarketDataTransport.test.ts', true]],
   ['market-data-history-reconciliation', ['src/services/core/data/marketDataStoreReconciliation.test.ts', true]],

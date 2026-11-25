@@ -13,7 +13,7 @@ This document is the operational contract for merging changes into `main`. A gre
 | Long tasks (browser Long Tasks API, each ≥ 50 ms) during steady state | 0 |
 | WebGL context losses | 0 |
 | Heap trend growth during a 30-minute soak | ≤ 32 MiB |
-| Chart layouts covered by the fast CI browser matrix | 1, 4 and 8 cells |
+| Chart layouts covered by the fast CI browser matrix | 1, 4, 5 and 8 cells |
 | Long-duration heap soak | 30 minutes at 8 cells |
 
 These are proposed acceptance thresholds, not claims about current observed performance. A run is valid only if it reports fresh `__TCO_PERF__` telemetry, identifies an active chart backend, has a non-stale market stream, and contains the required heap samples. A missing heap metric is a failure, not a pass with an omitted field.
@@ -22,7 +22,7 @@ The browser verifier does not wait for `networkidle`: the terminal intentionally
 
 ### What each browser workflow proves
 
-- `TradingCoreOS CI / browser-performance` runs the authenticated 1 / 4 / 8 cell matrix with a 30-second steady-state interval on pull requests and main pushes, once enabled.
+- `TradingCoreOS CI / browser-performance` runs the authenticated 1 / 4 / 5 / 8 cell matrix with a 30-second steady-state interval on pull requests and main pushes, once enabled.
 - `TradingCoreOS Browser Performance Soak / browser-performance-soak` runs a 30-minute 8-cell soak on weekdays at 09:30 India time (04:00 UTC). The dense layout is used for the long heap-growth test; 1 and 4 cell behavior is covered by the fast matrix.
 - Both workflows archive machine-readable verifier output. The scheduled soak is the 30-minute evidence; the fast CI matrix must not be described as a 30-minute memory test.
 
@@ -53,7 +53,7 @@ The following GitHub settings should be configured on branch `main` in [Settings
 - Disable force pushes and branch deletion for `main`.
 - Keep administrator bypass disabled where operationally practical; any emergency bypass must be documented in the PR/release record.
 
-**Repository protection is not self-enforced by this documentation or by a passing workflow.** The GitHub connection used for this change can read the branch/ruleset state but does not expose the administration write action needed to apply protection. A repository owner/admin must apply and verify these settings before claiming `main` is protected.
+**Repository protection is not self-enforced by this documentation or by a passing workflow.** The connected GitHub integration returned HTTP 403 for the legacy branch-protection read endpoint and an empty ruleset list; that does not prove that no legacy protection exists. The current connection cannot apply or verify the required settings. A repository owner/admin must inspect Settings → Branches / Rulesets, apply these settings, and confirm the effective protection before claiming `main` is protected.
 
 ## Vercel service routing
 
