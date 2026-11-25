@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 const contracts = [
+  ['dependency-audit-classification', ['tools/report-dependency-audit.test.mjs', false]],
   ['request-trace-reason', ['src/requestTraceReasonContract.test.mjs', false]],
   ['market-data-health', ['src/marketDataHealthContract.test.mjs', true]],
   ['options-data-domain', ['src/optionsDataDomainContract.test.mjs', true]],
