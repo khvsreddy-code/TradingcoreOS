@@ -118,7 +118,20 @@ function outputFingerprint(outputs) {
   let hash = 0x811c9dc5;
   let count = 0;
   for (const output of outputs) {
-    const encoded = JSON.stringify(output, (_key, value) => {
+    // Correction replays intentionally carry a different execution envelope
+    // (barPhase="correction") from a clean historical replay. That envelope is
+    // not chart output. Preserve every visual/event/order field and all
+    // caller-owned metadata, excluding only the runtime-owned semantics stamp.
+    const comparable = { ...output } as Record<string, unknown>;
+    const metadata = comparable.metadata && typeof comparable.metadata === 'object'
+      ? { ...(comparable.metadata as Record<string, unknown>) }
+      : undefined;
+    if (metadata) {
+      delete metadata.coreSpiritExecution;
+      if (Object.keys(metadata).length) comparable.metadata = metadata;
+      else delete comparable.metadata;
+    }
+    const encoded = JSON.stringify(comparable, (_key, value) => {
       if (typeof value === 'number' && Number.isNaN(value)) return '__NaN__';
       if (value === Infinity) return '__Infinity__';
       if (value === -Infinity) return '__-Infinity__';
