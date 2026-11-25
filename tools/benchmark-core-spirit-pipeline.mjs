@@ -299,7 +299,7 @@ async function main() {
     const incrementalCold = timeMs(() => incrementalCompiler.compile(workload.source, 'benchmark:' + workload.id));
     const incrementalWarm = timeMs(() => incrementalCompiler.compile(workload.source, 'benchmark:' + workload.id));
     if (!incrementalWarm.value.cacheHit) throw new Error('incremental compiler warm pass did not hit its cache');
-    const sourceRevision = workload.source + '\\n// benchmark-only source revision';
+    const sourceRevision = workload.source + '\n// benchmark-only source revision';
     const sourceChangeCompile = timeMs(() => new CoreSpiritCompiler().compileSource(sourceRevision, 'benchmark:' + workload.id));
     if (!sourceChangeCompile.value.ir || sourceChangeCompile.value.diagnostics.some(item => item.severity === 'error')) {
       throw new Error(workload.id + ' failed to compile after a source revision: ' + sourceChangeCompile.value.diagnostics.map(item => item.message).join('; '));

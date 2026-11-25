@@ -45,7 +45,7 @@ for (const key of [
   assert.ok(soak.includes(secretBinding), `scheduled soak must inject ${key}`);
 }
 
-assert.match(ci, /TCO_BROWSER_LAYOUTS: '1,4,8'/, 'normal CI must cover 1, 4 and 8 chart layouts');
+assert.match(ci, /TCO_BROWSER_LAYOUTS: '1,4,5,8'/, 'normal CI must cover 1, 4, 5 and 8 chart layouts');
 assert.match(ci, /node tools\/create-browser-auth-state\.mjs/, 'normal browser CI must create session state ephemerally');
 assert.match(soak, /npm ci --include=dev/, 'soak must install the project dependency used by the Supabase auth bootstrap');
 assert.match(soak, /node tools\/create-browser-auth-state\.mjs/, 'soak must use the same ephemeral Supabase auth bootstrap as CI');
