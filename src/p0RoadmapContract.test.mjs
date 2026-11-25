@@ -112,10 +112,10 @@ assert.match(nativeExtensions,/registerRendererLayer/);
 assert.match(nativeExtensions,/tco-regime-ribbon/);
 assert.match(facade,/registerDefaultEngine/);
 assert.match(watchlist,/registerDefaultEngine\('corespirit'/);
-assert.match(watchlist,/registerSidePanel\(positionsPanel\)/);
-assert.match(watchlist,/registerSidePanel\(orderBookPanel\)/);
-assert.match(watchlist,/registerSidePanel\(optionsPanel\)/);
-assert.match(watchlist,/registerSidePanel\(riskPanel\)/);
+assert.match(watchlist,/registerTcoSidePanel\(positionsPanel\)/, 'positionsPanel must enter Vela through the shared TCO panel wrapper');
+assert.match(watchlist,/registerTcoSidePanel\(orderBookPanel\)/, 'orderBookPanel must enter Vela through the shared TCO panel wrapper');
+assert.match(watchlist,/registerTcoSidePanel\(optionsPanel\)/, 'optionsPanel must enter Vela through the shared TCO panel wrapper');
+assert.match(watchlist,/registerTcoSidePanel\(riskPanel\)/, 'riskPanel must enter Vela through the shared TCO panel wrapper');
 assert.match(terminalOptions,/docks:\s*\[[\s\S]*'tco\.research'[\s\S]*'tco\.automation'[\s\S]*'tco\.trading'[\s\S]*'tco\.workspace-frame'[\s\S]*'tco\.panels'/, 'terminal topology owns the native dock inventory');
 assert.match(workspace,/createTcoVelaSupabaseStorage\(\(\) => tradingCoreRuntime\.getPrimaryBrokerId\(\)/);
 
