@@ -31,26 +31,32 @@ assert.match(main, /createRoot\(document\.getElementById\('root'\)!\)/,
   'src/main.tsx owns the single application root');
 
 const velaPanelChrome = read(velaPanelRootFile);
-assert.equal((velaPanelChrome.match(/createRoot\(/g) ?? []).length, 3,
-  'only CoreSpirit Studio, Quant and Journal may mount embedded React panel roots');
-assert.equal((velaPanelChrome.match(/\.unmount\(\)/g) ?? []).length, 3,
+assert.equal((velaPanelChrome.match(/createRoot\(/g) ?? []).length, 4,
+  'only CoreSpirit Studio, Quant, Order Ticket and Journal may mount embedded React panel roots');
+assert.equal((velaPanelChrome.match(/\.unmount\(\)/g) ?? []).length, 4,
   'every Vela-owned embedded React panel root must be disposed with its panel');
 const studioStart = velaPanelChrome.indexOf('const coreSpiritCodePanel: SidePanelDescriptor');
 const quantStart = velaPanelChrome.indexOf('const quantPanel: SidePanelDescriptor');
 const bookmarksStart = velaPanelChrome.indexOf('const bookmarksPanel: SidePanelDescriptor');
+const orderTicketStart = velaPanelChrome.indexOf('const orderTicketPanel: SidePanelDescriptor');
+const tradingStart = velaPanelChrome.indexOf('const tradingPanel: SidePanelDescriptor');
 const journalStart = velaPanelChrome.indexOf('const journalPanel: SidePanelDescriptor');
 const accountStart = velaPanelChrome.indexOf('const accountPanel: SidePanelDescriptor');
 assert.ok(studioStart >= 0 && quantStart > studioStart && bookmarksStart > quantStart
-  && journalStart > bookmarksStart && accountStart > journalStart,
-  'the three embedded React roots must remain inside their named Vela side-panel descriptors');
+  && orderTicketStart > bookmarksStart && tradingStart > orderTicketStart
+  && journalStart > tradingStart && accountStart > journalStart,
+  'the four embedded React roots must remain inside their named Vela side-panel descriptors');
 const studioPanelSource = velaPanelChrome.slice(studioStart, quantStart);
 const quantPanelSource = velaPanelChrome.slice(quantStart, bookmarksStart);
+const orderTicketPanelSource = velaPanelChrome.slice(orderTicketStart, tradingStart);
 const journalPanelSource = velaPanelChrome.slice(journalStart, accountStart);
 assert.match(studioPanelSource, /const root = createRoot\(body\)/);
 assert.match(studioPanelSource, /destroy\(\)\s*\{[\s\S]*?root\.unmount\(\)/,
   'CoreSpirit Studio mounts into its Vela-owned panel body and unmounts on panel destruction');
 assert.match(quantPanelSource, /const reactRoot = createRoot\(root\)[\s\S]*destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/,
   'Quant releases its embedded React root when Vela destroys the panel');
+assert.match(orderTicketPanelSource, /const root = createRoot\(body\)[\s\S]*destroy\(\)\s*\{[\s\S]*?root\.unmount\(\)/,
+  'Order Ticket releases its embedded React root when Vela destroys the panel');
 assert.match(journalPanelSource, /const reactRoot = createRoot\(root\)[\s\S]*destroy:\s*\(\)\s*=>\s*reactRoot\.unmount\(\)/,
   'Journal releases its embedded React root when Vela destroys the panel');
 
