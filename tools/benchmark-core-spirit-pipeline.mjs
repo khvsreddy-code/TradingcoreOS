@@ -122,9 +122,9 @@ function outputFingerprint(outputs) {
     // (barPhase="correction") from a clean historical replay. That envelope is
     // not chart output. Preserve every visual/event/order field and all
     // caller-owned metadata, excluding only the runtime-owned semantics stamp.
-    const comparable = { ...output } as Record<string, unknown>;
+    const comparable = { ...output };
     const metadata = comparable.metadata && typeof comparable.metadata === 'object'
-      ? { ...(comparable.metadata as Record<string, unknown>) }
+      ? { ...comparable.metadata }
       : undefined;
     if (metadata) {
       delete metadata.coreSpiritExecution;
