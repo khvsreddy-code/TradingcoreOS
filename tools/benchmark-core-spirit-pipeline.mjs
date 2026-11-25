@@ -181,6 +181,19 @@ show line(smoothedRelative)
   },
 ];
 
+function benchmarkExecutionBudgetMs() {
+  // Historical chart executions have a strict 150ms production default. The
+  // pipeline benchmark deliberately replays several thousand bars in one
+  // synchronous benchmark process, so it uses an explicit, isolated ceiling.
+  // This setting is only passed to benchmark-created runtimes; it never changes
+  // the application or CoreSpirit runtime default.
+  const value = Number(process.env.TCO_BENCH_MAX_EXECUTION_MS ?? 2_000);
+  if (!Number.isSafeInteger(value) || value < 150 || value > 10_000) {
+    throw new Error('TCO_BENCH_MAX_EXECUTION_MS must be an integer in [150, 10000]');
+  }
+  return value;
+}
+
 function makeRuntime(tier, workload, inputValues = {}) {
   return new CoreSpiritRuntime({
     executionTarget: 'chart',
@@ -190,6 +203,7 @@ function makeRuntime(tier, workload, inputValues = {}) {
     symbol: workload.symbol,
     timeframe: workload.timeframe,
     maxStepsPerBar: 10_000,
+    resourceBudget: { maxExecutionTimeMs: benchmarkExecutionBudgetMs() },
     dataResolver: fixtureResolver(),
     inputValues,
   });

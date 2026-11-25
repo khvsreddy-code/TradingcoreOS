@@ -39,16 +39,16 @@ const studioStart = velaPanelChrome.indexOf('const coreSpiritCodePanel: SidePane
 const quantStart = velaPanelChrome.indexOf('const quantPanel: SidePanelDescriptor');
 const bookmarksStart = velaPanelChrome.indexOf('const bookmarksPanel: SidePanelDescriptor');
 const orderTicketStart = velaPanelChrome.indexOf('const orderTicketPanel: SidePanelDescriptor');
-const tradingStart = velaPanelChrome.indexOf('const tradingPanel: SidePanelDescriptor');
+const dataWindowStart = velaPanelChrome.indexOf('const dataWindowPanel: SidePanelDescriptor');
 const journalStart = velaPanelChrome.indexOf('const journalPanel: SidePanelDescriptor');
 const accountStart = velaPanelChrome.indexOf('const accountPanel: SidePanelDescriptor');
 assert.ok(studioStart >= 0 && quantStart > studioStart && bookmarksStart > quantStart
-  && orderTicketStart > bookmarksStart && tradingStart > orderTicketStart
-  && journalStart > tradingStart && accountStart > journalStart,
+  && orderTicketStart > bookmarksStart && dataWindowStart > orderTicketStart
+  && journalStart > dataWindowStart && accountStart > journalStart,
   'the four embedded React roots must remain inside their named Vela side-panel descriptors');
 const studioPanelSource = velaPanelChrome.slice(studioStart, quantStart);
 const quantPanelSource = velaPanelChrome.slice(quantStart, bookmarksStart);
-const orderTicketPanelSource = velaPanelChrome.slice(orderTicketStart, tradingStart);
+const orderTicketPanelSource = velaPanelChrome.slice(orderTicketStart, dataWindowStart);
 const journalPanelSource = velaPanelChrome.slice(journalStart, accountStart);
 assert.match(studioPanelSource, /const root = createRoot\(body\)/);
 assert.match(studioPanelSource, /destroy\(\)\s*\{[\s\S]*?root\.unmount\(\)/,

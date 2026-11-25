@@ -51,6 +51,7 @@ jobs:
         env:
           TCO_BENCH_BAR_COUNTS: 2000,5000
           TCO_BENCH_UPDATE_ITERATIONS: 40
+          TCO_BENCH_MAX_EXECUTION_MS: 2000
           TCO_BENCH_OUTPUT_FILE: core-spirit-pipeline-benchmark.json
         run: npm run benchmark:corespirit:pipeline 2>&1 | tee core-spirit-pipeline-benchmark.txt
       - name: Archive CoreSpirit pipeline benchmark report
