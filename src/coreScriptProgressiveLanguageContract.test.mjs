@@ -237,7 +237,22 @@ assert.ok(compactV12Result.ir && expandedV12Result.ir);
 assert.equal(compactV12Result.ir.languageVersion, 1);
 assert.equal(compactV12Result.ir.languageEdition, '1.2');
 assert.equal(expandedV12Result.ir.languageEdition, '1.2');
-assert.deepEqual(compactV12Result.ir.entry.instructions, expandedV12Result.ir.entry.instructions);
+const normalizeV12SourceIdentity = (value) => {
+  if (Array.isArray(value)) return value.map(normalizeV12SourceIdentity);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [
+    key,
+    key === 'sourceNodeId' && typeof child === 'string'
+      ? child.replace(/^corescript-v12-(?:compact|expanded):/, 'corescript-v12:')
+      : normalizeV12SourceIdentity(child),
+  ]));
+};
+// The two spellings must produce identical executable semantics. Provenance
+// remains source-specific by design, so normalize only the sourceId prefix.
+assert.deepEqual(
+  normalizeV12SourceIdentity(compactV12Result.ir.entry.instructions),
+  normalizeV12SourceIdentity(expandedV12Result.ir.entry.instructions),
+);
 assert.ok(validateCoreSpiritIr(compactV12Result.ir));
 
 const legacyV10Result = compileCoreSpirit('plot(vwap());', 'corescript-v10-legacy');
