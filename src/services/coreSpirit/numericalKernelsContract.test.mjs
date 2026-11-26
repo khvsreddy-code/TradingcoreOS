@@ -341,6 +341,9 @@ assert.equal(getPineV6BuiltinDefinition('ta','adx'),undefined,
   'Pine exposes ADX through ta.dmi tuple output, not a standalone ta.adx builtin');
 assert.equal(getPineV6BuiltinDefinition('math','rphi'),undefined,
   'Unverified math.rphi is not added to the Pine v6 API registry');
+assert.equal(getPineV6BuiltinDefinition('ta','range')?.executionBuiltin,'ta_range');
+assert.equal(resolveCoreSpiritLibraryCall('ta','range')?.builtin?.returnType,'series<float>',
+  'ta.range must resolve to its TA execution alias, not the CoreSpirit visual range constructor');
 
 
 // Pine-only catalog enforcement must not break CoreScript's own strategy API.
