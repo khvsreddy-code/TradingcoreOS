@@ -19,7 +19,7 @@ Reference: https://github.com/LuxAlgo/PineTS
 - The live Code panel compiles off-thread, submits the source through the workspace's indicator path, watches Vela's ready/error events and removes a failed script instead of leaving a dead legend row.
 - The full CoreSpirit Coder page and the embedded live-chart dock use the same Monaco adapter with compiler diagnostics, symbol intelligence, completions, hover and definition navigation. The live dock presents a compact Pine-editor-inspired layout: script identity and Run/Save actions above the code canvas, with Console, Problems and Chart panels below. The visual treatment is a UX reference only; CoreScript compilation, artifacts, capability checks, worker execution and Vela output remain CoreSpirit-native.
 - The embedded dock now exposes the same Beginner / Trader / Quant / System guidance profiles as the full Coder. The selected profile is an authoring lens only; the compiler-inferred required level and sandbox capabilities remain authoritative.
-- The explicit CoreSpirit feature-parity matrix currently distinguishes implemented, partial, surface-only and planned capabilities. A visible namespace or syntax entry is not proof that its provider data, runtime semantics and visual output are complete.
+- The canonical Pine compatibility registry is now maintained in `src/services/coreSpirit/pine/pineFeatureRegistry.ts`. Its statuses are derived from implementation-file evidence, executable fixture outcomes and recorded semantic differences. The editor autocomplete and implementation-progress summary consume that same registry. A visible namespace or syntax entry is not proof that its provider data, runtime semantics and visual output are complete.
 - The current chart history policy requests up to 5,000 initial bars per timeframe, keeps a 500-bar warm target, and loads older history in bounded viewport-demand pages. This is the current implementation, not a claim that 5,000 bars is the best cold-start default for every chart or device.
 
 ## Runtime principles to borrow
@@ -66,7 +66,7 @@ Never report "running" merely because a button click or indicator handle was cre
 
 ## Parity gaps that must remain explicit
 
-The language feature matrix should drive implementation and release claims. The current matrix records 34 implemented, 16 partial, 3 surface-only and 7 planned entries out of 60 tracked features. Highest-impact gaps are typed mutable arrays/maps, user-defined functions and enums, import/export library syntax, full strategy/backtest execution and metrics, research optimization, concrete options-chain/Greeks/IV pricing data, corporate actions, market profile, and canonical tick-stream semantics.
+The canonical Pine registry, not a manually curated second matrix, must drive implementation and release claims. CoreSpirit-only capabilities such as orderbook, ML and broker execution belong in their own host contracts, not in the Pine language inventory. Highest-impact Pine gaps are declaration-mode semantics, tuple returns/destructuring, switch, numeric range loops, Pine arrow functions and method declarations, enum/UDT reference behavior, library import/export, collection API/identity/history semantics, and exact drawing-object lifecycle parity.
 
 Do not close a gap by adding only autocomplete, a namespace stub, or a renderer primitive. Each feature needs:
 1. a language/AST/type-system contract;
