@@ -70,7 +70,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('ta','rising','rising','Source exceeds every preceding value in the lookback window.'),
   b('ta','falling','falling','Source is below every preceding value in the lookback window.'),
   b('ta','tr','tr','Current-bar true range with explicit missing-close handling.'),
-  k('ta','vwma','Volume-weighted moving average; rolling price-volume kernel is pending.'),
+  b('ta','vwma','vwma','Technical-analysis volume-weighted moving average.'),
   k('ta','macd','MACD tuple return awaits tuple ABI and independent reference fixtures.'),
   k('ta','stoch','Stochastic oscillator kernel and reference fixtures are pending.'),
   k('ta','bb','Bollinger Bands tuple return awaits tuple ABI and reference fixtures.'),
