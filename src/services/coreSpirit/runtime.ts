@@ -1923,11 +1923,11 @@ export class CoreSpiritRuntime {
       }
       return finish(true);
     }
-    const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','range','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
+    const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','range','ta_range','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
     if (statefulSeriesNames.has(name)) {
       const current = Number(args[0]);
       if (!Number.isFinite(current)) return finish(null);
-      const operation = { name: name as CoreSpiritSeriesOperationName, length };
+      const operation = { name: (name === 'ta_range' ? 'range' : name) as CoreSpiritSeriesOperationName, length };
       const key = 'direct:' + callKey + '|' + name + '|' + series + '|' + length;
       this.rememberKernelIdentity('direct', key, callKey, seriesArgs);
       let cursor = this.directKernelCursors.get(key);
