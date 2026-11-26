@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritExecutionStateMachine } from './executionStateMachine.ts';
+const empty=new CoreSpiritExecutionStateMachine();empty.beginBarRevision(0,0,'realtime');empty.beginScriptExecution();empty.updateOutputs();empty.commitBar();assert.equal(empty.snapshot().committedBars,1);
 const m=new CoreSpiritExecutionStateMachine();m.beginHistoricalLoad(2);m.beginHistoricalExecution();
 for(let i=0;i<2;i++){m.beginBarRevision(i,0,'historical');m.beginScriptExecution();m.updateOutputs();m.commitBar();}
 m.commitHistorical();assert.equal(m.snapshot().phase,'history-committed');assert.equal(m.snapshot().committedHistoricalBars,2);
