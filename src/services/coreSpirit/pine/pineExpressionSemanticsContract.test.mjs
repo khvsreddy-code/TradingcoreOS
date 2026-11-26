@@ -10,8 +10,8 @@ const source=[
 ].join('\n');
 const compiled=new CoreSpiritCompiler().compileSource(source,'pine-ternary-conformance',{frontend:'pine-v6'});
 assert.ok(compiled.ir,compiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
-assert.ok(compiled.ir!.entry.instructions.some(item=>item.op==='jumpIfFalse'),'ternary must lower to explicit conditional control flow');
-assert.ok(compiled.ir!.entry.instructions.some(item=>item.op==='jump'),'ternary must skip the inactive branch');
+assert.ok(compiled.ir.entry.instructions.some(item=>item.op==='jumpIfFalse'),'ternary must lower to explicit conditional control flow');
+assert.ok(compiled.ir.entry.instructions.some(item=>item.op==='jump'),'ternary must skip the inactive branch');
 
 const bars=[
  {timestamp:'2026-11-25T09:15:00.000Z',open:100,high:102,low:99,close:101,volume:100},
