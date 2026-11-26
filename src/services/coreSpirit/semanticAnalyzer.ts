@@ -1,6 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, updateCoreSpiritAstNodeMetadata, type CoreSpiritFrontendId } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
-import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isPersistentStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
+import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isPersistentStateType, stateOf, intrabarOf, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, semanticTypeQualifier, isSemanticQualifierAssignable, isSemanticNumeric, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
@@ -36,7 +36,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const modelDeclarations = ((options.surface as CoreSpiritSurfaceMetadata | undefined)?.declarations ?? []).filter(item => item.kind === 'model');
   const modelDeclarationMap = new Map(modelDeclarations.map(item => [item.name, item] as const));
   let maxLookback=0;
-  let eventScopeDepth=0;
+  let eventScopeDepth=(ast.programKind==='indicator'||ast.programKind==='strategy')?1:0;
   let loopDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>{
     diagnostics.push({severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code});
@@ -685,19 +685,21 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'let': {
         if(symbols.has(n.name)) report(n,`Variable '${n.name}' is already declared`,'DUPLICATE_VARIABLE');
         const inferredType=infer(n.expression,scope);
-        const type=n.declaredType ? mapDeclaredType(n.declaredType) : inferredType;
+        const pineStorageType=n.pineMode==='varip' ? intrabarOf(inferredType) : n.pineMode==='var' ? stateOf(inferredType) : undefined;
+        const effectiveDeclaredType=n.declaredType ?? (pineStorageType && pineStorageType!=='unknown' ? String(pineStorageType) : undefined);
+        const type=effectiveDeclaredType ? mapDeclaredType(effectiveDeclaredType) : inferredType;
         visit(n.expression,scope);
         const semanticType=inferSemantic(n.expression,semanticSymbols);
-        if(n.declaredType){
-          const declared=semanticTypeForDeclaredName(n.declaredType);
+        if(effectiveDeclaredType){
+          const declared=semanticTypeForDeclaredName(effectiveDeclaredType);
           if(!declared) report(n,`Unsupported semantic type '${n.declaredType}'`,'TYPE_DECLARATION_SEMANTIC');
           else if(semanticType && declared.qualifier && !isSemanticQualifierAssignable(declared.qualifier,semanticTypeQualifier(semanticType))) {
             report(n,`Cannot assign ${semanticTypeQualifier(semanticType)}-qualified '${semanticTypeToString(semanticType)}' to ${declared.qualifier}-qualified '${n.declaredType}'`,'TYPE_QUALIFIER_MISMATCH');
-          } else if(semanticType && !semanticTypeCompatible(declared,semanticType)) {
-            report(n,`Declared type '${n.declaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
+          } else if(semanticType && !semanticTypeCompatible(declared,n.pineMode && semanticType.kind==='series' ? scalarize(semanticType) : semanticType)) {
+            report(n,`Declared type '${effectiveDeclaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
           }
           semanticSymbols.set(n.name,declared ?? semanticType ?? semanticScalar('number'));
-        } else if(semanticType) semanticSymbols.set(n.name,semanticType);
+        } else if(semanticType) semanticSymbols.set(n.name,n.pineMode && semanticType.kind==='series' ? scalarize(semanticType) : semanticType);
         symbols.set(n.name,type);
         scope.set(n.name,type);
         if(n.expression.type==='call'){

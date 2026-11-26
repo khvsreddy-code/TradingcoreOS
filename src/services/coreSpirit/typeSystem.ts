@@ -179,7 +179,15 @@ export function seriesOf(type: CoreSpiritType): CoreSpiritType {
 
 export function stateOf(type: CoreSpiritType): CoreSpiritType {
   if (type === 'int' || type === 'float' || type === 'number' || type === 'boolean' || type === 'string') return `state<${type}>` as CoreSpiritType;
+  if (isSeriesType(type)) return `state<${elementType(type)}>` as CoreSpiritType;
   if (isStateType(type)) return type;
+  return 'unknown';
+}
+
+export function intrabarOf(type: CoreSpiritType): CoreSpiritType {
+  if (type === 'int' || type === 'float' || type === 'number' || type === 'boolean' || type === 'string') return `intrabar<${type}>` as CoreSpiritType;
+  if (isSeriesType(type)) return `intrabar<${elementType(type)}>` as CoreSpiritType;
+  if (isIntrabarStateType(type)) return type;
   return 'unknown';
 }
 
