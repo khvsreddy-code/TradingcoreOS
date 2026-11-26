@@ -29,6 +29,7 @@ function children(node:CoreSpiritAstNode):CoreSpiritAstNode[] {
     case 'if': return [node.condition,...node.thenBranch,...(node.elseBranch??[])];
     case 'unary': return [node.operand];
     case 'binary': return [node.left,node.right];
+    case 'conditional': return [node.condition,node.whenTrue,node.whenFalse];
     case 'call': return node.args;
     case 'memberCall': return [node.target,...node.args];
     case 'index': return [node.target,node.index];

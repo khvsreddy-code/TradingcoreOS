@@ -260,6 +260,16 @@ export function buildCoreSpiritSemanticDependencyGraph(
         return id;
       }
 
+      case 'conditional': {
+        const condition=expression(node.condition,conditionOwner);
+        const whenTrue=expression(node.whenTrue,conditionOwner);
+        const whenFalse=expression(node.whenFalse,conditionOwner);
+        const id=addNode({id:'expr:'+(node.span?.start ?? nodes.size),kind:'expression',name:'ternary',source:sourceSpan(node)});
+        addEdge(condition,id,'depends-on');
+        addEdge(whenTrue,id,'depends-on');
+        addEdge(whenFalse,id,'depends-on');
+        return id;
+      }
       case 'binary': {
         const left = expression(node.left, conditionOwner);
         const right = expression(node.right, conditionOwner);

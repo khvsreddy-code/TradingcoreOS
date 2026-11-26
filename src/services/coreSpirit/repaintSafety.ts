@@ -224,6 +224,12 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       inferred = inferNode(node.operand,annotations);
       break;
 
+    case 'conditional':
+      inferred = merge(
+        merge(inferNode(node.condition,annotations),inferNode(node.whenTrue,annotations),node,'ternary condition and true branch'),
+        inferNode(node.whenFalse,annotations),node,'ternary false branch',
+      );
+      break;
     case 'binary':
       inferred = merge(inferNode(node.left,annotations),inferNode(node.right,annotations),node,`binary '${node.operator}'`);
       break;

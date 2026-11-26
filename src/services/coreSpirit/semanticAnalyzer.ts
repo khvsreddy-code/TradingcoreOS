@@ -185,6 +185,18 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return n.operator==='!' ? (t.startsWith('series<') ? 'series<boolean>' : 'boolean') : t;
       }
 
+      case 'conditional': {
+        const condition=infer(n.condition,scope);
+        const whenTrue=infer(n.whenTrue,scope);
+        const whenFalse=infer(n.whenFalse,scope);
+        if(!isBooleanType(condition)) report(n.condition,'Ternary condition must be boolean','TYPE_TERNARY_CONDITION');
+        let result=joinTypes(whenTrue,whenFalse);
+        if(result==='unknown' && whenTrue!=='unknown' && whenFalse!=='unknown') {
+          report(n,`Ternary branches must have compatible types; received '${whenTrue}' and '${whenFalse}'`,'TYPE_TERNARY_BRANCHES');
+        }
+        if(condition.startsWith('series<') && result!=='unknown' && !isSeriesType(result)) result=seriesOf(result);
+        return result;
+      }
       case 'binary': {
         const a=infer(n.left,scope), b=infer(n.right,scope);
         if(n.operator==='and'||n.operator==='or'){
@@ -514,6 +526,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           ? semanticSeries('boolean', mergeSemanticMetadata([operand]))
           : semanticScalar('boolean');
       }
+      case 'conditional': {
+        const condition=inferSemantic(n.condition,scope);
+        const whenTrue=inferSemantic(n.whenTrue,scope);
+        const whenFalse=inferSemantic(n.whenFalse,scope);
+        if(!whenTrue || !whenFalse) return undefined;
+        const resultType=infer(n,scope);
+        const atom=whenTrue.atom===whenFalse.atom ? whenTrue.atom : 'number';
+        const metadata=mergeSemanticMetadata([condition,whenTrue,whenFalse]);
+        return isSeriesType(resultType) ? semanticSeries(atom,metadata) : semanticScalar(atom,metadata);
+      }
       case 'binary': {
         const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
         if(n.operator==='and'||n.operator==='or') return left?.kind==='series' || right?.kind==='series' ? semanticSeries('boolean', mergeSemanticMetadata([left,right])) : semanticScalar('boolean');
@@ -758,6 +780,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         n.args.forEach(x=>visit(x,scope)); infer(n,scope); break;
       case 'unary':
         visit(n.operand,scope); infer(n,scope); break;
+      case 'conditional':
+        visit(n.condition,scope); visit(n.whenTrue,scope); visit(n.whenFalse,scope); infer(n,scope); break;
       case 'binary':
         visit(n.left,scope); visit(n.right,scope); infer(n,scope); break;
       default:

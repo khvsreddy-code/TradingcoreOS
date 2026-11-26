@@ -230,6 +230,11 @@ export function validateCoreScriptCapabilityRequirementsFromAst(
       case 'unary':
         visit(node.operand);
         return;
+      case 'conditional':
+        visit(node.condition);
+        visit(node.whenTrue);
+        visit(node.whenFalse);
+        return;
       case 'binary':
         visit(node.left);
         visit(node.right);

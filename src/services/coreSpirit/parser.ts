@@ -306,7 +306,16 @@ export class CoreSpiritParser {
     return body;
   }
 
-  private expression(){return this.or();}
+  private expression(){return this.conditional();}
+  /** Pine ternary is right-associative and lower precedence than boolean operators. */
+  private conditional():CoreSpiritAstNode {
+    const condition=this.or();
+    if(!this.match('question')) return condition;
+    const whenTrue=this.conditional();
+    this.consume('colon',"Expected : between ternary branches");
+    const whenFalse=this.conditional();
+    return {type:'conditional',condition,whenTrue,whenFalse,span:this.makeSpanFrom(condition,whenFalse)};
+  }
   private or(){let e=this.and();while(this.match('or'))e=this.binary(e,this.previous().lexeme,this.and());return e;}
   private and(){let e=this.equality();while(this.match('and'))e=this.binary(e,this.previous().lexeme,this.equality());return e;}
   private equality(){let e=this.comparison();while(this.match('equalEqual','bangEqual'))e=this.binary(e,this.previous().lexeme,this.comparison());return e;}

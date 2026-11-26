@@ -39,6 +39,7 @@ export type CoreSpiritAstNode = (
   | CoreSpiritIdentifierNode
   | CoreSpiritUnaryNode
   | CoreSpiritBinaryNode
+  | CoreSpiritConditionalNode
   | CoreSpiritCallNode
   | CoreSpiritMemberCallNode
   | CoreSpiritIndexNode
@@ -64,6 +65,7 @@ export type CoreSpiritLiteralNode = { type: 'number' | 'string' | 'boolean' | 'n
 export type CoreSpiritIdentifierNode = { type: 'identifier'; name: string; span?: CoreSpiritSpan };
 export type CoreSpiritUnaryNode = { type: 'unary'; operator: '-' | '!' | '+'; operand: CoreSpiritAstNode; span?: CoreSpiritSpan };
 export type CoreSpiritBinaryNode = { type: 'binary'; operator: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | 'and' | 'or'; left: CoreSpiritAstNode; right: CoreSpiritAstNode; span?: CoreSpiritSpan };
+export type CoreSpiritConditionalNode = { type:'conditional'; condition:CoreSpiritAstNode; whenTrue:CoreSpiritAstNode; whenFalse:CoreSpiritAstNode; span?:CoreSpiritSpan };
 export type CoreSpiritCallNode = { type: 'call'; name: string; args: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritMemberCallNode = { type: 'memberCall'; target: CoreSpiritAstNode; member: string; args: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritIndexNode = { type: 'index'; target: CoreSpiritAstNode; index: CoreSpiritAstNode; span?: CoreSpiritSpan };

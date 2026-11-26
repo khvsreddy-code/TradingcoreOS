@@ -215,6 +215,21 @@ export class CoreSpiritCompiler {
           else emitInstruction(n, { op:'move', dest, source:n.name, sourceKind:'local' });
           return dest;
         }
+        case 'conditional': {
+          const condition=expr(n.condition);
+          const dest=`t${temp++}`;
+          const falseJump=instructions.length;
+          emitInstruction(n,{op:'jumpIfFalse',condition,target:-1});
+          const whenTrue=expr(n.whenTrue);
+          emitInstruction(n,{op:'move',dest,source:whenTrue,sourceKind:'register'});
+          const endJump=instructions.length;
+          emitInstruction(n,{op:'jump',target:-1});
+          (instructions[falseJump] as Extract<CoreSpiritIrInstruction,{op:'jumpIfFalse'}>).target=instructions.length;
+          const whenFalse=expr(n.whenFalse);
+          emitInstruction(n,{op:'move',dest,source:whenFalse,sourceKind:'register'});
+          (instructions[endJump] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=instructions.length;
+          return dest;
+        }
         case 'unary': { const operand=expr(n.operand), dest=`t${temp++}`; emitInstruction(n, {op:'unary',dest,operator:n.operator,operand}); return dest; }
         case 'binary': { const left=expr(n.left),right=expr(n.right),dest=`t${temp++}`;emitInstruction(n, {op:'binary',dest,operator:n.operator,left,right});return dest; }
         case 'call': {
