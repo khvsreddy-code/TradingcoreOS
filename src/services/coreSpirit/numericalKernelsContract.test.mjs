@@ -5,7 +5,7 @@ import {
   zScore, dotProduct, matrixMultiply, matrixDecomposition, softmax, logSumExp,
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
-import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState, VWMAState } from './statefulIndicatorKernel.ts';
+import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState, VWMAState, ChangeState } from './statefulIndicatorKernel.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { analyzeCoreSpirit } from './semanticAnalyzer.ts';
 import {
@@ -272,6 +272,25 @@ assert.equal(vwmaClone.update(60,1),44);
 assert.equal(vwmaState.value,36,'VWMA snapshots/clones must not alias mutable buffers');
 assert.equal(vwmaState.update(Number.NaN,1),null,'VWMA must reset on missing source data');
 assert.equal(vwmaState.value,null);
+
+// Pine ta.change(source, length), ta.mom() and ta.roc() share a bounded lag
+// kernel that supports realtime replacement without consuming the forming bar twice.
+const lagChange=new ChangeState(false,2);
+assert.equal(lagChange.update(10,0),null);
+assert.equal(lagChange.update(20,1),null);
+assert.equal(lagChange.update(30,2),20);
+assert.equal(lagChange.update(35,2),25,'revising the current bar must reuse the same lag reference');
+assert.equal(lagChange.update(40,3),20);
+const lagChangeClone=lagChange.clone();
+assert.equal(lagChangeClone.update(50,4),15);
+assert.equal(lagChange.value,20,'lag change clones must not alias the original');
+const lagRoc=new ChangeState(true,2);
+assert.equal(lagRoc.update(100,0),null);
+assert.equal(lagRoc.update(110,1),null);
+assert.equal(lagRoc.update(125,2),0.25);
+assert.equal(lagRoc.update(130,2),0.3,'percentage change must recalculate on same-bar replacement');
+assert.equal(getPineV6BuiltinDefinition('ta','mom')?.executionBuiltin,'change');
+
 assert.equal(getPineV6BuiltinDefinition('ta','vwma')?.status,'implemented');
 
 assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?.defaultValue,false,
