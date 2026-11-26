@@ -33,6 +33,7 @@ assert.equal(verified.find(item=>item.id==='script-declarations')?.status,'parti
   'known, explicitly documented declaration-argument gaps must prevent a conformant label');
 assert.equal(PINE_FEATURE_REGISTRY.find(item=>item.id==='conditional-switch')?.status,'not_implemented');
 assert.equal(PINE_FEATURE_REGISTRY.find(item=>item.id==='variable-declarations')?.status,'partially_conformant');
+assert.ok(verified.find(item=>item.id==='intrabar-state-semantics')?.testFixtures.includes('src/services/coreSpirit/pine/pineVaripRuntimeContract.test.mjs'));
 const summary=getPineFeatureProgressSummary(verified);
 assert.equal(summary.total,verified.length);
 assert.ok(summary.conformant>=1);
