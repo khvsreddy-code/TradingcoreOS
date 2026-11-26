@@ -79,7 +79,7 @@ export function validateCoreSpiritIrInstructionShape(value: unknown): value is C
   const specification=CORE_SPIRIT_IR_OPERATION_SPECIFICATION[value.op as CoreSpiritIrInstruction['op']];
   if (!specification) return false;
   for (const operand of specification.requiredOperands) {
-    if (!Object.prototype.hasOwnProperty.call(value,operand)) return false;
+    if (!Object.prototype.hasOwnProperty.call(value,operand) || value[operand] === undefined) return false;
   }
   if ('dest' in value && !nonEmptyString(value.dest)) return false;
   if ('name' in value && !nonEmptyString(value.name)) return false;
@@ -90,25 +90,25 @@ export function validateCoreSpiritIrInstructionShape(value: unknown): value is C
   if ('condition' in value && !nonEmptyString(value.condition)) return false;
   if ('eventName' in value && !nonEmptyString(value.eventName)) return false;
   if ('args' in value && !stringArray(value.args)) return false;
-  if ('seriesArgs' in value && !stringArray(value.seriesArgs)) return false;
-  if ('callId' in value && typeof value.callId !== 'string') return false;
-  if ('componentId' in value && typeof value.componentId !== 'string') return false;
-  if ('componentPure' in value && typeof value.componentPure !== 'boolean') return false;
-  if ('componentStateful' in value && typeof value.componentStateful !== 'boolean') return false;
-  if ('componentDeterministic' in value && typeof value.componentDeterministic !== 'boolean') return false;
-  if ('series' in value && typeof value.series !== 'boolean') return false;
-  if ('initialize' in value && typeof value.initialize !== 'boolean') return false;
-  if ('sourceKind' in value && value.sourceKind !== 'register' && value.sourceKind !== 'local') return false;
-  if ('offset' in value && !validIndex(value.offset)) return false;
-  if ('value' in value && !(['string','number','boolean'].includes(typeof value.value) || value.value === null)) return false;
-  if ('operator' in value && !nonEmptyString(value.operator)) return false;
+  if ('seriesArgs' in value && value.seriesArgs !== undefined && !stringArray(value.seriesArgs)) return false;
+  if ('callId' in value && value.callId !== undefined && typeof value.callId !== 'string') return false;
+  if ('componentId' in value && value.componentId !== undefined && typeof value.componentId !== 'string') return false;
+  if ('componentPure' in value && value.componentPure !== undefined && typeof value.componentPure !== 'boolean') return false;
+  if ('componentStateful' in value && value.componentStateful !== undefined && typeof value.componentStateful !== 'boolean') return false;
+  if ('componentDeterministic' in value && value.componentDeterministic !== undefined && typeof value.componentDeterministic !== 'boolean') return false;
+  if ('series' in value && value.series !== undefined && typeof value.series !== 'boolean') return false;
+  if ('initialize' in value && value.initialize !== undefined && typeof value.initialize !== 'boolean') return false;
+  if ('sourceKind' in value && value.sourceKind !== undefined && value.sourceKind !== 'register' && value.sourceKind !== 'local') return false;
+  if ('offset' in value && value.offset !== undefined && !validIndex(value.offset)) return false;
+  if ('value' in value && value.value !== undefined && !(['string','number','boolean'].includes(typeof value.value) || value.value === null)) return false;
+  if ('operator' in value && value.operator !== undefined && !nonEmptyString(value.operator)) return false;
   if ('target' in value && (value.op === 'jump' || value.op === 'jumpIfFalse' || value.op === 'eventGate') && !validIndex(value.target)) return false;
   if (value.op === 'index' && !nonEmptyString(value.target)) return false;
   if (value.op === 'unary' && !['!','+','-'].includes(String(value.operator))) return false;
   if (value.op === 'call' && (!nonEmptyString(value.name) || !Array.isArray(value.args))) return false;
   if (value.op === 'emit' && (!nonEmptyString(value.kind) || !stringArray(value.args))) return false;
-  if ('outputId' in value && typeof value.outputId !== 'string') return false;
-  if ('seriesSources' in value) {
+  if ('outputId' in value && value.outputId !== undefined && typeof value.outputId !== 'string') return false;
+  if ('seriesSources' in value && value.seriesSources !== undefined) {
     if (!Array.isArray(value.seriesSources)) return false;
     if (!value.seriesSources.every(item => {
       if (!isRecord(item)) return false;

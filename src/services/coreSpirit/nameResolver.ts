@@ -1,4 +1,4 @@
-import type { CoreSpiritAst, CoreSpiritAstNode } from './ast';
+import { updateCoreSpiritAstNodeMetadata, type CoreSpiritAst, type CoreSpiritAstNode } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import type { CoreSpiritType } from './typeSystem';
 import { resolveCoreSpiritComponent, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
@@ -24,17 +24,17 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
   const componentSource=options.components;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>{
     diagnostics.push({severity:'error',code,message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end});
-    n.metadata={...(n.metadata ?? {}),diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]};
+    updateCoreSpiritAstNodeMetadata(n,{diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]});
   };
 
   const expression=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritType>)=>{
     switch(n.type){
       case 'identifier': {
-        if(scope.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`local:${n.name}`};
-        else if(builtinSeries.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`series:${n.name}`};
-        else if(builtinState.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`builtin:${n.name}`};
-        else if(builtinNamespaces.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`namespace:${n.name}`};
-        else if(resolveCoreSpiritComponent(componentSource,n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`component:${n.name}`};
+        if(scope.has(n.name)) updateCoreSpiritAstNodeMetadata(n,{resolvedSymbol:`local:${n.name}`});
+        else if(builtinSeries.has(n.name)) updateCoreSpiritAstNodeMetadata(n,{resolvedSymbol:`series:${n.name}`});
+        else if(builtinState.has(n.name)) updateCoreSpiritAstNodeMetadata(n,{resolvedSymbol:`builtin:${n.name}`});
+        else if(builtinNamespaces.has(n.name)) updateCoreSpiritAstNodeMetadata(n,{resolvedSymbol:`namespace:${n.name}`});
+        else if(resolveCoreSpiritComponent(componentSource,n.name)) updateCoreSpiritAstNodeMetadata(n,{resolvedSymbol:`component:${n.name}`});
         else report(n,`Unknown identifier '${n.name}'`,'UNKNOWN_IDENTIFIER');
         break;
       }

@@ -75,6 +75,25 @@ export type CoreSpiritContinueNode = { type:'continue'; span?:CoreSpiritSpan };
 export type CoreSpiritSpan = { start: number; end: number; line: number; column: number };
 export type CoreSpiritAst = CoreSpiritProgramNode;
 
+/** Update semantic metadata without allowing partial spreads to drop provenance fields. */
+export function updateCoreSpiritAstNodeMetadata(
+  node: CoreSpiritAstNode,
+  patch: Partial<CoreSpiritAstNodeMetadata>,
+): void {
+  const current=node.metadata;
+  const start=node.span?.start ?? -1;
+  const end=node.span?.end ?? start;
+  node.metadata={
+    sourceId:current?.sourceId ?? 'coreSpirit',
+    frontend:current?.frontend ?? 'corescript',
+    nodeId:current?.nodeId ?? `coreSpirit:corescript:${node.type}:${start}:${end}`,
+    dependencies:current?.dependencies ?? [],
+    ...current,
+    ...patch,
+  };
+}
+
+
 /**
  * Attach deterministic, source-based identity and syntactic identifier dependencies.
  * Semantic types and resolved symbols are filled by their owning later passes.

@@ -1,4 +1,4 @@
-import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, type CoreSpiritFrontendId } from './ast';
+import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, updateCoreSpiritAstNodeMetadata, type CoreSpiritFrontendId } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
@@ -40,7 +40,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   let loopDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>{
     diagnostics.push({severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code});
-    n.metadata={...(n.metadata ?? {}),diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]};
+    updateCoreSpiritAstNodeMetadata(n,{diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]});
   };
   annotateCoreSpiritAst(ast,{sourceId:options.sourceId ?? 'coreSpirit',frontend:options.frontend ?? 'corescript'});
   for (const declaration of modelDeclarations) {
@@ -632,7 +632,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
 
   const inferSemantic=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
     const inferred=inferSemanticNode(n,scope);
-    if(inferred) n.metadata={...(n.metadata ?? {}),inferredType:inferred,qualifier:semanticTypeQualifier(inferred)};
+    if(inferred) updateCoreSpiritAstNodeMetadata(n,{inferredType:inferred,qualifier:semanticTypeQualifier(inferred)});
     return inferred;
   };
 
