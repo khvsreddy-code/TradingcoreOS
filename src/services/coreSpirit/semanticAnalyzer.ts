@@ -531,10 +531,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const whenTrue=inferSemantic(n.whenTrue,scope);
         const whenFalse=inferSemantic(n.whenFalse,scope);
         if(!whenTrue || !whenFalse) return undefined;
-        const resultType=infer(n,scope);
         const atom=whenTrue.atom===whenFalse.atom ? whenTrue.atom : 'number';
         const metadata=mergeSemanticMetadata([condition,whenTrue,whenFalse]);
-        return isSeriesType(resultType) ? semanticSeries(atom,metadata) : semanticScalar(atom,metadata);
+        const isSeries=condition?.kind==='series' || whenTrue.kind==='series' || whenFalse.kind==='series';
+        return isSeries ? semanticSeries(atom,metadata) : semanticScalar(atom,metadata);
       }
       case 'binary': {
         const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
