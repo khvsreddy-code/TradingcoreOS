@@ -1922,7 +1922,7 @@ export class CoreSpiritRuntime {
       }
       return finish(true);
     }
-    const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
+    const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','range','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
     if (statefulSeriesNames.has(name)) {
       const current = Number(args[0]);
       if (!Number.isFinite(current)) return finish(null);
