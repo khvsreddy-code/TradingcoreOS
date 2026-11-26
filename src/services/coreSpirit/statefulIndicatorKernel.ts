@@ -820,21 +820,93 @@ export class RSIState {
 }
 
 export class ChangeState {
-  private previous = Number.NaN;
-  constructor(private readonly percentage = false) {}
-  update(value: number): number | null {
-    const current = Number(value);
-    const previous = this.previous;
-    this.previous = current;
-    if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
-    return this.percentage ? (previous === 0 ? null : current / previous - 1) : current - previous;
+  private readonly history: Float64Array;
+  private count = 0;
+  private cursor = 0;
+  private lastIndex = -1;
+  private stableLag = Number.NaN;
+  private latestValue: number | null = null;
+
+  constructor(private readonly percentage = false, readonly period = 1) {
+    if (!Number.isInteger(period) || period < 1 || period > 1_000_000) {
+      throw new Error('ChangeState period must be an integer between 1 and 1000000.');
+    }
+    this.history = new Float64Array(period);
+    this.history.fill(Number.NaN);
   }
-  reset(): void { this.previous = Number.NaN; }
-  clone(): ChangeState { const next = new ChangeState(this.percentage); next.previous = this.previous; return next; }
-  copyFrom(source: ChangeState): void {
-    if (source.percentage !== this.percentage) throw new Error('incompatible change state');
-    this.previous = source.previous;
+
+  update(value:number,absoluteIndex?:number):number|null {
+    const current=Number(value);
+    const index=absoluteIndex ?? this.lastIndex+1;
+    if(!Number.isSafeInteger(index) || index<0) {
+      this.reset();
+      return null;
+    }
+    if(!Number.isFinite(current)) {
+      this.reset();
+      this.lastIndex=index;
+      return null;
+    }
+
+    const replacing=index===this.lastIndex;
+    if(!replacing && this.lastIndex>=0 && index!==this.lastIndex+1) {
+      this.reset();
+    }
+
+    if(replacing) {
+      const slot=this.count<this.period
+        ? Math.max(0,this.count-1)
+        : (this.cursor-1+this.period)%this.period;
+      if(this.count>0) this.history[slot]=current;
+    } else if(this.count===this.period) {
+      this.stableLag=this.history[this.cursor]!;
+      this.history[this.cursor]=current;
+      this.cursor=(this.cursor+1)%this.period;
+    } else {
+      this.history[this.count]=current;
+      this.count+=1;
+      this.stableLag=Number.NaN;
+    }
+
+    this.lastIndex=index;
+    if(!Number.isFinite(this.stableLag)) {
+      this.latestValue=null;
+      return null;
+    }
+    if(this.percentage && this.stableLag===0) {
+      this.latestValue=null;
+      return null;
+    }
+    this.latestValue=this.percentage ? current/this.stableLag-1 : current-this.stableLag;
+    return this.latestValue;
   }
+
+  reset():void {
+    this.history.fill(Number.NaN);
+    this.count=0;
+    this.cursor=0;
+    this.lastIndex=-1;
+    this.stableLag=Number.NaN;
+    this.latestValue=null;
+  }
+
+  clone():ChangeState {
+    const next=new ChangeState(this.percentage,this.period);
+    next.copyFrom(this);
+    return next;
+  }
+
+  copyFrom(source:ChangeState):void {
+    if(source.percentage!==this.percentage || source.period!==this.period) throw new Error('incompatible change state');
+    this.history.set(source.history);
+    this.count=source.count;
+    this.cursor=source.cursor;
+    this.lastIndex=source.lastIndex;
+    this.stableLag=source.stableLag;
+    this.latestValue=source.latestValue;
+  }
+
+  get value():number|null { return this.latestValue; }
 }
 
 /** Stateful persistence kernel: same-direction changes / valid changes in the bounded window. */
