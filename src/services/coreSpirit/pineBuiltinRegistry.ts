@@ -191,14 +191,14 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   mathUnary('abs'), mathUnary('sqrt'), mathBinary('pow'), mathUnary('log'), mathUnary('exp'),
   mathUnary('floor'), mathUnary('ceil'), mathUnary('sin'), mathUnary('cos'), mathUnary('tan'),
   mathUnary('asin'), mathUnary('acos'), mathUnary('atan'), mathUnary('log10'),
-  mathUnary('tanh'), mathUnary('sign'),
+  mathUnary('sign'),
   mathBinary('atan2'),
   supported('math','round','round',[numeric('number'),numeric('precision','simple',true,0)],'float',1,2,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-round'),
   supported('math','todegrees','todegrees',[numeric('radians')],'float',1,1,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-todegrees'),
   supported('math','toradians','toradians',[numeric('degrees')],'float',1,1,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-toradians'),
-  supported('math','clamp','clamp',[numeric('value'),numeric('minimum'),numeric('maximum')],'float',3,3,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-clamp'),
-  supported('math','sigmoid','sigmoid',[numeric('value'),numeric('slope','simple',true,1)],'float',1,2,'No historical samples required.','Numerically stable pure scalar evaluation.','O(1).','pine-math-sigmoid'),
+
   supported('math','avg','avg',[numeric('number0'),numeric('number1'),parameter('numberN','numeric','series',true,undefined,true)],'float',2,10,'No historical samples required.','Pure deterministic scalar evaluation.','O(number of arguments).','pine-math-avg'),
+  supported('math','sum','sum',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'Requires the requested source window; missing samples follow the current rolling sum kernel rules.','Current-bar revisions replace the active rolling contribution.','O(1) amortized per bar.','pine-math-sum'),
   supported('math','min','min',[numeric('number0'),numeric('number1'),parameter('numberN','numeric','series',true,undefined,true)],'float',2,10,'No historical samples required.','Pure deterministic scalar evaluation.','O(number of arguments).','pine-math-min'),
   supported('math','max','max',[numeric('number0'),numeric('number1'),parameter('numberN','numeric','series',true,undefined,true)],'float',2,10,'No historical samples required.','Pure deterministic scalar evaluation.','O(number of arguments).','pine-math-max'),
 
@@ -234,6 +234,8 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
 
 
   catalog('math','pi',[],'const<float>',0,0,'pine-math-pi'),
+  catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
+  catalog('math','phi',[],'const<float>',0,0,'pine-math-phi'),
   catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
   catalog('array','new',[parameter('size','numeric','simple',true,0),parameter('initial_value','any','series',true,null)],'array<T>',0,2,'pine-array-new'),
   catalog('array','from',[parameter('values','any','series',false)],'array<T>',1,1,'pine-array-from'),
