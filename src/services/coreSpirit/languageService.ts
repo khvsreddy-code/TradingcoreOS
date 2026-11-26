@@ -180,7 +180,7 @@ export function getCoreSpiritCompletionContext(source: string, cursor = source.l
 }
 
 export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiritCompletionContext> = {}, source = '', options:{resolveSemanticTypes?:boolean} = {}): CoreSpiritCompletion[] {
-  const pineEditorContext = /^\\s*\\/\\/\\s*@/m.test(source) || /^\\s*(?:indicator|strategy|library)\\s*\\(/m.test(source);
+  const pineEditorContext = /^\s*\/\/\s*@/m.test(source) || /^\s*(?:indicator|strategy|library)\s*\(/m.test(source);
   const pineCompletions = pineEditorContext ? getPineFeatureEditorCompletions() : [];
   const all = [...allCompletions(), ...pineCompletions, ...getCoreSpiritUdtInfos(source).map(u=>({label:u.name,kind:'type' as const,detail:`CoreSpirit type • ${u.fields.length} fields`}))];
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
