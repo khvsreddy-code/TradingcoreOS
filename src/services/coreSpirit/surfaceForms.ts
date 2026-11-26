@@ -235,7 +235,7 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
   {
     id: 'implicit-assignment',
     apply: line => {
-      const assignment = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+      const assignment = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=(?![=>])\s*(.+)$/);
       if (assignment && !/^\s*(if|let|plot|signal|indicator|input)\b/.test(line)) {
         return { line: `${assignment[1]}let ${assignment[2]} = ${assignment[3]}` };
       }

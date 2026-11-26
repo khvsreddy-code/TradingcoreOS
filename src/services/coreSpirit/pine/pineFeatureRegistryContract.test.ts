@@ -49,6 +49,7 @@ for(const fixture of PINE_CONFORMANCE_FIXTURES){
     assert.equal(result.diagnostics[0]?.code,fixture.expectedDiagnostic,`${fixture.id}: expected diagnostic ${fixture.expectedDiagnostic}, got ${result.diagnostics.map(item=>item.code+': '+item.message).join('; ')}`);
   }else{
     assert.ok(result.ast,`${fixture.id}: ${result.diagnostics.map(item=>item.code+': '+item.message+' @'+item.line+':'+item.column).join('; ')}\nNormalized Pine body:\n${result.normalizedSource}`);
+    if(fixture.featureId==='conditional-switch') assert.ok(result.normalizedSource.includes('true => close'),'switch arrow tokens must survive generic surface normalization unchanged');
     assert.equal(result.ast?.programKind,fixture.expectedProgramKind);
     if(!fixture.parseOnly){
       const compiled=new CoreSpiritCompiler().compileSource(fixture.source,fixture.featureId,{frontend:'pine-v6'});
