@@ -48,6 +48,7 @@ import type { CoreSpiritSessionWindow } from './sessionCalendar';
 import { CoreSpiritResourceGovernor, type CoreSpiritResourceBudget, CoreSpiritResourceLimitError } from './resourceGovernor';
 import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent, type CoreSpiritOutputSemantics } from './executionSemantics';
 import type { CoreSpiritBarPhase } from './types';
+import { CoreSpiritExecutionStateMachine } from './executionStateMachine';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -261,6 +262,7 @@ export class CoreSpiritRuntime {
   private reactiveReused = 0;
   private reactiveEffects = 0;
   private realtimeLifecycle: 'idle'|'evaluating'|'committed' = 'idle';
+  private readonly executionStateMachine = new CoreSpiritExecutionStateMachine();
   private readonly modelOutputResolver?: CoreSpiritModelOutputResolver;
   private readonly modelPredictionResolver?: CoreSpiritModelPredictionResolver;
   private readonly modelTrainingMode: 'disabled' | 'research';
@@ -416,6 +418,7 @@ export class CoreSpiritRuntime {
   }
 
   reset(): void {
+    this.executionStateMachine.reset();
     this.kernelDataRevision += 1;
     this.uiRuntime.reset();
     this.appRuntime.reset();
@@ -593,6 +596,7 @@ export class CoreSpiritRuntime {
     if (!sameBucket && this.currentBarSnapshot && this.lastBarWasRealtime) this.confirmRealtimeBar();
 
     if (sameBucket && this.currentBarSnapshot) {
+      this.executionStateMachine.rollbackRevision();
       this.realtimeRevision += 1;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; this.reactiveReused += 1; }
       this.stateStore.rollbackRealtimeTransaction();
@@ -631,6 +635,9 @@ export class CoreSpiritRuntime {
     }
 
     const barIndex = this.history.length - 1;
+    // executeBar is the realtime/tick ingress; historical batches use executeIr.
+    this.executionStateMachine.beginBarRevision(barIndex, this.realtimeRevision, 'realtime');
+    this.executionStateMachine.beginScriptExecution();
     this.state.barIndex = barIndex;
     this.state.time = this.toEpoch(normalized.timestamp);
     this.state.locals = {};
@@ -662,6 +669,7 @@ export class CoreSpiritRuntime {
       if (error instanceof CoreSpiritResourceLimitError) throw error;
     }
     this.profiler.endBar();
+    this.executionStateMachine.updateOutputs();
     if (phase === 'confirmed') this.commitConfirmedRealtimeBarState('confirmed');
     else if (phase === 'historical' || phase === 'correction') this.commitConfirmedRealtimeBarState(phase);
     return { outputs, state: this.getState({ clone:false }), diagnostics };
@@ -743,6 +751,7 @@ export class CoreSpiritRuntime {
 
   private commitConfirmedRealtimeBarState(phase: CoreSpiritBarPhase): void {
     if (this.state.barIndex < 0) return;
+    this.executionStateMachine.commitBar();
     this.realtimeLifecycle = 'committed';
     this.state.barState = { ...this.state.barState!, isRealtime:false, isConfirmed:true, barPhase:phase, isLast:true };
     this.executionContext.frame = createCoreSpiritExecutionFrame({
@@ -770,6 +779,7 @@ export class CoreSpiritRuntime {
 
   rollbackRealtimeBar(): void {
     if (!this.currentBarSnapshot) return;
+    this.executionStateMachine.rollbackRevision();
     this.stateStore.rollbackRealtimeTransaction();
     this.eventRouter.rollbackTransaction(this.realtimeEventTransactionId);
     this.realtimeEventTransactionId = undefined;
@@ -798,6 +808,7 @@ export class CoreSpiritRuntime {
   }
 
   getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
+  getExecutionStateMachineSnapshot() { return this.executionStateMachine.snapshot(); }
 
   /** Recovery counters are cumulative for this runtime instance and safe to sample in telemetry. */
   getCheckpointRestoreDiagnostics() { return Object.freeze([...this.checkpointRestoreDiagnostics]); }
@@ -1210,6 +1221,8 @@ export class CoreSpiritRuntime {
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
     this.compiledIr = ir; this.updateOptimizedComponentDefinitionSignature(ir); this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan, this.optimizedExecutionCacheVersions());
+    this.executionStateMachine.beginHistoricalLoad(bars.length);
+    this.executionStateMachine.beginHistoricalExecution();
     const historicalCorrectionPlan = this.planHistoricalCorrection(previousIr, previousBars, ir, bars);
     const priorEffectSuppression = this.suppressExternalEffects;
     const replayMode = this.executionContext.mode === 'replay' || this.executionContext.mode === 'backtest' || this.executionContext.mode === 'historicalTick';
@@ -1240,6 +1253,8 @@ export class CoreSpiritRuntime {
       this.state.barState = { index:i, time:this.state.time, isFirst:i===0, isLast:i===bars.length-1, isRealtime:false, isConfirmed:true, barPhase:historyPhase, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
       this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,barPhase:historyPhase,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1,sessionCalendar:this.sessionCalendar});
       this.executionContext.session=this.executionContext.frame.session;
+      this.executionStateMachine.beginBarRevision(i, 0, historyPhase === 'replay' ? 'replay' : historyPhase === 'correction' ? 'correction' : 'historical');
+      this.executionStateMachine.beginScriptExecution();
       this.history.push(bar);
       this.columnarHistory.append(bar);
       if (this.history.length > this.maxHistoryBars) { const drop=this.history.length-this.maxHistoryBars; this.history.splice(0,drop); this.columnarHistory.trimTo(this.history.length); }
@@ -1251,7 +1266,10 @@ export class CoreSpiritRuntime {
         if (error instanceof CoreSpiritResourceLimitError) throw error;
       }
       finally { this.profiler.endBar(); }
+      this.executionStateMachine.updateOutputs();
+      this.executionStateMachine.commitBar();
     }
+    this.executionStateMachine.commitHistorical();
     if (this.history.length) this.snapshotKernelsForBar(this.history.length - 1);
     if (historicalCorrectionPlan) this.lastDirtyPlan = historicalCorrectionPlan;
     return { outputs, state: this.getState(), diagnostics };

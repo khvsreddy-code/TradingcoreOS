@@ -132,6 +132,7 @@ const contracts = [
   ['core-spirit-simulation-intent-adapter', ['src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts', true]],
   ['replay-timestamp-ordering', ['src/services/core/replay/replayValidator.test.ts', true]],
   ['strategy-simulator-live-execution-boundary', ['src/strategySimulatorExecutionBoundaryContract.test.mjs', false]],
+  ['corespirit-execution-state-machine', ['src/services/coreSpirit/executionStateMachineContract.test.mjs', true]],
   ['corespirit-replay-execution-parity', ['src/services/coreSpirit/replayContract.test.ts', true]],
   ['corespirit-research-temporal-validation', ['src/services/coreSpirit/researchValidation.test.ts', true]],
   ['corespirit-bounded-chunked-research', ['src/coreSpiritBatchResearchContract.test.mjs', false]],
