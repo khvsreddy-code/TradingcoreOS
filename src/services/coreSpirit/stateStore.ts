@@ -7,6 +7,8 @@ export class CoreSpiritStateStore {
   readonly series: CoreSpiritSeriesRegistry;
   private crossState: CoreSpiritCrossState = {};
   private readonly persistentState: CoreSpiritPersistentState = new Map();
+  /** varip-equivalent storage: deliberately excluded from realtime rollback journals. */
+  private readonly intrabarState: CoreSpiritPersistentState = new Map();
   private persistentJournal?: Map<string, CoreSpiritStoredValue | undefined>;
 
   constructor(registry = new CoreSpiritSeriesRegistry()) {
@@ -19,6 +21,7 @@ export class CoreSpiritStateStore {
 
   clear(): void {
     this.persistentState.clear();
+    this.intrabarState.clear();
     this.persistentJournal?.clear();
     this.persistentJournal = undefined;
   }
@@ -80,6 +83,27 @@ export class CoreSpiritStateStore {
       this.persistentJournal.set(key, this.persistentState.has(key) ? this.persistentState.get(key) : undefined);
     }
     this.persistentState.set(key, value);
+  }
+
+  getIntrabarState(key: string): CoreSpiritStoredValue {
+    return this.intrabarState.get(key) ?? null;
+  }
+
+  setIntrabarState(key: string, value: CoreSpiritStoredValue, initializeIfAbsent = false): void {
+    if (initializeIfAbsent && this.intrabarState.has(key)) return;
+    this.intrabarState.set(key, value);
+  }
+
+  intrabarStateSnapshot(): Record<string, CoreSpiritStoredValue> {
+    return Object.fromEntries(this.intrabarState.entries());
+  }
+
+  restoreIntrabarStateSnapshot(snapshot: Readonly<Record<string, CoreSpiritStoredValue>>): void {
+    this.intrabarState.clear();
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (!key) throw new Error('Intrabar state snapshot contains an empty key.');
+      this.intrabarState.set(key, value);
+    }
   }
 
   stateSnapshot(): Record<string, CoreSpiritStoredValue> {

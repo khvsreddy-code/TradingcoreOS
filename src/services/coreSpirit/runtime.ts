@@ -1329,10 +1329,11 @@ export class CoreSpiritRuntime {
       committedLocalSeries: this.seriesRegistry.snapshotValueObject(),
       committedCrossState: cloneCrossMap(this.crossState),
       persistentState: this.stateStore.stateSnapshot(),
+      intrabarState: this.stateStore.intrabarStateSnapshot(),
     };
   }
 
-  restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}>; persistentState?:Record<string,CoreSpiritStoredValue> }): boolean {
+  restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}>; persistentState?:Record<string,CoreSpiritStoredValue>; intrabarState?:Record<string,CoreSpiritStoredValue> }): boolean {
     try {
       this.seriesRegistry.reset();
       this.seriesRegistry.restoreNumericObject(checkpoint.state.seriesState);
@@ -1341,6 +1342,7 @@ export class CoreSpiritRuntime {
       this.crossState = cloneCrossMap(checkpoint.crossState);
       this.stateStore.bind(this.crossState);
       this.stateStore.restoreStateSnapshot(checkpoint.persistentState ?? {});
+      this.stateStore.restoreIntrabarStateSnapshot(checkpoint.intrabarState ?? {});
       (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
       this.columnarHistory.replaceRows((this as any).history);
       return true;
@@ -1428,10 +1430,12 @@ export class CoreSpiritRuntime {
       chargeInstruction: () => this.resourceGovernor.consumeInstructions(),
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
       moveLocal: (source) => this.state.locals[source],
-      loadState: (name) => this.stateStore.getState(name),
-      setState: (name,value,initialize) => {
-        this.stateStore.setState(name, value as CoreSpiritValue, initialize === true);
-        this.state.locals[name] = initialize ? this.stateStore.getState(name) : value;
+      loadState: (name,storage) => storage === 'intrabar' ? this.stateStore.getIntrabarState(name) : this.stateStore.getState(name),
+      setState: (name,value,initialize,storage) => {
+        const intrabar = storage === 'intrabar';
+        if (intrabar) this.stateStore.setIntrabarState(name, value as CoreSpiritValue, initialize === true);
+        else this.stateStore.setState(name, value as CoreSpiritValue, initialize === true);
+        this.state.locals[name] = initialize ? (intrabar ? this.stateStore.getIntrabarState(name) : this.stateStore.getState(name)) : value;
       },
       setLocal: (name, value, series) => {
         this.state.locals[name] = value;
