@@ -245,7 +245,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('ta','stoch',[numeric('source'),numeric('peak'),numeric('valley'),numeric('period','simple')],'series<float>',4,4,'pine-ta-stoch',['Stochastic kernel and reference fixtures are not yet implemented.']),
   catalog('ta','bb',bandsArgs,'[series<float>,series<float>,series<float>]',3,3,'pine-ta-bb',['Tuple return ABI and precise standard-deviation semantics are not implemented.']),
   catalog('ta','supertrend',[numeric('factor','simple'),numeric('atr_period','simple')],'[series<float>,series<int>]',2,2,'pine-ta-supertrend',['Stateful direction/flip semantics and tuple returns are not implemented.']),
-  catalog('ta','vwma',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-vwma',['Volume-weighted rolling kernel is not implemented.']),
+  supported('ta','vwma','vwma',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'Requires a complete rolling price and volume window.','Forming-bar price and volume revisions replace the current weighted contribution.','O(1) amortized per bar.','pine-ta-vwma'),
   catalog('ta','hma',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-hma',['Hull moving average kernel is not implemented in the Pine runtime.']),
   catalog('ta','cci',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-cci'),
   catalog('ta','mfi',[numeric('length','simple')],'series<float>',1,1,'pine-ta-mfi'),
