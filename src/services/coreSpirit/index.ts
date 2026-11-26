@@ -1,6 +1,7 @@
 /** CoreSpirit architecture authority: docs/CORESPIRIT.md */
 export * from './types';
 export * from './ast';
+export * from './frontends';
 export * from './lexer';
 export * from './parser';
 export { analyzeCoreSpirit } from './semanticAnalyzer';

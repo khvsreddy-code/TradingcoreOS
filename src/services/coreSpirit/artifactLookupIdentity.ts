@@ -72,7 +72,7 @@ export function coreSpiritComponentFingerprint(options: FingerprintOptions, sour
 /** Kept in a light module so cache identity lookup doesn't eagerly load the compiler/VM graph. */
 export function buildCoreSpiritSemanticFingerprint(options: FingerprintOptions = {}, source?: string): string {
   return stableJson({
-    compilerPipeline: 'semantic-v5',
+    compilerPipeline: 'semantic-v6',
     edition: source === undefined ? '1.0' : readCoreScriptEdition(source).edition,
     layer: options.layer || 'script',
     components: contractsForSource(options, source),

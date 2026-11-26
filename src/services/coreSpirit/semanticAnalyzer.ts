@@ -1,8 +1,8 @@
-import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
+import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, type CoreSpiritFrontendId } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
-import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
+import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, semanticTypeQualifier, isSemanticQualifierAssignable, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
 import { canUseCapability, type CoreSpiritProgramLayer } from './layeredPlatformContract';
@@ -10,7 +10,7 @@ import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string; line?:number; column?:number; start?:number; end?:number; code?:string };
 export type CoreSpiritUdt = { name:string; fields:Array<{name:string;type:CoreSpiritType}> };
-export type CoreSpiritSemanticOptions = { layer?:CoreSpiritProgramLayer; surface?:unknown; components?:CoreSpiritComponentRegistryLike };
+export type CoreSpiritSemanticOptions = { layer?:CoreSpiritProgramLayer; surface?:unknown; components?:CoreSpiritComponentRegistryLike; sourceId?:string; frontend?:CoreSpiritFrontendId };
 export type CoreSpiritSemanticResult = {
   diagnostics:CoreSpiritDiagnostic[];
   symbols:Map<string,CoreSpiritType>;
@@ -38,9 +38,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   let maxLookback=0;
   let eventScopeDepth=0;
   let loopDepth=0;
-  const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
-    severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
-  });
+  const report=(n:CoreSpiritAstNode,message:string,code:string)=>{
+    diagnostics.push({severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code});
+    n.metadata={...(n.metadata ?? {}),diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]};
+  };
+  annotateCoreSpiritAst(ast,{sourceId:options.sourceId ?? 'coreSpirit',frontend:options.frontend ?? 'corescript'});
   for (const declaration of modelDeclarations) {
     if (declaration.kind !== 'model' || !declaration.modelType || !/^HMM(?:<.*>)?$/i.test(declaration.modelType)) continue;
     if (declaration.states !== undefined &&
@@ -468,11 +470,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const semanticNumericFunctions = new Set(['abs','min','max','sqrt','pow','round','sign','nz','clamp','exp','log','tanh','sigmoid','probability','normalize','zscore','pctchange']);
   const semanticConversionFunctions: Readonly<Record<string, CoreSpiritSemanticType['atom']>> = Object.freeze({toNumber:'number',toPrice:'price',toVolume:'volume',toTime:'time',toDuration:'duration',toCurrency:'currency'});
   const semanticBooleanFunctions = new Set(['cross','crossover','crossunder','rising','falling','isNa']);
-  const inferSemantic = (n:CoreSpiritAstNode, scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
+  const inferSemanticNode = (n:CoreSpiritAstNode, scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
     switch(n.type){
-      case 'number': return semanticScalar('number');
-      case 'string': return semanticScalar('string');
-      case 'boolean': return semanticScalar('boolean');
+      case 'number': return semanticScalar('number',{qualifier:'const'});
+      case 'string': return semanticScalar('string',{qualifier:'const'});
+      case 'boolean': return semanticScalar('boolean',{qualifier:'const'});
       case 'null': return undefined;
       case 'identifier': {
         if(n.name==='open'||n.name==='high'||n.name==='low'||n.name==='close'||n.name==='volume'||n.name==='time') return semanticSeriesField(n.name);
@@ -534,9 +536,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           const definition = findSurfaceInput(key);
           const type = inputLanguageType(definition?.type);
           if(type === 'series<number>') return semanticSeries('number');
-          if(type === 'number') return semanticScalar('number');
-          if(type === 'boolean') return semanticScalar('boolean');
-          if(type === 'string') return semanticScalar('string');
+          if(type === 'number') return semanticScalar('number',{qualifier:'input'});
+          if(type === 'boolean') return semanticScalar('boolean',{qualifier:'input'});
+          if(type === 'string') return semanticScalar('string',{qualifier:'input'});
           return n.args[1] ? inferSemantic(n.args[1], scope) : undefined;
         }
         if(n.name==='market') {
@@ -628,6 +630,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     }
   };
 
+  const inferSemantic=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
+    const inferred=inferSemanticNode(n,scope);
+    if(inferred) n.metadata={...(n.metadata ?? {}),inferredType:inferred,qualifier:semanticTypeQualifier(inferred)};
+    return inferred;
+  };
+
   const visit=(n:CoreSpiritAstNode, scope=new Map(symbols))=>{
     switch(n.type){
       case 'program':
@@ -674,7 +682,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.declaredType){
           const declared=semanticTypeForDeclaredName(n.declaredType);
           if(!declared) report(n,`Unsupported semantic type '${n.declaredType}'`,'TYPE_DECLARATION_SEMANTIC');
-          else if(semanticType && !semanticTypeCompatible(declared, semanticType)) report(n,`Declared type '${n.declaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
+          else if(semanticType && declared.qualifier && !isSemanticQualifierAssignable(declared.qualifier,semanticTypeQualifier(semanticType))) {
+            report(n,`Cannot assign ${semanticTypeQualifier(semanticType)}-qualified '${semanticTypeToString(semanticType)}' to ${declared.qualifier}-qualified '${n.declaredType}'`,'TYPE_QUALIFIER_MISMATCH');
+          } else if(semanticType && !semanticTypeCompatible(declared,semanticType)) {
+            report(n,`Declared type '${n.declaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
+          }
           semanticSymbols.set(n.name,declared ?? semanticType ?? semanticScalar('number'));
         } else if(semanticType) semanticSymbols.set(n.name,semanticType);
         symbols.set(n.name,type);

@@ -22,16 +22,22 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
   const diagnostics:CoreSpiritNameDiagnostic[]=[];
   const declarations=new Map<string,CoreSpiritType>();
   const componentSource=options.components;
-  const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
-    severity:'error',code,message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end
-  });
+  const report=(n:CoreSpiritAstNode,message:string,code:string)=>{
+    diagnostics.push({severity:'error',code,message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end});
+    n.metadata={...(n.metadata ?? {}),diagnostics:[...(n.metadata?.diagnostics ?? []),{code,severity:'error',message}]};
+  };
 
   const expression=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritType>)=>{
     switch(n.type){
-      case 'identifier':
-        if(!builtinSeries.has(n.name)&&!builtinState.has(n.name)&&!builtinNamespaces.has(n.name)&&!scope.has(n.name)&&!resolveCoreSpiritComponent(componentSource,n.name))
-          report(n,`Unknown identifier '${n.name}'`,'UNKNOWN_IDENTIFIER');
+      case 'identifier': {
+        if(scope.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`local:${n.name}`};
+        else if(builtinSeries.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`series:${n.name}`};
+        else if(builtinState.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`builtin:${n.name}`};
+        else if(builtinNamespaces.has(n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`namespace:${n.name}`};
+        else if(resolveCoreSpiritComponent(componentSource,n.name)) n.metadata={...(n.metadata ?? {}),resolvedSymbol:`component:${n.name}`};
+        else report(n,`Unknown identifier '${n.name}'`,'UNKNOWN_IDENTIFIER');
         break;
+      }
       case 'call':
         if(!builtinDataReferences.has(n.name)&&!CORE_SPIRIT_BUILTINS.has(n.name)&&!resolveCoreSpiritComponent(componentSource,n.name))
           report(n,`Unknown function '${n.name}'`,'UNKNOWN_FUNCTION');
@@ -82,6 +88,7 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
   const statement=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritType>)=>{
     switch(n.type){
       case 'program':n.body.forEach(x=>statement(x,scope));break;
+      case 'onEvent': { const eventScope=new Map(scope); n.body.forEach(x=>statement(x,eventScope)); break; }
       case 'typeDeclaration':break;
       case 'let':
         expression(n.expression,scope);

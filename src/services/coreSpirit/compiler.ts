@@ -1,4 +1,4 @@
-import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
+import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, type CoreSpiritFrontendId } from './ast';
 import { CoreSpiritParser } from './parser';
 import { normalizeCoreSpiritSource } from './syntax';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram, coreSpiritSourceMapFromInstructions } from './ir';
@@ -30,6 +30,7 @@ import { inferCoreSpiritRequiredLevel } from './coreSpiritExecutionModel';
 import { validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 import { buildCoreSpiritArtifactSemanticFingerprint } from './artifactLookupIdentity';
 import { readCoreScriptEdition, type CoreScriptEdition } from './languageEdition.js';
+import { parseWithCoreSpiritFrontend } from './frontends';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
@@ -56,6 +57,7 @@ export type CoreSpiritCompilerOptions = {
   /** Original authoring source used for declarative research/model metadata. */
   researchSource?: string;
   languageEdition?: CoreScriptEdition;
+  frontend?: CoreSpiritFrontendId;
 };
 
 export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
@@ -100,38 +102,19 @@ export class CoreSpiritCompiler {
   ): CoreSpiritCompileResult {
     const original = String(source ?? '');
     traceSmcCompilerStage(sourceId, 'compileSource:start');
-    const edition = readCoreScriptEdition(original);
-    if (edition.diagnostics.length) {
-      return {
-        diagnostics: edition.diagnostics.map(item => ({
-          severity: 'error' as const,
-          code: item.code,
-          message: item.message,
-          line: item.line,
-          column: item.column,
-          start: item.start,
-          end: item.end,
-        })),
-        symbols: [],
-      };
-    }
-    const normalizedSource = normalizeCoreSpiritSource(original);
-    traceSmcCompilerStage(sourceId, 'compileSource:normalized');
-    let parsed: ReturnType<CoreSpiritParser['parseDetailed']>;
-    try {
-      parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
-      traceSmcCompilerStage(sourceId, 'compileSource:parsed');
-    } catch (error) {
-      const failure = error as { message?: string; position?: { offset?: number; line?: number; column?: number } };
-      const start = Math.max(0, Number(failure?.position?.offset) || 0);
-      return { diagnostics: [{ severity: 'error', code: 'SYNTAX_ERROR', message: failure?.message || String(error), start, end: start + 1, line: failure?.position?.line ?? 1, column: failure?.position?.column ?? 1 }], symbols: [] };
-    }
-    if (parsed.diagnostics.length) {
-      return {
-        diagnostics: parsed.diagnostics.map(d => ({ severity: 'error' as const, code: 'SYNTAX_ERROR', message: d.message, line: d.line, column: d.column, start: d.start, end: d.end })),
-        symbols: [],
-      };
-    }
+    const frontendId=options.frontend ?? 'corescript';
+    const frontendResult=parseWithCoreSpiritFrontend(frontendId,original);
+    if(!frontendResult.ast) return {diagnostics:frontendResult.diagnostics.map(d=>({
+      severity:'error' as const,code:d.code,message:d.message,line:d.line,column:d.column,start:d.start,end:d.end,
+    })),symbols:[]};
+    const edition=readCoreScriptEdition(original);
+    if(edition.diagnostics.length) return {diagnostics:edition.diagnostics.map(item=>({
+      severity:'error' as const,code:item.code,message:item.message,line:item.line,column:item.column,start:item.start,end:item.end,
+    })),symbols:[]};
+    const normalizedSource=frontendResult.normalizedSource;
+    const parsed={ast:frontendResult.ast,diagnostics:[] as Array<{message:string;line:number;column:number;start:number;end:number}>};
+    traceSmcCompilerStage(sourceId,'compileSource:frontend:done');
+    traceSmcCompilerStage(sourceId,'compileSource:parsed');
     traceSmcCompilerStage(sourceId, 'compileSource:surface:start');
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(original);
     traceSmcCompilerStage(sourceId, 'compileSource:surface:done');
@@ -140,6 +123,7 @@ export class CoreSpiritCompiler {
       ...options,
       surface,
       languageEdition: edition.edition,
+      frontend: frontendId,
       researchSource: original,
       artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options, original) },
     });
@@ -151,11 +135,13 @@ export class CoreSpiritCompiler {
     traceSmcCompilerStage(sourceId, 'compile:start');
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
+    const frontendId=options.frontend ?? 'corescript';
+    annotateCoreSpiritAst(ast,{sourceId,frontend:frontendId});
     traceSmcCompilerStage(sourceId, 'names:start');
     const names = resolveCoreSpiritNames(ast, { components: componentSource });
     traceSmcCompilerStage(sourceId, 'names:done');
     traceSmcCompilerStage(sourceId, 'semantic:start');
-    const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource });
+    const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource, sourceId, frontend: frontendId });
     traceSmcCompilerStage(sourceId, 'semantic:done');
     const symbols = symbolsFromSemantic(semantic);
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
@@ -167,7 +153,7 @@ export class CoreSpiritCompiler {
     const instructions: CoreSpiritIrInstruction[] = [];
     const locals: string[] = [];
     const originFor = (node: CoreSpiritAstNode) => node.span ? {
-      sourceNodeId: node.type + ':' + node.span.start + ':' + node.span.end,
+      sourceNodeId: node.metadata?.nodeId ?? node.type + ':' + node.span.start + ':' + node.span.end,
       start: node.span.start,
       end: node.span.end,
       line: node.span.line,
