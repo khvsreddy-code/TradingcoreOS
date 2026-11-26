@@ -7,9 +7,9 @@ const source=[
   'indicator("Ternary expression conformance")',
   'float selected = close > open ? close : open',
   'plot(selected)',
-].join('\\n');
+].join('\n');
 const compiled=new CoreSpiritCompiler().compileSource(source,'pine-ternary-conformance',{frontend:'pine-v6'});
-assert.ok(compiled.ir,compiled.diagnostics.map(item=>item.code+': '+item.message).join('\\n'));
+assert.ok(compiled.ir,compiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
 assert.ok(compiled.ir!.entry.instructions.some(item=>item.op==='jumpIfFalse'),'ternary must lower to explicit conditional control flow');
 assert.ok(compiled.ir!.entry.instructions.some(item=>item.op==='jump'),'ternary must skip the inactive branch');
 
