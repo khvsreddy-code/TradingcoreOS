@@ -5,6 +5,7 @@ import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSp
 import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, semanticTypeQualifier, isSemanticQualifierAssignable, isSemanticNumeric, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
+import { getPineV6BuiltinDefinition, pineV6BuiltinIsExecutable, validatePineV6BuiltinArguments } from './pineBuiltinRegistry';
 import { canUseCapability, type CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
@@ -467,8 +468,14 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
             return 'unknown';
           }
           const builtin = resolved.builtin;
-          n.args.forEach(arg => infer(arg,scope));
-          if (builtin && (n.args.length < builtin.minArgs || (builtin.maxArgs !== undefined && n.args.length > builtin.maxArgs))) report(n, `Invalid argument count for ${n.target.name}.${n.member}`, 'ARG_COUNT');
+          const argumentTypes = n.args.map(arg => infer(arg,scope));
+          const pineDefinition = getPineV6BuiltinDefinition(n.target.name,n.member);
+          if (pineV6BuiltinIsExecutable(pineDefinition)) {
+            const validation = validatePineV6BuiltinArguments(pineDefinition!,argumentTypes);
+            if (!validation.valid) report(n,validation.message ?? ('Invalid call to ' + pineDefinition!.qualifiedName),validation.code ?? 'BUILTIN_ARGUMENT_TYPE');
+          } else if (builtin && (n.args.length < builtin.minArgs || (builtin.maxArgs !== undefined && n.args.length > builtin.maxArgs))) {
+            report(n, `Invalid argument count for ${n.target.name}.${n.member}`, 'ARG_COUNT');
+          }
           if (n.target.name === 'automation' && !canUseCapability(options.layer || 'script','strategy-events')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot emit automation events`, 'CAPABILITY_AUTOMATION');
           if (n.target.name === 'risk' && !canUseCapability(options.layer || 'script','risk-queries')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot query risk`, 'CAPABILITY_RISK_QUERIES');
           if (n.target.name === 'background' && !canUseCapability(options.layer || 'script','visuals')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot render background`, 'CAPABILITY_VISUALS');
