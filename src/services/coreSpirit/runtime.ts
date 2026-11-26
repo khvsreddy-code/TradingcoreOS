@@ -1960,7 +1960,7 @@ export class CoreSpiritRuntime {
       const period=Math.max(1,Math.floor(Number(args[1] ?? 14)));
       if(!Number.isFinite(current)) return finish(null);
       const key='vwma:'+callKey+':'+period;
-      this.rememberKernelIdentity('vwma',key,callKey,seriesArgs);
+      this.rememberKernelIdentity('vwma',key,callKey,['volume',...seriesArgs]);
       let kernel=this.vwmaKernels.get(key);
       if(!kernel) {
         kernel=new VWMAState(period);
