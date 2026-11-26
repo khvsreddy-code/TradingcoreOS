@@ -1,8 +1,7 @@
-import { PINE_FEATURE_STATUSES, type PineFeatureContract, type PineFeatureDefinition, type PineFeatureDomain, type PineFeatureMode, type PineFeatureStatus, type PineFixtureEvidence, type PineFixtureOutcome } from './pineCompatibilityTypes';
+import { PINE_FEATURE_STATUSES, type PineFeatureContract, type PineFeatureDefinition, type PineFeatureMode, type PineFeatureStatus, type PineFixtureEvidence, type PineFixtureOutcome } from './pineCompatibilityTypes';
 export { PINE_FEATURE_STATUSES } from './pineCompatibilityTypes';
 export type { PineFeatureContract, PineFeatureDomain, PineFeatureMode, PineFeatureStatus, PineFixtureEvidence, PineFixtureOutcome } from './pineCompatibilityTypes';
 
-type PineFeatureDefinition = Omit<PineFeatureContract,'status'> & Readonly<{applicable?:boolean}>;
 const registryTest='src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts';
 const fixture=(id:string)=>`${registryTest}#${id}`;
 const modes:PineFeatureMode[]=['compile','historical','realtime','replay'];
