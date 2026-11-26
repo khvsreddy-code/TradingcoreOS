@@ -16,8 +16,6 @@ export type CoreSpiritReplayDataset = {
   normalizedSource?: string;
   semanticFingerprint?: string;
   dataVersion?: string;
-  inputConfiguration?: Readonly<Record<string, unknown>>;
-  runtimeConfiguration?: Readonly<Record<string, unknown>>;
   eventSequence?: readonly (string | number)[];
   modelArtifactVersion?: string;
   runtimeOptions?: Pick<CoreSpiritRuntimeOptions, 'timezone'|'maxStepsPerBar'|'stateHistoryLimit'|'maxHistoryBars'|'executionTier'|'resourceBudget'|'inputValues'>;
@@ -90,8 +88,8 @@ export function replayCoreSpirit(ir: CoreSpiritIrProgram, dataset: CoreSpiritRep
     timeframe: dataset.timeframe ?? '',
     dataVersion: dataset.dataVersion ?? coreSpiritChecksum(dataset.bars),
     eventSequenceChecksum: coreSpiritChecksum(dataset.eventSequence ?? dataset.bars.map((bar, index) => [index, bar.timestamp, bar.open, bar.high, bar.low, bar.close, bar.volume])),
-    inputConfigurationChecksum: coreSpiritChecksum(dataset.inputConfiguration ?? dataset.runtimeOptions?.inputValues ?? {}),
-    runtimeConfigurationChecksum: coreSpiritChecksum(dataset.runtimeConfiguration ?? { ...(dataset.runtimeOptions ?? {}), executionMode: 'replay' }),
+    inputConfigurationChecksum: coreSpiritChecksum(dataset.runtimeOptions?.inputValues ?? {}),
+    runtimeConfigurationChecksum: coreSpiritChecksum(dataset.runtimeOptions ?? {}),
     modelArtifactVersion: dataset.modelArtifactVersion ?? null,
   });
   const executionIdentityChecksum = coreSpiritChecksum(executionIdentity);
