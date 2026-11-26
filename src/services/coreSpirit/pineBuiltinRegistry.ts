@@ -208,8 +208,25 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   supported('math','max','max',[numeric('number0'),numeric('number1'),parameter('numberN','numeric','series',true,undefined,true)],'float',2,10,'No historical samples required.','Pure deterministic scalar evaluation.','O(number of arguments).','pine-math-max'),
 
   // The current host request adapter is not yet a full Pine expression request.
-  hostBound('request','security',[parameter('symbol','string','simple'),parameter('timeframe','string','simple'),parameter('expression','any','series'),boolean('ignore_invalid_symbol','simple',true,false)],'series<float>',3,4,'pine-request-security-host',['Current request lowering resolves a bounded host field/offset request; it does not yet evaluate arbitrary Pine expression ASTs or all gaps/lookahead/session options.']),
-  hostBound('request','security_lower_tf',[parameter('symbol','string','simple'),parameter('timeframe','string','simple'),parameter('expression','any','series')],'array<float>',3,3,'pine-request-security-lower-tf-host',['Lower-timeframe requests are constrained by the data resolver; full tuple, expression and Pine array semantics are not implemented.']),
+  hostBound('request','security',[
+    parameter('symbol','string','series'),
+    parameter('timeframe','string','series'),
+    parameter('expression','any','series'),
+    parameter('gaps','any','simple',true,'barmerge.gaps_off'),
+    parameter('lookahead','any','simple',true,'barmerge.lookahead_off'),
+    boolean('ignore_invalid_symbol','input',true,false),
+    parameter('currency','string','series',true,'syminfo.currency'),
+    numeric('calc_bars_count','simple',true),
+  ],'series<T>',3,8,'pine-request-security-host',['The current CoreSpirit host adapter accepts bounded symbol/timeframe/field/offset/alignment requests only. It does not yet evaluate arbitrary Pine expression ASTs, tuple expressions, currency conversion, gaps/lookahead policies or calc_bars_count.']),
+  hostBound('request','security_lower_tf',[
+    parameter('symbol','string','series'),
+    parameter('timeframe','string','series'),
+    parameter('expression','any','series'),
+    boolean('ignore_invalid_symbol','series',true,false),
+    parameter('currency','string','series',true,'syminfo.currency'),
+    boolean('ignore_invalid_timeframe','series',true,false),
+    numeric('calc_bars_count','simple',true),
+  ],'array<T>',3,7,'pine-request-security-lower-tf-host',['The current lower-timeframe host adapter does not support Pine tuple expression evaluation, typed arrays, currency conversion, ignore_invalid_timeframe or calc_bars_count semantics.']),
   hostBound('request','currency_rate',[parameter('from','string','simple'),parameter('to','string','simple'),boolean('ignore_invalid_currency','simple',true,false)],'series<float>',2,3,'pine-request-currency-rate',['Currency conversion data is not currently exposed by the CoreSpirit data resolver.']),
   hostBound('request','dividends',[parameter('ticker','string','simple'),parameter('field','any','simple'),parameter('gaps','any','simple',true),parameter('lookahead','any','simple',true)],'series<float>',2,6,'pine-request-dividends',['Corporate-action data and gaps/lookahead alignment are not implemented.']),
   hostBound('request','splits',[parameter('ticker','string','simple'),parameter('field','any','simple'),parameter('gaps','any','simple',true),parameter('lookahead','any','simple',true)],'series<float>',2,5,'pine-request-splits',['Corporate-action data and gaps/lookahead alignment are not implemented.']),
@@ -224,7 +241,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   // Tuples, reference collections, settings, drawing IDs and strategy engine
   // still need dedicated runtime contracts before these become executable.
   catalog('ta','macd',macdArgs,'[series<float>,series<float>,series<float>]',4,4,'pine-ta-macd',['Tuple return ABI and MACD reference fixtures are not yet implemented.']),
-  catalog('ta','adx',[numeric('di_length','simple'),numeric('adx_smoothing','simple')],'series<float>',2,2,'pine-ta-adx',['Directional movement and Wilder smoothing parity is not yet implemented.']),
+
   catalog('ta','stoch',[numeric('source'),numeric('peak'),numeric('valley'),numeric('period','simple')],'series<float>',4,4,'pine-ta-stoch',['Stochastic kernel and reference fixtures are not yet implemented.']),
   catalog('ta','bb',bandsArgs,'[series<float>,series<float>,series<float>]',3,3,'pine-ta-bb',['Tuple return ABI and precise standard-deviation semantics are not implemented.']),
   catalog('ta','supertrend',[numeric('factor','simple'),numeric('atr_period','simple')],'[series<float>,series<int>]',2,2,'pine-ta-supertrend',['Stateful direction/flip semantics and tuple returns are not implemented.']),
@@ -250,6 +267,8 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('ta','bbw',[numeric('source'),numeric('length','simple'),numeric('multiplier','simple')],'series<float>',3,3,'pine-ta-bbw'),
   catalog('ta','dev',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-dev'),
   catalog('ta','dmi',[numeric('di_length','simple'),numeric('adx_smoothing','simple')],'[series<float>,series<float>,series<float>]',2,2,'pine-ta-dmi',['Tuple return ABI is not implemented.']),
+  catalog('ta','accdist',[],'series<float>',0,0,'pine-ta-accdist',['Pine exposes accumulation/distribution as a namespace variable; typed value-member lowering is not implemented.']),
+
   catalog('ta','mom',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-mom'),
   catalog('ta','percentile_linear_interpolation',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-linear'),
   catalog('ta','percentile_nearest_rank',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-nearest'),
@@ -267,7 +286,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('math','pi',[],'const<float>',0,0,'pine-math-pi'),
   catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
   catalog('math','phi',[],'const<float>',0,0,'pine-math-phi'),
-  catalog('math','rphi',[],'const<float>',0,0,'pine-math-rphi'),
+
   catalog('math','random',[numeric('minimum','series',true,0),numeric('maximum','series',true,1),numeric('seed','series',true)],'series<float>',0,3,'pine-math-random',['Seeded deterministic stream and rollback-safe random state are not implemented.']),
   catalog('math','round_to_mintick',[numeric('number')],'series<float>',1,1,'pine-math-round-to-mintick',['Requires symbol mintick metadata in the scalar execution context.']),
 
@@ -380,6 +399,19 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('syminfo','session',[],'simple<string>',0,0,'pine-syminfo-session'),
   catalog('syminfo','type',[],'simple<string>',0,0,'pine-syminfo-type'),
   catalog('syminfo','timezone',[],'simple<string>',0,0,'pine-syminfo-timezone'),
+  catalog('syminfo','volumetype',[],'simple<string>',0,0,'pine-syminfo-volumetype'),
+  catalog('syminfo','expiration_date',[],'simple<int>',0,0,'pine-syminfo-expiration-date'),
+  catalog('syminfo','isin',[],'simple<string>',0,0,'pine-syminfo-isin'),
+  catalog('syminfo','industry',[],'simple<string>',0,0,'pine-syminfo-industry'),
+  catalog('syminfo','sector',[],'simple<string>',0,0,'pine-syminfo-sector'),
+  catalog('syminfo','current_contract',[],'simple<string>',0,0,'pine-syminfo-current-contract'),
+  catalog('syminfo','minmove',[],'simple<int>',0,0,'pine-syminfo-minmove'),
+  catalog('syminfo','pricescale',[],'simple<int>',0,0,'pine-syminfo-pricescale'),
+  catalog('syminfo','employees',[],'simple<int>',0,0,'pine-syminfo-employees'),
+  catalog('syminfo','shareholders',[],'simple<int>',0,0,'pine-syminfo-shareholders'),
+  catalog('syminfo','shares_outstanding_float',[],'simple<float>',0,0,'pine-syminfo-shares-float'),
+  catalog('syminfo','shares_outstanding_total',[],'simple<int>',0,0,'pine-syminfo-shares-total'),
+
   catalog('chart','is_standard',[],'simple<bool>',0,0,'pine-chart-is-standard'),
   catalog('chart','is_heikinashi',[],'simple<bool>',0,0,'pine-chart-is-heikinashi'),
   catalog('chart','is_renko',[],'simple<bool>',0,0,'pine-chart-is-renko'),
