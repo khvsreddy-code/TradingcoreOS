@@ -265,6 +265,7 @@ assert.equal(vwmaState.update(20,1),null);
 assert.equal(vwmaState.update(30,2),22.5);
 assert.equal(vwmaState.update(40,2),32);
 assert.equal(vwmaState.update(50,2,'replace'),36);
+assert.equal(vwmaState.latest,36,'VWMA latest value must track the emitted output, not the raw weighted sum');
 const vwmaClone=vwmaState.clone();
 assert.equal(vwmaClone.value,36);
 assert.equal(vwmaClone.update(60,1),44);
