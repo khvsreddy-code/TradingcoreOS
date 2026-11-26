@@ -97,7 +97,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('ta','bbw','Bollinger Band width output is pending.'),
   k('ta','dev','Mean absolute deviation kernel is pending.'),
   k('ta','dmi','Directional movement tuple (+DI, -DI, ADX); tuple ABI and reference parity are pending.'),
-  k('ta','mom','Momentum oscillator kernel is pending.'),
+  b('ta','mom','change','Technical-analysis momentum: source minus source[length].'),
   k('ta','percentile_linear_interpolation','Rolling percentile with linear interpolation is pending.'),
   k('ta','percentile_nearest_rank','Rolling nearest-rank percentile is pending.'),
   k('ta','percentrank','Rolling percent-rank kernel is pending.'),
