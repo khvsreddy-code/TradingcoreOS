@@ -462,19 +462,46 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return 'number';
         }
         if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+          // Pine v6 and CoreScript share the canonical AST/runtime, but their
+          // namespace contracts are not interchangeable. Enforce the Pine
+          // registry only for Pine source so CoreScript extensions keep their
+          // existing strategy/math semantics.
+          const pineDefinition = options.frontend === 'pine-v6'
+            ? getPineV6BuiltinDefinition(n.target.name,n.member)
+            : undefined;
+          if (options.frontend === 'pine-v6' && !pineDefinition) {
+            report(n, `'${n.target.name}.${n.member}' is not registered in the Pine Script v6 built-in reference catalog`, 'PINE_BUILTIN_UNKNOWN');
+            n.args.forEach(arg => infer(arg,scope));
+            return 'unknown';
+          }
+          if (pineDefinition?.status === 'catalog-only') {
+            report(n, `Pine v6 built-in '${pineDefinition.qualifiedName}' is catalogued but not executable yet${pineDefinition.knownDifferences.length ? ': ' + pineDefinition.knownDifferences.join(' ') : '.'}`, 'PINE_BUILTIN_UNSUPPORTED');
+            n.args.forEach(arg => infer(arg,scope));
+            return 'unknown';
+          }
           const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
           if (!resolved || resolved.entry.status === 'catalog') {
-            report(n, `Unknown or non-executable library member '${n.target.name}.${n.member}'`, 'UNKNOWN_LIBRARY_MEMBER');
+            const message = options.frontend === 'pine-v6' && pineDefinition?.status === 'host-dependent'
+              ? `Pine v6 built-in '${pineDefinition.qualifiedName}' requires a data-host capability that is not currently registered`
+              : `Unknown or non-executable library member '${n.target.name}.${n.member}'`;
+            report(n,message,options.frontend === 'pine-v6' ? 'PINE_BUILTIN_HOST_UNAVAILABLE' : 'UNKNOWN_LIBRARY_MEMBER');
+            n.args.forEach(arg => infer(arg,scope));
             return 'unknown';
           }
           const builtin = resolved.builtin;
           const argumentTypes = n.args.map(arg => infer(arg,scope));
-          const pineDefinition = getPineV6BuiltinDefinition(n.target.name,n.member);
           if (pineV6BuiltinIsExecutable(pineDefinition)) {
             const validation = validatePineV6BuiltinArguments(pineDefinition!,argumentTypes);
             if (!validation.valid) report(n,validation.message ?? ('Invalid call to ' + pineDefinition!.qualifiedName),validation.code ?? 'BUILTIN_ARGUMENT_TYPE');
           } else if (builtin && (n.args.length < builtin.minArgs || (builtin.maxArgs !== undefined && n.args.length > builtin.maxArgs))) {
             report(n, `Invalid argument count for ${n.target.name}.${n.member}`, 'ARG_COUNT');
+          }
+          if (options.frontend === 'pine-v6' && pineDefinition?.status === 'host-dependent') {
+            diagnostics.push({
+              severity:'warning',
+              message:`Pine v6 built-in '${pineDefinition.qualifiedName}' currently uses a host adapter with known differences: ${pineDefinition.knownDifferences.join(' ')}`,
+              line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code:'PINE_BUILTIN_HOST_LIMITATION',
+            });
           }
           if (n.target.name === 'automation' && !canUseCapability(options.layer || 'script','strategy-events')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot emit automation events`, 'CAPABILITY_AUTOMATION');
           if (n.target.name === 'risk' && !canUseCapability(options.layer || 'script','risk-queries')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot query risk`, 'CAPABILITY_RISK_QUERIES');
