@@ -1,8 +1,31 @@
 /** CoreSpirit source AST. This layer is pure language data and does not know about the chart. */
+export type CoreSpiritFrontendId = 'corescript' | 'pine-v6';
+export type CoreSpiritProgramKind = 'indicator' | 'strategy' | 'library' | 'automation' | 'prediction' | 'script';
 export type CoreSpiritLiteral = number | string | boolean | null;
 export type CoreSpiritAnnotation = { name:string; args:string[]; span?:CoreSpiritSpan };
 
-export type CoreSpiritAstNode =
+export type CoreSpiritAstDiagnosticReference = Readonly<{
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+}>;
+
+/**
+ * Frontend-neutral metadata attached after parsing. The parser only constructs
+ * syntax; semantic analysis and name resolution enrich this record in later passes.
+ */
+export type CoreSpiritAstNodeMetadata = Readonly<{
+  sourceId: string;
+  frontend: CoreSpiritFrontendId;
+  nodeId: string;
+  resolvedSymbol?: string;
+  inferredType?: import('./semanticTypeSystem').CoreSpiritSemanticType;
+  qualifier?: import('./semanticTypeSystem').CoreSpiritTypeQualifier;
+  dependencies: readonly string[];
+  diagnostics?: readonly CoreSpiritAstDiagnosticReference[];
+}>;
+
+export type CoreSpiritAstNode = (
   | CoreSpiritProgramNode
   | CoreSpiritLetNode
   | CoreSpiritAssignmentNode
@@ -23,9 +46,10 @@ export type CoreSpiritAstNode =
   | CoreSpiritWhileNode
   | CoreSpiritForEachNode
   | CoreSpiritBreakNode
-  | CoreSpiritContinueNode;
+  | CoreSpiritContinueNode
+) & { metadata?: CoreSpiritAstNodeMetadata };
 
-export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
+export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; declaredType?: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritAssignmentNode = { type: 'assignment'; name: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritOnEventNode = { type: 'onEvent'; eventName: string; body: CoreSpiritAstNode[]; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
@@ -49,5 +73,54 @@ export type CoreSpiritBreakNode = { type:'break'; span?:CoreSpiritSpan };
 export type CoreSpiritContinueNode = { type:'continue'; span?:CoreSpiritSpan };
 
 export type CoreSpiritSpan = { start: number; end: number; line: number; column: number };
-
 export type CoreSpiritAst = CoreSpiritProgramNode;
+
+/**
+ * Attach deterministic, source-based identity and syntactic identifier dependencies.
+ * Semantic types and resolved symbols are filled by their owning later passes.
+ */
+export function annotateCoreSpiritAst(
+  ast: CoreSpiritAst,
+  options: { sourceId: string; frontend: CoreSpiritFrontendId },
+): void {
+  const sourceId = String(options.sourceId || 'coreSpirit');
+  let generatedOrdinal = 0;
+
+  const visit = (value: unknown): Set<string> => {
+    if (Array.isArray(value)) {
+      const dependencies = new Set<string>();
+      for (const item of value) for (const dependency of visit(item)) dependencies.add(dependency);
+      return dependencies;
+    }
+    if (!value || typeof value !== 'object') return new Set();
+    const candidate = value as Record<string, unknown>;
+    const isNode = typeof candidate.type === 'string';
+    const dependencies = new Set<string>();
+    for (const [key, child] of Object.entries(candidate)) {
+      if (key === 'metadata' || key === 'span') continue;
+      for (const dependency of visit(child)) dependencies.add(dependency);
+    }
+    if (!isNode) return dependencies;
+
+    const span = candidate.span && typeof candidate.span === 'object'
+      ? candidate.span as Record<string, unknown>
+      : undefined;
+    const start = Number.isInteger(span?.start) ? Number(span?.start) : -1;
+    const end = Number.isInteger(span?.end) ? Number(span?.end) : start;
+    const nodeId = start >= 0
+      ? `${sourceId}:${options.frontend}:${String(candidate.type)}:${start}:${end}`
+      : `${sourceId}:${options.frontend}:${String(candidate.type)}:generated:${generatedOrdinal++}`;
+    if (candidate.type === 'identifier' && typeof candidate.name === 'string') dependencies.add(candidate.name);
+
+    candidate.metadata = {
+      ...((candidate.metadata && typeof candidate.metadata === 'object') ? candidate.metadata as object : {}),
+      sourceId,
+      frontend: options.frontend,
+      nodeId,
+      dependencies: [...dependencies].sort(),
+    };
+    return dependencies;
+  };
+
+  visit(ast);
+}

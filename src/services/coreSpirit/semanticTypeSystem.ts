@@ -30,11 +30,28 @@ export type CoreSpiritSemanticAtom =
 
 export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment'|'signalIntent'|'orderIntent';
 export type CoreSpiritSemanticPhase = 'historical'|'confirmed'|'developing'|'realtime'|'forecast';
+export type CoreSpiritTypeQualifier = 'const' | 'input' | 'simple' | 'series';
+
+const QUALIFIER_RANK: Readonly<Record<CoreSpiritTypeQualifier, number>> = Object.freeze({
+  const: 0, input: 1, simple: 2, series: 3,
+});
+
+/** Values may flow toward more dynamic qualifiers, never from series to simple/input/const. */
+export function isSemanticQualifierAssignable(expected: CoreSpiritTypeQualifier, actual: CoreSpiritTypeQualifier): boolean {
+  return QUALIFIER_RANK[actual] <= QUALIFIER_RANK[expected];
+}
+export function joinSemanticQualifiers(left: CoreSpiritTypeQualifier, right: CoreSpiritTypeQualifier): CoreSpiritTypeQualifier {
+  return QUALIFIER_RANK[left] >= QUALIFIER_RANK[right] ? left : right;
+}
+export function semanticTypeQualifier(type: CoreSpiritSemanticType | undefined): CoreSpiritTypeQualifier {
+  return type?.qualifier ?? (type?.kind === 'series' ? 'series' : 'simple');
+}
 
 export const CORE_SPIRIT_SEMANTIC_SERIES_TYPES = Object.freeze(['series<number>', 'series<price>', 'series<volume>', 'series<time>', 'series<duration>', 'series<currency>', 'series<boolean>', 'series<string>'] as const);
 
 export type CoreSpiritSemanticType = Readonly<{
   kind: 'scalar' | 'series';
+  qualifier?: CoreSpiritTypeQualifier;
   atom: CoreSpiritSemanticAtom;
   unit?: string;
   currency?: string;
@@ -55,6 +72,7 @@ export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): 
   if (!type) return 'unknown';
   const base = type.container ? `${type.container}<${type.atom}>` : `${type.kind}<${type.atom}>`;
   const qualifiers = [
+    type.qualifier ? `qualifier=${type.qualifier}` : '',
     type.symbol ? `symbol=${type.symbol}` : '',
     type.timeframe ? `timeframe=${type.timeframe}` : '',
     type.unit ? `unit=${type.unit}` : '',
@@ -201,6 +219,7 @@ export function compareSemanticTypes(
 }
 
 export function semanticTypeCompatible(expected: CoreSpiritSemanticType, actual: CoreSpiritSemanticType): boolean {
+  if (expected.qualifier && !isSemanticQualifierAssignable(expected.qualifier, semanticTypeQualifier(actual))) return false;
   if (expected.kind !== actual.kind) return false;
   if (expected.container !== actual.container) return false;
   if (expected.atom !== actual.atom && expected.atom !== 'number' && actual.atom !== 'number') return false;
@@ -213,6 +232,11 @@ export function semanticTypeCompatible(expected: CoreSpiritSemanticType, actual:
 
 export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticType | undefined {
   const normalized = name.trim().toLowerCase();
+  const qualified = normalized.match(/^(const|input|simple)<(.+)>$/i);
+  if (qualified) {
+    const base = semanticTypeForDeclaredName(qualified[2]!);
+    return base ? Object.freeze({ ...base, qualifier: qualified[1]!.toLowerCase() as CoreSpiritTypeQualifier }) : undefined;
+  }
   const direct: Record<string, CoreSpiritSemanticType> = {
     number: semanticScalar('number'), float: semanticScalar('number'), int: semanticScalar('number'),
     boolean: semanticScalar('boolean'), bool: semanticScalar('boolean'), string: semanticScalar('string'),
@@ -287,21 +311,23 @@ const PHASE_RANK: Readonly<Record<CoreSpiritSemanticPhase, number>> = Object.fre
 
 export function mergeSemanticMetadata(
   types: readonly (CoreSpiritSemanticType | undefined)[],
-): Pick<CoreSpiritSemanticType, 'phase' | 'causal' | 'lookahead' | 'lookback'> {
+): Pick<CoreSpiritSemanticType, 'phase' | 'causal' | 'lookahead' | 'lookback' | 'qualifier'> {
   const present = types.filter(Boolean) as CoreSpiritSemanticType[];
   if (!present.length) return { phase: 'developing', causal: true, lookahead: false, lookback: 0 };
   let phase: CoreSpiritSemanticPhase = 'historical';
   let causal = true;
   let lookahead = false;
   let lookback = 0;
+  let qualifier: CoreSpiritTypeQualifier = 'const';
   for (const type of present) {
     const next = type.phase ?? 'developing';
     if (PHASE_RANK[next] > PHASE_RANK[phase]) phase = next;
     causal = causal && type.causal !== false;
     lookahead = lookahead || type.lookahead === true;
     lookback = Math.max(lookback, type.lookback ?? 0);
+    qualifier = joinSemanticQualifiers(qualifier, semanticTypeQualifier(type));
   }
-  return { phase, causal, lookahead, lookback };
+  return { phase, causal, lookahead, lookback, qualifier };
 }
 
 export type CoreSpiritSemanticInspection = Readonly<CoreSpiritSemanticMetadata>;

@@ -164,8 +164,7 @@ export const isNullableType = (type: CoreSpiritType): boolean =>
   type === 'null' || type === 'unknown' || type.endsWith('>');
 
 export function seriesOf(type: CoreSpiritType): CoreSpiritType {
-  if (type === 'int' || type === 'float' || type === 'number') return `series<${type}>` as CoreSpiritType;
-  if (type === 'boolean' || type === 'string') return `series<${type}>` as CoreSpiritType;
+  if (['int','float','number','boolean','string','price','volume','time','duration','currency'].includes(type)) return `series<${type}>` as CoreSpiritType;
   if (isSeriesType(type)) return type;
   return 'unknown';
 }
@@ -190,6 +189,8 @@ export function elementType(type: CoreSpiritType): CoreSpiritType {
 
 export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   const name = typeName.trim();
+  const qualified = name.match(/^(?:const|input|simple)<(.+)>$/i);
+  if (qualified) return normalizeDeclaredType(qualified[1]!);
   if (name === 'bool' || name === 'boolean') return 'boolean';
   if (name === 'float') return 'float';
   if (name === 'int') return 'int';
