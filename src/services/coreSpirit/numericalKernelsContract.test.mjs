@@ -253,6 +253,10 @@ assert.equal(getPineV6BuiltinDefinition('math','clamp'),undefined,
   'CoreSpirit clamp is an extension, not a Pine v6 math namespace builtin');
 assert.equal(getPineV6BuiltinDefinition('math','sigmoid'),undefined,
   'CoreSpirit sigmoid is an extension, not a Pine v6 math namespace builtin');
+assert.equal(getPineV6BuiltinDefinition('math','atan2'),undefined,
+  'CoreSpirit atan2 is an extension, not a Pine v6 math namespace builtin');
+assert.equal(getPineV6BuiltinDefinition('math','rphi')?.status,'catalog-only',
+  'Pine math.rphi is cataloged as a constant value, not a callable');
 
 assert.throws(() => executeCoreSpiritPineMathBuiltin('clamp',[1,5,2]),/minimum must not exceed maximum/);
 assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?.defaultValue,false,
