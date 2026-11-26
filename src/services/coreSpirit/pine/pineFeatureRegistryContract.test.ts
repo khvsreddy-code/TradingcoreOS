@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 import { CoreSpiritCompiler } from '../compiler.ts';
 import { parseWithCoreSpiritFrontend } from '../frontends.ts';
@@ -9,7 +11,14 @@ assert.ok(PINE_FEATURE_REGISTRY.length>=20,'the registry must cover syntax, decl
 assert.equal(new Set(PINE_FEATURE_REGISTRY.map(item=>item.id)).size,PINE_FEATURE_REGISTRY.length);
 for(const feature of PINE_FEATURE_REGISTRY){
   assert.ok(feature.officialReference.startsWith('https://www.tradingview.com/pine-script-docs/'),feature.id);
-  for(const fixture of feature.testFixtures)assert.ok(fixture.includes('.test.'),`${feature.id}: fixture references must point to executable tests`);
+  for(const implementationFile of feature.implementationFiles){
+    assert.ok(existsSync(resolve(process.cwd(),implementationFile)),`${feature.id}: implementation file does not exist: ${implementationFile}`);
+  }
+  for(const fixture of feature.testFixtures){
+    assert.ok(fixture.includes('.test.'),`${feature.id}: fixture references must point to executable tests`);
+    const fixturePath=fixture.split('#')[0]!;
+    assert.ok(existsSync(resolve(process.cwd(),fixturePath)),`${feature.id}: executable fixture does not exist: ${fixturePath}`);
+  }
 }
 const fixtureEvidence:Record<string,'passed'|'failed'|'host_limited'|'not_applicable'>={};
 for(const fixture of PINE_CONFORMANCE_FIXTURES){
