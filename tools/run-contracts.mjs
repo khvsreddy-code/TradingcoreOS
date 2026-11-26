@@ -4,6 +4,7 @@ const contracts = [
   ['corespirit-function-ast-desugaring', ['src/services/coreSpirit/functionAstDesugarContract.test.ts', true]],
   ['corespirit-pine-v6-frontend', ['src/services/coreSpirit/pine/pineV6FrontendContract.test.ts', true]],
   ['corespirit-pine-varip-runtime', ['src/services/coreSpirit/pine/pineVaripRuntimeContract.test.mjs', true]],
+  ['corespirit-pine-expressions', ['src/services/coreSpirit/pine/pineExpressionSemanticsContract.test.mjs', true]],
   ['corespirit-frontend-and-type-qualifier', ['src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts', true]],
   ['corespirit-pine-feature-registry', ['src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts', true]],
   ['corespirit-ir-specification', ['src/services/coreSpirit/irSpecificationContract.test.ts', true]],
