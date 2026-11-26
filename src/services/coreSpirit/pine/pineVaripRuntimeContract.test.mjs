@@ -46,6 +46,7 @@ for (const executionTier of ['reference', 'optimized']) {
   runtime.confirmRealtimeBar();
   const committed = runtime.exportCheckpoint();
   assert.equal(committed.persistentState.barCount, 3);
-  assert.equal(committed.intrabarState.tickCount, 5);
+  assert.equal(committed.persistentState.barCount, 3, executionTier + ': confirmed execution must commit the bar-local var value once');
+  assert.equal(committed.intrabarState.tickCount, 6, executionTier + ': varip must survive the final confirmed execution as well as forming ticks');
 }
 console.log('CORESPIRIT_PINE_VARIP_RUNTIME_OK');
