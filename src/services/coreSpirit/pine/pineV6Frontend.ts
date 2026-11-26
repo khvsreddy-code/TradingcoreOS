@@ -143,7 +143,7 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
     try{normalizedSource=normalizeCoreSpiritSource(body);}
     catch(error){return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_NORMALIZE_ERROR',error instanceof Error?error.message:String(error))]};}
     try{
-      const parsed=new CoreSpiritParser(normalizedSource).parseDetailed();
+      const parsed=new CoreSpiritParser(normalizedSource,{pine:true}).parseDetailed();
       if(parsed.diagnostics.length)return {frontend:this.id,normalizedSource,diagnostics:parsed.diagnostics.map(item=>({severity:'error' as const,code:'PINE_SYNTAX_ERROR',message:item.message,start:item.start,end:item.end,line:item.line,column:item.column}))};
       const programKind=header.metadata.kind as CoreSpiritProgramKind;
       const ast:CoreSpiritAst={...parsed.ast,programKind,pineDeclaration:header.metadata};

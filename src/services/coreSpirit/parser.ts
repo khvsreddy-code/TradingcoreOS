@@ -3,8 +3,9 @@ import { CoreSpiritLexer, CoreSpiritSyntaxError, CoreSpiritToken } from './lexer
 
 export class CoreSpiritParser {
   private readonly tokens: CoreSpiritToken[];
+  private readonly pineFrontend:boolean;
   private i=0;
-  constructor(source:string){this.tokens=new CoreSpiritLexer(source).tokenize();}
+  constructor(source:string, options:{pine?:boolean}={}){this.tokens=new CoreSpiritLexer(source).tokenize();this.pineFrontend=options.pine===true;}
 
   parse(): CoreSpiritAst {
     const detailed=this.parseDetailed();
@@ -57,7 +58,7 @@ export class CoreSpiritParser {
     else if(this.match('type')) node=this.typeDeclaration();
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('var','varip')) node=this.pineVariableDeclaration(this.previous().type as 'var'|'varip');
-    else if(this.check('identifier') && this.pineVariableDeclarationAhead()) node=this.pineVariableDeclaration();
+    else if(this.pineFrontend && this.check('identifier') && this.pineVariableDeclarationAhead()) node=this.pineVariableDeclaration();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
     else if(this.match('coreWhile')) node=this.whileStatement();
