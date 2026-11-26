@@ -3,6 +3,7 @@ export const CORE_SPIRIT_TEMPORAL_CONTAINERS = Object.freeze([
   'series',
   'window',
   'state',
+  'intrabar',
   'event',
   'snapshot',
   'stream',
@@ -29,7 +30,7 @@ export type CoreSpiritTemporalTypeSpec = Readonly<{
   phase?: CoreSpiritTemporalPhase;
 }>;
 
-const temporalTypePattern = /^(scalar|series|window|state|event|snapshot|stream|confirmed|developing|forecast)<(.+?)>(?:\s+@([a-z]+))?$/;
+const temporalTypePattern = /^(scalar|series|window|state|intrabar|event|snapshot|stream|confirmed|developing|forecast)<(.+?)>(?:\s+@([a-z]+))?$/;
 
 export function parseCoreSpiritTemporalType(typeName: string): CoreSpiritTemporalTypeSpec | undefined {
   const normalized = typeName.trim();
@@ -111,7 +112,8 @@ export function isCoreSpiritTemporalPhaseType(typeName: string): boolean {
  *
  * - series<T> is historical/vector data with an explicit element type.
  * - window<T> is a bounded view, not persistent history.
- * - state<T> is explicitly mutable per-program memory.
+ * - state<T> is mutable per-program memory rolled back before each realtime revision.
+ * - intrabar<T> is mutable per-program memory that survives realtime revisions.
  * - event<T> is a stream of occurrences, not a bar-aligned value.
  * - snapshot<T> is an immutable point-in-time capture.
  * - stream<T> is an asynchronous/event-fed sequence.
@@ -130,7 +132,7 @@ export function describeTemporalType(typeName: string): Readonly<{
   return Object.freeze({
     container: spec.container,
     element: spec.element,
-    persistent: spec.container === 'series' || spec.container === 'state',
+    persistent: spec.container === 'series' || spec.container === 'state' || spec.container === 'intrabar',
     indexed: spec.container === 'series' || spec.container === 'window',
     evented: spec.container === 'event' || spec.container === 'stream',
     ...(spec.phase ? { phase: spec.phase } : {}),

@@ -15,6 +15,7 @@ export type CoreSpiritType =
   | `series<${string}>`
   | `window<${string}>`
   | `state<${string}>`
+  | `intrabar<${string}>`
   | `event<${string}>`
   | `snapshot<${string}>`
   | `stream<${string}>`
@@ -75,6 +76,7 @@ export type CoreSpiritType =
 export type CoreSpiritNumericScalar = 'int' | 'float' | 'number';
 export type CoreSpiritSeriesType = `series<${string}>`;
 export type CoreSpiritStateType = `state<${string}>`;
+export type CoreSpiritIntrabarStateType = `intrabar<${string}>`;
 export type CoreSpiritWindowType = `window<${string}>`;
 export type CoreSpiritTemporalValueType =
   | `confirmed<${string}>`
@@ -101,6 +103,12 @@ export const isSeriesType = (type: CoreSpiritType): type is CoreSpiritSeriesType
 export const isStateType = (type: CoreSpiritType): type is CoreSpiritStateType =>
   type.startsWith('state<') && type.endsWith('>');
 
+export const isIntrabarStateType = (type: CoreSpiritType): type is CoreSpiritIntrabarStateType =>
+  type.startsWith('intrabar<') && type.endsWith('>');
+
+export const isPersistentStateType = (type: CoreSpiritType): type is CoreSpiritStateType | CoreSpiritIntrabarStateType =>
+  isStateType(type) || isIntrabarStateType(type);
+
 export const isWindowType = (type: CoreSpiritType): type is CoreSpiritWindowType =>
   type.startsWith('window<') && type.endsWith('>');
 
@@ -126,7 +134,7 @@ export const isTradingObjectType = (type: CoreSpiritType): boolean =>
 
 export const isNumericType = (type: CoreSpiritType): boolean => {
   if (isNumericScalarType(type) || type === 'probability') return true;
-  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type)) {
+  if (isSeriesType(type) || isWindowType(type) || isPersistentStateType(type) || isTemporalValueType(type)) {
     const parsed = parseCoreSpiritTemporalType(type);
     return parsed ? ['int', 'float', 'number', 'price', 'volume', 'currency', 'duration', 'time'].includes(parsed.element) : false;
   }
@@ -148,14 +156,14 @@ export const isResearchObjectType = (type: CoreSpiritType): type is CoreSpiritRe
 
 export const isBooleanType = (type: CoreSpiritType): boolean => {
   if (type === 'boolean') return true;
-  if (type === 'series<boolean>' || type === 'state<boolean>' || type === 'window<boolean>') return true;
+  if (type === 'series<boolean>' || type === 'state<boolean>' || type === 'intrabar<boolean>' || type === 'window<boolean>') return true;
   const parsed = parseCoreSpiritTemporalType(type);
   return parsed?.element === 'boolean' && ['confirmed', 'developing', 'forecast'].includes(parsed.container);
 };
 
 export const isStringType = (type: CoreSpiritType): boolean => {
   if (type === 'string') return true;
-  if (type === 'series<string>' || type === 'state<string>' || type === 'window<string>') return true;
+  if (type === 'series<string>' || type === 'state<string>' || type === 'intrabar<string>' || type === 'window<string>') return true;
   const parsed = parseCoreSpiritTemporalType(type);
   return parsed?.element === 'string' && ['confirmed', 'developing', 'forecast'].includes(parsed.container);
 };
@@ -227,7 +235,7 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'order-intent' && actual === 'order-intent') return true;
   if (expected.startsWith('order<') && actual.startsWith('order<')) return expected === actual || expected === 'order<number>' || actual === 'order<number>';
   // A state cell is stored as its element value, but its variable type remains state<T>.
-  if (isStateType(expected) && !isStateType(actual) && !isSeriesType(actual) && !isWindowType(actual)) {
+  if (isPersistentStateType(expected) && !isPersistentStateType(actual) && !isSeriesType(actual) && !isWindowType(actual)) {
     return compatible(elementType(expected), actual);
   }
   if (expected === 'number') return isNumericScalarType(actual) || actual === 'probability';

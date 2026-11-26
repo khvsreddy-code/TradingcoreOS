@@ -20,6 +20,8 @@ import type { CoreScriptLanguageFeature, CoreScriptRequiredCapability, CoreScrip
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
 export type CoreSpiritIrValue = { kind:'const'; value:number|string|boolean|null } | { kind:'series'; name:string; offset:number } | { kind:'local'; name:string };
 
+export type CoreSpiritStateStorage = 'persistent' | 'intrabar';
+
 export type CoreSpiritIrInstructionOrigin = {
   sourceNodeId: string;
   start: number;
@@ -31,14 +33,14 @@ export type CoreSpiritIrInstructionOrigin = {
 export type CoreSpiritIrInstruction =
   | { op:'const'; dest:string; value:number|string|boolean|null; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'loadSeries'; dest:string; name:string; offset:number; origin?:CoreSpiritIrInstructionOrigin }
-  | { op:'loadState'; dest:string; name:string; origin?:CoreSpiritIrInstructionOrigin }
+  | { op:'loadState'; dest:string; name:string; storage?:CoreSpiritStateStorage; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'move'; dest:string; source:string; sourceKind?:'register'|'local'; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'unary'; dest:string; operator:'!'|'+'|'-'; operand:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'binary'; dest:string; operator:string; left:string; right:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; seriesSources?:Array<{ ref:string; field:'open'|'high'|'low'|'close'|'volume'|'time' }>; callId?:string; componentId?:string; componentPure?:boolean; componentStateful?:boolean; componentDeterministic?:boolean; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'index'; dest:string; target:string; index:string; seriesName?:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'setLocal'; name:string; source:string; series?: boolean; origin?:CoreSpiritIrInstructionOrigin }
-  | { op:'setState'; name:string; source:string; initialize?:boolean; origin?:CoreSpiritIrInstructionOrigin }
+  | { op:'setState'; name:string; source:string; initialize?:boolean; storage?:CoreSpiritStateStorage; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'eventGate'; eventName:string; target:number; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'jumpIfFalse'; condition:string; target:number; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'jump'; target:number; origin?:CoreSpiritIrInstructionOrigin }

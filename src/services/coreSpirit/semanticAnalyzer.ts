@@ -1,6 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, updateCoreSpiritAstNodeMetadata, type CoreSpiritFrontendId } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
-import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
+import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isPersistentStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, semanticTypeQualifier, isSemanticQualifierAssignable, isSemanticNumeric, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
@@ -91,7 +91,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='bar_index') return 'number';
         if(n.name==='bar') return 'udt:bar:context';
         const resolved = scope.get(n.name) || 'unknown';
-        return isStateType(resolved) ? elementType(resolved) : resolved;
+        return isPersistentStateType(resolved) ? elementType(resolved) : resolved;
 
       case 'member': {
         if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return 'boolean';
@@ -711,7 +711,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'assignment': {
         const current=scope.get(n.name);
         if(!current) { report(n,`Unknown state variable '${n.name}'`,'UNKNOWN_STATE'); break; }
-        if(!isStateType(current)) { report(n,`':=' can only update state<T>; '${n.name}' is '${current}'`,'STATE_ASSIGNMENT_TARGET'); break; }
+        if(!isPersistentStateType(current)) { report(n,`':=' can only update state<T> or intrabar<T>; '${n.name}' is '${current}'`,'STATE_ASSIGNMENT_TARGET'); break; }
         const value=infer(n.expression,scope);
         visit(n.expression,scope);
         const expected=elementType(current);

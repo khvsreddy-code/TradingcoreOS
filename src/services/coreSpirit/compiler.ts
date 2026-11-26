@@ -21,7 +21,7 @@ import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGrap
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
-import { isStateType } from './typeSystem';
+import { isPersistentStateType, isIntrabarStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { analyzeCoreSpiritCausality } from './causalityAnalysis';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
@@ -208,7 +208,7 @@ export class CoreSpiritCompiler {
             const modelNameDest = `t${temp++}`;
             emitInstruction(n, { op:'const', dest:modelNameDest, value:modelName });
             emitInstruction(n, { op:'call', dest, name:'model', args:[modelNameDest], callId:`model:${n.name}:${n.span?.start ?? temp}` });
-          } else if (semanticType && isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
+          } else if (semanticType && isPersistentStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name, storage:isIntrabarStateType(semanticType as any) ? 'intrabar' : 'persistent' });
           else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
@@ -467,7 +467,8 @@ export class CoreSpiritCompiler {
         }
         case 'assignment': {
           const source=expr(n.expression);
-          emitInstruction(n,{op:'setState',name:n.name,source});
+          const targetType=semantic.symbols.get(n.name) as any;
+          emitInstruction(n,{op:'setState',name:n.name,source,storage:isIntrabarStateType(targetType) ? 'intrabar' : 'persistent'});
           break;
         }
         case 'let': {
@@ -480,8 +481,9 @@ export class CoreSpiritCompiler {
           if (component && component.outputs.length > 1) componentRefRegisters.set(n.name, component.id);
           const declaredValueType=String(semantic.symbols.get(n.name) ?? '');
           const isCollectionValue=/^(?:array|map|matrix|vector|tensor)</.test(declaredValueType);
-          const isState=isStateType(semantic.symbols.get(n.name) as any);
-          if(isState) emitInstruction(n,{op:'setState',name:n.name,source,initialize:true});
+          const declaredType=semantic.symbols.get(n.name) as any;
+          const isState=isPersistentStateType(declaredType);
+          if(isState) emitInstruction(n,{op:'setState',name:n.name,source,initialize:true,storage:isIntrabarStateType(declaredType) ? 'intrabar' : 'persistent'});
           else emitInstruction(n,{op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef && !isCollectionValue});
           if(!locals.includes(n.name))locals.push(n.name);
           break;
