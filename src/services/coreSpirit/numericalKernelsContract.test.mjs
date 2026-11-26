@@ -255,8 +255,6 @@ assert.equal(getPineV6BuiltinDefinition('math','sigmoid'),undefined,
   'CoreSpirit sigmoid is an extension, not a Pine v6 math namespace builtin');
 assert.equal(getPineV6BuiltinDefinition('math','atan2'),undefined,
   'CoreSpirit atan2 is an extension, not a Pine v6 math namespace builtin');
-assert.equal(getPineV6BuiltinDefinition('math','rphi')?.status,'catalog-only',
-  'Pine math.rphi is cataloged as a constant value, not a callable');
 
 assert.throws(() => executeCoreSpiritPineMathBuiltin('clamp',[1,5,2]),/minimum must not exceed maximum/);
 assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?.defaultValue,false,
@@ -267,14 +265,27 @@ for (const requestFunction of ['security','security_lower_tf','currency_rate','d
   assert.ok(getPineV6BuiltinDefinition('request',requestFunction),
     'request API inventory must include request.' + requestFunction);
 }
-for (const technicalFunction of ['alma','adx','macd','stoch','bb','supertrend','vwma','cci','mfi','vwap','obv','pvt','nvi','pvi','wad','wvad','iii','linreg','correlation']) {
+assert.equal(getPineV6BuiltinDefinition('request','security')?.overloads[0]?.maxArgs,8,
+  'request.security reference signature includes all eight arguments');
+assert.equal(getPineV6BuiltinDefinition('request','security_lower_tf')?.overloads[0]?.maxArgs,7,
+  'request.security_lower_tf reference signature includes all seven arguments');
+for (const technicalFunction of ['alma','dmi','macd','stoch','bb','supertrend','vwma','cci','mfi','vwap','obv','pvt','nvi','pvi','wad','wvad','iii','linreg','correlation']) {
   assert.ok(getPineV6BuiltinDefinition('ta',technicalFunction),
     'technical analysis API inventory must include ta.' + technicalFunction);
 }
-for (const volumeFunction of ['vwap','obv','pvt','nvi','pvi','wad','wvad','iii','mfi']) {
+for (const volumeFunction of ['vwap','obv','accdist','pvt','nvi','pvi','wad','wvad','iii','mfi']) {
   assert.ok(getPineV6BuiltinDefinition('ta',volumeFunction),
     'volume and flow family inventory must include ta.' + volumeFunction);
 }
+for (const symbolField of ['volumetype','expiration_date','isin','industry','sector','current_contract','minmove','pricescale']) {
+  assert.ok(getPineV6BuiltinDefinition('syminfo',symbolField),
+    'symbol metadata inventory must include syminfo.' + symbolField);
+}
+assert.equal(getPineV6BuiltinDefinition('ta','adx'),undefined,
+  'Pine exposes ADX through ta.dmi tuple output, not a standalone ta.adx builtin');
+assert.equal(getPineV6BuiltinDefinition('math','rphi'),undefined,
+  'Unverified math.rphi is not added to the Pine v6 API registry');
+
 
 // Pine-only catalog enforcement must not break CoreScript's own strategy API.
 const pineStrategyAst = new CoreSpiritParser('strategy.entry("L", "long")').parse();
