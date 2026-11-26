@@ -407,7 +407,7 @@ export class CoreSpiritCompiler {
             }
             const builtinName = resolved.builtin?.name;
             if (!builtinName) throw new Error(`Standard-library member '${n.target.name}.${n.member}' has no executable lowering.`);
-            const seriesArgs = n.args.filter(a => a.type === 'identifier' && ['open','high','low','close','volume','time'].includes(a.name)).map(a => (a as any).name);
+            const seriesArgs = n.args.filter(a => a.type === 'identifier' && ['open','high','low','close','volume','time','hl2','hlc3','hlcc4','ohlc4'].includes(a.name)).map(a => (a as any).name);
             emitInstruction(n, { op:'call', dest, name:builtinName, args, seriesArgs, callId:`${n.target.name}.${n.member}:${n.span?.start ?? temp}` });
             if (resolved.builtin?.emitKind) emitInstruction(n, { op:'emit', kind:resolved.builtin.emitKind, args:[dest,...args], outputId:`${resolved.builtin.emitKind}:${n.span?.start ?? temp}` });
             return dest;
