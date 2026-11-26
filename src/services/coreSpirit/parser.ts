@@ -418,7 +418,7 @@ export class CoreSpiritParser {
       while(this.match('comma')) matches.push(this.expression());
       this.consume('fatArrow','Expected => after switch match expression');
       const value=this.expression();
-      arms.push({matches,value,span:this.makeSpanFrom(armStart,value)});
+      arms.push({matches,value,span:this.makeSpan(armStart,this.previous())});
     }
     if(!arms.length && !defaultValue) throw this.error('Switch expression requires at least one match or a default arm');
     return {type:'switch',subject,arms,defaultValue,span:this.makeSpan(start,this.previous())};
