@@ -13,6 +13,8 @@ export * from './irSpecification';
 export * from './compiler';
 export * from './standardLibrary';
 export * from './standardLibraryNamespaces';
+export * from './pineBuiltinRegistry';
+export * from './pineMathBuiltins';
 export * from './callContract';
 export * from './memberRegistry';
 export * from './surfaceForms';
