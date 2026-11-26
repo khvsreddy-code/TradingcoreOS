@@ -119,14 +119,14 @@ class FusedSeriesStage {
       case 'persistence': this.persistence = new PersistenceState(period); break;
       case 'ema': this.ema = new EMAState(period); break;
       case 'rma': this.wilder = new WilderState(period); break;
-      case 'change': this.change = new ChangeState(false); break;
-      case 'pctchange': this.change = new ChangeState(true); break;
+      case 'change': this.change = new ChangeState(false,period); break;
+      case 'pctchange': this.change = new ChangeState(true,period); break;
     }
   }
 
   update(value:number, absoluteIndex:number):number {
     void absoluteIndex;
-    if (this.change) return this.change.update(value) ?? Number.NaN;
+    if (this.change) return this.change.update(value,absoluteIndex) ?? Number.NaN;
     if (this.ema) return this.ema.update(value) ?? Number.NaN;
     if (this.wilder) return this.wilder.updateWilder(value) ?? Number.NaN;
     if (this.rollingMedian) return this.rollingMedian.update(value).value ?? Number.NaN;
