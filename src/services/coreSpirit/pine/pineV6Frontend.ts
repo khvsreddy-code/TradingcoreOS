@@ -134,10 +134,20 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
     if(parsedHeader.diagnostics.length)return {frontend:this.id,normalizedSource:original,diagnostics:parsedHeader.diagnostics};
     const header=parsedHeader.header!;
     const body=blankRange(original,header.start,header.end);
-    const unsupportedEnum=/^[ \t]*enum[ \t]+[A-Za-z_][A-Za-z0-9_]*/m.exec(maskCommentsAndStrings(body));
+    const maskedBody=maskCommentsAndStrings(body);
+    const unsupportedEnum=/^[ \t]*enum[ \t]+[A-Za-z_][A-Za-z0-9_]*/m.exec(maskedBody);
     if(unsupportedEnum){
       const offset=(unsupportedEnum.index??0)+unsupportedEnum[0].indexOf('enum');
       return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_UNSUPPORTED_ENUM','Pine enum declarations are recognized but not implemented by this compatibility frontend yet.',offset,offset+4)]};
+    }
+    // Do not let the generic expression parser swallow Pine's numeric range-loop
+    // header as a sequence of unrelated identifiers/operators. It is a reserved
+    // construct and remains explicitly unsupported until its loop result and
+    // iteration semantics have their own IR/runtime contract.
+    const unsupportedRangeLoop=/^[ \\t]*for[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]*=/m.exec(maskedBody);
+    if(unsupportedRangeLoop){
+      const offset=(unsupportedRangeLoop.index??0)+unsupportedRangeLoop[0].indexOf('for');
+      return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_SYNTAX_ERROR','Pine numeric range for-loops are not implemented by this Pine v6 frontend yet.',offset,offset+3)]};
     }
     let normalizedSource:string;
     try{normalizedSource=normalizeCoreSpiritSource(body);}
