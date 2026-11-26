@@ -250,6 +250,12 @@ export function validateCoreScriptCapabilityRequirementsFromAst(
         visit(node.target);
         visit(node.index);
         return;
+      case 'functionDeclaration':
+        node.body.forEach(visit);
+        return;
+      case 'return':
+        visit(node.expression);
+        return;
       case 'typeDeclaration':
       case 'number':
       case 'string':

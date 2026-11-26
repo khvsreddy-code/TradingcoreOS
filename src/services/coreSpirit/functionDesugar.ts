@@ -129,6 +129,12 @@ export function desugarCoreSpiritFunctions(ast:CoreSpiritAst):CoreSpiritFunction
           result=expand(statement.expression,bindings,[...stack,node.name],depth+1);
           continue;
         }
+        if(statement.type==='expressionStatement'){
+          const foundEffect=effect(statement.expression);
+          if(foundEffect) report(diagnostics,statement,'FUNCTION_SIDE_EFFECT',`Pure function '${node.name}' cannot perform effectful operation '${foundEffect}'.`);
+          else report(diagnostics,statement,'FUNCTION_UNSUPPORTED_BODY',`Function '${node.name}' does not support expression statements in its body.`);
+          continue;
+        }
         report(diagnostics,statement,'FUNCTION_UNSUPPORTED_BODY',`Function '${node.name}' currently supports local let/const expressions followed by one return; '${statement.type}' is unsupported.`);
       }
       if(!result){report(diagnostics,definition,'FUNCTION_MISSING_RETURN',`Function '${node.name}' must end with one return expression.`);return {...node,args};}
