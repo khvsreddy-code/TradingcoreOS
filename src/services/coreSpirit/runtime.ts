@@ -1598,7 +1598,8 @@ export class CoreSpiritRuntime {
     // Pine ta.atr(length) has its length in argument 0; RSI and rolling
     // transforms use source, length. Keep the canonical runtime ABI explicit.
     const lengthArgument = name === 'atr' ? args[0] : args[1];
-    const length = Math.max(1,Math.floor(Number(lengthArgument ?? 14)));
+    const defaultLength = name === 'change' ? 1 : 14;
+    const length = Math.max(1,Math.floor(Number(lengthArgument ?? defaultLength)));
     const memoizable = !['__array','__map','__collection_index','__collection_member','__collection_method','array','map','len'].includes(name);
     const memoKey = memoizable
       ? `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? String(v) : String(v)).join(',')}`
@@ -1976,7 +1977,8 @@ export class CoreSpiritRuntime {
         this.captureKernelSnapshot('vwma',key,kernel,index-1);
       }
       const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
-      return finish(kernel.update(current,Number(bar.volume),mode));
+      const volume=bar.volume==null ? Number.NaN : Number(bar.volume);
+      return finish(kernel.update(current,volume,mode));
     }
     if(name==='vwap') {
       const key = 'vwap:session';
