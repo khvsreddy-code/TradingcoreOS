@@ -17,7 +17,7 @@ import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDat
 import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
-import { ATRState, RSIState, VWAPSessionState } from './statefulIndicatorKernel';
+import { ATRState, RSIState, VWAPSessionState, VWMAState } from './statefulIndicatorKernel';
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './quantKernels';
 import { CoreSpiritGaussianHMM, coreSpiritDataset, coreSpiritIdentity, coreSpiritMatrix, coreSpiritMatrixAdd, coreSpiritMatrixMultiply, coreSpiritMatrixScale, coreSpiritMatrixTranspose, coreSpiritTensor, coreSpiritVector, coreSpiritVectorDot, coreSpiritZeros, type CoreSpiritDatasetRow } from './quantMath';
 import { createCoreScriptArray, createCoreScriptMap, coreScriptCollectionIndex, coreScriptCollectionMember, coreScriptCollectionMethod } from './coreScriptCollections';
@@ -86,6 +86,7 @@ export type CoreSpiritKernelState =
   | { family:'rsi'; state:RSIState }
   | { family:'atr'; state:ATRState }
   | { family:'vwap'; state:VWAPSessionState }
+  | { family:'vwma'; state:VWMAState }
   | { family:'beta'; state:RollingBetaState }
   | { family:'trend'; state:RollingCorrelationState };
 
@@ -96,6 +97,7 @@ function cloneCoreSpiritKernelState(value: CoreSpiritKernelState): CoreSpiritKer
     case 'rsi': return { family:'rsi', state:value.state.clone() };
     case 'atr': return { family:'atr', state:value.state.clone() };
     case 'vwap': return { family:'vwap', state:value.state.clone() };
+    case 'vwma': return { family:'vwma', state:value.state.clone() };
     case 'beta': return { family:'beta', state:value.state.clone() };
     case 'trend': return { family:'trend', state:value.state.clone() };
   }
@@ -111,6 +113,7 @@ function copyCoreSpiritKernelState(target: CoreSpiritKernelState, source: CoreSp
     case 'rsi': target.state.copyFrom(source.state as RSIState); break;
     case 'atr': target.state.copyFrom(source.state as ATRState); break;
     case 'vwap': target.state.copyFrom(source.state as VWAPSessionState); break;
+    case 'vwma': target.state.copyFrom(source.state as VWMAState); break;
     case 'beta': target.state.copyFrom(source.state as RollingBetaState); break;
     case 'trend': target.state.copyFrom(source.state as RollingCorrelationState); break;
   }
@@ -285,6 +288,7 @@ export class CoreSpiritRuntime {
   private readonly rsiKernels = new Map<string, RSIState>();
   private readonly atrKernels = new Map<string, ATRState>();
   private readonly vwapKernels = new Map<string, VWAPSessionState>();
+  private readonly vwmaKernels = new Map<string, VWMAState>();
   private readonly betaKernels = new Map<string, RollingBetaState>();
   private readonly trendStrengthKernels = new Map<string, RollingCorrelationState>();
   private readonly hmmModels = new Map<string, { signature:string; model:CoreSpiritGaussianHMM }>();
@@ -441,7 +445,7 @@ export class CoreSpiritRuntime {
     this.committedCrossState=cloneCrossMap(this.crossState);
     this.eventRouter.rollbackTransaction();
     this.realtimeTransactionId = undefined;
-    this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear();
+    this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear(); this.vwmaKernels.clear();
     this.betaKernels.clear();
     this.trendStrengthKernels.clear();
     this.kernelStateSnapshots.clear();
@@ -1078,6 +1082,7 @@ export class CoreSpiritRuntime {
     for (const [key, kernel] of this.rsiKernels) this.captureKernelSnapshot('rsi', key, kernel, barIndex);
     for (const [key, kernel] of this.atrKernels) this.captureKernelSnapshot('atr', key, kernel, barIndex);
     for (const [key, kernel] of this.vwapKernels) this.captureKernelSnapshot('vwap', key, kernel, barIndex);
+    for (const [key, kernel] of this.vwmaKernels) this.captureKernelSnapshot('vwma', key, kernel, barIndex);
     for (const [key, kernel] of this.betaKernels) this.captureKernelSnapshot('beta', key, kernel, barIndex);
     for (const [key, kernel] of this.trendStrengthKernels) this.captureKernelSnapshot('trend', key, kernel, barIndex);
   }
@@ -1085,7 +1090,7 @@ export class CoreSpiritRuntime {
   private restoreKernelSnapshotsAtBar(barIndex: number): Readonly<{complete:boolean;expected:number;restored:number}> {
     if (!this.compiledIr || barIndex < -1) return Object.freeze({ complete:false, expected:0, restored:0 });
     const activeKernelCount = this.fusedCursors.size + this.directKernelCursors.size +
-      this.rsiKernels.size + this.atrKernels.size + this.vwapKernels.size +
+      this.rsiKernels.size + this.atrKernels.size + this.vwapKernels.size + this.vwmaKernels.size +
       this.betaKernels.size + this.trendStrengthKernels.size;
     if (activeKernelCount > 0 && this.hasUnversionedExternalKernelInputs()) {
       // No cache identity means no proof that secondary data stayed unchanged.
@@ -1152,6 +1157,7 @@ export class CoreSpiritRuntime {
     for (const [key, kernel] of this.rsiKernels) restore('rsi', key, kernel);
     for (const [key, kernel] of this.atrKernels) restore('atr', key, kernel);
     for (const [key, kernel] of this.vwapKernels) restore('vwap', key, kernel);
+    for (const [key, kernel] of this.vwmaKernels) restore('vwma', key, kernel);
     for (const [key, kernel] of this.betaKernels) restore('beta', key, kernel);
     for (const [key, kernel] of this.trendStrengthKernels) restore('trend', key, kernel);
     for (const [groupId, cursor] of this.fusedCursors) restore('fused', groupId, cursor);
@@ -1948,6 +1954,21 @@ export class CoreSpiritRuntime {
       }
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
+    }
+    if(name==='vwma') {
+      const current=Number(args[0]);
+      const period=Math.max(1,Math.floor(Number(args[1] ?? 14)));
+      if(!Number.isFinite(current)) return finish(null);
+      const key='vwma:'+callKey+':'+period;
+      this.rememberKernelIdentity('vwma',key,callKey,seriesArgs);
+      let kernel=this.vwmaKernels.get(key);
+      if(!kernel) {
+        kernel=new VWMAState(period);
+        this.vwmaKernels.set(key,kernel);
+        this.captureKernelSnapshot('vwma',key,kernel,index-1);
+      }
+      const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
+      return finish(kernel.update(current,Number(bar.volume),mode));
     }
     if(name==='vwap') {
       const key = 'vwap:session';
