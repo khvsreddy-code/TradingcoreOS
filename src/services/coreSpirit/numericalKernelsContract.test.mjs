@@ -289,7 +289,7 @@ const pineBarStateAst = new CoreSpiritParser('barstate.isconfirmed').parse();
 const pineBarStateAnalysis = analyzeCoreSpirit(pineBarStateAst,{frontend:'pine-v6'});
 assert.ok(pineBarStateAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_VALUE_UNSUPPORTED'),
   'Pine namespace values must not fall through to unrelated member resolution before typed runtime bindings exist');
-const namespaceMemberKeys = CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.map(entry => entry.namespace + '.' + entry.name);
+const namespaceMemberKeys = CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.map(entry => entry.qualifiedName);
 assert.equal(new Set(namespaceMemberKeys).size,namespaceMemberKeys.length,
   'CoreSpirit namespace member registry must not contain duplicate keys');
 const pineHostRequestAst = new CoreSpiritParser('request.security("NSE:NIFTY", "15", close)').parse();
