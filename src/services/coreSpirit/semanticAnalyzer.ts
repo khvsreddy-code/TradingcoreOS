@@ -71,7 +71,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
 
   const infer=(n:CoreSpiritAstNode, scope:Map<string,CoreSpiritType>):CoreSpiritType=>{
     switch(n.type){
-      case 'number': return ast.programKind ? (Number.isInteger(n.value) ? 'int' : 'float') : 'number';
+      case 'number': return ast.programKind ? (typeof n.value === 'number' && Number.isInteger(n.value) ? 'int' : 'float') : 'number';
       case 'string': return 'string';
       case 'boolean': return 'boolean';
       case 'null': return 'null';
