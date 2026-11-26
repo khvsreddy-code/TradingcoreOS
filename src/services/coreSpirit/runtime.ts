@@ -29,6 +29,7 @@ import type { CoreSpiritExecutionVMHost } from './executionVM';
 import { CoreSpiritOptimizedExecutionVM, type CoreSpiritExecutionCacheVersions } from './optimizedExecutionVM';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import { CORE_SPIRIT_STDLIB } from './standardLibrary';
+import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins';
 import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_OPTIMIZER_ABI, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION';
 import type { CoreSpiritValueStore } from './executionValueStore';
 import type { CoreSpiritExecutionTier } from './executionTier';
@@ -1575,7 +1576,11 @@ export class CoreSpiritRuntime {
   }
 
   private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
-    const series = seriesArgs[0] || 'close'; const length = Math.max(1,Math.floor(Number(args[1] ?? 14)));
+    const series = seriesArgs[0] || 'close';
+    // Pine ta.atr(length) has its length in argument 0; RSI and rolling
+    // transforms use source, length. Keep the canonical runtime ABI explicit.
+    const lengthArgument = name === 'atr' ? args[0] : args[1];
+    const length = Math.max(1,Math.floor(Number(lengthArgument ?? 14)));
     const memoizable = !['__array','__map','__collection_index','__collection_member','__collection_method','array','map','len'].includes(name);
     const memoKey = memoizable
       ? `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? String(v) : String(v)).join(',')}`
@@ -1598,6 +1603,8 @@ export class CoreSpiritRuntime {
       throw new Error('len expects an array, map, string, vector or matrix');
     }
     this.capabilityHost.assert(name);
+    const pineMath = executeCoreSpiritPineMathBuiltin(name,args);
+    if (pineMath.handled) return finish(pineMath.value ?? null);
     if (name === 'vector') return finish(coreSpiritVector(...args));
     if (name === 'matrix') return finish(coreSpiritMatrix(args[0], args[1], ...args.slice(2)));
     if (name === 'tensor') return finish(coreSpiritTensor(args[0], ...args.slice(1)));
@@ -1860,12 +1867,34 @@ export class CoreSpiritRuntime {
       return finish(kernel.update(value,mode));
     }
     if(name==='regimeDetect')return finish(detectQuantRegime(Number(args[0]),Number(args[1]),Number(args[2] ?? 0.02)));
-    if (name==='crossover'||name==='crossunder') {
+    if(name==='tr') {
+      const high=Number(bar.high), low=Number(bar.low);
+      const previousClose=index>0 ? Number(bars[index-1]?.close) : Number.NaN;
+      if(!Number.isFinite(high)||!Number.isFinite(low)) return finish(null);
+      if(!Number.isFinite(previousClose)) return finish(args[0]===true ? high-low : null);
+      return finish(Math.max(high-low,Math.abs(high-previousClose),Math.abs(low-previousClose)));
+    }
+    if (name==='cross'||name==='crossover'||name==='crossunder') {
       const a=Number(args[0]), b=Number(args[1]);
       const previous=this.crossState[callKey];
       this.stateStore.setCross(callKey,{a,b});
       if(!Number.isFinite(a)||!Number.isFinite(b)||!previous) return finish(false);
-      return finish(name==='crossover' ? previous.a <= previous.b && a > b : previous.a >= previous.b && a < b);
+      const crossedUp=previous.a <= previous.b && a > b;
+      const crossedDown=previous.a >= previous.b && a < b;
+      return finish(name==='crossover' ? crossedUp : name==='crossunder' ? crossedDown : crossedUp || crossedDown);
+    }
+    if(name==='rising' || name==='falling') {
+      const current=Number(args[0]);
+      const period=Math.max(1,Math.floor(Number(args[1]??1)));
+      const sourceName=seriesArgs[0] || 'close';
+      if(!Number.isFinite(current)) return finish(false);
+      for(let offset=1;offset<=period;offset+=1) {
+        const priorValue=this.loadSeries(sourceName,offset,bar,bars,index);
+        const prior=Number(priorValue);
+        if(priorValue===null || !Number.isFinite(prior)) return finish(false);
+        if(name==='rising' ? current<=prior : current>=prior) return finish(false);
+      }
+      return finish(true);
     }
     const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
     if (statefulSeriesNames.has(name)) {
