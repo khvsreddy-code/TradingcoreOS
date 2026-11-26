@@ -15,7 +15,7 @@ import {
   validatePineV6BuiltinArguments,
   pineV6BuiltinIsExecutable,
 } from './pineBuiltinRegistry.ts';
-import { resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces.ts';
+import { CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces.ts';
 import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins.ts';
 
 const close = (actual, expected, epsilonOrMessage = 1e-9, message) => {
@@ -285,6 +285,13 @@ const pineUnknownMathAst = new CoreSpiritParser('math.vector([1, 2])').parse();
 const pineUnknownMathAnalysis = analyzeCoreSpirit(pineUnknownMathAst,{frontend:'pine-v6'});
 assert.ok(pineUnknownMathAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_UNKNOWN'),
   'CoreSpirit-only math extensions must not leak into Pine v6');
+const pineBarStateAst = new CoreSpiritParser('barstate.isconfirmed').parse();
+const pineBarStateAnalysis = analyzeCoreSpirit(pineBarStateAst,{frontend:'pine-v6'});
+assert.ok(pineBarStateAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_VALUE_UNSUPPORTED'),
+  'Pine namespace values must not fall through to unrelated member resolution before typed runtime bindings exist');
+const namespaceMemberKeys = CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.map(entry => entry.namespace + '.' + entry.name);
+assert.equal(new Set(namespaceMemberKeys).size,namespaceMemberKeys.length,
+  'CoreSpirit namespace member registry must not contain duplicate keys');
 const pineHostRequestAst = new CoreSpiritParser('request.security("NSE:NIFTY", "15", close)').parse();
 const pineHostRequestAnalysis = analyzeCoreSpirit(pineHostRequestAst,{frontend:'pine-v6'});
 assert.ok(pineHostRequestAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_HOST_LIMITATION'),
