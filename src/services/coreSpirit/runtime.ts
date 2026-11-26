@@ -1525,6 +1525,18 @@ export class CoreSpiritRuntime {
       return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
     }
 
+    // Derived Pine price sources must be reconstructed from the historical
+    // candle at the requested offset. Falling back to close here silently
+    // changes ta.change/roc/rising/falling semantics for hl2/hlc3/hlcc4/ohlc4.
+    if (name === 'hl2' || name === 'hlc3' || name === 'hlcc4' || name === 'ohlc4') {
+      const open=Number(source.open), high=Number(source.high), low=Number(source.low), close=Number(source.close);
+      if (![high,low,close].every(Number.isFinite) || (name === 'ohlc4' && !Number.isFinite(open))) return null;
+      if (name === 'hl2') return (high+low)/2;
+      if (name === 'hlc3') return (high+low+close)/3;
+      if (name === 'hlcc4') return (high+low+close+close)/4;
+      return (open+high+low+close)/4;
+    }
+
     // Persistent worker contexts read OHLCV directly from shared MarketFrame
     // columns, avoiding a second object/column lookup for every quant feature.
     const frame = this.marketFrameResolver?.();
