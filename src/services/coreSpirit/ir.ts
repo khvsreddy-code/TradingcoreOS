@@ -1,4 +1,5 @@
 import type { CoreSpiritGraphBundle } from './semanticGraph';
+import type { CoreSpiritProgramKind, CoreSpiritPineDeclarationMetadata } from './ast';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import type { CoreSpiritOptimizationPlan } from './optimizer';
@@ -72,6 +73,8 @@ export function coreSpiritSourceMapFromInstructions(
 export type CoreSpiritIrProgram = {
   version:1;
   sourceId:string;
+  programKind?:CoreSpiritProgramKind;
+  pineDeclaration?:CoreSpiritPineDeclarationMetadata;
   entry:CoreSpiritIrBlock;
   locals:string[];
   maxLookback:number;

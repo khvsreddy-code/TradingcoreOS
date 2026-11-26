@@ -1,6 +1,7 @@
 import type { CoreSpiritAst, CoreSpiritFrontendId } from './ast';
 import { CoreSpiritParser } from './parser';
 import { normalizeCoreSpiritSource } from './syntax';
+import { PineV6Frontend } from './pine/pineV6Frontend';
 
 export type CoreSpiritFrontendDiagnostic = Readonly<{
   severity: 'error' | 'warning';
@@ -50,6 +51,7 @@ export class CoreScriptFrontend implements CoreSpiritLanguageFrontend {
 
 const frontends=new Map<CoreSpiritFrontendId,CoreSpiritLanguageFrontend>();
 frontends.set('corescript',new CoreScriptFrontend());
+frontends.set('pine-v6',new PineV6Frontend());
 
 export function registerCoreSpiritFrontend(frontend: CoreSpiritLanguageFrontend): () => void {
   const current=frontends.get(frontend.id);

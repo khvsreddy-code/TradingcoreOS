@@ -579,6 +579,8 @@ export class CoreSpiritCompiler {
       const rawIr:CoreSpiritIrProgram={
         version:1,
         sourceId,
+        ...(ast.programKind ? {programKind:ast.programKind} : {}),
+        ...(ast.pineDeclaration ? {pineDeclaration:ast.pineDeclaration} : {}),
         entry:{instructions},
         locals,
         maxLookback:semantic.maxLookback,

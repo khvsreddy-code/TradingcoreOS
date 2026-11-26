@@ -1,6 +1,8 @@
 /** CoreSpirit source AST. This layer is pure language data and does not know about the chart. */
 export type CoreSpiritFrontendId = 'corescript' | 'pine-v6';
 export type CoreSpiritProgramKind = 'indicator' | 'strategy' | 'library' | 'automation' | 'prediction' | 'script';
+export type CoreSpiritPineDeclarationArgument = Readonly<{ name?:string; value:string }>;
+export type CoreSpiritPineDeclarationMetadata = Readonly<{ version:6; kind:'indicator'|'strategy'|'library'; title:string; arguments:readonly CoreSpiritPineDeclarationArgument[] }>;
 export type CoreSpiritLiteral = number | string | boolean | null;
 export type CoreSpiritAnnotation = { name:string; args:string[]; span?:CoreSpiritSpan };
 
@@ -52,7 +54,7 @@ export type CoreSpiritAstNode = (
   | CoreSpiritReturnNode
 ) & { metadata?: CoreSpiritAstNodeMetadata };
 
-export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; span?: CoreSpiritSpan };
+export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; pineDeclaration?:CoreSpiritPineDeclarationMetadata; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; declaredType?: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritAssignmentNode = { type: 'assignment'; name: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritOnEventNode = { type: 'onEvent'; eventName: string; body: CoreSpiritAstNode[]; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };

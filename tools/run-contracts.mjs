@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 
 const contracts = [
   ['corespirit-function-ast-desugaring', ['src/services/coreSpirit/functionAstDesugarContract.test.ts', true]],
+  ['corespirit-pine-v6-frontend', ['src/services/coreSpirit/pine/pineV6FrontendContract.test.ts', true]],
   ['corespirit-frontend-and-type-qualifier', ['src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts', true]],
   ['corespirit-ir-specification', ['src/services/coreSpirit/irSpecificationContract.test.ts', true]],
   ['dependency-audit-classification', ['tools/report-dependency-audit.test.mjs', false]],

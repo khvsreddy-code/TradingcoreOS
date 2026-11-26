@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritCompiler } from './compiler.ts';
 import { getCoreSpiritFrontend, parseWithCoreSpiritFrontend, CoreScriptFrontend } from './frontends.ts';
+import { PineV6Frontend } from './pine/pineV6Frontend.ts';
 import { semanticTypeForDeclaredName, semanticTypeQualifier } from './semanticTypeSystem.ts';
 
 assert.ok(getCoreSpiritFrontend('corescript') instanceof CoreScriptFrontend);
@@ -8,10 +9,16 @@ const parsed=parseWithCoreSpiritFrontend('corescript','let trend = ema(close, 9)
 assert.ok(parsed.ast);
 assert.equal(parsed.frontend,'corescript');
 assert.equal(parsed.diagnostics.length,0);
-const pine=parseWithCoreSpiritFrontend('pine-v6','//@version=6\nplot(close)');
-assert.equal(pine.ast,undefined);
-assert.equal(pine.diagnostics[0]?.code,'FRONTEND_NOT_REGISTERED');
-assert.match(pine.diagnostics[0]?.message ?? '',/not registered.*not parsed as CoreScript/i);
+const pineFrontend=getCoreSpiritFrontend('pine-v6');
+assert.ok(pineFrontend instanceof PineV6Frontend);
+const pine=parseWithCoreSpiritFrontend('pine-v6','//@version=6\nindicator("Pine frontend contract", overlay=true)\nplot(close)');
+assert.ok(pine.ast, pine.diagnostics.map(item=>item.message).join('; '));
+assert.equal(pine.ast?.programKind,'indicator');
+assert.equal(pine.ast?.pineDeclaration?.title,'Pine frontend contract');
+assert.equal(pine.ast?.pineDeclaration?.version,6);
+const unsupportedPine=parseWithCoreSpiritFrontend('pine-v6','//@version=5\nindicator("Unsupported")\nplot(close)');
+assert.equal(unsupportedPine.ast,undefined);
+assert.equal(unsupportedPine.diagnostics[0]?.code,'PINE_VERSION_UNSUPPORTED');
 
 const valid=new CoreSpiritCompiler().compileSource('let constant: const<float> = 10','qualifier-constant');
 assert.ok(valid.ir,valid.diagnostics.map(d=>d.code+': '+d.message).join('\n'));
