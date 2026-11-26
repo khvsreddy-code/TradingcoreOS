@@ -637,7 +637,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       for(const expectedName of n.metadata?.expectedTypes ?? []){
         const expected=semanticTypeForDeclaredName(expectedName);
         if(!expected){report(n,`Unsupported function type '${expectedName}'`,'FUNCTION_UNKNOWN_TYPE');continue;}
-        const typeMatches=expected.atom===inferred.atom && (!expected.container || expected.container===inferred.container);
+        const typeMatches=(expected.atom===inferred.atom || (expected.atom==='number' && isSemanticNumeric(inferred))) && (expected.container===inferred.container);
         const qualifierMatches=!expected.qualifier || isSemanticQualifierAssignable(expected.qualifier,semanticTypeQualifier(inferred));
         if(!typeMatches || !qualifierMatches)report(n,`Function value expects '${expectedName}' but inferred '${semanticTypeToString(inferred)}'`,'FUNCTION_TYPE_MISMATCH');
       }
@@ -762,5 +762,29 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   };
 
   visit(ast);
+
+  // Function parameter/return constraints annotate arbitrary expression nodes,
+  // including arguments inside expression statements (not only let declarations).
+  // Validate those explicit constraints after ordinary declaration scopes have
+  // been resolved, using the same semantic inference and qualifier rules.
+  const visitedExpectations=new WeakSet<object>();
+  const validateExpectedFunctionTypes=(value:unknown):void=>{
+    if(Array.isArray(value)){for(const item of value)validateExpectedFunctionTypes(item);return;}
+    if(!value || typeof value!=='object')return;
+    const record=value as Record<string,unknown>;
+    if(typeof record.type==='string' && record.metadata && typeof record.metadata==='object'){
+      const metadata=record.metadata as {expectedTypes?:readonly string[]};
+      if(metadata.expectedTypes?.length && !visitedExpectations.has(record)){
+        visitedExpectations.add(record);
+        inferSemantic(record as CoreSpiritAstNode,semanticSymbols);
+      }
+    }
+    for(const [key,child] of Object.entries(record)){
+      if(key==='metadata'||key==='span')continue;
+      validateExpectedFunctionTypes(child);
+    }
+  };
+  validateExpectedFunctionTypes(ast);
+
   return {diagnostics,symbols,udts,modelBindings,componentBindings,maxLookback,semanticSymbols};
 }
