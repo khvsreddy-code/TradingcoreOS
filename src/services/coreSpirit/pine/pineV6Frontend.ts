@@ -1,4 +1,4 @@
-import type { CoreSpiritAst, CoreSpiritAstNode, CoreSpiritPineDeclarationArgument, CoreSpiritPineDeclarationMetadata, CoreSpiritProgramKind } from '../ast';
+import type { CoreSpiritAst, CoreSpiritPineDeclarationArgument, CoreSpiritPineDeclarationMetadata, CoreSpiritProgramKind } from '../ast';
 import { CoreSpiritParser } from '../parser';
 import { normalizeCoreSpiritSource } from '../syntax';
 import type { CoreSpiritFrontendDiagnostic, CoreSpiritFrontendParseResult, CoreSpiritLanguageFrontend } from '../frontends';
