@@ -82,7 +82,7 @@ Public publication uses an explicit `script_kind`:
 - `indicator`
 - `strategy`
 
-The public catalog exposes `/explore/indicators` and the unified `/explore/scripts` hub. CoreSpirit remains the only scripting language; there is no PineScript/PineTS compatibility layer.
+The public catalog exposes `/explore/indicators` and the unified `/explore/scripts` hub. CoreSpirit remains the compiler, canonical IR, VM and chart runtime. A separate native Pine Script v6 compatibility frontend is being implemented against CoreSpirit; it does not embed PineTS or execute a second runtime.
 
 ## Community indicators
 
