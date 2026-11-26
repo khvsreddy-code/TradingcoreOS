@@ -134,6 +134,11 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
     if(parsedHeader.diagnostics.length)return {frontend:this.id,normalizedSource:original,diagnostics:parsedHeader.diagnostics};
     const header=parsedHeader.header!;
     const body=blankRange(original,header.start,header.end);
+    const unsupportedEnum=/^[ \t]*enum[ \t]+[A-Za-z_][A-Za-z0-9_]*/m.exec(maskCommentsAndStrings(body));
+    if(unsupportedEnum){
+      const offset=(unsupportedEnum.index??0)+unsupportedEnum[0].indexOf('enum');
+      return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_UNSUPPORTED_ENUM','Pine enum declarations are recognized but not implemented by this compatibility frontend yet.',offset,offset+4)]};
+    }
     let normalizedSource:string;
     try{normalizedSource=normalizeCoreSpiritSource(body);}
     catch(error){return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_NORMALIZE_ERROR',error instanceof Error?error.message:String(error))]};}
