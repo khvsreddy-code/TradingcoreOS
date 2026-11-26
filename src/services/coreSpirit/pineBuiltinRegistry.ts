@@ -236,7 +236,6 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('math','pi',[],'const<float>',0,0,'pine-math-pi'),
   catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
   catalog('math','phi',[],'const<float>',0,0,'pine-math-phi'),
-  catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
   catalog('array','new',[parameter('size','numeric','simple',true,0),parameter('initial_value','any','series',true,null)],'array<T>',0,2,'pine-array-new'),
   catalog('array','from',[parameter('values','any','series',false)],'array<T>',1,1,'pine-array-from'),
   catalog('array','get',[parameter('id','array'),numeric('index','series')],'T',2,2,'pine-array-get'),
