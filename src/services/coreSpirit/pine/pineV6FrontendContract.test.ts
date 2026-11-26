@@ -45,7 +45,7 @@ const normalDeclarations = [
   'plot(currentClose)',
   'plot(sampleCount)',
   'plot(latest)',
-].join('\\n');
+].join('\n');
 const normalCompiled = new CoreSpiritCompiler().compileSource(normalDeclarations, 'pine-normal-declarations', { frontend:'pine-v6' });
 assert.ok(normalCompiled.ir, normalCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\\n'));
 const normalSets = normalCompiled.ir!.entry.instructions.filter(item => item.op === 'setLocal');
