@@ -123,6 +123,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'toradians', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'tr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'series', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'vwma', minArgs:2, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'range', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   // Typed quant research primitives. Structured values are only combined by
   // explicit operations; there is deliberately no implicit matrix/scalar broadcast.
   { name:'vector', minArgs:1, returnType:'vector<float>', pure:true, category:'extension' },
