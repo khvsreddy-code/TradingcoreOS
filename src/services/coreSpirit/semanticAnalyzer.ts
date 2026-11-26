@@ -1,6 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst, annotateCoreSpiritAst, updateCoreSpiritAstNodeMetadata, type CoreSpiritFrontendId } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
-import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isPersistentStateType, stateOf, intrabarOf, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
+import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isPersistentStateType, stateOf, intrabarOf, seriesOf, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, semanticTypeQualifier, isSemanticQualifierAssignable, isSemanticNumeric, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
