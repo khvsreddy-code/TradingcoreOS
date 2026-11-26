@@ -6,6 +6,7 @@ import {
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
 import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState, VWMAState, ChangeState } from './statefulIndicatorKernel.ts';
+import { CoreSpiritFusedSeriesCursor, executeCoreSpiritFusedSeriesPipeline } from './seriesVector.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { analyzeCoreSpirit } from './semanticAnalyzer.ts';
 import {
@@ -289,6 +290,23 @@ assert.equal(lagRoc.update(100,0),null);
 assert.equal(lagRoc.update(110,1),null);
 assert.equal(lagRoc.update(125,2),0.25);
 assert.equal(lagRoc.update(130,2),0.3,'percentage change must recalculate on same-bar replacement');
+
+const changeCursor=new CoreSpiritFusedSeriesCursor([{name:'change',length:2}]);
+assert.ok(Number.isNaN(changeCursor.update(10,0)[0]));
+assert.ok(Number.isNaN(changeCursor.update(20,1)[0]));
+assert.equal(changeCursor.update(30,2)[0],20);
+assert.equal(changeCursor.update(35,2)[0],25,'fused cursor must replace a repeated absolute bar index');
+assert.equal(changeCursor.update(40,3)[0],20);
+const rangeBatch=executeCoreSpiritFusedSeriesPipeline([1,3,2,5],[{name:'range',length:3}]).output;
+assert.ok(Number.isNaN(rangeBatch[0]));
+assert.ok(Number.isNaN(rangeBatch[1]));
+assert.equal(rangeBatch[2],2);
+assert.equal(rangeBatch[3],3);
+const rangeCursor=new CoreSpiritFusedSeriesCursor([{name:'range',length:3}]);
+rangeCursor.update(1,0);rangeCursor.update(3,1);rangeCursor.update(2,2);
+assert.equal(rangeCursor.update(6,3)[0],4);
+assert.equal(rangeCursor.update(4,3)[0],3,'rolling range must revise a forming bar without appending twice');
+
 assert.equal(getPineV6BuiltinDefinition('ta','mom')?.executionBuiltin,'change');
 
 assert.equal(getPineV6BuiltinDefinition('ta','vwma')?.status,'implemented');
