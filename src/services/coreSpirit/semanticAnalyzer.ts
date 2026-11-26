@@ -687,18 +687,20 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const inferredType=infer(n.expression,scope);
         const pineStorageType=n.pineMode==='varip' ? intrabarOf(inferredType) : n.pineMode==='var' ? stateOf(inferredType) : undefined;
         const effectiveDeclaredType=n.declaredType ?? (pineStorageType && pineStorageType!=='unknown' ? String(pineStorageType) : undefined);
-        const type=effectiveDeclaredType ? mapDeclaredType(effectiveDeclaredType) : inferredType;
+        let type=effectiveDeclaredType ? mapDeclaredType(effectiveDeclaredType) : inferredType;
         visit(n.expression,scope);
         const semanticType=inferSemantic(n.expression,semanticSymbols);
+        const pineSeriesInitializer=Boolean(ast.pineDeclaration && !n.pineMode && semanticType?.kind==='series');
+        if(pineSeriesInitializer && effectiveDeclaredType) type=seriesOf(type);
         if(effectiveDeclaredType){
           const declared=semanticTypeForDeclaredName(effectiveDeclaredType);
           if(!declared) report(n,`Unsupported semantic type '${n.declaredType}'`,'TYPE_DECLARATION_SEMANTIC');
           else if(semanticType && declared.qualifier && !isSemanticQualifierAssignable(declared.qualifier,semanticTypeQualifier(semanticType))) {
             report(n,`Cannot assign ${semanticTypeQualifier(semanticType)}-qualified '${semanticTypeToString(semanticType)}' to ${declared.qualifier}-qualified '${n.declaredType}'`,'TYPE_QUALIFIER_MISMATCH');
-          } else if(semanticType && !semanticTypeCompatible(declared,n.pineMode && semanticType.kind==='series' ? scalarize(semanticType) : semanticType)) {
+          } else if(semanticType && !semanticTypeCompatible(declared,(n.pineMode || pineSeriesInitializer) && semanticType.kind==='series' ? scalarize(semanticType) : semanticType)) {
             report(n,`Declared type '${effectiveDeclaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
           }
-          semanticSymbols.set(n.name,declared ?? semanticType ?? semanticScalar('number'));
+          semanticSymbols.set(n.name,pineSeriesInitializer && semanticType ? semanticType : declared ?? semanticType ?? semanticScalar('number'));
         } else if(semanticType) semanticSymbols.set(n.name,n.pineMode && semanticType.kind==='series' ? scalarize(semanticType) : semanticType);
         symbols.set(n.name,type);
         scope.set(n.name,type);

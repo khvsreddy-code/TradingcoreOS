@@ -57,6 +57,7 @@ export class CoreSpiritParser {
     else if(this.match('type')) node=this.typeDeclaration();
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('var','varip')) node=this.pineVariableDeclaration(this.previous().type as 'var'|'varip');
+    else if(this.check('identifier') && this.pineVariableDeclarationAhead()) node=this.pineVariableDeclaration();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
     else if(this.match('coreWhile')) node=this.whileStatement();
@@ -198,9 +199,24 @@ export class CoreSpiritParser {
     return {type:'typeDeclaration',name:name.lexeme,fields,span:this.makeSpan(start,end)} as any;
   }
 
-  /** Parse Pine's declaration modes without rewriting source text or invalidating source spans. */
-  private pineVariableDeclaration(mode:'var'|'varip'):CoreSpiritAstNode {
-    const start=this.previous();
+  private pineVariableDeclarationAhead():boolean {
+    if(!this.check('identifier')) return false;
+    if(this.peek(1).type==='equal') return true;
+    const start=this.i;
+    try {
+      this.typeName();
+      const matches=this.check('identifier') && this.peek(1).type==='equal';
+      this.i=start;
+      return matches;
+    } catch {
+      this.i=start;
+      return false;
+    }
+  }
+
+  /** Parse Pine declarations without rewriting source text or invalidating source spans. */
+  private pineVariableDeclaration(mode?:'var'|'varip'):CoreSpiritAstNode {
+    const start=mode ? this.previous() : this.peek();
     const typeStart=this.i;
     let valueType:string|undefined;
     if(this.check('identifier')){
@@ -208,17 +224,17 @@ export class CoreSpiritParser {
       if(this.check('identifier')) valueType=candidate;
       else this.i=typeStart;
     }
-    const name=this.consume('identifier',`Expected variable name after ${mode} declaration`);
-    this.consume('equal',`Expected = after ${mode} variable name`);
+    const name=this.consume('identifier',`Expected variable name after ${mode ?? 'typed'} declaration`);
+    this.consume('equal',`Expected = after ${mode ?? 'typed'} variable name`);
     const expression=this.expression();
     this.match('semicolon');
     const container=mode==='varip'?'intrabar':'state';
     return {
       type:'let',
       name:name.lexeme,
-      declaredType:valueType ? `${container}<${valueType}>` : undefined,
+      declaredType:valueType ? (mode ? `${container}<${valueType}>` : valueType) : undefined,
       expression,
-      pineMode:mode,
+      ...(mode ? {pineMode:mode} : {}),
       span:this.makeSpan(start,this.previous()),
     };
   }

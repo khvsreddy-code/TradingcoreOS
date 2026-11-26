@@ -35,4 +35,21 @@ assert.ok(varCompiled.ir, varCompiled.diagnostics.map(item => item.code + ': ' +
 const stateInstructions = varCompiled.ir!.entry.instructions.filter(item => item.op === 'setState');
 assert.ok(stateInstructions.some(item => item.op === 'setState' && item.name === 'barCount' && item.storage === 'persistent'));
 assert.ok(stateInstructions.some(item => item.op === 'setState' && item.name === 'tickCount' && item.storage === 'intrabar'));
+
+const normalDeclarations = [
+  '//@version=6',
+  'indicator("Pine declarations")',
+  'float currentClose = close',
+  'int sampleCount = 1',
+  'latest = close',
+  'plot(currentClose)',
+  'plot(sampleCount)',
+  'plot(latest)',
+].join('\\n');
+const normalCompiled = new CoreSpiritCompiler().compileSource(normalDeclarations, 'pine-normal-declarations', { frontend:'pine-v6' });
+assert.ok(normalCompiled.ir, normalCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\\n'));
+const normalSets = normalCompiled.ir!.entry.instructions.filter(item => item.op === 'setLocal');
+assert.ok(normalSets.some(item => item.op === 'setLocal' && item.name === 'currentClose'));
+assert.ok(normalSets.some(item => item.op === 'setLocal' && item.name === 'sampleCount'));
+assert.ok(normalSets.some(item => item.op === 'setLocal' && item.name === 'latest'));
 console.log('CORESPIRIT_PINE_V6_FRONTEND_OK');
