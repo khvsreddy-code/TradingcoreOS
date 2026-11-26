@@ -74,8 +74,8 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'regimeDetect', minArgs:2, maxArgs:3, returnType:'string', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   // Math
   { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
-  { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
-  { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'min', minArgs:2, maxArgs:10, returnType:'number', pure:true, category:'math' },
+  { name:'max', minArgs:2, maxArgs:10, returnType:'number', pure:true, category:'math' },
   { name:'sqrt', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'pow', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'log', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
@@ -107,6 +107,21 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
  * They are deliberately not part of the small language core.
  */
 export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  // Pine v6 scalar math; the pure kernel module is the single runtime implementation.
+  { name:'avg', minArgs:2, maxArgs:10, returnType:'number', pure:true, category:'math' },
+  { name:'floor', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'ceil', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'sin', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'cos', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'tan', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'asin', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'acos', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'atan', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'atan2', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'log10', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'todegrees', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'toradians', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'tr', minArgs:1, maxArgs:1, returnType:'series<float>', pure:false, category:'series', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   // Typed quant research primitives. Structured values are only combined by
   // explicit operations; there is deliberately no implicit matrix/scalar broadcast.
   { name:'vector', minArgs:1, returnType:'vector<float>', pure:true, category:'extension' },
