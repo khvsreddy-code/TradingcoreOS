@@ -62,7 +62,8 @@ for(const fixture of PINE_CONFORMANCE_FIXTURES){
           const runtime=new CoreSpiritRuntime({sourceId:`pine-ternary-${executionTier}`,executionTier});
           const execution=runtime.executeIr(compiled.ir!,bars);
           assert.equal(execution.state.locals.selected,10,`${executionTier}: the false branch must be selected on the last bar`);
-          assert.equal(execution.state.locals.nested,3,`${executionTier}: nested ternaries must associate to the right`);
+          assert.equal(execution.state.locals.nested,3,`${executionTier}: outer false branch must be selected`);
+          assert.equal(execution.state.locals.previousNested,1,`${executionTier}: unparenthesized nested ternary must associate to the right and retain branch history`);
           assert.equal(execution.state.locals.previousSelected,11,`${executionTier}: selected series history must be retained`);
         }
         assert.ok(compiled.ir!.entry.instructions.some(instruction=>instruction.op==='jumpIfFalse'),
