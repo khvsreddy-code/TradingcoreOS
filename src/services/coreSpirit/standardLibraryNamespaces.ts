@@ -72,7 +72,6 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('ta','tr','tr','Current-bar true range with explicit missing-close handling.'),
   k('ta','vwma','Volume-weighted moving average; rolling price-volume kernel is pending.'),
   k('ta','macd','MACD tuple return awaits tuple ABI and independent reference fixtures.'),
-  k('ta','adx','ADX/DMI smoothing kernel and reference fixtures are pending.'),
   k('ta','stoch','Stochastic oscillator kernel and reference fixtures are pending.'),
   k('ta','bb','Bollinger Bands tuple return awaits tuple ABI and reference fixtures.'),
   k('ta','supertrend','Supertrend state and direction semantics are pending.'),
