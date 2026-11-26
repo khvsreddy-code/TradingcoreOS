@@ -195,8 +195,10 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   mathUnary('asin'), mathUnary('acos'), mathUnary('atan'), mathUnary('log10'),
   mathUnary('sign'),
   mathBinary('atan2'),
-  supported('math','round','round',[numeric('number')],'int',1,1,'No historical samples required.','Pure deterministic scalar evaluation; ties round up.','O(1).','pine-math-round-integer'),
-  supported('math','round','round',[numeric('number'),numeric('precision','simple')],'float',2,2,'No historical samples required.','Pure deterministic scalar evaluation at the requested decimal precision.','O(1).','pine-math-round-precision'),
+  definition('math','round','implemented',[
+    overload([numeric('number')],'int',1,1,'No historical samples required.','Pure deterministic scalar evaluation; ties round up.','O(1).','pine-math-round-integer'),
+    overload([numeric('number'),numeric('precision','simple')],'float',2,2,'No historical samples required.','Pure deterministic scalar evaluation at the requested decimal precision.','O(1).','pine-math-round-precision'),
+  ],'round'),
   supported('math','todegrees','todegrees',[numeric('radians')],'float',1,1,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-todegrees'),
   supported('math','toradians','toradians',[numeric('degrees')],'float',1,1,'No historical samples required.','Pure deterministic scalar evaluation.','O(1).','pine-math-toradians'),
 
@@ -303,17 +305,34 @@ export function getPineV6BuiltinDefinition(namespace: string, name: string): Pin
   return byQualifiedName.get(namespace + '.' + name);
 }
 
+function stripQualifier(type: string): string {
+  return type.trim()
+    .replace(/^(series|simple|input|const)\\s*</,'')
+    .replace(/^(series|simple|input|const)\\s+/,'')
+    .replace(/>$/,'');
+}
 function numericType(type: string): boolean {
-  const value = type.replace(/^(series|simple|input|const)</,'').replace(/>$/,'');
-  return ['number','numeric','int','float'].includes(value);
+  return ['number','numeric','int','float'].includes(stripQualifier(type));
+}
+function actualQualifier(type: string): PineV6Qualifier | undefined {
+  const match=type.trim().match(/^(const|input|simple|series)(?:<|\\s)/);
+  return match?.[1] as PineV6Qualifier | undefined;
+}
+const qualifierRank: Readonly<Record<PineV6Qualifier,number>> = Object.freeze({
+  const:0,input:1,simple:2,series:3,
+});
+function qualifierMatches(type: string, expected: PineV6Qualifier): boolean {
+  const actual=actualQualifier(type);
+  return actual === undefined || qualifierRank[actual] <= qualifierRank[expected];
 }
 function typeMatches(actual: string, expected: PineV6ParameterType): boolean {
   if (actual === 'unknown' || expected === 'any') return true;
+  const value=stripQualifier(actual);
   if (expected === 'numeric') return numericType(actual);
-  if (expected === 'boolean') return ['bool','boolean','series<bool>','simple<bool>','input<bool>'].includes(actual);
-  if (expected === 'string') return ['string','series<string>','simple<string>','input<string>','const<string>'].includes(actual);
-  if (expected === 'color') return ['color','series<color>','simple<color>','input<color>'].includes(actual);
-  return actual.startsWith(expected + '<');
+  if (expected === 'boolean') return ['bool','boolean'].includes(value);
+  if (expected === 'string') return value === 'string';
+  if (expected === 'color') return value === 'color';
+  return value.startsWith(expected + '<');
 }
 
 export type PineV6BuiltinValidation = Readonly<{
@@ -336,7 +355,8 @@ export function validatePineV6BuiltinArguments(
     let valid = true;
     for (let index = 0; index < argumentTypes.length; index += 1) {
       const expected = candidate.parameters[index] ?? (candidate.parameters.at(-1)?.variadic ? candidate.parameters.at(-1) : undefined);
-      if (!expected || !typeMatches(argumentTypes[index] ?? 'unknown',expected.type)) { valid = false; break; }
+      const actualType=argumentTypes[index] ?? 'unknown';
+      if (!expected || !typeMatches(actualType,expected.type) || !qualifierMatches(actualType,expected.qualifier)) { valid = false; break; }
     }
     if (valid) return Object.freeze({valid:true});
   }
