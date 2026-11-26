@@ -37,7 +37,7 @@ import { CoreSpiritOutputCollector } from './outputCollector';
 import { CoreSpiritEventRouter } from './eventRouter';
 import { CoreSpiritCapabilityHost } from './capabilityHost';
 import { CoreSpiritDebugHost } from './debugHost';
-import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegistry';
+import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId, type CoreSpiritStoredValue } from './seriesRegistry';
 import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProfilerSnapshot } from './profiler';
 import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
@@ -736,6 +736,7 @@ export class CoreSpiritRuntime {
   /** Commit a live bar only after executing its final, confirmed revision. */
   confirmRealtimeBar(): void {
     if (this.state.barIndex < 0) return;
+    if (!this.currentBarSnapshot && this.state.barState.isConfirmed) return;
     if (this.currentBarSnapshot && !this.state.barState.isConfirmed && this.compiledIr) {
       const current = this.history.at(-1);
       if (current) {
@@ -1327,10 +1328,11 @@ export class CoreSpiritRuntime {
       committedSeriesState: this.seriesRegistry.snapshotNumericObject(),
       committedLocalSeries: this.seriesRegistry.snapshotValueObject(),
       committedCrossState: cloneCrossMap(this.crossState),
+      persistentState: this.stateStore.stateSnapshot(),
     };
   }
 
-  restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}> }): boolean {
+  restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}>; persistentState?:Record<string,CoreSpiritStoredValue> }): boolean {
     try {
       this.seriesRegistry.reset();
       this.seriesRegistry.restoreNumericObject(checkpoint.state.seriesState);
@@ -1338,6 +1340,7 @@ export class CoreSpiritRuntime {
       this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:this.seriesRegistry.createNumericCompatibilityView(), localSeries:this.seriesRegistry.createValueCompatibilityView() };
       this.crossState = cloneCrossMap(checkpoint.crossState);
       this.stateStore.bind(this.crossState);
+      this.stateStore.restoreStateSnapshot(checkpoint.persistentState ?? {});
       (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
       this.columnarHistory.replaceRows((this as any).history);
       return true;

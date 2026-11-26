@@ -86,6 +86,16 @@ export class CoreSpiritStateStore {
     return Object.fromEntries(this.persistentState.entries());
   }
 
+  restoreStateSnapshot(snapshot: Readonly<Record<string, CoreSpiritStoredValue>>): void {
+    this.persistentState.clear();
+    this.persistentJournal?.clear();
+    this.persistentJournal = undefined;
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (!key) throw new Error('Persistent state snapshot contains an empty key.');
+      this.persistentState.set(key, value);
+    }
+  }
+
   setCross(key: string, value: { a: number; b: number }): void {
     this.seriesCrossJournal ??= new Map();
     if (this.series.hasActiveTransaction() && !this.seriesCrossJournal.has(key)) {
