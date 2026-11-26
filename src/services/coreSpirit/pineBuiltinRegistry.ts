@@ -210,6 +210,16 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   // The current host request adapter is not yet a full Pine expression request.
   hostBound('request','security',[parameter('symbol','string','simple'),parameter('timeframe','string','simple'),parameter('expression','any','series'),boolean('ignore_invalid_symbol','simple',true,false)],'series<float>',3,4,'pine-request-security-host',['Current request lowering resolves a bounded host field/offset request; it does not yet evaluate arbitrary Pine expression ASTs or all gaps/lookahead/session options.']),
   hostBound('request','security_lower_tf',[parameter('symbol','string','simple'),parameter('timeframe','string','simple'),parameter('expression','any','series')],'array<float>',3,3,'pine-request-security-lower-tf-host',['Lower-timeframe requests are constrained by the data resolver; full tuple, expression and Pine array semantics are not implemented.']),
+  hostBound('request','currency_rate',[parameter('from','string','simple'),parameter('to','string','simple'),boolean('ignore_invalid_currency','simple',true,false)],'series<float>',2,3,'pine-request-currency-rate',['Currency conversion data is not currently exposed by the CoreSpirit data resolver.']),
+  hostBound('request','dividends',[parameter('ticker','string','simple'),parameter('field','any','simple'),parameter('gaps','any','simple',true),parameter('lookahead','any','simple',true)],'series<float>',2,6,'pine-request-dividends',['Corporate-action data and gaps/lookahead alignment are not implemented.']),
+  hostBound('request','splits',[parameter('ticker','string','simple'),parameter('field','any','simple'),parameter('gaps','any','simple',true),parameter('lookahead','any','simple',true)],'series<float>',2,5,'pine-request-splits',['Corporate-action data and gaps/lookahead alignment are not implemented.']),
+  hostBound('request','earnings',[parameter('ticker','string','simple'),parameter('field','any','simple'),parameter('gaps','any','simple',true),parameter('lookahead','any','simple',true)],'series<float>',2,6,'pine-request-earnings',['Earnings event data and gaps/lookahead alignment are not implemented.']),
+  hostBound('request','financial',[parameter('symbol','string','simple'),parameter('financial_id','string','simple'),parameter('period','string','simple')],'series<float>',3,6,'pine-request-financial',['Fundamental financial datasets are not exposed by the CoreSpirit data resolver.']),
+  hostBound('request','economic',[parameter('country_code','string','simple'),parameter('field','string','simple')],'series<float>',2,4,'pine-request-economic',['Macroeconomic datasets are not exposed by the CoreSpirit data resolver.']),
+  hostBound('request','seed',[parameter('source','string','simple'),parameter('symbol','string','simple'),parameter('expression','any','series')],'series<float>',3,5,'pine-request-seed',['External GitHub-hosted seed datasets are not supported by the current data resolver.']),
+  hostBound('request','footprint',[parameter('ticker','string','simple')],'series<footprint>',1,4,'pine-request-footprint',['CoreSpirit has its own orderflow/footprint host API; Pine footprint object compatibility is not implemented.']),
+  catalog('request','quandl',[parameter('ticker','string','simple'),parameter('expression','string','simple')],'series<float>',2,4,'pine-request-quandl',['Legacy Quandl data request integration is not implemented.']),
+
 
   // Tuples, reference collections, settings, drawing IDs and strategy engine
   // still need dedicated runtime contracts before these become executable.
@@ -236,6 +246,22 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('ta','lowestbars',[numeric('source'),numeric('length','simple')],'series<int>',2,2,'pine-ta-lowestbars'),
   catalog('ta','barssince',[boolean('condition')],'series<int>',1,1,'pine-ta-barssince'),
   catalog('ta','cum',[numeric('source')],'series<float>',1,1,'pine-ta-cum'),
+  catalog('ta','alma',[numeric('source'),numeric('length','simple'),numeric('offset','simple'),numeric('sigma','simple')],'series<float>',4,4,'pine-ta-alma'),
+  catalog('ta','bbw',[numeric('source'),numeric('length','simple'),numeric('multiplier','simple')],'series<float>',3,3,'pine-ta-bbw'),
+  catalog('ta','dev',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-dev'),
+  catalog('ta','dmi',[numeric('di_length','simple'),numeric('adx_smoothing','simple')],'[series<float>,series<float>,series<float>]',2,2,'pine-ta-dmi',['Tuple return ABI is not implemented.']),
+  catalog('ta','mom',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-mom'),
+  catalog('ta','percentile_linear_interpolation',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-linear'),
+  catalog('ta','percentile_nearest_rank',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-nearest'),
+  catalog('ta','percentrank',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-percentrank'),
+  catalog('ta','pivotlow',[numeric('source'),numeric('leftbars','simple'),numeric('rightbars','simple')],'series<float>',2,4,'pine-ta-pivotlow',['Requires future rightbars confirmation; causal confirmation delay and max_bars_back rules are not implemented.']),
+  catalog('ta','pivothigh',[numeric('source'),numeric('leftbars','simple'),numeric('rightbars','simple')],'series<float>',2,4,'pine-ta-pivothigh',['Requires future rightbars confirmation; causal confirmation delay and max_bars_back rules are not implemented.']),
+  catalog('ta','range',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-range'),
+  catalog('ta','sar',[numeric('start','simple'),numeric('increment','simple'),numeric('maximum','simple')],'series<float>',3,3,'pine-ta-sar'),
+  catalog('ta','swma',[numeric('source')],'series<float>',1,1,'pine-ta-swma'),
+  catalog('ta','tsi',[numeric('source'),numeric('short_length','simple'),numeric('long_length','simple')],'series<float>',3,3,'pine-ta-tsi'),
+  catalog('ta','wpr',[numeric('length','simple')],'series<float>',1,1,'pine-ta-wpr'),
+
 
 
   catalog('math','pi',[],'const<float>',0,0,'pine-math-pi'),
