@@ -108,6 +108,16 @@ function parseHeader(source:string):{header?:ParsedHeader;diagnostics:CoreSpirit
   if(end<0){diagnostics.push(diagnostic(source,'PINE_UNCLOSED_DECLARATION',`Unclosed ${kind}() declaration.`,codeStart,source.length));return {diagnostics};}
   const rawArgs=source.slice(open+1,end-1);
   const args=splitArguments(rawArgs).map(splitNamedArgument);
+  const seenArguments=new Set<string>();
+  for(const argument of args){
+    if(!argument.name)continue;
+    if(seenArguments.has(argument.name)){
+      const argumentOffset=source.indexOf(argument.name,open+1);
+      diagnostics.push(diagnostic(source,'PINE_DUPLICATE_DECLARATION_ARGUMENT',`Declaration argument '${argument.name}' is specified more than once.`,Math.max(open+1,argumentOffset),Math.max(open+2,argumentOffset+argument.name.length)));
+      return {diagnostics};
+    }
+    seenArguments.add(argument.name);
+  }
   const namedTitle=args.find(arg=>arg.name==='title')?.value;
   const positionalTitle=args.find(arg=>!arg.name)?.value;
   const title=decodePineString(positionalTitle??namedTitle??'');
