@@ -224,6 +224,11 @@ for (const entry of PINE_V6_BUILTIN_REGISTRY.filter(item => item.status === 'imp
 const smaApi = getPineV6BuiltinDefinition('ta','sma');
 assert.ok(smaApi && pineV6BuiltinIsExecutable(smaApi));
 assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>','int']).valid,true);
+assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>','series<int>']).valid,false,
+  'simple length qualifiers must reject series-qualified arguments');
+assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>','simple<int>']).valid,true,
+  'simple length qualifiers accept simple integer arguments');
+
 assert.equal(validatePineV6BuiltinArguments(smaApi,['string','int']).valid,false);
 assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>']).valid,false);
 const avgApi = getPineV6BuiltinDefinition('math','avg');
