@@ -6,6 +6,8 @@ import {
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
 import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState } from './statefulIndicatorKernel.ts';
+import { CoreSpiritParser } from './parser.ts';
+import { analyzeCoreSpirit } from './semanticAnalyzer.ts';
 import {
   PINE_V6_BUILTIN_NAMESPACE_INVENTORY,
   PINE_V6_BUILTIN_REGISTRY,
@@ -269,4 +271,23 @@ for (const volumeFunction of ['vwap','obv','pvt','nvi','pvi','wad','wvad','iii',
   assert.ok(getPineV6BuiltinDefinition('ta',volumeFunction),
     'volume and flow family inventory must include ta.' + volumeFunction);
 }
+
+// Pine-only catalog enforcement must not break CoreScript's own strategy API.
+const pineStrategyAst = new CoreSpiritParser('strategy.entry("L", "long")').parse();
+const pineStrategyAnalysis = analyzeCoreSpirit(pineStrategyAst,{frontend:'pine-v6'});
+assert.ok(pineStrategyAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_UNSUPPORTED'),
+  'Pine strategy simulation must not fall through to the CoreScript order-intent builtin');
+const coreStrategyAst = new CoreSpiritParser('strategy.entry("L", "long")').parse();
+const coreStrategyAnalysis = analyzeCoreSpirit(coreStrategyAst,{frontend:'corescript'});
+assert.ok(!coreStrategyAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_UNSUPPORTED'),
+  'CoreScript strategy intent API must remain available');
+const pineUnknownMathAst = new CoreSpiritParser('math.vector([1, 2])').parse();
+const pineUnknownMathAnalysis = analyzeCoreSpirit(pineUnknownMathAst,{frontend:'pine-v6'});
+assert.ok(pineUnknownMathAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_UNKNOWN'),
+  'CoreSpirit-only math extensions must not leak into Pine v6');
+const pineHostRequestAst = new CoreSpiritParser('request.security("NSE:NIFTY", "15", close)').parse();
+const pineHostRequestAnalysis = analyzeCoreSpirit(pineHostRequestAst,{frontend:'pine-v6'});
+assert.ok(pineHostRequestAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_HOST_LIMITATION'),
+  'request.security must surface its current host-adapter compatibility limitation');
+
 
