@@ -66,7 +66,7 @@ Never report "running" merely because a button click or indicator handle was cre
 
 ## Parity gaps that must remain explicit
 
-The canonical Pine registry, not a manually curated second matrix, must drive implementation and release claims. CoreSpirit-only capabilities such as orderbook, ML and broker execution belong in their own host contracts, not in the Pine language inventory. Highest-impact Pine gaps are declaration-mode semantics, tuple returns/destructuring, switch, numeric range loops, Pine arrow functions and method declarations, enum/UDT reference behavior, library import/export, collection API/identity/history semantics, and exact drawing-object lifecycle parity.
+The canonical Pine registry, not a manually curated second matrix, must drive implementation and release claims. CoreSpirit-only capabilities such as orderbook, ML and broker execution belong in their own host contracts, not in the Pine language inventory. Scalar `var` and `varip` declarations now lower to separate rollback-aware persistent and intrabar-persistent state stores, with tests against both reference and optimized VMs. Remaining high-impact gaps include full Pine qualifier propagation, multi-variable and tuple declarations, switch, numeric range loops, Pine arrow functions/default arguments, method declarations, enums, UDT/reference identity, library import/export, collection API/history semantics, full strategy simulation and drawing-object rollback parity.
 
 Do not close a gap by adding only autocomplete, a namespace stub, or a renderer primitive. Each feature needs:
 1. a language/AST/type-system contract;
