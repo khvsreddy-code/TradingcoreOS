@@ -5,7 +5,7 @@ export type CoreSpiritNumericSeries = Float64Array;
 export type CoreSpiritSeriesOperationName =
   | 'change' | 'pctchange'
   | 'sma' | 'mean' | 'sum' | 'highest' | 'lowest' | 'stdev' | 'variance'
-  | 'wma' | 'median' | 'zscore' | 'normalize' | 'persistence'
+  | 'wma' | 'median' | 'zscore' | 'normalize' | 'range' | 'persistence'
   | 'ema' | 'rma';
 
 /**
@@ -74,7 +74,7 @@ export function coreSpiritSeriesMaxLookback(
 const FUSED_OPERATION_SET: ReadonlySet<CoreSpiritSeriesOperationName> = new Set([
   'change', 'pctchange', 'sma', 'mean', 'sum', 'highest', 'lowest',
   'stdev', 'variance', 'wma', 'median', 'zscore', 'normalize',
-  'persistence', 'ema', 'rma',
+  'persistence', 'ema', 'rma', 'range',
 ]);
 
 export function isCoreSpiritSeriesOperationFusible(
@@ -112,7 +112,7 @@ class FusedSeriesStage {
     switch (op.name) {
       case 'sma': case 'mean': this.rollingMean = new RollingMean(period); break;
       case 'sum': this.rollingSum = new RollingSum(period); break;
-      case 'highest': case 'lowest': case 'normalize': this.rollingMinMax = new RollingMinMax(period); break;
+      case 'highest': case 'lowest': case 'normalize': case 'range': this.rollingMinMax = new RollingMinMax(period); break;
       case 'stdev': case 'variance': case 'zscore': this.rollingVariance = new RollingVariance(period); if (op.name === 'zscore') this.rollingMean = new RollingMean(period); break;
       case 'wma': this.wma = new WMAState(period); break;
       case 'median': this.rollingMedian = new RollingMedian(period); break;
@@ -151,6 +151,7 @@ class FusedSeriesStage {
       if (state.min==null||state.max==null) return Number.NaN;
       if (this.op.name==='highest') return state.max;
       if (this.op.name==='lowest') return state.min;
+      if (this.op.name==='range') return state.max-state.min;
       return state.max===state.min?0:(value-state.min)/(state.max-state.min);
     }
     if (this.wma) return this.wma.update(value) ?? Number.NaN;
