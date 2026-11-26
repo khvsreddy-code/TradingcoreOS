@@ -144,7 +144,7 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
     // header as a sequence of unrelated identifiers/operators. It is a reserved
     // construct and remains explicitly unsupported until its loop result and
     // iteration semantics have their own IR/runtime contract.
-    const unsupportedRangeLoop=/^[ \\t]*for[ \\t]+[A-Za-z_][A-Za-z0-9_]*[ \\t]*=/m.exec(maskedBody);
+    const unsupportedRangeLoop=/^[ \t]*for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=/m.exec(maskedBody);
     if(unsupportedRangeLoop){
       const offset=(unsupportedRangeLoop.index??0)+unsupportedRangeLoop[0].indexOf('for');
       return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_SYNTAX_ERROR','Pine numeric range for-loops are not implemented by this Pine v6 frontend yet.',offset,offset+3)]};
