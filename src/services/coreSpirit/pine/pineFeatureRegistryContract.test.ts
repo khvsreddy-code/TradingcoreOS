@@ -9,6 +9,9 @@ import { PINE_CONFORMANCE_FIXTURES } from './pineConformanceFixtures.ts';
 assert.deepEqual(validatePineFeatureRegistry(),[]);
 assert.ok(PINE_FEATURE_REGISTRY.length>=20,'the registry must cover syntax, declarations, types, functions, collections, visuals and runtime');
 assert.equal(new Set(PINE_FEATURE_REGISTRY.map(item=>item.id)).size,PINE_FEATURE_REGISTRY.length);
+assert.equal(new Set(PINE_CONFORMANCE_FIXTURES.map(item=>item.id)).size,PINE_CONFORMANCE_FIXTURES.length,'fixture identifiers must be unique');
+const registeredFeatureIds=new Set(PINE_FEATURE_REGISTRY.map(item=>item.id));
+for(const fixture of PINE_CONFORMANCE_FIXTURES) assert.ok(registeredFeatureIds.has(fixture.featureId),`${fixture.id}: unknown feature id ${fixture.featureId}`);
 for(const feature of PINE_FEATURE_REGISTRY){
   assert.ok(feature.officialReference.startsWith('https://www.tradingview.com/pine-script-docs/'),feature.id);
   for(const implementationFile of feature.implementationFiles){
