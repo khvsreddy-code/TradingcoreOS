@@ -6,6 +6,15 @@ import {
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
 import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState } from './statefulIndicatorKernel.ts';
+import {
+  PINE_V6_BUILTIN_NAMESPACE_INVENTORY,
+  PINE_V6_BUILTIN_REGISTRY,
+  getPineV6BuiltinDefinition,
+  validatePineV6BuiltinArguments,
+  pineV6BuiltinIsExecutable,
+} from './pineBuiltinRegistry.ts';
+import { resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces.ts';
+import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins.ts';
 
 const close = (actual, expected, epsilonOrMessage = 1e-9, message) => {
   const epsilon = typeof epsilonOrMessage === 'number' ? epsilonOrMessage : 1e-9;
@@ -186,3 +195,45 @@ assert.throws(() => executeCoreSpiritNumericalKernel('matrixMultiply', [[], []],
 assert.throws(() => executeCoreSpiritNumericalKernel('matrixDecomposition', [[1]], [2]), /input length must match/);
 
 console.log('CoreSpirit numerical kernel contract: OK');
+
+
+// Pine v6 API inventory, typed overload and deterministic scalar execution contracts.
+const pineNamespaces = [
+  'ta','math','array','matrix','map','str','color','input','request',
+  'timeframe','time','syminfo','chart','barstate','strategy','line','box',
+  'label','table','polyline','log',
+];
+for (const namespace of pineNamespaces) {
+  assert.ok(PINE_V6_BUILTIN_NAMESPACE_INVENTORY.some(entry => entry.namespace === namespace),
+    'Pine v6 namespace inventory must include ' + namespace);
+}
+assert.ok(PINE_V6_BUILTIN_REGISTRY.length >= 70,'Pine v6 API inventory should include executable and planned signatures');
+for (const entry of PINE_V6_BUILTIN_REGISTRY) {
+  for (const signature of entry.overloads) {
+    assert.ok(signature.returnType,entry.qualifiedName + ' must declare return type');
+    assert.ok(signature.parameters.every(arg => arg.qualifier && arg.type),entry.qualifiedName + ' parameters must declare type and qualifier');
+    assert.ok(signature.historicalRequirement && signature.realtimeBehavior,entry.qualifiedName + ' must declare temporal behavior');
+    assert.ok(signature.executionCost && signature.errorBehavior && signature.testFixture,entry.qualifiedName + ' must declare runtime contract and fixture');
+  }
+}
+const smaApi = getPineV6BuiltinDefinition('ta','sma');
+assert.ok(smaApi && pineV6BuiltinIsExecutable(smaApi));
+assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>','int']).valid,true);
+assert.equal(validatePineV6BuiltinArguments(smaApi,['string','int']).valid,false);
+assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>']).valid,false);
+const avgApi = getPineV6BuiltinDefinition('math','avg');
+assert.equal(validatePineV6BuiltinArguments(avgApi,['float','float','float','int']).valid,true);
+assert.equal(resolveCoreSpiritLibraryCall('ta','macd')?.entry.status,'catalog',
+  'tuple-returning MACD is not executable before tuple ABI support is implemented');
+assert.equal(resolveCoreSpiritLibraryCall('ta','hma')?.entry.status,'catalog',
+  'HMA must not be advertised as executable without a conformant kernel');
+assert.equal(resolveCoreSpiritLibraryCall('array','new')?.entry.status,'catalog',
+  'array.new remains blocked until typed Pine collection semantics exist');
+assert.equal(resolveCoreSpiritLibraryCall('math','avg')?.builtin?.name,'avg');
+assert.equal(executeCoreSpiritPineMathBuiltin('avg',[2,4,6]).value,4);
+assert.equal(executeCoreSpiritPineMathBuiltin('floor',[2.9]).value,2);
+assert.equal(executeCoreSpiritPineMathBuiltin('ceil',[2.1]).value,3);
+assert.equal(executeCoreSpiritPineMathBuiltin('todegrees',[Math.PI]).value,180);
+assert.equal(executeCoreSpiritPineMathBuiltin('clamp',[12,0,10]).value,10);
+assert.equal(executeCoreSpiritPineMathBuiltin('sigmoid',[0]).value,0.5);
+assert.throws(() => executeCoreSpiritPineMathBuiltin('clamp',[1,5,2]),/minimum must not exceed maximum/);
