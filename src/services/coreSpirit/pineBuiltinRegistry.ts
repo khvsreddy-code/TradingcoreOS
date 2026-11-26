@@ -269,7 +269,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('ta','dmi',[numeric('di_length','simple'),numeric('adx_smoothing','simple')],'[series<float>,series<float>,series<float>]',2,2,'pine-ta-dmi',['Tuple return ABI is not implemented.']),
   catalog('ta','accdist',[],'series<float>',0,0,'pine-ta-accdist',['Pine exposes accumulation/distribution as a namespace variable; typed value-member lowering is not implemented.']),
 
-  catalog('ta','mom',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-mom'),
+  supported('ta','mom','change',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'Requires the current source value and length bars of prior source history.','Developing-bar revisions replace the current lagged observation.','O(1) amortized per bar with a fixed-capacity lag ring.','pine-ta-mom'),
   catalog('ta','percentile_linear_interpolation',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-linear'),
   catalog('ta','percentile_nearest_rank',[numeric('source'),numeric('length','simple'),numeric('percentage','simple')],'series<float>',3,3,'pine-ta-percentile-nearest'),
   catalog('ta','percentrank',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-percentrank'),
