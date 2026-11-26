@@ -5,7 +5,7 @@ import {
   zScore, dotProduct, matrixMultiply, matrixDecomposition, softmax, logSumExp,
   executeCoreSpiritNumericalKernel,
 } from './numericalKernels.ts';
-import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState } from './statefulIndicatorKernel.ts';
+import { RollingMean, RollingSum, RollingVariance, RollingMinMax, EMAState, WilderState, WMAState, ATRState, VWMAState } from './statefulIndicatorKernel.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { analyzeCoreSpirit } from './semanticAnalyzer.ts';
 import {
@@ -257,6 +257,22 @@ assert.equal(getPineV6BuiltinDefinition('math','atan2'),undefined,
   'CoreSpirit atan2 is an extension, not a Pine v6 math namespace builtin');
 
 assert.throws(() => executeCoreSpiritPineMathBuiltin('clamp',[1,5,2]),/minimum must not exceed maximum/);
+
+// VWMA uses an O(1) rolling two-sum kernel and replaces the forming-bar pair.
+const vwmaState=new VWMAState(3);
+assert.equal(vwmaState.update(10,1),null);
+assert.equal(vwmaState.update(20,1),null);
+assert.equal(vwmaState.update(30,2),22.5);
+assert.equal(vwmaState.update(40,2),32);
+assert.equal(vwmaState.update(50,2,'replace'),36);
+const vwmaClone=vwmaState.clone();
+assert.equal(vwmaClone.value,36);
+assert.equal(vwmaClone.update(60,1),43.333333333333336);
+assert.equal(vwmaState.value,36,'VWMA snapshots/clones must not alias mutable buffers');
+assert.equal(vwmaState.update(Number.NaN,1),null,'VWMA must reset on missing source data');
+assert.equal(vwmaState.value,null);
+assert.equal(getPineV6BuiltinDefinition('ta','vwma')?.status,'implemented');
+
 assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?.defaultValue,false,
   'ta.tr defaults handle_na to false');
 assert.equal(validatePineV6BuiltinArguments(getPineV6BuiltinDefinition('ta','tr'),[]).valid,true,
