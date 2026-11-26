@@ -95,6 +95,19 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return isPersistentStateType(resolved) ? elementType(resolved) : resolved;
 
       case 'member': {
+        // Pine namespace values (e.g. barstate.isconfirmed, syminfo.mintick,
+        // ta.obv) must be registered as value built-ins and backed by runtime
+        // metadata. Until that value ABI exists, do not fall through to UDT
+        // member resolution or an unrelated CoreScript member.
+        if(options.frontend==='pine-v6' && n.target.type==='identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+          const definition=getPineV6BuiltinDefinition(n.target.name,n.member);
+          if(!definition) {
+            report(n, `'${n.target.name}.${n.member}' is not registered in the Pine Script v6 built-in reference catalog`, 'PINE_BUILTIN_UNKNOWN');
+            return 'unknown';
+          }
+          report(n, `Pine v6 value built-in '${definition.qualifiedName}' is catalogued but its typed runtime value binding is not implemented yet${definition.knownDifferences.length ? ': ' + definition.knownDifferences.join(' ') : '.'}`, 'PINE_BUILTIN_VALUE_UNSUPPORTED');
+          return 'unknown';
+        }
         if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return 'boolean';
         if(n.target.type==='identifier' && n.target.name==='chart' && ['price','volume','indicator','custom'].includes(n.member)) return `visual:area`;
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
