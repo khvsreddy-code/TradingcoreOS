@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 
 const contracts = [
+  ['corespirit-frontend-and-type-qualifier', ['src/services/coreSpirit/frontendAndTypeQualifierContract.test.mjs', true]],
+  ['corespirit-ir-specification', ['src/services/coreSpirit/irSpecificationContract.test.mjs', true]],
   ['dependency-audit-classification', ['tools/report-dependency-audit.test.mjs', false]],
   ['request-trace-reason', ['src/requestTraceReasonContract.test.mjs', false]],
   ['market-data-health', ['src/marketDataHealthContract.test.mjs', true]],

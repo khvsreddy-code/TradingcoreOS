@@ -8,6 +8,7 @@ export { analyzeCoreSpirit } from './semanticAnalyzer';
 export type { CoreSpiritDiagnostic, CoreSpiritUdt, CoreSpiritSemanticOptions, CoreSpiritSemanticResult } from './semanticAnalyzer';
 
 export * from './ir';
+export * from './irSpecification';
 export * from './compiler';
 export * from './standardLibrary';
 export * from './standardLibraryNamespaces';

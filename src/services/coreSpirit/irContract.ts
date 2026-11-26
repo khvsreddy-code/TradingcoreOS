@@ -1,6 +1,7 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
 import { CORE_SPIRIT_AUTHORING_LEVELS } from './coreSpiritExecutionModel';
+import { validateCoreSpiritIrInstructionShape } from './irSpecification';
 
 /**
  * Stable CoreSpirit VM contract. The VM executes this contract, never AST nodes.
@@ -28,10 +29,9 @@ function hasValidInstructionOrigin(value: unknown): boolean {
 
 export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
   const instruction = value as CoreSpiritIrInstruction | undefined;
-  return !!instruction && typeof instruction === 'object' &&
-    typeof (instruction as any).op === 'string' &&
-    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) &&
-    ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
+  return !!instruction && validateCoreSpiritIrInstructionShape(instruction) &&
+    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes(instruction.op) &&
+    (instruction.origin === undefined || hasValidInstructionOrigin(instruction.origin));
 }
 
 export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {
@@ -60,7 +60,13 @@ export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrP
           required.some((capability, index) => capability !== policyRequired[index])) return false;
     }
   }
-  return p.entry.instructions.every(isCoreSpiritIrInstruction);
+  if (!p.entry.instructions.every(isCoreSpiritIrInstruction)) return false;
+  const instructionCount=p.entry.instructions.length;
+  return p.entry.instructions.every(instruction =>
+    instruction.op !== 'jump' && instruction.op !== 'jumpIfFalse' && instruction.op !== 'eventGate'
+      ? true
+      : instruction.target <= instructionCount
+  );
 }
 
 /** Stable structural representation used by caches, replay and worker transport. */
