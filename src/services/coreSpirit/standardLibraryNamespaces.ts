@@ -106,6 +106,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('math','pi','Numeric constant access requires namespace member-value lowering.'),
   k('math','e','Numeric constant access requires namespace member-value lowering.'),
   k('math','phi','Numeric constant access requires namespace member-value lowering.'),
+  k('math','rphi','Numeric constant access requires namespace member-value lowering.'),
   b('math','vector','vector','Construct a typed dense vector.'), b('math','matrix','matrix','Construct a typed dense matrix.'), b('math','tensor','tensor','Construct a typed dense tensor.'),
   b('math','zeros','zeros','Create a zero-filled matrix.'), b('math','identity','identity','Create a matrix identity.'),
   b('math','matrixAdd','matrixAdd','Add identically-shaped matrices.'), b('math','matrixScale','matrixScale','Scale a matrix by a scalar.'),
