@@ -237,3 +237,12 @@ assert.equal(executeCoreSpiritPineMathBuiltin('todegrees',[Math.PI]).value,180);
 assert.equal(executeCoreSpiritPineMathBuiltin('clamp',[12,0,10]).value,10);
 assert.equal(executeCoreSpiritPineMathBuiltin('sigmoid',[0]).value,0.5);
 assert.throws(() => executeCoreSpiritPineMathBuiltin('clamp',[1,5,2]),/minimum must not exceed maximum/);
+assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?.defaultValue,false,
+  'ta.tr defaults handle_na to false');
+assert.equal(validatePineV6BuiltinArguments(getPineV6BuiltinDefinition('ta','tr'),[]).valid,true,
+  'ta.tr exposes its default handle_na argument');
+for (const volumeFunction of ['vwap','obv','pvt','nvi','pvi','wad','wvad','iii','mfi']) {
+  assert.ok(getPineV6BuiltinDefinition('ta',volumeFunction),
+    'volume and flow family inventory must include ta.' + volumeFunction);
+}
+
