@@ -40,10 +40,18 @@ const allowed = new Set([
 ]);
 for (const file of directVendorImports) if (!allowed.has(file)) throw new Error(`Vela import crossed facade boundary: ${path.relative(root, file)}`);
 
-const forbidden = /pineCompatibility|pineRuntime|tradingViewPublicScripts|PineTS|PineScript compatibility/i;
+const legacyPineRuntime = /pineCompatibility|pineRuntime|tradingViewPublicScripts|PineTS|PineScript compatibility/i;
+const legacyPineBridge = /tradingViewPublicScripts|PineTS|PineScript compatibility/i;
+const nativePineLanguageRoot = path.join(root, 'src/services/coreSpirit/pine') + path.sep;
 for (const file of sourceFiles) {
   if (file === new URL(import.meta.url).pathname) continue;
   const text = fs.readFileSync(file, 'utf8');
+  // CoreSpirit's dedicated Pine v6 frontend/registry is the supported language
+  // implementation. It may name Pine compatibility contracts, but it must not
+  // import retired PineTS or public-script bridge runtimes. All other source
+  // remains forbidden from depending on either legacy integration or the Pine
+  // compatibility subsystem.
+  const forbidden = file.startsWith(nativePineLanguageRoot) ? legacyPineBridge : legacyPineRuntime;
   if (forbidden.test(text)) throw new Error(`legacy Pine/chart dependency reference remains: ${path.relative(root, file)}`);
 }
 
