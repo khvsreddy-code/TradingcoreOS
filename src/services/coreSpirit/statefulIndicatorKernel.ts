@@ -665,6 +665,79 @@ export class WMAState extends RollingBase {
   get value(): number | null { return this.count === this.capacity ? this.weighted / (this.capacity * (this.capacity + 1) / 2) : null; }
 }
 
+/**
+ * Exact bounded volume-weighted moving average. Price-volume and volume sums
+ * are updated in O(1), including same-bar replacement. Missing observations
+ * reset the complete window rather than leaking stale samples through a gap.
+ */
+export class VWMAState extends RollingBase {
+  private readonly volumeBuffer: Float64Array;
+  private weightedSum = 0;
+  private volumeSum = 0;
+
+  constructor(period:number) {
+    super(period);
+    this.volumeBuffer = new Float64Array(this.capacity);
+  }
+
+  update(price:number, volume:number, mode:'append'|'replace'='append'):number|null {
+    const p=Number(price), v=Number(volume);
+    if(!Number.isFinite(p) || !Number.isFinite(v) || v < 0) {
+      this.reset();
+      return null;
+    }
+    const weighted=p*v;
+    if(mode==='replace' && this.count) {
+      const slot=this.slotForCurrent();
+      this.weightedSum += weighted-this.buffer[slot]!;
+      this.volumeSum += v-this.volumeBuffer[slot]!;
+      this.volumeBuffer[slot]=v;
+      this.replaceCurrentSlot(weighted);
+    } else {
+      if(this.count===this.capacity) {
+        this.weightedSum -= this.buffer[this.cursor]!;
+        this.volumeSum -= this.volumeBuffer[this.cursor]!;
+      }
+      this.volumeBuffer[this.cursor]=v;
+      this.appendSlot(weighted);
+      this.weightedSum += weighted;
+      this.volumeSum += v;
+    }
+    if(this.count!==this.capacity || this.volumeSum<=0) return null;
+    return this.weightedSum/this.volumeSum;
+  }
+
+  reset():void {
+    super.reset();
+    this.volumeBuffer.fill(0);
+    this.weightedSum=0;
+    this.volumeSum=0;
+  }
+
+  get value():number|null {
+    return this.count===this.capacity && this.volumeSum>0 ? this.weightedSum/this.volumeSum : null;
+  }
+
+  clone():VWMAState {
+    const next=new VWMAState(this.capacity);
+    next.copyFrom(this);
+    return next;
+  }
+
+  copyFrom(source:VWMAState):void {
+    if(source.capacity!==this.capacity) throw new Error('incompatible VWMA state');
+    this.buffer.set(source.buffer);
+    this.versions.set(source.versions);
+    this.volumeBuffer.set(source.volumeBuffer);
+    this.cursor=source.cursor;
+    this.count=source.count;
+    this.absoluteIndex=source.absoluteIndex;
+    this.latestValue=source.latestValue;
+    this.weightedSum=source.weightedSum;
+    this.volumeSum=source.volumeSum;
+  }
+}
+
 function copyVwapSessions(target: Map<string, { pv: number; volume: number }>, source: Map<string, { pv: number; volume: number }>): void {
   target.clear();
   for (const [key, value] of source) target.set(key, { pv: value.pv, volume: value.volume });
