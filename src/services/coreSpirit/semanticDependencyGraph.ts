@@ -270,6 +270,16 @@ export function buildCoreSpiritSemanticDependencyGraph(
         addEdge(whenFalse,id,'depends-on');
         return id;
       }
+      case 'switch': {
+        const id=addNode({id:'expr:'+(node.span?.start ?? nodes.size),kind:'expression',name:'switch',source:sourceSpan(node)});
+        if(node.subject)addEdge(expression(node.subject,conditionOwner),id,'depends-on');
+        for(const arm of node.arms){
+          for(const match of arm.matches)addEdge(expression(match,conditionOwner),id,'depends-on');
+          addEdge(expression(arm.value,conditionOwner),id,'depends-on');
+        }
+        if(node.defaultValue)addEdge(expression(node.defaultValue,conditionOwner),id,'depends-on');
+        return id;
+      }
       case 'binary': {
         const left = expression(node.left, conditionOwner);
         const right = expression(node.right, conditionOwner);

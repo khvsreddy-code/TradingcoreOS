@@ -54,6 +54,20 @@ for(const fixture of PINE_CONFORMANCE_FIXTURES){
       const compiled=new CoreSpiritCompiler().compileSource(fixture.source,fixture.featureId,{frontend:'pine-v6'});
       assert.ok(compiled.ir,`${fixture.id}: ${compiled.diagnostics.map(item=>item.code+': '+item.message).join('; ')}`);
       assert.equal(compiled.ir?.programKind,fixture.expectedProgramKind);
+      if(fixture.featureId==='conditional-switch'){
+        const bars=[
+          {timestamp:'2026-11-25T09:15:00.000Z',open:10,high:12,low:9,close:11,volume:100},
+          {timestamp:'2026-11-25T09:20:00.000Z',open:10,high:11,low:8,close:9,volume:120},
+        ];
+        for(const executionTier of ['reference','optimized'] as const){
+          const runtime=new CoreSpiritRuntime({sourceId:`pine-switch-${executionTier}`,executionTier});
+          const execution=runtime.executeIr(compiled.ir!,bars);
+          assert.equal(execution.state.locals.selected,10,`${executionTier}: default switch arm must supply the selected value when no case matches`);
+          assert.equal(execution.state.locals.previousSelected,11,`${executionTier}: switch result must retain series history`);
+        }
+        assert.ok(compiled.ir!.entry.instructions.some(instruction=>instruction.op==='jumpIfFalse'),
+          'switch must lower to explicit VM control flow and evaluate branch values lazily');
+      }
       if(fixture.featureId==='ternary-expression'){
         const bars=[
           {timestamp:'2026-11-25T09:15:00.000Z',open:10,high:12,low:9,close:11,volume:100},
@@ -81,7 +95,8 @@ assert.equal(verified.find(item=>item.id==='ternary-expression')?.status,'confor
   'ternary may be conformant only after parser/compiler/reference/optimized/history checks pass');
 assert.equal(verified.find(item=>item.id==='script-declarations')?.status,'partially_conformant',
   'known declaration-argument gaps must prevent a conformant label');
-assert.equal(PINE_FEATURE_REGISTRY.find(item=>item.id==='conditional-switch')?.status,'not_implemented');
+assert.equal(verified.find(item=>item.id==='conditional-switch')?.status,'partially_conformant',
+  'switch expression support must remain partially conformant while block arms and tuple semantics are outstanding');
 assert.equal(PINE_FEATURE_REGISTRY.find(item=>item.id==='variable-declarations')?.status,'partially_conformant');
 assert.ok(verified.find(item=>item.id==='intrabar-state-semantics')?.testFixtures.includes('src/services/coreSpirit/pine/pineVaripRuntimeContract.test.mjs'));
 const summary=getPineFeatureProgressSummary(evidence);

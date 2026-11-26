@@ -21,6 +21,7 @@ function collectReusable(ast: CoreSpiritAst, source: string) {
       case 'unary': visit(n.operand); break;
       case 'binary': visit(n.left); visit(n.right); break;
       case 'conditional': visit(n.condition); visit(n.whenTrue); visit(n.whenFalse); break;
+      case 'switch': if(n.subject)visit(n.subject); n.arms.forEach(arm=>{arm.matches.forEach(visit);visit(arm.value);}); if(n.defaultValue)visit(n.defaultValue); break;
       case 'call': n.args.forEach(visit); break;
       case 'memberCall': visit(n.target); n.args.forEach(visit); break;
       case 'index': visit(n.target); visit(n.index); break;
@@ -46,6 +47,7 @@ function reuseTree(next: CoreSpiritAst, previous: CoreSpiritAst, previousSource:
       case 'unary': return { ...n, operand: visit(n.operand) };
       case 'binary': return { ...n, left: visit(n.left), right: visit(n.right) };
       case 'conditional': return { ...n, condition:visit(n.condition), whenTrue:visit(n.whenTrue), whenFalse:visit(n.whenFalse) };
+      case 'switch': return { ...n, subject:n.subject?visit(n.subject):undefined, arms:n.arms.map(arm=>({...arm,matches:arm.matches.map(visit),value:visit(arm.value)})), defaultValue:n.defaultValue?visit(n.defaultValue):undefined };
       case 'call': return { ...n, args: n.args.map(visit) };
       case 'memberCall': return { ...n, target: visit(n.target), args: n.args.map(visit) };
       case 'index': return { ...n, target: visit(n.target), index: visit(n.index) };

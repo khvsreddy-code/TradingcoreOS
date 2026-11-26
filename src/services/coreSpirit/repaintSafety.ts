@@ -230,6 +230,11 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
         inferNode(node.whenFalse,annotations),node,'ternary false branch',
       );
       break;
+    case 'switch': {
+      const dependencies=[...(node.subject?[node.subject]:[]),...node.arms.flatMap(arm=>[...arm.matches,arm.value]),...(node.defaultValue?[node.defaultValue]:[])];
+      inferred=dependencies.map(child=>inferNode(child,annotations)).reduce<Safety>((acc,next)=>merge(acc,next,node,'switch branch dependency'),{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]});
+      break;
+    }
     case 'binary':
       inferred = merge(inferNode(node.left,annotations),inferNode(node.right,annotations),node,`binary '${node.operator}'`);
       break;

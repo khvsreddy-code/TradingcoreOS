@@ -204,6 +204,7 @@ function visit(
     }
     case 'binary': visit(node.left,dependencies,events); visit(node.right,dependencies,events); return;
     case 'conditional': visit(node.condition,dependencies,events); visit(node.whenTrue,dependencies,events); visit(node.whenFalse,dependencies,events); return;
+    case 'switch': if(node.subject)visit(node.subject,dependencies,events); for(const arm of node.arms){arm.matches.forEach(match=>visit(match,dependencies,events));visit(arm.value,dependencies,events);} if(node.defaultValue)visit(node.defaultValue,dependencies,events); return;
     case 'unary': visit(node.operand,dependencies,events); return;
     case 'index': visit(node.target,dependencies,events); visit(node.index,dependencies,events); return;
     default: return;

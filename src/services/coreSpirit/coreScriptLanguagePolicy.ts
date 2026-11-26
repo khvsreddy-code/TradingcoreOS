@@ -235,6 +235,11 @@ export function validateCoreScriptCapabilityRequirementsFromAst(
         visit(node.whenTrue);
         visit(node.whenFalse);
         return;
+      case 'switch':
+        if(node.subject)visit(node.subject);
+        for(const arm of node.arms){arm.matches.forEach(visit);visit(arm.value);}
+        if(node.defaultValue)visit(node.defaultValue);
+        return;
       case 'binary':
         visit(node.left);
         visit(node.right);

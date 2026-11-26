@@ -215,6 +215,48 @@ export class CoreSpiritCompiler {
           else emitInstruction(n, { op:'move', dest, source:n.name, sourceKind:'local' });
           return dest;
         }
+        case 'switch': {
+          const subject=n.subject ? expr(n.subject) : undefined;
+          const dest=`t${temp++}`;
+          const endJumps:number[]=[];
+          for(const arm of n.arms){
+            const falseJumps:number[]=[];
+            const trueJumps:number[]=[];
+            const nextPatternTargets:number[]=[];
+            for(const match of arm.matches){
+              nextPatternTargets.push(instructions.length);
+              const matchRegister=expr(match);
+              let condition=matchRegister;
+              if(subject){
+                condition=`t${temp++}`;
+                emitInstruction(n,{op:'binary',dest:condition,operator:'==',left:subject,right:matchRegister});
+              }
+              falseJumps.push(instructions.length);
+              emitInstruction(n,{op:'jumpIfFalse',condition,target:-1});
+              trueJumps.push(instructions.length);
+              emitInstruction(n,{op:'jump',target:-1});
+            }
+            const skipArmJump=instructions.length;
+            emitInstruction(n,{op:'jump',target:-1});
+            const caseBody=instructions.length;
+            for(const jump of trueJumps) (instructions[jump] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=caseBody;
+            const branchValue=expr(arm.value);
+            emitInstruction(n,{op:'move',dest,source:branchValue,sourceKind:'register'});
+            endJumps.push(instructions.length);
+            emitInstruction(n,{op:'jump',target:-1});
+            const nextArm=instructions.length;
+            for(let index=0;index<falseJumps.length;index++)
+              (instructions[falseJumps[index]!] as Extract<CoreSpiritIrInstruction,{op:'jumpIfFalse'}>).target=nextPatternTargets[index+1] ?? nextArm;
+            (instructions[skipArmJump] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=nextArm;
+          }
+          if(n.defaultValue){
+            const fallback=expr(n.defaultValue);
+            emitInstruction(n,{op:'move',dest,source:fallback,sourceKind:'register'});
+          } else emitInstruction(n,{op:'const',dest,value:null});
+          const end=instructions.length;
+          for(const jump of endJumps) (instructions[jump] as Extract<CoreSpiritIrInstruction,{op:'jump'}>).target=end;
+          return dest;
+        }
         case 'conditional': {
           const condition=expr(n.condition);
           const dest=`t${temp++}`;

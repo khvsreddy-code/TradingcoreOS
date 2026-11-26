@@ -360,6 +360,7 @@ export class CoreSpiritParser {
   }
 
   private primary():CoreSpiritAstNode {
+    if(this.pineFrontend && this.check('identifier') && this.peek().lexeme==='switch') return this.pineSwitchExpression();
     if(this.match('leftBracket')) {
       const start=this.previous();
       const elements:CoreSpiritAstNode[]=[];
@@ -391,6 +392,36 @@ export class CoreSpiritParser {
     if(this.match('identifier')) return {type:'identifier',name:this.previous().lexeme,span:this.tokenSpan(this.previous())};
     if(this.match('leftParen')) { const e=this.expression(); this.consume('rightParen','Expected )'); return e; }
     throw this.error('Expected expression');
+  }
+
+  /** Pine switch expressions with scalar expression-valued arms. */
+  private pineSwitchExpression():CoreSpiritAstNode {
+    const start=this.consume('identifier','Expected switch');
+    let first=start;
+    let cursor=this.i-1;
+    while(cursor>0 && this.tokens[cursor-1]!.line===start.line) cursor--;
+    first=this.tokens[cursor] ?? start;
+    const baseColumn=first.column;
+    const subject=this.peek().line===start.line ? this.expression() : undefined;
+    const arms:Array<{matches:CoreSpiritAstNode[];value:CoreSpiritAstNode;span?:CoreSpiritSpan}>=[];
+    let defaultValue:CoreSpiritAstNode|undefined;
+    while(!this.check('eof') && this.peek().line>this.previous().line && this.peek().column>baseColumn) {
+      const armStart=this.peek();
+      if(this.match('fatArrow')) {
+        if(defaultValue) throw this.error('A switch expression can contain only one default arm');
+        defaultValue=this.expression();
+        if(!this.check('eof') && this.peek().line>this.previous().line && this.peek().column>baseColumn)
+          throw this.error('The default switch arm must be last');
+        break;
+      }
+      const matches=[this.expression()];
+      while(this.match('comma')) matches.push(this.expression());
+      this.consume('fatArrow','Expected => after switch match expression');
+      const value=this.expression();
+      arms.push({matches,value,span:this.makeSpanFrom(armStart,value)});
+    }
+    if(!arms.length && !defaultValue) throw this.error('Switch expression requires at least one match or a default arm');
+    return {type:'switch',subject,arms,defaultValue,span:this.makeSpan(start,this.previous())};
   }
 
   private binary(left:CoreSpiritAstNode,operator:string,right:CoreSpiritAstNode):CoreSpiritAstNode {

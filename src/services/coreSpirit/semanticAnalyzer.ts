@@ -185,6 +185,29 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return n.operator==='!' ? (t.startsWith('series<') ? 'series<boolean>' : 'boolean') : t;
       }
 
+      case 'switch': {
+        const subjectType=n.subject ? infer(n.subject,scope) : undefined;
+        const resultTypes:CoreSpiritType[]=[];
+        let selectorIsSeries=Boolean(subjectType && isSeriesType(subjectType));
+        for(const arm of n.arms){
+          for(const match of arm.matches){
+            const matchType=infer(match,scope);
+            if(subjectType){
+              const subjectElement=isSeriesType(subjectType) ? elementType(subjectType) : subjectType;
+              const matchElement=isSeriesType(matchType) ? elementType(matchType) : matchType;
+              if(matchElement!=='unknown' && subjectElement!=='unknown' && !compatible(subjectElement,matchElement))
+                report(match,`Switch match type '${matchType}' is incompatible with subject type '${subjectType}'`,'TYPE_SWITCH_MATCH');
+            } else if(!isBooleanType(matchType)) report(match,'A switch without a subject requires boolean case expressions','TYPE_SWITCH_CONDITION');
+            selectorIsSeries ||= isSeriesType(matchType);
+          }
+          resultTypes.push(infer(arm.value,scope));
+        }
+        if(n.defaultValue) resultTypes.push(infer(n.defaultValue,scope));
+        else resultTypes.push('null');
+        let result=resultTypes.reduce((current,next)=>joinTypes(current,next),'null' as CoreSpiritType);
+        if(selectorIsSeries && result!=='unknown' && !isSeriesType(result)) result=seriesOf(result);
+        return result;
+      }
       case 'conditional': {
         const condition=infer(n.condition,scope);
         const whenTrue=infer(n.whenTrue,scope);
@@ -526,6 +549,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           ? semanticSeries('boolean', mergeSemanticMetadata([operand]))
           : semanticScalar('boolean');
       }
+      case 'switch': {
+        const subject=n.subject ? inferSemantic(n.subject,scope) : undefined;
+        const matches=n.arms.flatMap(arm=>arm.matches.map(item=>inferSemantic(item,scope)));
+        const values=[...n.arms.map(arm=>inferSemantic(arm.value,scope)),...(n.defaultValue?[inferSemantic(n.defaultValue,scope)]:[])].filter((item):item is CoreSpiritSemanticType=>Boolean(item));
+        if(!values.length) return undefined;
+        const atom=values.every(item=>item.atom===values[0]!.atom) ? values[0]!.atom : 'number';
+        const metadata=mergeSemanticMetadata([subject,...matches,...values]);
+        const isSeries=subject?.kind==='series'||matches.some(item=>item?.kind==='series')||values.some(item=>item.kind==='series');
+        return isSeries ? semanticSeries(atom,metadata) : semanticScalar(atom,metadata);
+      }
       case 'conditional': {
         const condition=inferSemantic(n.condition,scope);
         const whenTrue=inferSemantic(n.whenTrue,scope);
@@ -696,6 +729,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'break': case 'continue':
         if(loopDepth===0) report(n,`${n.type} is only valid inside a loop`,'TYPE_LOOP_CONTROL');
         break;
+      case 'switch': {
+        if(n.subject){infer(n.subject,scope);visit(n.subject,scope);}
+        for(const arm of n.arms){
+          for(const match of arm.matches){infer(match,scope);visit(match,scope);}
+          visit(arm.value,scope);
+        }
+        if(n.defaultValue) visit(n.defaultValue,scope);
+        infer(n,scope);
+        break;
+      }
       case 'arrayLiteral': n.elements.forEach(item=>visit(item,scope)); break;
       case 'mapLiteral': n.entries.forEach(entry=>visit(entry.value,scope)); break;
       case 'typeDeclaration': {

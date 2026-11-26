@@ -4,7 +4,7 @@ export type CoreSpiritTokenType =
   | 'plus' | 'minus' | 'star' | 'slash' | 'percent' | 'bang'
   | 'equal' | 'equalEqual' | 'bangEqual' | 'less' | 'lessEqual' | 'greater' | 'greaterEqual'
   | 'leftParen' | 'rightParen' | 'leftBracket' | 'rightBracket' | 'leftBrace' | 'rightBrace'
-  | 'comma' | 'semicolon' | 'colon' | 'colonEqual' | 'question' | 'at' | 'dot' | 'eof';
+  | 'comma' | 'semicolon' | 'colon' | 'colonEqual' | 'question' | 'fatArrow' | 'at' | 'dot' | 'eof';
 
 export type CoreSpiritToken = { type: CoreSpiritTokenType; lexeme: string; value?: string | number | boolean | null; offset: number; line: number; column: number };
 
@@ -35,7 +35,7 @@ export class CoreSpiritLexer {
   private string(): CoreSpiritToken { const s=this.pos(); const quote=this.advance(); let value=''; while(!this.atEnd()&&this.peek()!==quote){ if(this.peek()==='\\'){this.advance(); const e=this.advance(); value+=e==='n'?'\n':e==='r'?'\r':e==='t'?'\t':e; } else value+=this.advance(); } if(this.atEnd()) throw new CoreSpiritSyntaxError('Unterminated string',s); this.advance(); return {...s,type:'string',lexeme:this.source.slice(s.offset,this.i),value}; }
   private symbol(): CoreSpiritToken {
     const s=this.pos(); const c=this.advance(); const two=c+this.peek();
-    const pairs:Record<string,CoreSpiritTokenType>={'==':'equalEqual','!=':'bangEqual','<=':'lessEqual','>=':'greaterEqual',':=':'colonEqual'};
+    const pairs:Record<string,CoreSpiritTokenType>={'==':'equalEqual','!=':'bangEqual','<=':'lessEqual','>=':'greaterEqual',':=':'colonEqual','=>':'fatArrow'};
     if(pairs[two]){this.advance();return {...s,type:pairs[two],lexeme:two};}
     const one:Record<string,CoreSpiritTokenType>={'+':'plus','-':'minus','*':'star','/':'slash','%':'percent','!':'bang','=':'equal','<':'less','>':'greater','(':'leftParen',')':'rightParen','[':'leftBracket',']':'rightBracket','{':'leftBrace','}':'rightBrace',',':'comma',';':'semicolon',':':'colon','?':'question','@':'at','.':'dot'};
     const type=one[c]; if(!type) throw new CoreSpiritSyntaxError(`Unexpected character '${c}'`,s); return {...s,type,lexeme:c};

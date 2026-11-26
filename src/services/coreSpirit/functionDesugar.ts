@@ -28,6 +28,7 @@ function clone(node:CoreSpiritAstNode):CoreSpiritAstNode {
     case 'unary':return {...node,operand:clone(node.operand)};
     case 'binary':return {...node,left:clone(node.left),right:clone(node.right)};
     case 'conditional':return {...node,condition:clone(node.condition),whenTrue:clone(node.whenTrue),whenFalse:clone(node.whenFalse)};
+    case 'switch':return {...node,subject:node.subject?clone(node.subject):undefined,arms:node.arms.map(arm=>({...arm,matches:arm.matches.map(clone),value:clone(arm.value)})),defaultValue:node.defaultValue?clone(node.defaultValue):undefined};
     case 'call':return {...node,args:node.args.map(clone)};
     case 'member':return {...node,target:clone(node.target)};
     case 'memberCall':return {...node,target:clone(node.target),args:node.args.map(clone)};
@@ -53,6 +54,7 @@ function effect(node:CoreSpiritAstNode):string|undefined {
     case 'unary':return effect(node.operand);
     case 'binary':return effect(node.left)??effect(node.right);
     case 'conditional':return effect(node.condition)??effect(node.whenTrue)??effect(node.whenFalse);
+    case 'switch': { const children=[...(node.subject?[node.subject]:[]),...node.arms.flatMap(arm=>[...arm.matches,arm.value]),...(node.defaultValue?[node.defaultValue]:[])]; for(const child of children){const found=effect(child);if(found)return found;} return undefined; }
     case 'member':return effect(node.target);
     case 'index':return effect(node.target)??effect(node.index);
     case 'arrayLiteral':
@@ -147,6 +149,7 @@ export function desugarCoreSpiritFunctions(ast:CoreSpiritAst):CoreSpiritFunction
       case 'unary':return {...node,operand:expand(node.operand,env,stack,depth+1)};
       case 'binary':return {...node,left:expand(node.left,env,stack,depth+1),right:expand(node.right,env,stack,depth+1)};
        case 'conditional':return {...node,condition:expand(node.condition,env,stack,depth+1),whenTrue:expand(node.whenTrue,env,stack,depth+1),whenFalse:expand(node.whenFalse,env,stack,depth+1)};
+       case 'switch':return {...node,subject:node.subject?expand(node.subject,env,stack,depth+1):undefined,arms:node.arms.map(arm=>({...arm,matches:arm.matches.map(match=>expand(match,env,stack,depth+1)),value:expand(arm.value,env,stack,depth+1)})),defaultValue:node.defaultValue?expand(node.defaultValue,env,stack,depth+1):undefined};
       case 'member':return {...node,target:expand(node.target,env,stack,depth+1)};
       case 'memberCall':return {...node,target:expand(node.target,env,stack,depth+1),args:node.args.map(arg=>expand(arg,env,stack,depth+1))};
       case 'index':return {...node,target:expand(node.target,env,stack,depth+1),index:expand(node.index,env,stack,depth+1)};

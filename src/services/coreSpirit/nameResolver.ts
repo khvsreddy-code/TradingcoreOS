@@ -81,6 +81,7 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
       case 'unary':expression(n.operand,scope);break;
       case 'binary':expression(n.left,scope);expression(n.right,scope);break;
       case 'conditional':expression(n.condition,scope);expression(n.whenTrue,scope);expression(n.whenFalse,scope);break;
+      case 'switch':if(n.subject)expression(n.subject,scope);n.arms.forEach(arm=>{arm.matches.forEach(match=>expression(match,scope));expression(arm.value,scope);});if(n.defaultValue)expression(n.defaultValue,scope);break;
       case 'number':case 'string':case 'boolean':case 'null':case 'typeDeclaration':break;
       default:break;
     }
