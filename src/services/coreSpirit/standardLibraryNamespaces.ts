@@ -263,7 +263,6 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('strategy','wintrades','Strategy winning closed trade count.'),
   k('strategy','losstrades','Strategy losing closed trade count.'),
   k('strategy','position_avg_price','Average price of the open strategy position.'),
-  k('strategy','position_avg_price','Average price of the open strategy position.'),
   k('strategy','position_size','Strategy position size series.'),
   k('strategy','wintrades','Number of winning closed trades.'),
   k('strategy','losstrades','Number of losing closed trades.'),
