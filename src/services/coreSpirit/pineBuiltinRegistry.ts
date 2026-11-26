@@ -194,7 +194,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   mathUnary('sin'), mathUnary('cos'), mathUnary('tan'),
   mathUnary('asin'), mathUnary('acos'), mathUnary('atan'), mathUnary('log10'),
   mathUnary('sign'),
-  mathBinary('atan2'),
+
   definition('math','round','implemented',[
     overload([numeric('number')],'int',1,1,'No historical samples required.','Pure deterministic scalar evaluation; ties round up.','O(1).','pine-math-round-integer'),
     overload([numeric('number'),numeric('precision','simple')],'float',2,2,'No historical samples required.','Pure deterministic scalar evaluation at the requested decimal precision.','O(1).','pine-math-round-precision'),
@@ -267,6 +267,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('math','pi',[],'const<float>',0,0,'pine-math-pi'),
   catalog('math','e',[],'const<float>',0,0,'pine-math-e'),
   catalog('math','phi',[],'const<float>',0,0,'pine-math-phi'),
+  catalog('math','rphi',[],'const<float>',0,0,'pine-math-rphi'),
   catalog('math','random',[numeric('minimum','series',true,0),numeric('maximum','series',true,1),numeric('seed','series',true)],'series<float>',0,3,'pine-math-random',['Seeded deterministic stream and rollback-safe random state are not implemented.']),
   catalog('math','round_to_mintick',[numeric('number')],'series<float>',1,1,'pine-math-round-to-mintick',['Requires symbol mintick metadata in the scalar execution context.']),
 
