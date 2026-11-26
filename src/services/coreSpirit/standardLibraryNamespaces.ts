@@ -103,7 +103,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('ta','percentrank','Rolling percent-rank kernel is pending.'),
   k('ta','pivotlow','Confirmed pivot-low with right-bar delay semantics is pending.'),
   k('ta','pivothigh','Confirmed pivot-high with right-bar delay semantics is pending.'),
-  b('ta','range','range','Rolling source high-low range.'),
+  b('ta','range','ta_range','Rolling source high-low range.'),
   k('ta','sar','Parabolic SAR state kernel is pending.'),
   k('ta','swma','Symmetrically weighted moving average kernel is pending.'),
   k('ta','tsi','True strength index kernel is pending.'),
