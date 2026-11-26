@@ -390,8 +390,6 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('barstate','isfirst',[],'series<bool>',0,0,'pine-barstate-isfirst'),
   catalog('barstate','islast',[],'series<bool>',0,0,'pine-barstate-islast'),
   catalog('barstate','ishistory',[],'series<bool>',0,0,'pine-barstate-ishistory'),
-  catalog('barstate','isrealtime',[],'series<bool>',0,0,'pine-barstate-isrealtime'),
-  catalog('barstate','isconfirmed',[],'series<bool>',0,0,'pine-barstate-isconfirmed'),
   catalog('barstate','isnew',[],'series<bool>',0,0,'pine-barstate-isnew'),
   catalog('barstate','islastconfirmedhistory',[],'series<bool>',0,0,'pine-barstate-islastconfirmedhistory'),
   catalog('strategy','equity',[],'series<float>',0,0,'pine-strategy-equity'),
