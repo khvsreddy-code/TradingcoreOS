@@ -51,7 +51,10 @@ export class CoreSpiritParser {
   private statement():CoreSpiritAstNode {
     const annotations=this.parseAnnotations();
     let node:CoreSpiritAstNode;
-    if(this.match('type')) node=this.typeDeclaration();
+    if(this.check('identifier') && this.peek().lexeme==='fn') node=this.functionDeclaration();
+    else if(this.check('identifier') && this.peek().lexeme==='return') node=this.returnStatement();
+    else if(this.check('identifier') && this.peek().lexeme==='const') node=this.constStatement();
+    else if(this.match('type')) node=this.typeDeclaration();
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
@@ -93,6 +96,41 @@ export class CoreSpiritParser {
       annotations.push({name:nameToken.lexeme,args,span:this.makeSpan(at,end)});
     }
     return annotations;
+  }
+
+  private functionDeclaration():CoreSpiritAstNode {
+    const start=this.consume('identifier','Expected fn keyword');
+    const name=this.consume('identifier','Expected function name after fn');
+    this.consume('leftParen','Expected ( after function name');
+    const parameters:Array<{name:string;declaredType:string;span?:CoreSpiritSpan}>=[];
+    if(!this.check('rightParen')) {
+      do {
+        const parameter=this.consume('identifier','Expected function parameter name');
+        this.consume('colon','Expected : after function parameter');
+        const declaredType=this.typeName();
+        parameters.push({name:parameter.lexeme,declaredType,span:this.makeSpan(parameter,this.previous())});
+      } while(this.match('comma'));
+    }
+    this.consume('rightParen','Expected ) after function parameters');
+    this.consume('minus','Expected -> before function return type');
+    this.consume('greater','Expected -> before function return type');
+    const returnType=this.typeName();
+    const body=this.block();
+    return {type:'functionDeclaration',name:name.lexeme,parameters,returnType,body,span:this.makeSpan(start,this.previous())};
+  }
+
+  private returnStatement():CoreSpiritAstNode {
+    const start=this.consume('identifier','Expected return keyword');
+    const expression=this.expression();
+    this.match('semicolon');
+    return {type:'return',expression,span:this.makeSpan(start,this.previous())};
+  }
+
+  private constStatement():CoreSpiritAstNode {
+    const start=this.consume('identifier','Expected const keyword');
+    const declaration=this.letStatement();
+    if(declaration.type!=='let') throw this.error('Expected constant declaration');
+    return {...declaration,span:this.makeSpan(start,this.previous())};
   }
 
   private assignmentStatement():CoreSpiritAstNode {

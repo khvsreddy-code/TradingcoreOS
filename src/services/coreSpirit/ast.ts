@@ -21,6 +21,7 @@ export type CoreSpiritAstNodeMetadata = Readonly<{
   resolvedSymbol?: string;
   inferredType?: import('./semanticTypeSystem').CoreSpiritSemanticType;
   qualifier?: import('./semanticTypeSystem').CoreSpiritTypeQualifier;
+  expectedTypes?: readonly string[];
   dependencies: readonly string[];
   diagnostics?: readonly CoreSpiritAstDiagnosticReference[];
 }>;
@@ -47,6 +48,8 @@ export type CoreSpiritAstNode = (
   | CoreSpiritForEachNode
   | CoreSpiritBreakNode
   | CoreSpiritContinueNode
+  | CoreSpiritFunctionDeclarationNode
+  | CoreSpiritReturnNode
 ) & { metadata?: CoreSpiritAstNodeMetadata };
 
 export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; span?: CoreSpiritSpan };
@@ -71,6 +74,16 @@ export type CoreSpiritWhileNode = { type:'while'; condition:CoreSpiritAstNode; b
 export type CoreSpiritForEachNode = { type:'forEach'; name:string; iterable:CoreSpiritAstNode; body:CoreSpiritAstNode[]; span?:CoreSpiritSpan };
 export type CoreSpiritBreakNode = { type:'break'; span?:CoreSpiritSpan };
 export type CoreSpiritContinueNode = { type:'continue'; span?:CoreSpiritSpan };
+export type CoreSpiritFunctionParameter = { name:string; declaredType:string; span?:CoreSpiritSpan };
+export type CoreSpiritFunctionDeclarationNode = {
+  type:'functionDeclaration';
+  name:string;
+  parameters:CoreSpiritFunctionParameter[];
+  returnType:string;
+  body:CoreSpiritAstNode[];
+  span?:CoreSpiritSpan;
+};
+export type CoreSpiritReturnNode = { type:'return'; expression:CoreSpiritAstNode; span?:CoreSpiritSpan };
 
 export type CoreSpiritSpan = { start: number; end: number; line: number; column: number };
 export type CoreSpiritAst = CoreSpiritProgramNode;

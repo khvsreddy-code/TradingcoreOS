@@ -632,7 +632,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
 
   const inferSemantic=(n:CoreSpiritAstNode,scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
     const inferred=inferSemanticNode(n,scope);
-    if(inferred) updateCoreSpiritAstNodeMetadata(n,{inferredType:inferred,qualifier:semanticTypeQualifier(inferred)});
+    if(inferred){
+      updateCoreSpiritAstNodeMetadata(n,{inferredType:inferred,qualifier:semanticTypeQualifier(inferred)});
+      for(const expectedName of n.metadata?.expectedTypes ?? []){
+        const expected=semanticTypeForDeclaredName(expectedName);
+        if(!expected){report(n,`Unsupported function type '${expectedName}'`,'FUNCTION_UNKNOWN_TYPE');continue;}
+        const typeMatches=expected.atom===inferred.atom && (!expected.container || expected.container===inferred.container);
+        const qualifierMatches=!expected.qualifier || isSemanticQualifierAssignable(expected.qualifier,semanticTypeQualifier(inferred));
+        if(!typeMatches || !qualifierMatches)report(n,`Function value expects '${expectedName}' but inferred '${semanticTypeToString(inferred)}'`,'FUNCTION_TYPE_MISMATCH');
+      }
+    }
     return inferred;
   };
 

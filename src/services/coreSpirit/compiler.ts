@@ -31,6 +31,7 @@ import { validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguag
 import { buildCoreSpiritArtifactSemanticFingerprint } from './artifactLookupIdentity';
 import { readCoreScriptEdition, type CoreScriptEdition } from './languageEdition.js';
 import { parseWithCoreSpiritFrontend } from './frontends';
+import { desugarCoreSpiritFunctions } from './functionDesugar';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
@@ -136,6 +137,9 @@ export class CoreSpiritCompiler {
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const frontendId=options.frontend ?? 'corescript';
+    const lowered=desugarCoreSpiritFunctions(ast);
+    if(lowered.diagnostics.length)return {diagnostics:lowered.diagnostics.map(d=>({severity:'error' as const,code:d.code,message:d.message,start:d.start,end:d.end,line:d.line,column:d.column})),symbols:[]};
+    ast=lowered.ast;
     annotateCoreSpiritAst(ast,{sourceId,frontend:frontendId});
     traceSmcCompilerStage(sourceId, 'names:start');
     const names = resolveCoreSpiritNames(ast, { components: componentSource });

@@ -24,7 +24,7 @@ Structured numeric containers carry a runtime tag and their dimensions. The runt
 
 Available primitives are `vector`, `matrix`, `tensor`, `zeros`, `identity`, `matrixAdd`, `matrixScale`, `matmul`, `transpose`, and `dot`. Matrices use row-major storage. Current browser-safe caps are 256 rows/columns per matrix (65,536 cells), 16,384 vector elements and 262,144 tensor elements; constructors reject non-finite elements and invalid dimensions.
 
-User-defined `fn` declarations have typed parameters and a required return type. This initial inlining tier accepts a sequence of local `let`/`const` expression assignments followed by one `return`. The function is inlined before ordinary compilation so its linear algebra calls still pass the same type checks:
+User-defined `fn` declarations have typed parameters and a required return type. The lexer/parser produce function-declaration and return AST nodes. A bounded AST desugaring tier accepts pure local `let`/`const` expression assignments followed by one `return`, then feeds the resulting expression nodes through the canonical semantic and IR pipelines:
 
 ```corescript
 fn forward(
@@ -38,7 +38,7 @@ fn forward(
 let alpha = forward(observations, transition);
 ```
 
-This first tier deliberately does not implement general function-body control flow, loops, recursion, or mutable local frames. It is useful for composable linear-algebra expressions, but it is not yet a full procedural quant language for implementing every Kalman / particle-filter / GARCH algorithm. That needs first-class function IR and bounded-loop execution in a follow-on compiler step.
+This first tier deliberately does not implement general function-body control flow, loops, recursion, broker/market effects or mutable local frames. Recursive calls, known side effects and unsupported bodies fail with source-mapped compiler diagnostics. It is useful for composable linear-algebra expressions, but it is not yet a full procedural quant language for implementing every Kalman / particle-filter / GARCH algorithm. That needs first-class function IR and bounded-loop execution in a follow-on compiler step.
 
 ## High-level Gaussian HMM
 

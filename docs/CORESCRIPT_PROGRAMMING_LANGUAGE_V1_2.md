@@ -27,7 +27,7 @@ fn doubled(value: number) -> number {
 plot(doubled(close))
 ```
 
-Functions are lowered through the existing bounded inliner before parsing. Parameters and local expressions are substituted into the expression tree; the generated source then goes through the canonical parser, semantic analyser, compiler and VM.
+Function declarations and returns are tokenized and parsed into first-class AST nodes. A bounded AST desugaring pass expands pure expression functions into ordinary expression AST nodes before semantic analysis and IR generation. It does not parse or substitute source strings; generated nodes retain function-body source spans, while parameter and return types are checked by semantic analysis.
 
 **Current limit:** recursive calls are rejected. Function bodies are limited to local declarations followed by a single return expression. Stateful/effectful functions, early returns, loops and general control-flow bodies are not supported yet. This is not a general call-frame/stack implementation.
 

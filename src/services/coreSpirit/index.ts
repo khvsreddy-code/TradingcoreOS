@@ -2,6 +2,7 @@
 export * from './types';
 export * from './ast';
 export * from './frontends';
+export * from './functionDesugar';
 export * from './lexer';
 export * from './parser';
 export { analyzeCoreSpirit } from './semanticAnalyzer';

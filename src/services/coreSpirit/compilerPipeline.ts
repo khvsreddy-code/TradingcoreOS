@@ -5,6 +5,7 @@ import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { normalizeCoreSpiritSource } from './syntax';
 import { readCoreScriptEdition } from './languageEdition.js';
+import { desugarCoreSpiritFunctions } from './functionDesugar';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
@@ -40,16 +41,20 @@ export function createCoreSpiritCompilationUnit(
     ...edition.diagnostics.map(item => ({ code:item.code, message:item.message, line:item.line, column:item.column, start:item.start, end:item.end })), 
     ...parsed.diagnostics,
   ];
-  const semantic = syntaxDiagnostics.length ? null : analyzeCoreSpirit(parsed.ast, options);
-  const diagnostics = [
-    ...syntaxDiagnostics.map(d => ({ severity:'error' as const, code:d.code, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })), 
+  const lowered=syntaxDiagnostics.length ? null : desugarCoreSpiritFunctions(parsed.ast);
+  const functionDiagnostics=(lowered?.diagnostics ?? []).map(d=>({severity:'error' as const,code:d.code,message:d.message,line:d.line,column:d.column,start:d.start,end:d.end}));
+  const semantic=syntaxDiagnostics.length || functionDiagnostics.length ? null : analyzeCoreSpirit(lowered!.ast,options);
+  const finalAst=lowered?.ast ?? parsed.ast;
+  const diagnostics=[
+    ...syntaxDiagnostics.map(d=>({severity:'error' as const,code:d.code,message:d.message,line:d.line,column:d.column,start:d.start,end:d.end})),
+    ...functionDiagnostics,
     ...(semantic?.diagnostics ?? []),
   ];
-  return { kind: 'partial-diagnostics', executable: false, source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
+  return {kind:'partial-diagnostics',executable:false,source:original,normalizedSource,ast:finalAst,semantic,syntaxDiagnostics:[...syntaxDiagnostics,...functionDiagnostics],diagnostics};
 }
 
 
-export const CORE_SPIRIT_COMPILER_PIPELINE_VERSION = 4 as const;
+export const CORE_SPIRIT_COMPILER_PIPELINE_VERSION = 5 as const;
 const CORE_SPIRIT_COMPILER_STAGE_ORDER_V1 = Object.freeze([
   'source','cst','ast','semantic-analysis','semantic-graph','typed-ir','dependency-graph','optimizer','execution-plan',
 ] as const);
@@ -62,8 +67,13 @@ const CORE_SPIRIT_COMPILER_STAGE_ORDER_V3 = Object.freeze([
   'optimizer','dependency-graph','specialized-planner','trading-native-planner','research-analysis',
   'safety-analysis','backend-planner','execution-plan',
 ] as const);
-export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
+const CORE_SPIRIT_COMPILER_STAGE_ORDER_V4 = Object.freeze([
   'source','frontend','lexer','parser','ast-metadata','name-resolution','semantic-analysis',
+  'semantic-graph','core-ir','optimizer','dependency-graph','specialized-planner',
+  'trading-native-planner','research-analysis','safety-analysis','backend-planner','execution-plan',
+] as const);
+export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
+  'source','frontend','lexer','parser','desugaring','ast-metadata','name-resolution','semantic-analysis',
   'semantic-graph','core-ir','optimizer','dependency-graph','specialized-planner',
   'trading-native-planner','research-analysis','safety-analysis','backend-planner','execution-plan',
 ] as const);
@@ -71,9 +81,10 @@ export type CoreSpiritCompilerStage =
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER[number]
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V1[number]
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V2[number]
-  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V3[number];
+  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V3[number]
+  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V4[number];
 export type CoreSpiritCompilerPipelineTrace = Readonly<{
-  version: 1 | 2 | 3 | typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
+  version: 1 | 2 | 3 | 4 | typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
   stages: readonly CoreSpiritCompilerStage[];
   runtimeBoundary: 'CoreSpiritExecutionVM';
 }>;
@@ -89,6 +100,7 @@ export function validateCoreSpiritCompilerPipelineTrace(value: unknown): value i
   if(trace.version===1) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V1);
   if(trace.version===2) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V2);
   if(trace.version===3) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V3);
+  if(trace.version===4) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V4);
   if(trace.version===CORE_SPIRIT_COMPILER_PIPELINE_VERSION) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER);
   return false;
 }
