@@ -29,9 +29,9 @@ const varSource = [
   'tickCount := tickCount + 1',
   'plot(barCount)',
   'plot(tickCount)',
-].join('\\n');
+].join('\n');
 const varCompiled = new CoreSpiritCompiler().compileSource(varSource, 'pine-var-modes', { frontend:'pine-v6' });
-assert.ok(varCompiled.ir, varCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\\n'));
+assert.ok(varCompiled.ir, varCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\n'));
 const stateInstructions = varCompiled.ir!.entry.instructions.filter(item => item.op === 'setState');
 assert.ok(stateInstructions.some(item => item.op === 'setState' && item.name === 'barCount' && item.storage === 'persistent'));
 assert.ok(stateInstructions.some(item => item.op === 'setState' && item.name === 'tickCount' && item.storage === 'intrabar'));
