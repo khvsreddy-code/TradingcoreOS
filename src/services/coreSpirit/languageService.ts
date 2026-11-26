@@ -162,7 +162,7 @@ function allCompletions(): CoreSpiritCompletion[] {
     kind:'visual' as const,
     detail:'advanced/compatibility visual API • SHOW is the primary surface',
   }));
-  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...SYSTEM_CAPABILITIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals, ...getPineFeatureEditorCompletions()];
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...SYSTEM_CAPABILITIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
 }
 
 
@@ -180,7 +180,9 @@ export function getCoreSpiritCompletionContext(source: string, cursor = source.l
 }
 
 export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiritCompletionContext> = {}, source = '', options:{resolveSemanticTypes?:boolean} = {}): CoreSpiritCompletion[] {
-  const all = [...allCompletions(), ...getCoreSpiritUdtInfos(source).map(u=>({label:u.name,kind:'type' as const,detail:`CoreSpirit type • ${u.fields.length} fields`}))];
+  const pineEditorContext = /^\\s*\\/\\/\\s*@/m.test(source) || /^\\s*(?:indicator|strategy|library)\\s*\\(/m.test(source);
+  const pineCompletions = pineEditorContext ? getPineFeatureEditorCompletions() : [];
+  const all = [...allCompletions(), ...pineCompletions, ...getCoreSpiritUdtInfos(source).map(u=>({label:u.name,kind:'type' as const,detail:`CoreSpirit type • ${u.fields.length} fields`}))];
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
   if (context.mode === 'member') {
     const before=source.slice(0,Math.max(0,context.cursor ?? source.length)); const target=before.match(/((?:[A-Za-z_][A-Za-z0-9_]*)|(?:market|timeframe)\s*\([^)]*\))\.([A-Za-z_]*)$/)?.[1];
@@ -240,7 +242,7 @@ export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiri
     const memberFiltered=members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     if(memberFiltered.length) return memberFiltered;
   }
-  const filtered = all.filter(x => !needle || x.label.toLowerCase().startsWith(needle));
+  const filtered = all.filter(x => !needle || x.label.toLowerCase().startsWith(needle) || (x.label === '//@version=6' && 'version'.startsWith(needle)));
   return filtered;
 }
 

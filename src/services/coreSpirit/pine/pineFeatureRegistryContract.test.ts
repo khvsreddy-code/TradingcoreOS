@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritCompiler } from '../compiler.ts';
 import { CoreSpiritRuntime } from '../runtime.ts';
 import { parseWithCoreSpiritFrontend } from '../frontends.ts';
+import { getCoreSpiritCompletions } from '../languageService.ts';
 import {
   derivePineFeatureStatus, getPineFeatureEditorCompletions, getPineFeatureProgressSummary,
   getPineFeatureRegistry, PINE_FEATURE_DEFINITIONS, PINE_FEATURE_REGISTRY, validatePineFeatureRegistry,
@@ -87,6 +88,12 @@ const summary=getPineFeatureProgressSummary(evidence);
 assert.equal(summary.total,verified.length);
 assert.ok(summary.conformant>=2);
 const completions=getPineFeatureEditorCompletions(evidence);
+const coreScriptCompletions=getCoreSpiritCompletions('switch',{prefix:'switch',mode:'global'},'let signal = close > open');
+assert.equal(coreScriptCompletions.some(item=>item.label==='switch'),false,'Pine-only completions must not leak into CoreScript buffers');
+const pineEditorCompletions=getCoreSpiritCompletions('switch',{prefix:'switch',mode:'global'},'//@version=6\\nindicator("Pine editor")');
+assert.ok(pineEditorCompletions.some(item=>item.label==='switch'),'Pine autocomplete must use the canonical registry for Pine v6 buffers');
+const versionDirectiveCompletions=getCoreSpiritCompletions('ver',{prefix:'ver',mode:'global'},'//@ver');
+assert.ok(versionDirectiveCompletions.some(item=>item.label==='//@version=6'),'Pine version annotation must be suggested while entering its directive');
 for(const label of ['indicator','strategy','library','switch','var','varip','for','while','enum','import'])
   assert.ok(completions.some(item=>item.label===label),`Pine completion missing ${label}`);
 assert.ok(completions.find(item=>item.label==='indicator')?.detail.includes('partially_conformant'),
