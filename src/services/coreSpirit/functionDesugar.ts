@@ -27,6 +27,7 @@ function clone(node:CoreSpiritAstNode):CoreSpiritAstNode {
     case 'number':case 'string':case 'boolean':case 'null':case 'identifier':return {...node};
     case 'unary':return {...node,operand:clone(node.operand)};
     case 'binary':return {...node,left:clone(node.left),right:clone(node.right)};
+    case 'conditional':return {...node,condition:clone(node.condition),whenTrue:clone(node.whenTrue),whenFalse:clone(node.whenFalse)};
     case 'call':return {...node,args:node.args.map(clone)};
     case 'member':return {...node,target:clone(node.target)};
     case 'memberCall':return {...node,target:clone(node.target),args:node.args.map(clone)};
@@ -51,6 +52,7 @@ function effect(node:CoreSpiritAstNode):string|undefined {
     }
     case 'unary':return effect(node.operand);
     case 'binary':return effect(node.left)??effect(node.right);
+    case 'conditional':return effect(node.condition)??effect(node.whenTrue)??effect(node.whenFalse);
     case 'member':return effect(node.target);
     case 'index':return effect(node.target)??effect(node.index);
     case 'arrayLiteral':
@@ -144,6 +146,7 @@ export function desugarCoreSpiritFunctions(ast:CoreSpiritAst):CoreSpiritFunction
     switch(node.type){
       case 'unary':return {...node,operand:expand(node.operand,env,stack,depth+1)};
       case 'binary':return {...node,left:expand(node.left,env,stack,depth+1),right:expand(node.right,env,stack,depth+1)};
+       case 'conditional':return {...node,condition:expand(node.condition,env,stack,depth+1),whenTrue:expand(node.whenTrue,env,stack,depth+1),whenFalse:expand(node.whenFalse,env,stack,depth+1)};
       case 'member':return {...node,target:expand(node.target,env,stack,depth+1)};
       case 'memberCall':return {...node,target:expand(node.target,env,stack,depth+1),args:node.args.map(arg=>expand(arg,env,stack,depth+1))};
       case 'index':return {...node,target:expand(node.target,env,stack,depth+1),index:expand(node.index,env,stack,depth+1)};

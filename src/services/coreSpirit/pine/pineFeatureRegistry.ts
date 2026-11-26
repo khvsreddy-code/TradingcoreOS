@@ -1,34 +1,11 @@
-export const PINE_FEATURE_STATUSES = Object.freeze([
-  'not_implemented',
-  'implemented_unverified',
-  'partially_conformant',
-  'conformant',
-  'host_limited',
-  'not_applicable',
-] as const);
-export type PineFeatureStatus = typeof PINE_FEATURE_STATUSES[number];
-export type PineFeatureDomain = 'language'|'types'|'collections'|'functions'|'visuals'|'data'|'strategy'|'libraries'|'runtime';
-export type PineFixtureOutcome = 'passed'|'failed'|'host_limited'|'not_applicable';
-export type PineFixtureEvidence = Readonly<Record<string,PineFixtureOutcome>>;
-export type PineEditorCompletion = Readonly<{label:string;kind:'function'|'keyword'|'type';insertText:string;detail:string}>;
-
-export interface PineFeatureContract {
-  id: string;
-  domain: string;
-  officialReference: string;
-  implementationFiles: string[];
-  prerequisites: string[];
-  testFixtures: string[];
-  supportedModes: string[];
-  status: string;
-  knownDifferences: string[];
-  editorCompletions?: readonly PineEditorCompletion[];
-}
+import { PINE_FEATURE_STATUSES, type PineFeatureContract, type PineFeatureDefinition, type PineFeatureDomain, type PineFeatureMode, type PineFeatureStatus, type PineFixtureEvidence, type PineFixtureOutcome } from './pineCompatibilityTypes';
+export { PINE_FEATURE_STATUSES } from './pineCompatibilityTypes';
+export type { PineFeatureContract, PineFeatureDomain, PineFeatureMode, PineFeatureStatus, PineFixtureEvidence, PineFixtureOutcome } from './pineCompatibilityTypes';
 
 type PineFeatureDefinition = Omit<PineFeatureContract,'status'> & Readonly<{applicable?:boolean}>;
 const registryTest='src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts';
 const fixture=(id:string)=>`${registryTest}#${id}`;
-const modes=['compile','historical','realtime','replay'] as const;
+const modes:PineFeatureMode[]=['compile','historical','realtime','replay'];
 
 /**
  * This is implementation/test metadata, not a status matrix. Status is derived
@@ -41,6 +18,7 @@ export const PINE_FEATURE_DEFINITIONS: readonly PineFeatureDefinition[] = Object
   {id:'reassignment',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/operators/',implementationFiles:['src/services/coreSpirit/parser.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/executionVM.ts'],prerequisites:['variable-declarations'],testFixtures:['src/services/coreSpirit/functionAstDesugarContract.test.ts'],supportedModes:[...modes],knownDifferences:['Pine compound assignment operators and reassignment qualifier rules are not fully implemented.'],editorCompletions:[{label:':=',kind:'keyword',insertText:':=',detail:'Reassign an existing mutable variable'}]},
   {id:'history-referencing',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/operators/#-history-referencing-operator',implementationFiles:['src/services/coreSpirit/parser.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/runtime.ts','src/services/coreSpirit/seriesRegistry.ts'],prerequisites:['variable-declarations'],testFixtures:['src/services/coreSpirit/seriesRegistryContract.test.mjs','src/services/coreSpirit/mutationConformance.test.ts'],supportedModes:[...modes],knownDifferences:['Pine dynamic history-reference bounds, max_bars_back inference and every local-scope history rule still need differential fixtures.'],editorCompletions:[{label:'[1]',kind:'keyword',insertText:'[1]',detail:'Previous committed bar value'}]},
   {id:'expressions-and-operators',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/operators/',implementationFiles:['src/services/coreSpirit/parser.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/executionVM.ts','src/services/coreSpirit/optimizedExecutionVM.ts'],prerequisites:['variable-declarations'],testFixtures:['src/services/coreSpirit/optimizerDifferentialPropertyContract.test.mjs','src/services/coreSpirit/pine/pineExpressionSemanticsContract.test.mjs'],supportedModes:['compile','historical','realtime','replay','reference-vm','optimized-vm'],knownDifferences:['Compound assignments, Pine-specific implicit casts and full na propagation parity are not yet established.'],editorCompletions:[{label:'condition ? whenTrue : whenFalse',kind:'keyword',insertText:'? :',detail:'Series-aware conditional expression'}]},
+  {id:'ternary-expression',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/operators/',implementationFiles:['src/services/coreSpirit/ast.ts','src/services/coreSpirit/lexer.ts','src/services/coreSpirit/parser.ts','src/services/coreSpirit/semanticAnalyzer.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/executionVM.ts','src/services/coreSpirit/optimizedExecutionVM.ts'],prerequisites:['expressions-and-operators'],testFixtures:[fixture('ternary-expression')],supportedModes:[...modes,'reference-vm','optimized-vm'],knownDifferences:[]},
   {id:'conditional-if',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/conditional-structures/',implementationFiles:['src/services/coreSpirit/parser.ts','src/services/coreSpirit/ast.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/executionVM.ts'],prerequisites:['expressions-and-operators'],testFixtures:['src/services/coreSpirit/optimizerControlFlowReassignmentContract.test.mjs'],supportedModes:[...modes],knownDifferences:['The parser supports CoreScript braced if/else blocks; Pine indentation-based blocks and else-if chains are not yet fully normalized.'],editorCompletions:[{label:'if',kind:'keyword',insertText:'if ',detail:'Conditional structure'},{label:'else',kind:'keyword',insertText:'else ',detail:'Alternative conditional branch'}]},
   {id:'conditional-switch',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/conditional-structures/',implementationFiles:[],prerequisites:['conditional-if'],testFixtures:[fixture('switch-pending')],supportedModes:[],knownDifferences:['Pine switch expression/statement syntax and tuple-return semantics are not implemented.'],editorCompletions:[{label:'switch',kind:'keyword',insertText:'switch ',detail:'Pine conditional selection structure; implementation pending'}]},
   {id:'loops-while',domain:'language',officialReference:'https://www.tradingview.com/pine-script-docs/language/loops/',implementationFiles:['src/services/coreSpirit/parser.ts','src/services/coreSpirit/compiler.ts','src/services/coreSpirit/executionVM.ts'],prerequisites:['expressions-and-operators'],testFixtures:['src/services/coreSpirit/optimizerControlFlowReassignmentContract.test.mjs'],supportedModes:[...modes],knownDifferences:['Pine indentation-based while blocks, local block return values and exact loop iteration semantics require more parity tests.'],editorCompletions:[{label:'while',kind:'keyword',insertText:'while (condition) {\n  \n}',detail:'Bounded loop; runtime instruction/time budgets remain enforced'}]},
@@ -65,7 +43,7 @@ export const PINE_FEATURE_DEFINITIONS: readonly PineFeatureDefinition[] = Object
   {id:'bar-state-realtime-rollback',domain:'runtime',officialReference:'https://www.tradingview.com/pine-script-docs/language/execution-model/',implementationFiles:['src/services/coreSpirit/runtime.ts','src/services/coreSpirit/stateStore.ts','src/services/coreSpirit/executionStateMachine.ts','src/services/coreSpirit/kernelStateSnapshots.ts'],prerequisites:['variable-declarations','history-referencing'],testFixtures:['src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs','src/services/coreSpirit/executionStateMachineContract.test.mjs','src/services/coreSpirit/executionStateCheckpointContract.test.mjs'],supportedModes:['historical','realtime','replay'],knownDifferences:['Full Pine drawing-object and collection-reference rollback semantics are still open.']},
 ]);
 
-function derivePineFeatureStatus(definition:PineFeatureDefinition,evidence:PineFixtureEvidence):PineFeatureStatus {
+export function derivePineFeatureStatus(definition:PineFeatureDefinition,evidence:PineFixtureEvidence):PineFeatureStatus {
   if(definition.applicable===false)return 'not_applicable';
   if(definition.implementationFiles.length===0)return 'not_implemented';
   const outcomes=definition.testFixtures.map(id=>evidence[id]).filter((value):value is PineFixtureOutcome=>value!==undefined);
@@ -98,16 +76,27 @@ export function validatePineFeatureRegistry(registry:readonly PineFeatureContrac
     for(const field of ['implementationFiles','prerequisites','testFixtures','supportedModes','knownDifferences'] as const)if(!Array.isArray(feature[field]))errors.push(`invalid ${field} for ${feature.id}`);
     if(!PINE_FEATURE_STATUSES.includes(feature.status as PineFeatureStatus))errors.push(`invalid status for ${feature.id}: ${feature.status}`);
   }
+  const byId=new Map(registry.map(feature=>[feature.id,feature] as const));
   for(const feature of registry)for(const prerequisite of feature.prerequisites)if(!ids.has(prerequisite))errors.push(`unknown prerequisite '${prerequisite}' for ${feature.id}`);
+  const visiting=new Set<string>(); const visited=new Set<string>();
+  const visit=(id:string,path:string[]):void=>{
+    if(visiting.has(id)){errors.push(`prerequisite cycle: ${[...path,id].join(' -> ')}`);return;}
+    if(visited.has(id))return;
+    visiting.add(id);
+    for(const prerequisite of byId.get(id)?.prerequisites ?? [])if(byId.has(prerequisite))visit(prerequisite,[...path,id]);
+    visiting.delete(id);visited.add(id);
+  };
+  for(const feature of registry)visit(feature.id,[]);
   return errors;
 }
-export function getPineFeatureProgressSummary(registry:readonly PineFeatureContract[]=PINE_FEATURE_REGISTRY) {
+export function getPineFeatureProgressSummary(input:readonly PineFeatureContract[]|PineFixtureEvidence=PINE_FEATURE_REGISTRY) {
+  const registry=Array.isArray(input) ? input as readonly PineFeatureContract[] : getPineFeatureRegistry(input as PineFixtureEvidence);
   const counts=Object.fromEntries(PINE_FEATURE_STATUSES.map(status=>[status,registry.filter(item=>item.status===status).length])) as Record<PineFeatureStatus,number>;
   return Object.freeze({total:registry.length,counts,conformant:counts.conformant,unverified:counts.implemented_unverified,partial:counts.partially_conformant,notImplemented:counts.not_implemented});
 }
-export function getPineFeatureEditorCompletions():readonly Readonly<{label:string;kind:'function'|'keyword'|'type';insertText:string;detail:string}>[] {
+export function getPineFeatureEditorCompletions(evidence:PineFixtureEvidence={}):readonly Readonly<{label:string;kind:'function'|'keyword'|'type';insertText:string;detail:string}>[] {
   const byLabel=new Map<string,{label:string;kind:'function'|'keyword'|'type';insertText:string;detail:string}>();
-  for(const feature of PINE_FEATURE_REGISTRY)for(const item of feature.editorCompletions??[]){
+  for(const feature of getPineFeatureRegistry(evidence))for(const item of feature.editorCompletions??[]){
     byLabel.set(item.label,{...item,detail:`Pine v6 • ${feature.status} • ${item.detail}`});
   }
   return Object.freeze([...byLabel.values()]);

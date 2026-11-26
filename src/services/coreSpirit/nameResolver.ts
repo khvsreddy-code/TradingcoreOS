@@ -80,6 +80,7 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
         break;
       case 'unary':expression(n.operand,scope);break;
       case 'binary':expression(n.left,scope);expression(n.right,scope);break;
+      case 'conditional':expression(n.condition,scope);expression(n.whenTrue,scope);expression(n.whenFalse,scope);break;
       case 'number':case 'string':case 'boolean':case 'null':case 'typeDeclaration':break;
       default:break;
     }

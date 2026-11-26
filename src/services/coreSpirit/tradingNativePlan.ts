@@ -203,6 +203,7 @@ function visit(
       return;
     }
     case 'binary': visit(node.left,dependencies,events); visit(node.right,dependencies,events); return;
+    case 'conditional': visit(node.condition,dependencies,events); visit(node.whenTrue,dependencies,events); visit(node.whenFalse,dependencies,events); return;
     case 'unary': visit(node.operand,dependencies,events); return;
     case 'index': visit(node.target,dependencies,events); visit(node.index,dependencies,events); return;
     default: return;

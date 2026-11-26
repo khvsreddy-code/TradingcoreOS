@@ -1,9 +1,6 @@
-import type { CoreSpiritProgramKind, CoreSpiritPineDeclarationMetadata } from '../ast';
-
-export type PineScriptKind = Extract<CoreSpiritProgramKind,'indicator'|'strategy'|'library'>;
-export type PineExecutionMode = 'historical'|'realtime'|'replay';
-export type PineDeclarationMode = 'default'|'var'|'varip';
-export type PineStateClass = 'bar-local'|'committed-persistent'|'intrabar-persistent'|'series-history'|'drawing-reference'|'function-call-site'|'external-model';
+import type { CoreSpiritPineDeclarationMetadata } from '../ast';
+import type { PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
+export type { PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
 
 export const PINE_EXECUTION_MODE_CONTRACT = Object.freeze({
   historical:Object.freeze({repeatedExecution:false,barConfirmed:true,rollbackBeforeNextRevision:false}),
