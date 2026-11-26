@@ -307,15 +307,15 @@ export function getPineV6BuiltinDefinition(namespace: string, name: string): Pin
 
 function stripQualifier(type: string): string {
   return type.trim()
-    .replace(/^(series|simple|input|const)\\s*</,'')
-    .replace(/^(series|simple|input|const)\\s+/,'')
+    .replace(/^(series|simple|input|const)\s*</,'')
+    .replace(/^(series|simple|input|const)\s+/,'')
     .replace(/>$/,'');
 }
 function numericType(type: string): boolean {
   return ['number','numeric','int','float'].includes(stripQualifier(type));
 }
 function actualQualifier(type: string): PineV6Qualifier | undefined {
-  const match=type.trim().match(/^(const|input|simple|series)(?:<|\\s)/);
+  const match=type.trim().match(/^(const|input|simple|series)(?:<|\s)/);
   return match?.[1] as PineV6Qualifier | undefined;
 }
 const qualifierRank: Readonly<Record<PineV6Qualifier,number>> = Object.freeze({
