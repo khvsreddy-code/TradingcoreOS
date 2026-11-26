@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritCompiler } from './compiler.ts';
-import { CoreSpiritRuntime } from './runtime.ts';
+import { CoreSpiritCompiler } from '../compiler.ts';
+import { CoreSpiritRuntime } from '../runtime.ts';
 
 const source = [
   '//@version=6',
