@@ -271,6 +271,8 @@ const vwmaClone=vwmaState.clone();
 assert.equal(vwmaClone.value,36);
 assert.equal(vwmaClone.update(60,1),44);
 assert.equal(vwmaState.value,36,'VWMA snapshots/clones must not alias mutable buffers');
+assert.equal(vwmaState.update(60,Number.NaN),null,'VWMA must reset on missing volume data');
+assert.equal(vwmaState.value,null,'VWMA must not retain a prior window across missing volume data');
 assert.equal(vwmaState.update(Number.NaN,1),null,'VWMA must reset on missing source data');
 assert.equal(vwmaState.value,null);
 
