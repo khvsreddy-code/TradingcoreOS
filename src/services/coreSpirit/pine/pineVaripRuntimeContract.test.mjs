@@ -11,9 +11,9 @@ const source = [
   'tickCount := tickCount + 1',
   'plot(barCount)',
   'plot(tickCount)',
-].join('\\n');
+].join('\n');
 const compiled = new CoreSpiritCompiler().compileSource(source, 'pine-varip-runtime', { frontend:'pine-v6' });
-assert.ok(compiled.ir, compiled.diagnostics.map(item => item.code + ': ' + item.message).join('\\n'));
+assert.ok(compiled.ir, compiled.diagnostics.map(item => item.code + ': ' + item.message).join('\n'));
 
 const history = [
   { timestamp:'2026-11-25T09:15:00.000Z', open:100, high:102, low:99, close:101, volume:100 },
