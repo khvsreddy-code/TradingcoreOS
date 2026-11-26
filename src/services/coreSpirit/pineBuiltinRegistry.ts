@@ -275,7 +275,7 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('ta','percentrank',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-percentrank'),
   catalog('ta','pivotlow',[numeric('source'),numeric('leftbars','simple'),numeric('rightbars','simple')],'series<float>',2,4,'pine-ta-pivotlow',['Requires future rightbars confirmation; causal confirmation delay and max_bars_back rules are not implemented.']),
   catalog('ta','pivothigh',[numeric('source'),numeric('leftbars','simple'),numeric('rightbars','simple')],'series<float>',2,4,'pine-ta-pivothigh',['Requires future rightbars confirmation; causal confirmation delay and max_bars_back rules are not implemented.']),
-  catalog('ta','range',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'pine-ta-range'),
+  supported('ta','range','range',[numeric('source'),numeric('length','simple')],'series<float>',2,2,'Requires length consecutive finite source observations.','Current-bar revisions replace the active source; no future samples are read.','O(1) amortized per bar using the monotonic extrema window.','pine-ta-range'),
   catalog('ta','sar',[numeric('start','simple'),numeric('increment','simple'),numeric('maximum','simple')],'series<float>',3,3,'pine-ta-sar'),
   catalog('ta','swma',[numeric('source')],'series<float>',1,1,'pine-ta-swma'),
   catalog('ta','tsi',[numeric('source'),numeric('short_length','simple'),numeric('long_length','simple')],'series<float>',3,3,'pine-ta-tsi'),
