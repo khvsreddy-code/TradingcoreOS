@@ -307,6 +307,11 @@ assert.ok(pineBarStateAnalysis.diagnostics.some(item => item.code === 'PINE_BUIL
 const namespaceMemberKeys = CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.map(entry => entry.qualifiedName);
 assert.equal(new Set(namespaceMemberKeys).size,namespaceMemberKeys.length,
   'CoreSpirit namespace member registry must not contain duplicate keys');
+const namespaceMemberKeySet = new Set(namespaceMemberKeys);
+for (const entry of PINE_V6_BUILTIN_REGISTRY) {
+  assert.ok(namespaceMemberKeySet.has(entry.qualifiedName),
+    'Pine builtin registry entry must be discoverable in the namespace resolver: ' + entry.qualifiedName);
+}
 const pineHostRequestAst = new CoreSpiritParser('request.security("NSE:NIFTY", "15", close)').parse();
 const pineHostRequestAnalysis = analyzeCoreSpirit(pineHostRequestAst,{frontend:'pine-v6'});
 assert.ok(pineHostRequestAnalysis.diagnostics.some(item => item.code === 'PINE_BUILTIN_HOST_LIMITATION'),
