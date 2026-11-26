@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritCompiler } from './compiler.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
-const source=['let total: state<float> = 0','on bar {','  total := total + close','  plot total','}'].join('\n');
+const source=['let total: state<float> = 0','on bar {','  total := total + close','}','plot total'].join('\n');
 const compiled=new CoreSpiritCompiler().compileSource(source,'state-checkpoint-contract');
 assert.ok(compiled.ir,compiled.diagnostics.map(x=>x.message).join('; '));
 const bars=[
