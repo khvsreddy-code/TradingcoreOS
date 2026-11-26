@@ -1815,11 +1815,19 @@ export class CoreSpiritRuntime {
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
     if (name==='log') return finish(Math.log(Number(args[0])));
     if (name==='roc') {
-      const period=Math.max(1,Math.floor(Number(args[1] ?? 1)));
       const current=Number(args[0]);
-      const seriesName=seriesArgs[0] || 'close';
-      const previous=this.loadSeries(seriesName,period,bar,bars,index);
-      return finish(Number.isFinite(current) && previous !== null && Number.isFinite(Number(previous)) && Number(previous)!==0 ? (current/Number(previous)-1)*100 : null);
+      if(!Number.isFinite(current)) return finish(null);
+      const period=Math.max(1,Math.floor(Number(args[1] ?? 1)));
+      const key='direct:'+callKey+'|pctchange|'+series+'|'+period;
+      this.rememberKernelIdentity('direct',key,callKey,seriesArgs);
+      let cursor=this.directKernelCursors.get(key);
+      if(!cursor) {
+        cursor=new CoreSpiritFusedSeriesCursor([{name:'pctchange',length:period}]);
+        this.directKernelCursors.set(key,cursor);
+        this.captureKernelSnapshot('direct',key,cursor,index-1);
+      }
+      const ratio=cursor.update(current,index)[0];
+      return finish(Number.isFinite(ratio) ? ratio*100 : null);
     }
     if (name==='exp') return finish(Math.exp(Number(args[0])));
     if(name==='returns'){
