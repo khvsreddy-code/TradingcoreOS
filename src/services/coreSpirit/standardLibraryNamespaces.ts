@@ -92,6 +92,23 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('ta','lowestbars','Bars-since-low index function is pending.'),
   k('ta','barssince','Condition age counter is pending.'),
   k('ta','cum','Cumulative sum semantics are pending.'),
+
+  k('ta','alma','Arnaud Legoux moving average kernel is pending.'),
+  k('ta','bbw','Bollinger Band width output is pending.'),
+  k('ta','dev','Mean absolute deviation kernel is pending.'),
+  k('ta','dmi','Directional movement tuple (+DI, -DI, ADX); tuple ABI and reference parity are pending.'),
+  k('ta','mom','Momentum oscillator kernel is pending.'),
+  k('ta','percentile_linear_interpolation','Rolling percentile with linear interpolation is pending.'),
+  k('ta','percentile_nearest_rank','Rolling nearest-rank percentile is pending.'),
+  k('ta','percentrank','Rolling percent-rank kernel is pending.'),
+  k('ta','pivotlow','Confirmed pivot-low with right-bar delay semantics is pending.'),
+  k('ta','pivothigh','Confirmed pivot-high with right-bar delay semantics is pending.'),
+  k('ta','range','Rolling high-low range kernel is pending.'),
+  k('ta','sar','Parabolic SAR state kernel is pending.'),
+  k('ta','swma','Symmetrically weighted moving average kernel is pending.'),
+  k('ta','tsi','True strength index kernel is pending.'),
+  k('ta','wpr','Williams percent-range kernel is pending.'),
+
   b('math','abs','abs','Absolute value.'), b('math','min','min','Minimum.'), b('math','max','max','Maximum.'),
   b('math','sqrt','sqrt','Square root.'), b('math','pow','pow','Power.'), b('math','round','round','Round.'), b('math','sign','sign','Sign.'), b('math','log','log','Natural logarithm.'), b('math','exp','exp','Exponential function.'),
   b('math','toNumber','toNumber','Explicit semantic conversion to unitless number.'), b('math','toPrice','toPrice','Explicit semantic conversion to price.'), b('math','toVolume','toVolume','Explicit semantic conversion to volume.'),
@@ -106,6 +123,10 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('math','pi','Numeric constant access requires namespace member-value lowering.'),
   k('math','e','Numeric constant access requires namespace member-value lowering.'),
   k('math','phi','Numeric constant access requires namespace member-value lowering.'),
+
+
+  k('math','random','Seeded deterministic random stream is pending.'),
+  k('math','round_to_mintick','Symbol mintick-aware rounding is pending.'),
 
   b('math','vector','vector','Construct a typed dense vector.'), b('math','matrix','matrix','Construct a typed dense matrix.'), b('math','tensor','tensor','Construct a typed dense tensor.'),
   b('math','zeros','zeros','Create a zero-filled matrix.'), b('math','identity','identity','Create a matrix identity.'),
@@ -166,6 +187,15 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('array','size','Return array size.'),
   k('array','clear','Remove all array elements.'),
   k('array','copy','Copy an array while preserving element type.'),
+
+  k('array','shift','Remove and return the first array element.'),
+  k('array','unshift','Insert an element at the beginning of an array.'),
+  k('array','insert','Insert an element at an array index.'),
+  k('array','remove','Remove and return an array element by index.'),
+  k('array','reverse','Reverse array element order.'),
+  k('array','sort','Sort array elements in place.'),
+  k('array','slice','Return a bounded array slice.'),
+
   k('matrix','new','Typed matrix constructor and overload family.'),
   k('matrix','rows','Return matrix row count.'),
   k('matrix','columns','Return matrix column count.'),
@@ -173,6 +203,13 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('matrix','set','Replace a matrix element.'),
   k('matrix','add','Add matrices with matching dimensions.'),
   k('matrix','mult','Multiply matrices with compatible dimensions.'),
+
+  k('matrix','transpose','Transpose a matrix.'),
+  k('matrix','det','Calculate the determinant of a square matrix.'),
+  k('matrix','inv','Calculate the inverse of a non-singular matrix.'),
+  k('matrix','sum','Sum all matrix elements.'),
+  k('matrix','avg','Average all matrix elements.'),
+
   k('map','new','Typed map constructor and overload family.'),
   k('map','put','Insert or replace a key/value pair.'),
   k('map','get','Read a map value.'),
@@ -180,6 +217,9 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('map','contains','Test whether a key exists.'),
   k('map','keys','Return map keys.'),
   k('map','values','Return map values.'),
+
+  k('map','size','Return map entry count.'),
+
   k('str','format','Format strings with Pine-compatible placeholders.'),
   k('str','length','Return string length.'),
   k('str','tostring','Convert a value to string.'),
@@ -217,6 +257,9 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('timeframe','isdwm','True for daily/weekly/monthly intervals.'),
   k('timeframe','main_period','Main chart timeframe period metadata.'),
   k('timeframe','in_seconds','Convert a timeframe into seconds.'),
+
+  k('time','time','Bar opening timestamp.'),
+
   k('time','time_close','Bar closing timestamp.'),
   k('time','year','Extract calendar year.'),
   k('time','month','Extract calendar month.'),
@@ -255,6 +298,16 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   k('chart','left_visible_bar_time','Left visible chart bar timestamp.'),
   k('chart','right_visible_bar_time','Right visible chart bar timestamp.'),
   k('chart','bg_color','Chart background metadata.'),
+
+  k('chart','is_standard','True for standard time-based charts.'),
+  k('chart','is_heikinashi','True for Heikin Ashi charts.'),
+  k('chart','is_renko','True for Renko charts.'),
+  k('chart','is_kagi','True for Kagi charts.'),
+  k('chart','is_pnf','True for point-and-figure charts.'),
+  k('chart','is_linebreak','True for line-break charts.'),
+  k('chart','is_range','True for range charts.'),
+  k('chart','is_time_based','True when chart bars are time-based.'),
+
   k('chart','point','Chart point namespace.'),
   k('barstate','isfirst','True on the first chart bar.'),
   k('barstate','islast','True on the last chart bar.'),
