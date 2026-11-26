@@ -703,8 +703,12 @@ export class VWMAState extends RollingBase {
       this.weightedSum += weighted;
       this.volumeSum += v;
     }
-    if(this.count!==this.capacity || this.volumeSum<=0) return null;
-    return this.weightedSum/this.volumeSum;
+    if(this.count!==this.capacity || this.volumeSum<=0) {
+      this.latestValue=null;
+      return null;
+    }
+    this.latestValue=this.weightedSum/this.volumeSum;
+    return this.latestValue;
   }
 
   reset():void {
