@@ -1,6 +1,5 @@
-import type { CoreSpiritPineDeclarationMetadata } from '../ast';
-import type { PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
-export type { PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
+import type { PineRuntimeContract, PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
+export type { PineRuntimeContract, PineScriptKind, PineExecutionMode, PineDeclarationMode, PineStateClass } from './pineCompatibilityTypes';
 
 export const PINE_EXECUTION_MODE_CONTRACT = Object.freeze({
   historical:Object.freeze({repeatedExecution:false,barConfirmed:true,rollbackBeforeNextRevision:false}),
@@ -21,13 +20,6 @@ export const PINE_STATE_OWNERSHIP_CONTRACT:Readonly<Record<PineStateClass,string
   'function-call-site':'stateful call-site key plus confirmed-bar checkpoint',
   'external-model':'immutable artifact version and explicitly managed model runtime state',
 });
-export type PineRuntimeContract = Readonly<{
-  scriptKind:PineScriptKind;
-  mode:PineExecutionMode;
-  declaration:CoreSpiritPineDeclarationMetadata;
-  seriesHistoryIsCausal:true;
-  outputsAreRevisioned:true;
-}>;
 export function validatePineRuntimeContract(contract:PineRuntimeContract):string[] {
   const errors:string[]=[];
   if(contract.declaration.kind!==contract.scriptKind)errors.push('script kind must match the parsed top-level Pine declaration');
