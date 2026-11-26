@@ -7,6 +7,7 @@ import { CORE_SPIRIT_LANGUAGE_CONCEPTS } from './languageConcepts';
 import { getCoreSpiritModelSurfaceDeclarations } from './modelSurface';
 import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 import { CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES, getCoreSpiritLibraryNamespaceEntries } from './standardLibraryNamespaces';
+import { getPineFeatureEditorCompletions } from './pine/pineFeatureRegistry';
 import { CORE_SPIRIT_SURFACE_CAPABILITIES } from './languageConcepts';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
@@ -161,7 +162,7 @@ function allCompletions(): CoreSpiritCompletion[] {
     kind:'visual' as const,
     detail:'advanced/compatibility visual API • SHOW is the primary surface',
   }));
-  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...SYSTEM_CAPABILITIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...SYSTEM_CAPABILITIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals, ...getPineFeatureEditorCompletions()];
 }
 
 

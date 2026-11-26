@@ -1,0 +1,27 @@
+import type { PineExecutionMode } from './pineRuntimeContracts';
+
+export type PineConformanceFixture = Readonly<{
+  id:string;
+  featureId:string;
+  description:string;
+  source:string;
+  frontend:'pine-v6';
+  mode:PineExecutionMode;
+  parseOnly?:boolean;
+  expectedProgramKind?:'indicator'|'strategy'|'library';
+  expectedDiagnostic?:string;
+}>;
+export const PINE_CONFORMANCE_FIXTURE_TEST_PATH='src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts';
+export const PINE_CONFORMANCE_FIXTURES:readonly PineConformanceFixture[]=Object.freeze([
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#version-6`,featureId:'version-annotation',description:'Explicit Pine v6 compiler annotation is recognized',source:'//@version=6\nindicator("Version fixture")\nplot(close)',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedProgramKind:'indicator'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#reject-version-5`,featureId:'version-annotation',description:'Older language versions fail closed rather than being parsed as CoreScript',source:'//@version=5\nindicator("Old version")\nplot(close)',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_VERSION_UNSUPPORTED'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#indicator-declaration`,featureId:'script-declarations',description:'Indicator declaration metadata survives frontend parsing and compiler lowering',source:'//@version=6\nindicator("Indicator fixture", overlay=true)\nplot(close)',frontend:'pine-v6',mode:'historical',expectedProgramKind:'indicator'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#strategy-declaration`,featureId:'strategy-declarations',description:'Strategy script kind is preserved by Pine parsing',source:'//@version=6\nstrategy("Strategy fixture", overlay=true)',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedProgramKind:'strategy'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#library-declaration`,featureId:'libraries-import-export',description:'Library declaration is recognized and kept distinct from indicator/strategy scripts',source:'//@version=6\nlibrary("Library fixture")',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedProgramKind:'library'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#single-global-declaration`,featureId:'script-declarations',description:'A second or locally scoped declaration is rejected',source:'//@version=6\nindicator("One")\nstrategy("Two")',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_DUPLICATE_OR_SCOPED_DECLARATION'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#switch-pending`,featureId:'conditional-switch',description:'Pine switch grammar conformance is pending',source:'//@version=6\nindicator("Switch")\nplot(switch close > open\n    true => close\n    => open)',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_SYNTAX_ERROR'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#for-range-pending`,featureId:'loops-for-range',description:'Pine numeric range-loop grammar conformance is pending',source:'//@version=6\nindicator("For range")\nfor i = 0 to 10\n    plot(close)',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_SYNTAX_ERROR'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#tuple-return-pending`,featureId:'function-tuples',description:'Pine tuple declaration and return grammar conformance is pending',source:'//@version=6\nindicator("Tuple")\n[a, b] = [close, open]',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_SYNTAX_ERROR'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#enum-pending`,featureId:'enums',description:'Pine enum grammar conformance is pending',source:'//@version=6\nindicator("Enum")\nenum Signal\n    buy\n    sell',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_SYNTAX_ERROR'},
+  {id:`${PINE_CONFORMANCE_FIXTURE_TEST_PATH}#library-import-pending`,featureId:'libraries-import-export',description:'Pine import/export grammar conformance is pending',source:'//@version=6\nindicator("Import")\nimport TradingView/ta/9 as ta',frontend:'pine-v6',mode:'historical',parseOnly:true,expectedDiagnostic:'PINE_SYNTAX_ERROR'},
+]);
