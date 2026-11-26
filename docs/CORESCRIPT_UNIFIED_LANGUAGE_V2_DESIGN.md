@@ -265,17 +265,7 @@ Editor affordances should not be confused with runtime features. A visible butto
 
 ## 7. Current source-of-truth gap baseline
 
-The source file `src/services/coreSpirit/languageParity.ts` currently tracks 60 capabilities:
-
-| Source status | Count |
-|---|---:|
-| Implemented | 33 |
-| Partial | 17 |
-| Surface only | 3 |
-| Planned | 7 |
-| Total | 60 |
-
-This count is taken from the current source matrix. Older narrative documents contain a different count and should be reconciled against this source when their trackers are next updated.
+The canonical Pine compatibility source is `src/services/coreSpirit/pine/pineFeatureRegistry.ts`. It defines feature contracts, official references, implementation files, prerequisites, executable fixtures and supported modes. Status is derived from fixture evidence, implementation references and explicit known differences; there is deliberately no fixed manually curated status count. Use `getPineFeatureProgressSummary()` for the current count by status. The compatibility adapter at `languageParity.ts` is an alias, not a second inventory.
 
 Highest priority missing/incomplete language capabilities:
 1. typed arrays and maps with safe mutation/iteration and memory budgets;
@@ -373,6 +363,6 @@ Extend the existing foundations rather than creating competing systems:
 - External code/models: `modelAbi.ts`, `modelOrchestration.ts`, `pythonMlModelAdapter.ts`, `ml/` and model artifact lifecycle.
 - Research: research validation, dataset/artifact provenance, batch training, out-of-sample economics and model promotion.
 - Visuals: CoreSpirit output/scene ABI and Vela output adapter.
-- Proof: `languageParity.ts` plus contract tests; update source status only with evidence.
+- Proof: `pine/pineFeatureRegistry.ts` plus executable fixtures and the contract runner; status is derived from test evidence and known differences, never manually promoted.
 
 The first delivery should establish this design and compatibility contract. Subsequent commits should land one independently testable capability slice at a time. Do not attempt to mark all Pine features complete in one large change.
