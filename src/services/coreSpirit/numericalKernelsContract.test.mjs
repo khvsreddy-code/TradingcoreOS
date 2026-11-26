@@ -257,6 +257,14 @@ assert.equal(getPineV6BuiltinDefinition('ta','tr')?.overloads[0]?.parameters[0]?
   'ta.tr defaults handle_na to false');
 assert.equal(validatePineV6BuiltinArguments(getPineV6BuiltinDefinition('ta','tr'),[]).valid,true,
   'ta.tr exposes its default handle_na argument');
+for (const requestFunction of ['security','security_lower_tf','currency_rate','dividends','splits','earnings','financial','economic','seed','footprint']) {
+  assert.ok(getPineV6BuiltinDefinition('request',requestFunction),
+    'request API inventory must include request.' + requestFunction);
+}
+for (const technicalFunction of ['alma','adx','macd','stoch','bb','supertrend','vwma','cci','mfi','vwap','obv','pvt','nvi','pvi','wad','wvad','iii','linreg','correlation']) {
+  assert.ok(getPineV6BuiltinDefinition('ta',technicalFunction),
+    'technical analysis API inventory must include ta.' + technicalFunction);
+}
 for (const volumeFunction of ['vwap','obv','pvt','nvi','pvi','wad','wvad','iii','mfi']) {
   assert.ok(getPineV6BuiltinDefinition('ta',volumeFunction),
     'volume and flow family inventory must include ta.' + volumeFunction);
