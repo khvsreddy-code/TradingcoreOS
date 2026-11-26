@@ -150,15 +150,15 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
       return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_SYNTAX_ERROR','Pine numeric range for-loops are not implemented by this Pine v6 frontend yet.',offset,offset+3)]};
     }
     const unsupportedPineConstructs:readonly Readonly<{pattern:RegExp;label:string}>[]=[
-      {pattern:/\\bswitch\\b/m,label:'switch conditional structures'},
-      {pattern:/^[ \\t]*import\\b/m,label:'library import declarations'},
-      {pattern:/^[ \\t]*export\\b/m,label:'library export declarations'},
-      {pattern:/^[ \\t]*\\[[^\\]\\r\\n]*\\][ \\t]*=/m,label:'tuple declarations and destructuring'},
+      {pattern:/\bswitch\b/m,label:'switch conditional structures'},
+      {pattern:/^[ \t]*import\b/m,label:'library import declarations'},
+      {pattern:/^[ \t]*export\b/m,label:'library export declarations'},
+      {pattern:/^[ \t]*\[[^\]\r\n]*\][ \t]*=/m,label:'tuple declarations and destructuring'},
     ];
     for(const unsupported of unsupportedPineConstructs){
       const match=unsupported.pattern.exec(maskedBody);
       if(match){
-        const offset=match.index+(match[0].search(/\\S/)>=0?match[0].search(/\\S/):0);
+        const offset=match.index+(match[0].search(/\S/)>=0?match[0].search(/\S/):0);
         return {frontend:this.id,normalizedSource:body,diagnostics:[diagnostic(original,'PINE_SYNTAX_ERROR',`Pine ${unsupported.label} are not implemented by this Pine v6 frontend yet.`,offset,offset+1)]};
       }
     }
