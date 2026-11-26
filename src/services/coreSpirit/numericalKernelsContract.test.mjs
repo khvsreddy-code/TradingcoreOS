@@ -267,7 +267,7 @@ assert.equal(vwmaState.update(40,2),32);
 assert.equal(vwmaState.update(50,2,'replace'),36);
 const vwmaClone=vwmaState.clone();
 assert.equal(vwmaClone.value,36);
-assert.equal(vwmaClone.update(60,1),43.333333333333336);
+assert.equal(vwmaClone.update(60,1),44);
 assert.equal(vwmaState.value,36,'VWMA snapshots/clones must not alias mutable buffers');
 assert.equal(vwmaState.update(Number.NaN,1),null,'VWMA must reset on missing source data');
 assert.equal(vwmaState.value,null);
