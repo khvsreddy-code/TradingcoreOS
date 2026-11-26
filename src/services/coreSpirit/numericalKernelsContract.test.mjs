@@ -216,6 +216,11 @@ for (const entry of PINE_V6_BUILTIN_REGISTRY) {
     assert.ok(signature.executionCost && signature.errorBehavior && signature.testFixture,entry.qualifiedName + ' must declare runtime contract and fixture');
   }
 }
+for (const entry of PINE_V6_BUILTIN_REGISTRY.filter(item => item.status === 'implemented' || item.status === 'partial')) {
+  const resolved = resolveCoreSpiritLibraryCall(entry.namespace,entry.name);
+  assert.equal(resolved?.entry.status,'builtin',entry.qualifiedName + ' must resolve as executable');
+  assert.equal(resolved?.builtin?.name,entry.executionBuiltin,entry.qualifiedName + ' must lower to its declared runtime builtin');
+}
 const smaApi = getPineV6BuiltinDefinition('ta','sma');
 assert.ok(smaApi && pineV6BuiltinIsExecutable(smaApi));
 assert.equal(validatePineV6BuiltinArguments(smaApi,['series<float>','int']).valid,true);
