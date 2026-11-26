@@ -9,8 +9,8 @@ const bars=[
  {timestamp:'2026-11-25T09:20:00+05:30',open:101,high:103,low:100,close:102,volume:12},
 ];
 const dataset={id:'nifty-5m-fixture-v1',symbol:'NSE:NIFTY50-INDEX',timeframe:'5m',source,normalizedSource:source,
- dataVersion:'fixture-bars-v1',eventSequence:['bar:0:confirmed','bar:1:confirmed'],inputConfiguration:{source:'close'},
- runtimeConfiguration:{timezone:'Asia/Kolkata',executionTier:'reference'},modelArtifactVersion:'none',bars};
+ dataVersion:'fixture-bars-v1',eventSequence:['bar:0:confirmed','bar:1:confirmed'],
+ runtimeOptions:{timezone:'Asia/Kolkata',executionTier:'reference',inputValues:{source:'close'}},modelArtifactVersion:'none',bars};
 const {first,second}=assertDeterministicReplay(compiled.ir,dataset);
 assert.equal(first.executionIdentityChecksum,second.executionIdentityChecksum);
 assert.ok(first.executionIdentity.sourceHash,'replay identity must carry a source hash');
