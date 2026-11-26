@@ -73,7 +73,7 @@ function validateSpecializedPlan(
         if (lowered.op !== 'loadSeries' || lowered.name !== original.name || lowered.offset !== original.offset) throw new Error(`specialized series load is stale at instruction ${index}`);
         break;
       case 'loadState':
-        if (lowered.op !== 'loadState' || lowered.name !== original.name) throw new Error(`specialized state load is stale at instruction ${index}`);
+        if (lowered.op !== 'loadState' || lowered.name !== original.name || lowered.storage !== original.storage) throw new Error(`specialized state load is stale at instruction ${index}`);
         break;
       case 'move':
         if (lowered.op !== 'move' || lowered.sourceKind !== (original.sourceKind ?? 'register')) throw new Error(`specialized move source kind is stale at instruction ${index}`);
@@ -91,7 +91,7 @@ function validateSpecializedPlan(
         assertSlot(plan, original.source, lowered.source, `instruction ${index} local source`);
         break;
       case 'setState':
-        if (lowered.op !== 'setState' || lowered.name !== original.name || lowered.initialize !== original.initialize) throw new Error(`specialized setState metadata is stale at instruction ${index}`);
+        if (lowered.op !== 'setState' || lowered.name !== original.name || lowered.initialize !== original.initialize || lowered.storage !== original.storage) throw new Error(`specialized setState metadata is stale at instruction ${index}`);
         assertSlot(plan, original.source, lowered.source, `instruction ${index} state source`);
         break;
       case 'unary':
@@ -387,13 +387,13 @@ export class CoreSpiritOptimizedExecutionVM {
           switch (ins.op) {
             case 'const': values.set(ins.dest, ins.value); pc += 1; break;
             case 'loadSeries': values.set(ins.dest, host.loadSeries(ins.name, ins.offset)); pc += 1; break;
-            case 'loadState': values.set(ins.dest, host.loadState(ins.name)); pc += 1; break;
+            case 'loadState': values.set(ins.dest, host.loadState(ins.name, ins.storage)); pc += 1; break;
             case 'move': values.set(ins.dest, ins.sourceKind === 'local' ? host.moveLocal(ins.source) : values.get(ins.source)); pc += 1; break;
             case 'setLocal':
               if (ins.series !== false && ins.seriesId >= 0 && host.setLocalBySeriesId) host.setLocalBySeriesId(ins.seriesId, ins.name, values.get(ins.source));
               else host.setLocal(ins.name, values.get(ins.source), ins.series !== false);
               pc += 1; break;
-            case 'setState': host.setState(ins.name, values.get(ins.source), ins.initialize); pc += 1; break;
+            case 'setState': host.setState(ins.name, values.get(ins.source), ins.initialize, ins.storage); pc += 1; break;
             case 'unary': values.set(ins.dest, host.unary(ins.operator, values.get(ins.operand))); pc += 1; break;
             case 'binary': values.set(ins.dest, host.binary(ins.operator, values.get(ins.left), values.get(ins.right))); pc += 1; break;
             case 'call': {

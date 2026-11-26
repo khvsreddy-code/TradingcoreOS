@@ -1,4 +1,4 @@
-import type { CoreSpiritIrInstruction } from './ir';
+import type { CoreSpiritIrInstruction, CoreSpiritStateStorage } from './ir';
 import type { CoreSpiritObject, CoreSpiritValue } from './types';
 import type { CoreSpiritOutputCollector } from './outputCollector';
 import type { CoreSpiritValueStore } from './executionValueStore';
@@ -13,8 +13,8 @@ export type CoreSpiritExecutionVMHost = {
   chargeInstruction?: () => void;
   loadSeries: (name: string, offset: number) => number | null;
   moveLocal: (source: string) => unknown;
-  loadState: (name: string) => unknown;
-  setState: (name: string, value: unknown, initialize?: boolean) => void;
+  loadState: (name: string, storage?: CoreSpiritStateStorage) => unknown;
+  setState: (name: string, value: unknown, initialize?: boolean, storage?: CoreSpiritStateStorage) => void;
   setLocal: (name: string, value: unknown, series: boolean) => void;
   setLocalBySeriesId?: (id: number, name: string, value: unknown) => void;
   unary: (operator: string, value: unknown) => unknown;
@@ -61,7 +61,7 @@ export class CoreSpiritExecutionVM {
             pc += 1;
             break;
           case 'loadState':
-            values.set(ins.dest, host.loadState(ins.name));
+            values.set(ins.dest, host.loadState(ins.name, ins.storage));
             pc += 1;
             break;
           case 'move':
@@ -73,7 +73,7 @@ export class CoreSpiritExecutionVM {
             pc += 1;
             break;
           case 'setState':
-            host.setState(ins.name, values.get(ins.source), ins.initialize);
+            host.setState(ins.name, values.get(ins.source), ins.initialize, ins.storage);
             pc += 1;
             break;
           case 'unary':

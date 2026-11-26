@@ -1,15 +1,15 @@
-import type { CoreSpiritIrInstruction } from './ir';
+import type { CoreSpiritIrInstruction, CoreSpiritStateStorage } from './ir';
 import { getCoreSpiritBuiltin } from './standardLibrary';
 import type { CoreSpiritSeriesRegistry, CoreSpiritSeriesId } from './seriesRegistry';
 
 export type CoreSpiritSpecializedInstruction =
   | { op:'const'; dest:number; value:number|string|boolean|null }
   | { op:'loadSeries'; dest:number; name:string; offset:number }
-  | { op:'loadState'; dest:number; name:string }
+  | { op:'loadState'; dest:number; name:string; storage?:CoreSpiritStateStorage }
   | { op:'move'; dest:number; source:number; sourceKind:'register' }
   | { op:'move'; dest:number; source:string; sourceKind:'local' }
   | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }
-  | { op:'setState'; name:string; source:number; initialize?:boolean }
+  | { op:'setState'; name:string; source:number; initialize?:boolean; storage?:CoreSpiritStateStorage }
   | { op:'unary'; dest:number; operator:'!'|'+'|'-'; operand:number }
   | { op:'binary'; dest:number; operator:string; left:number; right:number }
   | { op:'call'; dest:number; name:string; args:number[]; instruction:Extract<CoreSpiritIrInstruction,{op:'call'}> }
@@ -91,12 +91,12 @@ export function buildCoreSpiritSpecializedPlan(
       case 'const': return {op:'const',dest:slot(instruction.dest),value:instruction.value};
       case 'loadSeries':
         return {op:'loadSeries',dest:slot(instruction.dest),name:instruction.name,offset:instruction.offset};
-      case 'loadState': return {op:'loadState',dest:slot(instruction.dest),name:instruction.name};
+      case 'loadState': return {op:'loadState',dest:slot(instruction.dest),name:instruction.name,...(instruction.storage ? {storage:instruction.storage} : {})};
       case 'move': return instruction.sourceKind === 'local'
         ? {op:'move',dest:slot(instruction.dest),source:instruction.source,sourceKind:'local'}
         : {op:'move',dest:slot(instruction.dest),source:slot(instruction.source),sourceKind:'register'};
       case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
-      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source),...(instruction.initialize ? {initialize:true} : {})};
+      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source),...(instruction.initialize ? {initialize:true} : {}),...(instruction.storage ? {storage:instruction.storage} : {})};
       case 'unary': return {op:'unary',dest:slot(instruction.dest),operator:instruction.operator,operand:slot(instruction.operand)};
       case 'binary': return {op:'binary',dest:slot(instruction.dest),operator:instruction.operator,left:slot(instruction.left),right:slot(instruction.right)};
       case 'call': return {op:'call',dest:slot(instruction.dest),name:instruction.name,args:instruction.args.map(slot),instruction};
