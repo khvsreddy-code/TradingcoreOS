@@ -39,7 +39,7 @@ assert.equal(beginner.artifact?.abi.kind, advanced.artifact?.abi.kind);
 assert.ok(beginner.ir?.semanticDependencyGraph);
 assert.ok(advanced.ir?.semanticDependencyGraph);
 assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='collections-arrays'&&item.status==='partially_conformant'));
-assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='conditional-switch'&&item.status==='not_implemented'));
+assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='conditional-switch'&&item.status==='partially_conformant'));
 assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='version-annotation'));
 assert.equal(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='orderbook'),false,'Pine language compatibility registry must not mix in unrelated host/domain features');
 console.log('CORESPIRIT_LANGUAGE_PARITY_CONTRACT_OK');
