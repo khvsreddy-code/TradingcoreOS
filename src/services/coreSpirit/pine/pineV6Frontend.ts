@@ -1,4 +1,4 @@
-import type { CoreSpiritAst, CoreSpiritPineDeclarationArgument, CoreSpiritPineDeclarationMetadata, CoreSpiritProgramKind } from '../ast';
+import type { CoreSpiritAst, CoreSpiritAstNode, CoreSpiritPineDeclarationArgument, CoreSpiritPineDeclarationMetadata, CoreSpiritProgramKind } from '../ast';
 import { CoreSpiritParser } from '../parser';
 import { normalizeCoreSpiritSource } from '../syntax';
 import type { CoreSpiritFrontendDiagnostic, CoreSpiritFrontendParseResult, CoreSpiritLanguageFrontend } from '../frontends';
@@ -136,6 +136,37 @@ function blankRange(source:string,start:number,end:number):string {
   return source.slice(0,start)+source.slice(start,end).replace(/[^\r\n]/g,' ')+source.slice(end);
 }
 
+/** Strategy namespace values and operations are valid only in strategy() programs. */
+function validateScriptKindOperations(
+  ast:CoreSpiritAst,
+  metadata:CoreSpiritPineDeclarationMetadata,
+  source:string,
+):CoreSpiritFrontendDiagnostic[] {
+  if(metadata.kind==='strategy') return [];
+  const diagnostics:CoreSpiritFrontendDiagnostic[]=[];
+  const visit=(value:unknown):void=>{
+    if(Array.isArray(value)){for(const item of value)visit(item);return;}
+    if(!value||typeof value!=='object')return;
+    const node=value as Record<string,unknown>;
+    if((node.type==='member'||node.type==='memberCall')&&
+       node.target&&typeof node.target==='object'&&
+       (node.target as Record<string,unknown>).type==='identifier'&&
+       (node.target as Record<string,unknown>).name==='strategy'){
+      const span=node.span as {start?:number;end?:number}|undefined;
+      const start=Number.isInteger(span?.start)?Number(span?.start):0;
+      const end=Number.isInteger(span?.end)?Number(span?.end):start+1;
+      diagnostics.push(diagnostic(source,'PINE_STRATEGY_NAMESPACE_REQUIRES_STRATEGY',
+        `The strategy.* namespace is available only in scripts declared with strategy().`,start,end));
+    }
+    for(const [key,child] of Object.entries(node)){
+      if(key==='metadata'||key==='span')continue;
+      visit(child);
+    }
+  };
+  visit(ast.body);
+  return diagnostics;
+}
+
 export class PineV6Frontend implements CoreSpiritLanguageFrontend {
   readonly id='pine-v6' as const;
   parse(source:string):CoreSpiritFrontendParseResult {
@@ -180,6 +211,8 @@ export class PineV6Frontend implements CoreSpiritLanguageFrontend {
       if(parsed.diagnostics.length)return {frontend:this.id,normalizedSource,diagnostics:parsed.diagnostics.map(item=>({severity:'error' as const,code:'PINE_SYNTAX_ERROR',message:item.message,start:item.start,end:item.end,line:item.line,column:item.column}))};
       const programKind=header.metadata.kind as CoreSpiritProgramKind;
       const ast:CoreSpiritAst={...parsed.ast,programKind,pineDeclaration:header.metadata};
+      const kindDiagnostics=validateScriptKindOperations(ast,header.metadata,original);
+      if(kindDiagnostics.length)return {frontend:this.id,normalizedSource,diagnostics:kindDiagnostics};
       return {frontend:this.id,normalizedSource,ast,diagnostics:[]};
     }catch(error){
       const failure=error as {message?:string;position?:{offset?:number;line?:number;column?:number}};
