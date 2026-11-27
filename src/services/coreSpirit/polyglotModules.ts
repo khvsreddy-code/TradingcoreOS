@@ -81,7 +81,7 @@ function snapshotManifest(manifest:CoreSpiritPolyglotModuleManifest):CoreSpiritP
     ...(dependencies?{dependencies}:{} )});
 }
 function validateTensorSpec(name:string,shape:readonly number[]):void {
-  if(!name||shape.length>8||shape.some(size=>!Number.isSafeInteger(size)||size<0)) throw new Error("Polyglot tensor '"+name+"' has an invalid shape.");
+  if(typeof name!=='string'||!name||!Array.isArray(shape)||shape.length>8||shape.some(size=>!Number.isSafeInteger(size)||size<0)) throw new Error("Polyglot tensor '"+name+"' has an invalid shape.");
   const elements=shape.reduce((count,size)=>count*size,1);
   if(!Number.isSafeInteger(elements)||elements>1_000_000) throw new Error("Polyglot tensor '"+name+"' exceeds the one-million-element ABI limit.");
 }
@@ -103,7 +103,15 @@ function canonical(value:unknown):string {
 }
 /** SHA-256 binds a response to the exact module artifact, request and output tensors. */
 export function coreSpiritPolyglotResponseChecksum(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,outputs:Readonly<Record<string,CoreSpiritPolyglotTensor>>):string {
-  return sha256HexSync(canonical({abiVersion:manifest.abiVersion,moduleId:manifest.moduleId,version:manifest.version,language:manifest.language,transport:manifest.transport,runtimeVersion:manifest.runtimeVersion,dependencies:manifest.dependencies??[],inputs:manifest.inputs,outputsSchema:manifest.outputs,limits:{maxInputBytes:manifest.maxInputBytes,maxOutputBytes:manifest.maxOutputBytes,maxMemoryBytes:manifest.maxMemoryBytes,maxSteps:manifest.maxSteps,maxLatencyMs:manifest.maxLatencyMs},requestId:request.requestId,exportName:request.exportName,outputs}));
+  return sha256HexSync(canonical({
+    abiVersion:manifest.abiVersion,moduleId:manifest.moduleId,version:manifest.version,
+    language:manifest.language,transport:manifest.transport,runtimeVersion:manifest.runtimeVersion,
+    dependencies:manifest.dependencies??[],inputs:manifest.inputs,outputsSchema:manifest.outputs,
+    limits:{maxInputBytes:manifest.maxInputBytes,maxOutputBytes:manifest.maxOutputBytes,
+      maxMemoryBytes:manifest.maxMemoryBytes,maxSteps:manifest.maxSteps,maxLatencyMs:manifest.maxLatencyMs},
+    requestId:request.requestId,exportName:request.exportName,
+    context:request.context,requestInputs:request.inputs,outputs,
+  }));
 }
 export class CoreSpiritPolyglotRegistry {
   private readonly entries=new Map<string,{manifest:CoreSpiritPolyglotModuleManifest;host:CoreSpiritPolyglotHost}>();
@@ -123,7 +131,7 @@ export class CoreSpiritPolyglotRegistry {
     const {manifest,host}=entry;
     if(!manifest.exports.includes(request.exportName)) throw new Error("Polyglot export '"+request.exportName+"' is not declared.");
     const context=request.context;
-    if(!context.confirmed) throw new Error('Polyglot v1 inference accepts confirmed-bar inputs only.');
+    if(typeof context.confirmed!=='boolean'||context.confirmed!==true) throw new Error('Polyglot v1 inference accepts confirmed-bar inputs only.');
     if(!context.runId?.trim()||context.runId.length>128||!context.symbol?.trim()||context.symbol.length>128||
        !context.timeframe?.trim()||context.timeframe.length>32||!context.deterministicSeed?.trim()||
        !Number.isSafeInteger(context.barIndex)||context.barIndex<0||
