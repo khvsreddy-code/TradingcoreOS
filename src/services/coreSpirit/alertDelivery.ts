@@ -1,15 +1,8 @@
 /** Host-owned, durable, idempotent alert outbox. The VM never performs network delivery. */
-export type CoreSpiritAlertFrequency='all'|'once-per-bar'|'once-per-bar-close';
+import { normalizeCoreSpiritAlertFrequency, type CoreSpiritAlertFrequency } from './alertFrequency';
+export { normalizeCoreSpiritAlertFrequency } from './alertFrequency';
+export type { CoreSpiritAlertFrequency } from './alertFrequency';
 export type CoreSpiritAlertEventType='alert'|'alertcondition';
-
-/** Canonicalize Pine enum values before runtime frequency gating or outbox admission. */
-export function normalizeCoreSpiritAlertFrequency(value:unknown):CoreSpiritAlertFrequency {
-  const raw=String(value??'once-per-bar').trim().toLowerCase();
-  const withoutPrefix=raw.startsWith('alert.freq_')?raw.slice('alert.freq_'.length):raw;
-  const normalized=withoutPrefix.replaceAll('_','-');
-  if(normalized==='all'||normalized==='once-per-bar'||normalized==='once-per-bar-close')return normalized;
-  throw new Error(`Unsupported Pine alert frequency '${raw}'.`);
-}
 export type CoreSpiritAlertIdentity=Readonly<{
   programId:string;
   instrumentId:string;

@@ -53,7 +53,7 @@ import { CoreSpiritResourceGovernor, type CoreSpiritResourceBudget, CoreSpiritRe
 import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent, type CoreSpiritOutputSemantics } from './executionSemantics';
 import type { CoreSpiritBarPhase } from './types';
 import { CoreSpiritExecutionStateMachine } from './executionStateMachine';
-import { normalizeCoreSpiritAlertFrequency } from './alertDelivery';
+import { normalizeCoreSpiritAlertFrequency } from './alertFrequency';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
