@@ -172,6 +172,7 @@ const contracts = [
   ['corespirit-polyglot-module-abi', ['src/services/coreSpirit/polyglotModulesContract.test.mjs', true]],
   ['corespirit-quant-research', ['src/services/coreSpirit/quantResearchContract.test.mjs', true]],
   ['corespirit-large-data-research-host', ['src/services/coreSpirit/quantResearchServiceHostContract.test.mjs', true]],
+  ['corespirit-point-in-time-research-features', ['src/services/coreSpirit/researchFeaturesContract.test.mjs', true]],
   ['corespirit-alert-delivery', ['src/services/coreSpirit/alertDeliveryContract.test.mjs', true]],
   ['corespirit-data-request-temporal-budget', ['src/services/coreSpirit/dataResolverTemporalBudgetContract.test.mjs', true]],
   ['corespirit-request-security-lower-tf-arrays', ['src/services/coreSpirit/requestSecurityCompatibilityContract.test.mjs', true]],
