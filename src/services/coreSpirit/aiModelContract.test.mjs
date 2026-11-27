@@ -26,7 +26,7 @@ const manifest = {
   ],
   primaryPredictionField: 'prediction',
   confidenceField: 'confidence',
-  metadataFields: ['direction', 'regime', 'probability_long', 'probability_short', 'probability_flat'],
+  metadataFields: ['direction', 'regime', 'probability_long', 'probability_short', 'probability_flat', 'valid_until_ms', 'probability_calibration', 'data_quality', 'feature_schema_version', 'dataset_hash', 'artifact_hash', 'expected_return', 'release_status', 'production_eligible'],
   maxMemoryBytes: 64 * 1024,
   maxSteps: 100_000,
   maxInputBytes: 1024,
@@ -51,6 +51,38 @@ assert.equal(prediction.probability, 0.2, 'the directional probability must matc
 assert.equal(prediction.confidence, 0.8);
 assert.equal(prediction.regime, 'high-volatility');
 assert.deepEqual(prediction.probabilities, { LONG: 0.62, SHORT: 0.2, FLAT: 0.18 });
+assert.equal(prediction.modelId, 'nifty-direction');
+assert.equal(prediction.modelVersion, 'a'.repeat(64));
+assert.equal(prediction.calibrationStatus, 'unknown');
+assert.equal(prediction.dataQuality, 'unknown');
+assert.equal(prediction.productionEligible, false);
+
+const provenancePrediction = aiPredictionFromResult(manifest, {
+  ...result,
+  metadata: {
+    ...result.metadata,
+    valid_until_ms: 1_700_000_600_000,
+    probability_calibration: 'calibrated',
+    data_quality: 'verified',
+    feature_schema_version: 'ohlcv-v3',
+    dataset_hash: 'b'.repeat(64),
+    artifact_hash: 'c'.repeat(64),
+    expected_return: 0.004,
+    release_status: 'approved',
+    production_eligible: true,
+  },
+}, { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5m', timestamp: 1_700_000_000_000 });
+assert.equal(provenancePrediction.instrument, 'NSE:NIFTY50-INDEX');
+assert.equal(provenancePrediction.timeframe, '5m');
+assert.equal(provenancePrediction.generatedAt, 1_700_000_000_000);
+assert.equal(provenancePrediction.validUntil, 1_700_000_600_000);
+assert.equal(provenancePrediction.predictionHorizonBars, null);
+assert.equal(provenancePrediction.featureVersion, 'ohlcv-v3');
+assert.equal(provenancePrediction.datasetHash, 'b'.repeat(64));
+assert.equal(provenancePrediction.artifactHash, 'c'.repeat(64));
+assert.equal(provenancePrediction.expectedReturn, 0.004);
+assert.equal(provenancePrediction.productionEligible, true,
+  'the semantic AI view may report production eligibility only when approval, calibration and verified data are all present');
 
 assert.throws(() => aiPredictionFromResult(manifest, {
   ...result,
