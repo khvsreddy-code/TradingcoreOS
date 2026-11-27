@@ -126,8 +126,9 @@ function assertFeatureAvailability(name:string,values:Float64Array,availableAt:F
 }
 
 /**
- * Build a compact reusable OHLCV feature set. This is a causal baseline feature
- * family, not a substitute for licensed options, breadth, futures or event data.
+ * Build causal OHLCV features and accept event-time-aware external columns for
+ * breadth, sectors, futures, options, macro or licensed event data. This module
+ * does not fetch market data or imply any provider entitlement.
  */
 export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureInput):CoreSpiritResearchFeatureSet{
   if(!(input.timestampsMs instanceof Float64Array))throw new Error('Research timestamps must be a Float64Array.');
@@ -203,7 +204,14 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   const shortVolatilityRaw=rollingStd(logReturns,shortVolatilityPeriod);
   const volatilityExpansion=new Float64Array(n);volatilityExpansion.fill(Number.NaN);
   for(let i=0;i<n;i++)if(Number.isFinite(shortVolatilityRaw[i]!)&&Number.isFinite(volatilityRaw[i]!)&&volatilityRaw[i]!>0)volatilityExpansion[i]=shortVolatilityRaw[i]!/volatilityRaw[i]!;
-  const volatilityExpansionAvailability=maxWindowAvailability(returnAvailability,volPeriod);
+  const shortVolatilityAvailability=maxWindowAvailability(returnAvailability,shortVolatilityPeriod);
+  const volatilityExpansionAvailability=new Float64Array(n);volatilityExpansionAvailability.fill(Number.NaN);
+  for(let i=0;i<n;i++){
+    if(Number.isFinite(shortVolatilityRaw[i]!)&&Number.isFinite(volatilityRaw[i]!)&&
+       Number.isFinite(shortVolatilityAvailability[i]!)&&Number.isFinite(volatilityAvailability[i]!)){
+      volatilityExpansionAvailability[i]=Math.max(shortVolatilityAvailability[i]!,volatilityAvailability[i]!);
+    }
+  }
   const closeLocation=new Float64Array(n);closeLocation.fill(Number.NaN);
   for(let i=0;i<n;i++){const width=input.high[i]!-input.low[i]!;if(width>0)closeLocation[i]=(input.close[i]!-input.low[i]!)/width;}
   const closeLocationAvailability=rangeAvailability;
