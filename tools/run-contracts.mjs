@@ -96,6 +96,7 @@ const contracts = [
   ['corespirit-worker-generation-lifecycle', ['src/coreSpiritWorkerLifecycleContract.test.mjs', false]],
   ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
+  ['corescript-program-mode-security', ['src/services/coreSpirit/coreScriptProgramModesContract.test.mjs', true]],
   ['corespirit-smc-deterministic-acceptance', ['src/services/coreSpirit/luxAlgoSmcDeterministicAcceptance.test.mjs', true]],
   ['corespirit-session-calendar', ['src/services/coreSpirit/sessionCalendarContract.test.mjs', true]],
   ['corespirit-retained-zone-identity', ['src/services/coreSpirit/retainedZoneIdentityContract.test.mjs', true]],
