@@ -64,7 +64,7 @@ const strategySource = [
 ].join('\n');
 const strategyParsed = frontend.parse(strategySource);
 assert.ok(strategyParsed.ast,strategyParsed.diagnostics.map(item=>item.message).join('; '));
-const strategyCompiled = new CoreSpiritCompiler().compileSource(strategyParsed.normalizedSource,'pine-strategy-simulation',{frontend:'pine-v6'});
+const strategyCompiled = new CoreSpiritCompiler().compileSource(strategySource,'pine-strategy-simulation',{frontend:'pine-v6'});
 assert.ok(strategyCompiled.ir,strategyCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
 for(const kind of ['strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll']){
   assert.ok(strategyCompiled.ir!.entry.instructions.some(item=>item.op==='emit'&&item.kind===kind),
