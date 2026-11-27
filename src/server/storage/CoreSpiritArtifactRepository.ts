@@ -189,8 +189,12 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       // Chunked snapshots keep only a manifest pointer in this row. The worker streams
       // separately hashed chunks instead of materializing the dataset in this object.
       rows: (data.rows as ResearchFeatureRow[]).map((row) => ({
-        ...row, values: [...row.values],
-        ...(row.featureAvailableAt ? { featureAvailableAt: [...row.featureAvailableAt] } : {}),
+        timestamp: row.timestamp,
+        availableAt: row.availableAt,
+        confirmed: row.confirmed,
+        phase: row.phase,
+        values: [...row.values],
+        ...(row.featureAvailableAt ? { featureAvailableAt: Array.from(row.featureAvailableAt) } : {}),
       })),
     };
     if (storageMode === 'chunked-v1') {
