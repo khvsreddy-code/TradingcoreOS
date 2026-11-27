@@ -280,6 +280,8 @@ export class CoreSpiritRuntime {
   private readonly executionTarget: CoreSpiritExecutionTarget = 'chart';
   private readonly layer: CoreSpiritProgramLayer = 'script';
   private realtimeRevision = 0;
+  /** Host-stamped market tick sequence used for alert.freq_all idempotency. */
+  private currentHostEventSequence?: number;
   private realtimeEventTransactionId?: string;
   private loadedSurface?: CoreSpiritProgram['surface'];
   private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
@@ -699,6 +701,10 @@ export class CoreSpiritRuntime {
   executeTick(tick: CoreSpiritTick, baseBar: HistoricalCandle, historicalTick = false): CoreSpiritExecutionResult {
     const price = Number(tick.price);
     if (!Number.isFinite(price)) throw new Error('invalid realtime tick price');
+    if(tick.sequence!==undefined&&(!Number.isSafeInteger(tick.sequence)||tick.sequence<0))
+      throw new Error('market tick sequence must be a non-negative safe integer');
+    const previousHostSequence=this.currentHostEventSequence;
+    this.currentHostEventSequence=tick.sequence;
     const bar: HistoricalCandle = {
       timestamp: new Date(Number(tick.timestamp)).toISOString(),
       open: Number(baseBar.open),
@@ -709,8 +715,8 @@ export class CoreSpiritRuntime {
     };
     // Historical tick replays use the same forming-bar rollback path as live ticks,
     // but their execution mode is explicitly replay and can never authorize live orders.
-    return this.executeBar(bar, historicalTick ? 'replay' : 'realtime');
-  }
+    try { return this.executeBar(bar, historicalTick ? 'replay' : 'realtime'); }
+    finally { this.currentHostEventSequence=previousHostSequence; }
 
   /**
    * Execute a sequence of host-supplied historical ticks against one bar.
@@ -2427,6 +2433,7 @@ export class CoreSpiritRuntime {
           this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{
             eventType:'alert',conditionId:outputId||'alert:unknown-callsite',callsiteId:outputId||'alert:unknown-callsite',
             args,message,frequency,barIndex,revision:this.state.barState.revision,execution:semantics,
+            ...(this.currentHostEventSequence!==undefined?{sourceSequence:this.currentHostEventSequence}:{}),
           }});
         }
       }

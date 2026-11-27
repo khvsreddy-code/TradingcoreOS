@@ -21,6 +21,7 @@ const second=runStrategySimulation({strategyId:'breakout',sourceProgramChecksum:
 assert.equal(first.simulationId,second.simulationId);
 assert.deepEqual(first.ledger,second.ledger,'identical inputs must produce an identical ledger');
 assert.equal(first.executionAuthority,'simulation-only');
+assert.equal(first.closedTrades[0]?.entryTimestampMs,Date.parse(bars[1]!.timestamp),'closed trade retains the actual simulator entry time');
 assert.ok(first.ledger.every(e=>e.simulated&&e.executionAuthority==='simulation-only'));
 assert.ok(first.ledger.some(e=>e.eventType==='order_submitted'&&e.orderId==='order-1'));
 assert.ok(first.ledger.some(e=>e.eventType==='fill'&&e.orderId==='order-1'),'market order fills on a later bar, never its signal bar');

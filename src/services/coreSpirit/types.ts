@@ -122,6 +122,8 @@ export type CoreSpiritExecutionMode = 'historical' | 'realtime' | 'replay' | 'ba
 export type CoreSpiritTick = {
   timestamp: number;
   price: number;
+  /** Stable market-feed sequence; repeated delivery of the same tick must reuse it. */
+  sequence?: number;
   volume?: number;
   bid?: number;
   ask?: number;

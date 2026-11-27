@@ -68,10 +68,10 @@ export function calculateCoreSpiritBacktestMetrics(
     observations:equity.length,netProfit,totalReturn:netProfit/initialCapital,maxDrawdown,maxDrawdownPct,
     sharpe,sortino,winRate,profitFactor:grossLoss>0?grossProfit/grossLoss:grossProfit>0?null:0,averageTradePnl,
     expectancy:averageTradePnl,grossProfit,grossLoss,feesPaid,averageGrossExposure:exposure/equity.length,maxGrossExposure:maxExposure,
-    averageWin,averageLoss,largestWin:winners.length?Math.max(...winners.map(t=>t.netPnl)):null,
-    largestLoss:losers.length?Math.min(...losers.map(t=>t.netPnl)):null,
+    averageWin,averageLoss,largestWin:winners.length?winners.reduce((m,t)=>Math.max(m,t.netPnl),Number.NEGATIVE_INFINITY):null,
+    largestLoss:losers.length?losers.reduce((m,t)=>Math.min(m,t.netPnl),Number.POSITIVE_INFINITY):null,
     averageTradeDurationMs:durations.length?durations.reduce((s,d)=>s+d,0)/durations.length:null,
-    maxTradeDurationMs:durations.length?Math.max(...durations):null,maxConsecutiveWins,maxConsecutiveLosses,
+    maxTradeDurationMs:durations.length?durations.reduce((m,d)=>Math.max(m,d),0):null,maxConsecutiveWins,maxConsecutiveLosses,
   });
 }
 export function compareCoreSpiritBenchmark(

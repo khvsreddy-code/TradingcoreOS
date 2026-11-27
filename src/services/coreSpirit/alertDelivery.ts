@@ -78,7 +78,7 @@ function outboxKey(event:CoreSpiritAlertEvent):string{
   if(event.frequency==='all'){
     if(!Number.isSafeInteger(event.sourceSequence)||Number(event.sourceSequence)<0)
       throw new Error('alert.freq_all requires a unique host-stamped event sequence.');
-    return 'all|'+tupleKey([event.id,String(event.sourceSequence)]);
+    return 'all|'+tupleKey([...scope,event.barId,event.conditionId,String(event.sourceSequence)]);
   }
   // alert() frequency is script-wide: two alert() call sites do not each get a separate
   // once-per-bar allowance. alertcondition() remains scoped to its declaration.
@@ -161,9 +161,12 @@ export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEven
   if(eventType==='alertcondition')frequency='once-per-bar-close';
   if(!event.scriptId||!context.scriptRevision||!context.symbol||!context.timeframe||!Number.isFinite(event.time)||
      !Number.isFinite(context.createdAt))throw new Error('Runtime alert identity and timestamp are required.');
-  const sourceSequence=event.sequence;
-  if(frequency==='all'&&(!Number.isSafeInteger(sourceSequence)||Number(sourceSequence)<0))
-    throw new Error('alert.freq_all requires a unique host-stamped event sequence.');
+  const rawSourceSequence=payload.sourceSequence;
+  if(rawSourceSequence!==undefined&&(typeof rawSourceSequence!=='number'||!Number.isSafeInteger(rawSourceSequence)||rawSourceSequence<0))
+    throw new Error('Alert source sequence must be a non-negative safe integer stamped by the market-data host.');
+  const sourceSequence=rawSourceSequence as number|undefined;
+  if(frequency==='all'&&sourceSequence===undefined)
+    throw new Error('alert.freq_all requires a unique host-stamped market event sequence.');
   const args=Array.isArray(payload.args)?payload.args:[];
   const message=String(payload.message??payload.conditionMessage??payload.title??args[0]??'');
   const conditionId=String(payload.conditionId??payload.callsiteId??(eventType+':default'));
