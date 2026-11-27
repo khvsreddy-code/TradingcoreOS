@@ -1,4 +1,7 @@
 import { calculateCoreSpiritSimulationMetrics, type CoreSpiritBacktestMetrics } from './backtestMetrics';
+import { CoreSpiritBacktestExecutionHost, type CoreSpiritHostRunResult } from './executionHost';
+import type { CoreSpiritExecutableArtifact } from './artifact';
+import type { CoreSpiritMarketDataset } from './marketData';
 import {
   runStrategySimulation,
   type SimulationAction,
@@ -189,4 +192,48 @@ export function runCoreSpiritPineStrategySimulation(
   });
   const metrics=simulation.equityCurve.length>=2?calculateCoreSpiritSimulationMetrics(simulation):null;
   return Object.freeze({simulation,actions:converted.actions,diagnostics:converted.diagnostics,metrics});
+}
+
+export type CoreSpiritPineStrategyBacktestInput=Readonly<{
+  strategyId?:string;
+  runId:string;
+  artifact:CoreSpiritExecutableArtifact;
+  dataset:CoreSpiritMarketDataset;
+  defaultQuantity:number;
+  tickSizeBySymbol?:Readonly<Record<string,number>>;
+  config?:Partial<SimulationConfig>;
+}>;
+
+export type CoreSpiritPineStrategyBacktestResult=CoreSpiritPineStrategySimulationResult&Readonly<{
+  hostRun:CoreSpiritHostRunResult;
+}>;
+
+/** Execute the validated artifact in backtest mode, then pass only its inert
+ * strategy command events into the deterministic simulator. This function has
+ * no live order gateway or paper/live broker dependency.
+ */
+export function runCoreSpiritPineStrategyBacktest(
+  input:CoreSpiritPineStrategyBacktestInput,
+):CoreSpiritPineStrategyBacktestResult{
+  if(!input.runId?.trim())throw new Error('A stable backtest runId is required.');
+  if(!input.artifact?.ir||!input.artifact.abi?.sourceHash||!/^[a-f0-9]{64}$/i.test(input.artifact.abi.sourceHash)){
+    throw new Error('A validated CoreSpirit artifact with a SHA-256 source hash is required.');
+  }
+  if(!input.dataset?.id||!input.dataset.symbol||!input.dataset.timeframe||!Array.isArray(input.dataset.bars)||input.dataset.bars.length<2){
+    throw new Error('A validated market dataset with at least two bars is required.');
+  }
+  const hostRun=new CoreSpiritBacktestExecutionHost().run(input.artifact,input.dataset,input.runId,'backtest');
+  const datasets:SimulationDataset[]=[{
+    symbol:input.dataset.symbol,timeframe:input.dataset.timeframe,
+    bars:input.dataset.bars.map(bar=>({
+      timestamp:bar.timestamp,open:bar.open,high:bar.high,low:bar.low,close:bar.close,volume:bar.volume,
+    })),
+  }];
+  const result=runCoreSpiritPineStrategySimulation({
+    strategyId:input.strategyId??input.artifact.sourceId,
+    sourceProgramChecksum:input.artifact.abi.sourceHash,
+    datasetId:input.dataset.id,datasets,outputs:hostRun.outputs,
+    defaultQuantity:input.defaultQuantity,tickSizeBySymbol:input.tickSizeBySymbol,config:input.config,
+  });
+  return Object.freeze({...result,diagnostics:Object.freeze([...hostRun.diagnostics,...result.diagnostics]),hostRun});
 }

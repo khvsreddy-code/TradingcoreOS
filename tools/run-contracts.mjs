@@ -135,6 +135,7 @@ const contracts = [
   ['strategy-simulator-deterministic-ledger', ['src/services/core/replay/strategySimulator.test.ts', true]],
   ['strategy-simulator-margin-pyramiding-oca', ['src/services/core/replay/strategySimulatorEnhancementsContract.test.mjs', true]],
   ['corespirit-pine-strategy-simulation-adapter', ['src/services/coreSpirit/pineStrategySimulationAdapterContract.test.mjs', true]],
+  ['corespirit-pine-backtest-execution-host', ['src/services/coreSpirit/pineStrategyBacktestHostContract.test.mjs', true]],
   ['core-spirit-simulation-intent-adapter', ['src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts', true]],
   ['replay-timestamp-ordering', ['src/services/core/replay/replayValidator.test.ts', true]],
   ['strategy-simulator-live-execution-boundary', ['src/strategySimulatorExecutionBoundaryContract.test.mjs', false]],

@@ -12,7 +12,7 @@ import { assertDeterministicReplay, type CoreSpiritReplayResult } from './replay
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutionTarget } from './executionTarget';
 
-export type CoreSpiritExecutionHostMode = 'historical' | 'replay' | 'realtime';
+export type CoreSpiritExecutionHostMode = 'historical' | 'replay' | 'realtime' | 'backtest';
 
 export interface CoreSpiritHostRunIdentity {
   target?: CoreSpiritExecutionTarget;
@@ -48,14 +48,14 @@ abstract class BaseCoreSpiritExecutionHost implements CoreSpiritExecutionHost {
       symbol: identity.symbol,
       timeframe: identity.timeframe,
       executionMode: this.mode === 'realtime' ? 'realtime' : this.mode,
-      executionTarget: identity.target || (this.mode === 'historical' ? 'chart' : this.mode === 'realtime' ? 'chart' : 'replay'),
+      executionTarget: identity.target || (this.mode === 'historical' ? 'chart' : this.mode === 'realtime' ? 'chart' : this.mode === 'backtest' ? 'backtest' : 'replay'),
       runId: identity.runId,
     });
     runtime.loadIr(artifact.ir);
     return runtime;
   }
 
-  run(artifact: CoreSpiritExecutableArtifact, dataset: CoreSpiritMarketDataset, runId: string, target: CoreSpiritExecutionTarget = this.mode === 'historical' ? 'chart' : this.mode === 'realtime' ? 'chart' : 'replay'): CoreSpiritHostRunResult {
+  run(artifact: CoreSpiritExecutableArtifact, dataset: CoreSpiritMarketDataset, runId: string, target: CoreSpiritExecutionTarget = this.mode === 'historical' ? 'chart' : this.mode === 'realtime' ? 'chart' : this.mode === 'backtest' ? 'backtest' : 'replay'): CoreSpiritHostRunResult {
     const identity: CoreSpiritHostRunIdentity = {
       runId,
       artifactChecksum: artifact.checksum,
@@ -80,6 +80,10 @@ abstract class BaseCoreSpiritExecutionHost implements CoreSpiritExecutionHost {
 
 export class CoreSpiritHistoricalExecutionHost extends BaseCoreSpiritExecutionHost {
   readonly mode = 'historical' as const;
+}
+
+export class CoreSpiritBacktestExecutionHost extends BaseCoreSpiritExecutionHost {
+  readonly mode = 'backtest' as const;
 }
 
 export class CoreSpiritReplayExecutionHost extends BaseCoreSpiritExecutionHost {
