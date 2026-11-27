@@ -6,6 +6,8 @@ export type ResearchFeatureRow = Readonly<{
   confirmed: boolean;
   phase: ResearchTemporalPhase;
   values: readonly number[];
+  /** Optional exact per-feature availability. Legacy rows use availableAt as a conservative shared upper bound. */
+  featureAvailableAt?: readonly number[];
   source?: 'fyers' | 'tvdatafeed' | 'trusted_feature_pipeline' | 'user_supplied';
   revision?: number;
 }>;
@@ -52,7 +54,7 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
   let previousTimestamp = Number.NEGATIVE_INFINITY;
   return rows.map((row, index) => {
     if (!row || typeof row !== 'object' ||
-        Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values','source','revision'].includes(key)) ||
+        Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values','featureAvailableAt','source','revision'].includes(key)) ||
         typeof row.timestamp !== 'number' || !Number.isSafeInteger(row.timestamp) ||
         typeof row.availableAt !== 'number' || !Number.isSafeInteger(row.availableAt) ||
         row.availableAt > row.timestamp ||
@@ -60,6 +62,11 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
         (row.phase !== 'historical' && row.phase !== 'confirmed') ||
         !Array.isArray(row.values) || row.values.length !== featureNames.length ||
         row.values.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        (row.featureAvailableAt !== undefined && (
+          !Array.isArray(row.featureAvailableAt) || row.featureAvailableAt.length !== featureNames.length ||
+          row.featureAvailableAt.some(value => !Number.isSafeInteger(value) || value < 0 || value > row.timestamp) ||
+          Math.max(...row.featureAvailableAt) !== row.availableAt
+        )) ||
         (row.source !== undefined && !['fyers','tvdatafeed','trusted_feature_pipeline','user_supplied'].includes(row.source)) ||
         (row.revision !== undefined && (!Number.isSafeInteger(row.revision) || row.revision < 0))) {
       throw new Error('Research row ' + index + ' must contain finite feature values from confirmed historical data, with availableAt <= decision timestamp. Developing, realtime, forecast, and unconfirmed rows are forbidden.');
@@ -68,7 +75,11 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
       throw new Error('Research rows must be strictly chronological with unique decision timestamps.');
     }
     previousTimestamp = row.timestamp;
-    return Object.freeze({ ...row, values: Object.freeze([...row.values]) }) as T;
+    return Object.freeze({
+      ...row,
+      values: Object.freeze([...row.values]),
+      ...(row.featureAvailableAt ? { featureAvailableAt: Object.freeze([...row.featureAvailableAt]) } : {}),
+    }) as T;
   });
 }
 
