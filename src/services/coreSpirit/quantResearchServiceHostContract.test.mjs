@@ -13,6 +13,8 @@ const request={dataset:{
  walkForward:{trainBars:100000,validationBars:20000,testBars:20000,stepBars:10000,purgeBars:5,embargoBars:5},
  algorithm:'ridge-regression',parameters:{ridge:.001}};
 const calls=[];
+assert.throws(()=>new CoreSpiritResearchServiceHost({baseUrl:'ftp://localhost/research',serviceSecret:'r'.repeat(32)}),/HTTPS or explicit HTTP loopback/);
+assert.doesNotThrow(()=>new CoreSpiritResearchServiceHost({baseUrl:'http://127.0.0.1:8080/research',serviceSecret:'r'.repeat(32)}));
 const host=new CoreSpiritResearchServiceHost({baseUrl:'https://research.example/api',serviceSecret:'r'.repeat(32),fetchImpl:async(url,init)=>{calls.push({url:String(url),init});if(init.method==='POST')return new Response(JSON.stringify({jobId:'job_1',status:'queued',progress:0,createdAt:1,updatedAt:1}),{status:202});if(init.method==='GET')return new Response(JSON.stringify({jobId:'job_1',status:'succeeded',progress:1,createdAt:1,updatedAt:2,result:{folds:4}}),{status:200});return new Response(null,{status:204});}});
 const job=await host.submit(request);assert.equal(job.jobId,'job_1');assert.match(calls[0].url,/v1\/research\/jobs/);
 const completed=await host.get('job_1');assert.equal(completed.status,'succeeded');
