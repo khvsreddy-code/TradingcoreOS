@@ -221,13 +221,26 @@ function tensorSize(tensors: Readonly<Record<string, CoreSpiritModelTensor>>): n
 }
 
 function validateTensor(name: string, tensor: CoreSpiritModelTensor): void {
-  if (!tensor.shape.every(value => Number.isInteger(value) && value >= 0)) {
-    throw new Error(`model field '${name}' has invalid shape`);
+  if (!tensor || !Array.isArray(tensor.shape) || tensor.shape.length > 8 ||
+      !Array.isArray(tensor.data) ||
+      !tensor.shape.every(value => Number.isSafeInteger(value) && value >= 0)) {
+    throw new Error(`model field '${name}' has invalid shape or data`);
   }
   const expected = tensor.shape.reduce((product, value) => product * value, 1);
-  if (expected !== tensor.data.length) throw new Error(`model field '${name}' shape/data length mismatch`);
-  if (tensor.dtype !== 'bool' && tensor.data.some(value => !Number.isFinite(value))) {
+  if (!Number.isSafeInteger(expected) || expected > 1_000_000 || expected !== tensor.data.length) {
+    throw new Error(`model field '${name}' shape/data length mismatch or exceeds the tensor element limit`);
+  }
+  if (tensor.dtype !== 'f64' && tensor.dtype !== 'i64' && tensor.dtype !== 'bool') {
+    throw new Error(`model field '${name}' has an unsupported dtype`);
+  }
+  if (tensor.data.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
     throw new Error(`model field '${name}' contains a non-finite value`);
+  }
+  if (tensor.dtype === 'i64' && tensor.data.some(value => !Number.isSafeInteger(value))) {
+    throw new Error(`model field '${name}' contains an unsafe integer`);
+  }
+  if (tensor.dtype === 'bool' && tensor.data.some(value => value !== 0 && value !== 1)) {
+    throw new Error(`model field '${name}' contains a non-boolean tensor value`);
   }
 }
 
@@ -241,37 +254,74 @@ function validateSpecShape(name: string, tensor: CoreSpiritModelTensor, spec: Co
 }
 
 export function validateCoreSpiritStrictModelManifest(manifest: CoreSpiritStrictModelManifest): void {
-  if (manifest.contractVersion !== CORE_SPIRIT_EXTERNAL_MODEL_CONTRACT_VERSION) throw new Error('unsupported CoreSpirit external model contract version');
+  if (!manifest || manifest.contractVersion !== CORE_SPIRIT_EXTERNAL_MODEL_CONTRACT_VERSION) throw new Error('unsupported CoreSpirit external model contract version');
   if (manifest.abiVersion !== CORE_SPIRIT_MODEL_ABI_VERSION) throw new Error('external model ABI version mismatch');
-  if (!manifest.modelId || !manifest.version) throw new Error('external model id/version are required');
+  if (!/^[a-z0-9][a-z0-9-]{1,79}$/.test(manifest.modelId) || typeof manifest.version !== 'string' || !manifest.version.trim() || manifest.version.length > 128) {
+    throw new Error('external model id/version are invalid');
+  }
   if (manifest.deterministic !== true) throw new Error('external models must declare deterministic=true');
-  if (!manifest.inputSchema.length) throw new Error('external model inputSchema cannot be empty');
-  if (!manifest.outputSchema.length) throw new Error('external model outputSchema cannot be empty');
+  if (!Array.isArray(manifest.inputSchema) || !manifest.inputSchema.length || manifest.inputSchema.length > 64) throw new Error('external model inputSchema must contain 1–64 fields');
+  if (!Array.isArray(manifest.outputSchema) || !manifest.outputSchema.length || manifest.outputSchema.length > 64) throw new Error('external model outputSchema must contain 1–64 fields');
+  if (!Array.isArray(manifest.metadataFields) || manifest.metadataFields.length > 128 ||
+      manifest.metadataFields.some(name => typeof name !== 'string' || !name.trim()) ||
+      new Set(manifest.metadataFields).size !== manifest.metadataFields.length) {
+    throw new Error('external model metadataFields must be unique, non-empty names');
+  }
   if (manifest.modelKind === 'ai') {
     if (!manifest.aiOutput) throw new Error('AI models must declare aiOutput mapping');
+    const mappingKeys = Object.values(manifest.aiOutput);
+    if (mappingKeys.some(value => value !== undefined && (typeof value !== 'string' || !value.trim() || !manifest.metadataFields.includes(value)))) {
+      throw new Error('AI output mappings must reference declared metadata fields');
+    }
     if (!manifest.aiOutput.directionMetadataKey.trim()) throw new Error('AI directionMetadataKey is required');
   }
   if (manifest.modelKind !== 'ai' && manifest.aiOutput) throw new Error('aiOutput can only be declared for AI models');
+  const inputNames = manifest.inputSchema.map(field => field.name);
+  const outputNames = manifest.outputSchema.map(field => field.name);
+  if (new Set(inputNames).size !== inputNames.length || new Set(outputNames).size !== outputNames.length) {
+    throw new Error('external model input/output field names must be unique');
+  }
   if (!manifest.outputSchema.some(field => field.name === manifest.primaryPredictionField && field.semantic === 'prediction' && (field.representation ?? 'tensor') === 'tensor')) {
     throw new Error('primaryPredictionField must reference a prediction field');
   }
   if (manifest.confidenceField && !manifest.outputSchema.some(field => field.name === manifest.confidenceField && field.semantic === 'confidence' && field.representation === 'scalar')) {
     throw new Error('confidenceField must reference a confidence output');
   }
-  if (!Number.isInteger(manifest.maxMemoryBytes) || manifest.maxMemoryBytes < 64 * 1024) throw new Error('maxMemoryBytes must be >= 64 KiB');
-  if (!Number.isInteger(manifest.maxSteps) || manifest.maxSteps < 1) throw new Error('maxSteps must be positive');
-  if (!Number.isInteger(manifest.maxInputBytes) || manifest.maxInputBytes <= 0) throw new Error('maxInputBytes must be positive');
-  if (!Number.isInteger(manifest.maxOutputBytes) || manifest.maxOutputBytes <= 0) throw new Error('maxOutputBytes must be positive');
+  if (!Number.isSafeInteger(manifest.maxMemoryBytes) || manifest.maxMemoryBytes < 64 * 1024 || manifest.maxMemoryBytes > 2 * 1024 * 1024 * 1024) throw new Error('maxMemoryBytes must be between 64 KiB and 2 GiB');
+  if (!Number.isSafeInteger(manifest.maxSteps) || manifest.maxSteps < 1 || manifest.maxSteps > 1_000_000_000) throw new Error('maxSteps must be a positive bounded integer');
+  if (!Number.isSafeInteger(manifest.maxInputBytes) || manifest.maxInputBytes <= 0 || manifest.maxInputBytes > 64 * 1024 * 1024) throw new Error('maxInputBytes must be between 1 byte and 64 MiB');
+  if (!Number.isSafeInteger(manifest.maxOutputBytes) || manifest.maxOutputBytes <= 0 || manifest.maxOutputBytes > 8 * 1024 * 1024) throw new Error('maxOutputBytes must be between 1 byte and 8 MiB');
+  if (manifest.maxLatencyMs !== undefined && (!Number.isSafeInteger(manifest.maxLatencyMs) || manifest.maxLatencyMs < 50 || manifest.maxLatencyMs > 30_000)) {
+    throw new Error('maxLatencyMs must be between 50 and 30000 ms');
+  }
   for (const field of [...manifest.inputSchema, ...manifest.outputSchema]) {
-    if (!field.name.trim() || !field.shape.every(dimension => Number.isInteger(dimension) && (dimension >= 0 || dimension === -1))) {
-      throw new Error('external model field schemas must use non-negative dimensions or -1 for a bounded dynamic dimension');
+    if (typeof field.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(field.name) ||
+        !Array.isArray(field.shape) || field.shape.length > 8 ||
+        !field.shape.every(dimension => Number.isSafeInteger(dimension) && (dimension >= 0 || dimension === -1)) ||
+        field.shape.filter(dimension => dimension === -1).length > 1) {
+      throw new Error('external model field schemas must use valid names and bounded tensor dimensions');
     }
+    if (field.representation === 'scalar' && field.shape.length !== 0) throw new Error('scalar model fields must use scalar [] shape');
   }
   if (manifest.forecastHorizonBars !== undefined && (!Number.isInteger(manifest.forecastHorizonBars) || manifest.forecastHorizonBars < 1 || manifest.forecastHorizonBars > 100)) {
     throw new Error('forecastHorizonBars must be an integer from 1 to 100');
   }
-  if (!manifest.capabilities.includes('write-output')) throw new Error('external model must declare write-output capability');
+  if (!Array.isArray(manifest.capabilities) || !manifest.capabilities.includes('write-output') ||
+      new Set(manifest.capabilities).size !== manifest.capabilities.length) throw new Error('external model capabilities must be unique and include write-output');
+  if (manifest.state !== 'stateless' && manifest.state !== 'stateful') throw new Error('external model state is invalid');
   if (manifest.state === 'stateful' && !manifest.rollbackSafe) throw new Error('stateful external models must declare rollbackSafe=true');
+}
+
+function snapshotStrictManifest(manifest: CoreSpiritStrictModelManifest): CoreSpiritStrictModelManifest {
+  const copy: CoreSpiritStrictModelManifest = {
+    ...manifest,
+    ...(manifest.aiOutput ? { aiOutput: Object.freeze({ ...manifest.aiOutput }) } : {}),
+    inputSchema: Object.freeze(manifest.inputSchema.map(field => Object.freeze({ ...field, shape: Object.freeze([...field.shape]) }))),
+    outputSchema: Object.freeze(manifest.outputSchema.map(field => Object.freeze({ ...field, shape: Object.freeze([...field.shape]) }))),
+    metadataFields: Object.freeze([...manifest.metadataFields]),
+    capabilities: Object.freeze([...manifest.capabilities]),
+  };
+  return Object.freeze(copy);
 }
 
 export function coreSpiritStrictManifestToTransportManifest(manifest: CoreSpiritStrictModelManifest): CoreSpiritModelManifest {
@@ -295,14 +345,14 @@ export class CoreSpiritExternalModelRegistry {
 
   register(manifest: CoreSpiritStrictModelManifest, adapter: CoreSpiritExternalModelAdapter): void {
     validateCoreSpiritStrictModelManifest(manifest);
-    if (adapter.implementation !== manifest.implementation || adapter.transport !== manifest.transport) {
+    if (!adapter || adapter.implementation !== manifest.implementation || adapter.transport !== manifest.transport) {
       throw new Error(`adapter does not match model '${manifest.modelId}@${manifest.version}'`);
     }
-
-
     const key = `${manifest.modelId}@${manifest.version}`;
     if (this.models.has(key)) throw new Error(`external model '${key}' is already registered`);
-    this.models.set(key, { manifest, adapter });
+    // Snapshot the complete manifest: a caller must not be able to mutate the
+    // registered ABI after its validation has completed.
+    this.models.set(key, Object.freeze({ manifest: snapshotStrictManifest(manifest), adapter }));
   }
 
   get(modelId: string, version: string): RegisteredStrictModel {
@@ -330,61 +380,134 @@ export interface CoreSpiritExternalModelCallResult extends CoreSpiritStrictModel
 
 export class CoreSpiritModelOrchestrator {
   private readonly callsPerBar = new Map<string, number>();
+  private readonly maxTrackedBarKeys: number;
 
   constructor(
     private readonly registry: CoreSpiritExternalModelRegistry,
-    private readonly limits: CoreSpiritExternalModelCallLimits,
+    private readonly limits: CoreSpiritExternalModelCallLimits & { maxTrackedBarKeys?: number },
     private readonly executionTarget?: CoreSpiritExecutionTarget,
-  ) {}
+  ) {
+    for (const key of ['maxCallsPerBar', 'maxInputBytes', 'maxOutputBytes'] as const) {
+      if (!Number.isSafeInteger(limits[key]) || limits[key] <= 0) throw new Error(`model orchestrator ${key} must be a positive safe integer`);
+    }
+    this.maxTrackedBarKeys = limits.maxTrackedBarKeys ?? 4096;
+    if (!Number.isSafeInteger(this.maxTrackedBarKeys) || this.maxTrackedBarKeys < 64 || this.maxTrackedBarKeys > 65_536) {
+      throw new Error('model orchestrator maxTrackedBarKeys must be between 64 and 65536');
+    }
+  }
+
+  private barKey(runId: string, barIndex: number): string {
+    return JSON.stringify([runId, barIndex]);
+  }
+
+  private trimBarLedger(): void {
+    while (this.callsPerBar.size > this.maxTrackedBarKeys) {
+      const oldest = this.callsPerBar.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.callsPerBar.delete(oldest);
+    }
+  }
 
   resetBar(runId: string, barIndex: number): void {
-    this.callsPerBar.set(`${runId}:${barIndex}`, 0);
+    if (!runId.trim() || !Number.isSafeInteger(barIndex) || barIndex < 0) throw new Error('model call quota bar identity is invalid');
+    const key = this.barKey(runId, barIndex);
+    this.callsPerBar.delete(key);
+    this.callsPerBar.set(key, 0);
+    this.trimBarLedger();
   }
 
   async infer(request: CoreSpiritStrictModelRequest): Promise<CoreSpiritExternalModelCallResult> {
     if (this.executionTarget && !canUseExecutionTargetCapability(this.executionTarget, 'model-inference')) {
       throw new Error(`execution target '${this.executionTarget}' does not allow model inference`);
     }
+    if (!request || typeof request.requestId !== 'string' || !request.requestId.trim() || request.requestId.length > 128) {
+      throw new Error('external model requestId is invalid');
+    }
     const registered = this.registry.get(request.modelId, request.version);
-    validateCoreSpiritStrictModelManifest(registered.manifest);
+    const manifest = registered.manifest;
+    validateCoreSpiritStrictModelManifest(manifest);
+    const context = request.context;
+    if (!context || !context.runId?.trim() || context.runId.length > 128 ||
+        context.modelVersion !== manifest.version || !Number.isSafeInteger(context.barIndex) || context.barIndex < 0 ||
+        !Number.isSafeInteger(context.timestamp) || context.timestamp < 0 ||
+        !Number.isSafeInteger(context.revision) || context.revision < 0 ||
+        !context.symbol?.trim() || !context.timeframe?.trim() || !context.deterministicSeed?.trim() ||
+        typeof context.confirmed !== 'boolean' ||
+        !['historical', 'realtime', 'replay', 'backtest', 'historicalTick'].includes(context.mode)) {
+      throw new Error('external model execution context is invalid or does not match the pinned model version');
+    }
+    if (request.modelId !== manifest.modelId || request.version !== manifest.version) {
+      throw new Error('external model request identity does not match its registered manifest');
+    }
+    const market = request.marketState;
+    if (!market || market.timestamp !== context.timestamp ||
+        market.timeframe !== context.timeframe ||
+        market.instrument?.symbol !== context.symbol ||
+        !market.instrument.instrumentId?.trim()) {
+      throw new Error('external model market context does not match its execution context');
+    }
 
-    const key = `${request.context.runId}:${request.context.barIndex}`;
-    const count = this.callsPerBar.get(key) ?? 0;
-    if (count >= this.limits.maxCallsPerBar) throw new Error(`external model call quota exceeded at bar ${request.context.barIndex}`);
-
-    for (const field of registered.manifest.inputSchema) {
+    const allowedInputs = new Set(manifest.inputSchema.map(field => field.name));
+    for (const name of Object.keys(request.features ?? {})) {
+      if (!allowedInputs.has(name)) throw new Error(`undeclared model feature '${name}' is not allowed by the manifest`);
+    }
+    for (const field of manifest.inputSchema) {
       const tensor = request.features[field.name];
       if (!tensor && field.required) throw new Error(`required model feature '${field.name}' is missing`);
       if (tensor) validateSpecShape(field.name, tensor, field);
     }
     const inputBytes = tensorSize(request.features);
-    if (inputBytes > Math.min(this.limits.maxInputBytes, registered.manifest.maxInputBytes)) throw new Error(`external model input quota exceeded: ${inputBytes}`);
+    if (inputBytes > Math.min(this.limits.maxInputBytes, manifest.maxInputBytes)) throw new Error(`external model input quota exceeded: ${inputBytes}`);
+
+    const key = this.barKey(context.runId, context.barIndex);
+    const count = this.callsPerBar.get(key) ?? 0;
+    if (count >= this.limits.maxCallsPerBar) throw new Error(`external model call quota exceeded at bar ${context.barIndex}`);
+    // Reserve synchronously before awaiting the remote host so concurrent calls
+    // cannot all observe the same remaining quota and race past the per-bar cap.
+    this.callsPerBar.delete(key);
+    this.callsPerBar.set(key, count + 1);
+    this.trimBarLedger();
 
     const requestChecksum = coreSpiritChecksum({
       contractVersion: CORE_SPIRIT_EXTERNAL_MODEL_CONTRACT_VERSION,
       modelId: request.modelId,
       version: request.version,
       requestId: request.requestId,
-      context: request.context,
+      context,
       features: request.features,
       marketState: request.marketState,
       stateToken: request.stateToken ?? '',
     });
 
-    const adapterRequest: CoreSpiritStrictModelRequest = registered.manifest.capabilities.includes('read-market-state')
+    const adapterRequest: CoreSpiritStrictModelRequest = manifest.capabilities.includes('read-market-state')
       ? request
-      : { ...request, marketState: { timestamp: request.marketState.timestamp, instrument: request.marketState.instrument, timeframe: request.marketState.timeframe } };
+      : { ...request, marketState: { timestamp: market.timestamp, instrument: market.instrument, timeframe: market.timeframe } };
 
-    const result = await registered.adapter.execute(registered.manifest, adapterRequest);
-    validateSpecShape(registered.manifest.primaryPredictionField, result.prediction, registered.manifest.outputSchema.find(field => field.name === registered.manifest.primaryPredictionField)!);
-    if (result.confidence != null && (!Number.isFinite(result.confidence) || result.confidence < 0 || result.confidence > 1)) {
+    const result = await registered.adapter.execute(manifest, adapterRequest);
+    const predictionField = manifest.outputSchema.find(field => field.name === manifest.primaryPredictionField)!;
+    validateSpecShape(manifest.primaryPredictionField, result.prediction, predictionField);
+    if (manifest.confidenceField && result.confidence === undefined) {
+      throw new Error('model confidence output is required by the registered manifest');
+    }
+    if (result.confidence !== undefined && (!Number.isFinite(result.confidence) || result.confidence < 0 || result.confidence > 1)) {
       throw new Error('model confidence must be finite and between 0 and 1');
     }
+    if (!result.metadata || typeof result.metadata !== 'object' || Array.isArray(result.metadata)) {
+      throw new Error('model metadata must be a structured object');
+    }
+    const allowedMetadata = new Set(manifest.metadataFields);
+    for (const [name, value] of Object.entries(result.metadata)) {
+      if (!allowedMetadata.has(name)) throw new Error(`undeclared model metadata '${name}' is not allowed by the manifest`);
+      if (value !== null && typeof value !== 'string' && typeof value !== 'boolean' &&
+          !(typeof value === 'number' && Number.isFinite(value))) {
+        throw new Error(`model metadata '${name}' must be a finite scalar value`);
+      }
+    }
 
-    const outputBytes = tensorBytes(result.prediction);
-    if (outputBytes > Math.min(this.limits.maxOutputBytes, registered.manifest.maxOutputBytes)) throw new Error(`external model output quota exceeded: ${outputBytes}`);
+    const metadataBytes = new TextEncoder().encode(JSON.stringify(result.metadata)).byteLength;
+    const outputBytes = tensorBytes(result.prediction) + (result.confidence === undefined ? 0 : 8) + metadataBytes;
+    if (outputBytes > Math.min(this.limits.maxOutputBytes, manifest.maxOutputBytes)) throw new Error(`external model output quota exceeded: ${outputBytes}`);
 
-    this.callsPerBar.set(key, count + 1);
     return { ...result, modelId: request.modelId, version: request.version, requestChecksum };
   }
 }
