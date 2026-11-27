@@ -24,6 +24,28 @@ const stable = monitorCoreSpiritFeatureDrift({
 assert.equal(stable.status, 'healthy', 'a similarly distributed, adequately sized sample should be healthy');
 assert.equal(stable.features.length, 2);
 assert.equal(stable.artifactHash, artifactHash);
+const withFeatureAvailability=stableObserved.map(row=>({
+  ...row,featureAvailableAt:[row.timestamp-2_000,row.timestamp],
+}));
+const perFeatureStable=monitorCoreSpiritFeatureDrift({
+  artifactHash,featureSchemaHash,featureNames:names,baseline,observed:withFeatureAvailability,
+});
+assert.equal(perFeatureStable.status,'healthy',
+  'valid per-feature availability must remain eligible for drift comparisons');
+assert.throws(()=>monitorCoreSpiritFeatureDrift({
+  artifactHash,featureSchemaHash,featureNames:names,baseline,
+  observed:stableObserved.map((row,index)=>index===3?{
+    ...row,featureAvailableAt:[row.timestamp-2_000,row.timestamp+1],
+  }:row),
+}),/availability/,
+  'drift evaluation must reject an individual feature that arrived after the decision timestamp');
+assert.throws(()=>monitorCoreSpiritFeatureDrift({
+  artifactHash,featureSchemaHash,featureNames:names,baseline,
+  observed:stableObserved.map((row,index)=>index===3?{
+    ...row,featureAvailableAt:[row.timestamp-2_000],
+  }:row),
+}),/feature schema/,
+  'per-feature availability width must exactly match the pinned schema');
 
 const shiftedObserved = stableObserved.map((row, index) => ({
   ...row,
