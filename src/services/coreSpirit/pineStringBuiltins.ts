@@ -68,7 +68,7 @@ function execute(name: string, args: readonly unknown[]): unknown {
     case 'pine.str.length': return Array.from(requireString(args[0], name)).length;
     case 'pine.str.lower': return boundedString(requireString(args[0], name).toLowerCase(), name);
     case 'pine.str.upper': return boundedString(requireString(args[0], name).toUpperCase(), name);
-    case 'pine.str.trim': return boundedString(requireString(args[0], name).replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, ''), name);
+case 'pine.str.trim': return boundedString(requireString(args[0], name).trim(), name);
     case 'pine.str.substring': {
       const source = Array.from(requireString(args[0], name));
       const rawStart = Number(args[1]);

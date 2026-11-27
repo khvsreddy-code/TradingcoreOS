@@ -217,6 +217,7 @@ assert.equal(pineString('endswith',['BANKNIFTY','NIFTY']),true);
 assert.equal(pineString('pos',['NIFTY BANKNIFTY','BANK']),6);
 assert.equal(pineString('pos',['NIFTY BANKNIFTY','SENSEX']),null);
 assert.equal(pineString('trim',[' \tNIFTY 50\n']),'NIFTY 50');
+assert.equal(pineString('trim',['\u00A0NIFTY 50\u00A0']),'NIFTY 50','trim handles Unicode whitespace');
 assert.equal(pineString('repeat',['AB',3,'-']),'AB-AB-AB');
 assert.equal(pineString('tonumber',['-123.50']),-123.5);
 assert.equal(pineString('tonumber',['₹123.50']),null);
