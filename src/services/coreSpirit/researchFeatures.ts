@@ -193,7 +193,8 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   const trendRegression=linearRegression(input.close,trendPeriod);
   const normalizedTrendSlope=new Float64Array(n);normalizedTrendSlope.fill(Number.NaN);
   for(let i=0;i<n;i++)if(Number.isFinite(trendRegression.slope[i]!))normalizedTrendSlope[i]=trendRegression.slope[i]!/input.close[i]!;
-  const trendAvailability=maxWindowAvailability(input.availableAtMs.close,trendPeriod);\n  const emaAvailability=cumulativeMaxColumns(input.availableAtMs.close);
+  const trendAvailability=maxWindowAvailability(input.availableAtMs.close,trendPeriod);
+  const emaAvailability=cumulativeMaxColumns(input.availableAtMs.close);
   const momentum=new Float64Array(n);momentum.fill(Number.NaN);
   const momentumAvailability=new Float64Array(n);momentumAvailability.fill(Number.NaN);
   for(let i=momentumPeriod;i<n;i++){momentum[i]=input.close[i]!/input.close[i-momentumPeriod]!-1;momentumAvailability[i]=Math.max(input.availableAtMs.close[i]!,input.availableAtMs.close[i-momentumPeriod]!);}
