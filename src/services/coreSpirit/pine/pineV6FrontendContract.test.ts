@@ -20,12 +20,14 @@ assert.equal(frontend.parse('//@version=5\nindicator("old")\nplot(close)').diagn
 assert.equal(frontend.parse('//@version=6\nplot(close)').diagnostics[0]?.code,'PINE_MISSING_DECLARATION');
 assert.equal(frontend.parse('//@version=6\nindicator("one")\nstrategy("two")').diagnostics[0]?.code,'PINE_DUPLICATE_OR_SCOPED_DECLARATION');
 
-const alertIndicator = frontend.parse([
-  '//@version=6',
-  'indicator("Alert semantics")',
-  'alert("tick", alert.freq_all)',
-  'alertcondition(close > open, "Bullish", "Bullish candle")',
-].join('\n'));
+const alertIndicator = frontend.parse(`//@version=6
+indicator("Alert semantics")
+alert("tick", alert.freq_all)`);
+const alertConditionIndicator = frontend.parse(`//@version=6
+indicator("Alert condition semantics")
+alertcondition(close > open, "Bullish", "Bullish candle")`);
+assert.ok(alertConditionIndicator.ast,alertConditionIndicator.diagnostics.map(item=>item.message).join('; '));
+
 assert.ok(alertIndicator.ast,alertIndicator.diagnostics.map(item=>item.message).join('; '));
 const alertCompiled = new CoreSpiritCompiler().compileSource(alertIndicator.normalizedSource,'pine-alert-semantics',{frontend:'pine-v6'});
 assert.ok(alertCompiled.ir,alertCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
