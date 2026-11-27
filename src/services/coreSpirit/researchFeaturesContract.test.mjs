@@ -17,7 +17,7 @@ const input={symbol:'NSE:NIFTY50-INDEX',timeframe:'5m',timestampsMs,confirmed,op
 const features=buildCoreSpiritResearchFeatures(input);
 assert.equal(features.quality.confirmedOnly,true);
 assert.equal(features.quality.featureAvailabilityVerified,true);
-assert.equal(features.featureNames.length,6);
+assert.equal(features.featureNames.length,11);
 assert.ok(features.features.returns_1[0]!==features.features.returns_1[0],'first return is warm-up NaN, never a fabricated zero');
 assert.ok(Number.isFinite(features.features.returns_1[1]));
 assert.ok(Number.isFinite(features.features.realized_volatility_5[5]));
@@ -25,6 +25,28 @@ assert.ok(Number.isFinite(features.features.normalized_atr_5[5]));
 assert.ok(Number.isFinite(features.features.relative_volume_5[5]));
 assert.ok(features.quality.usableRows>0);
 assert.equal(features.pointInTimeSchema.availabilityRule,'availableAt<=timestamp');
+assert.ok(Number.isFinite(features.features.ema_distance_20[30]!));
+assert.ok(Number.isFinite(features.features.ema_slope_20[30]!));
+assert.ok(Number.isFinite(features.features.momentum_5[30]!));
+assert.ok(Number.isFinite(features.features.volatility_expansion_5_20[30]!));
+assert.ok(Number.isFinite(features.features.close_location_value[30]!));
+
+const breadthValues=Float64Array.from({length:rows},(_,i)=>Math.sin(i/7));
+const breadthAvailability=Float64Array.from(timestampsMs,(value)=>value-2_000);
+const extended=buildCoreSpiritResearchFeatures({...input,auxiliary:{
+ advance_decline_ratio:{values:breadthValues,availableAtMs:breadthAvailability,source:'market-breadth'},
+ nifty_futures_basis:{values:Float64Array.from({length:rows},(_,i)=>0.001*Math.sin(i/5)),availableAtMs:breadthAvailability,source:'futures'},
+ atm_iv:{values:Float64Array.from({length:rows},(_,i)=>15+Math.cos(i/6)),availableAtMs:breadthAvailability,source:'options'},
+}});
+assert.equal(extended.features.advance_decline_ratio.length,rows);
+assert.equal(extended.featureSources.advance_decline_ratio,'market-breadth');
+assert.equal(extended.featureSources.nifty_futures_basis,'futures');
+assert.equal(extended.featureSources.atm_iv,'options');
+for(let i=0;i<rows;i++)if(Number.isFinite(extended.features.atm_iv[i]!))assert.ok(extended.availabilityMsByFeature.atm_iv[i]!<=timestampsMs[i]!);
+const lateAuxiliary=Float64Array.from(breadthAvailability);lateAuxiliary[10]=timestampsMs[10]!+1;
+assert.throws(()=>buildCoreSpiritResearchFeatures({...input,auxiliary:{
+ late_macro_release:{values:breadthValues,availableAtMs:lateAuxiliary,source:'macro'},
+}}),/unavailable at decision timestamp/);
 for(const name of features.featureNames){
  const column=features.features[name],availability=features.availabilityMsByFeature[name];
  for(let i=0;i<rows;i++){
