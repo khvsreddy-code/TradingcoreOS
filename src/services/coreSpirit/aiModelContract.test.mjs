@@ -108,6 +108,11 @@ assert.throws(() => validateCoreSpiritAiManifest({
   ...manifest,
   aiOutput: { ...manifest.aiOutput, longProbabilityMetadataKey: 'not_declared' },
 }), /declared metadata fields/);
+assert.throws(() => aiPredictionFromResult(scalarManifest, {
+  prediction: { dtype: 'f64', shape: [3], data: [0.6, 0.2, 0.2] },
+  confidence: 0.7,
+  metadata: { direction: 'LONG' },
+}), /explicit LONG\/SHORT\/FLAT probability mapping/);
 
 const scalarManifest = {
   ...manifest,
