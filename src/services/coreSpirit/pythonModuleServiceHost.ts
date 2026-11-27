@@ -27,12 +27,14 @@ export class CoreSpiritPythonModuleServiceHost implements CoreSpiritPolyglotHost
     this.timeoutMs=config.timeoutMs??8000;if(!Number.isSafeInteger(this.timeoutMs)||this.timeoutMs<100||this.timeoutMs>30_000)throw new Error('Python module service timeout must be between 100 and 30000 ms.');
   }
   private endpoint(path:string):string{return new URL(path,this.baseUrl).toString();}
-  private async request(path:string,init:RequestInit,signal?:AbortSignal):Promise<Response>{
+  private async request<T=Response>(path:string,init:RequestInit,signal?:AbortSignal,consume?:(response:Response)=>Promise<T>):Promise<T|Response>{
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(new Error('Python module service timeout')),this.timeoutMs);
     const abort=()=>controller.abort(signal?.reason??new Error('Python module operation cancelled'));
     if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
-    try{return await this.fetcher(this.endpoint(path),{...init,signal:controller.signal});}
-    finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+    try{
+      const response=await this.fetcher(this.endpoint(path),{...init,redirect:'error',signal:controller.signal});
+      return consume?await consume(response):response;
+    }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
   /** Register a content-addressed module package; the service must verify dependencies and sandbox it. */
   async loadModule(manifest:CoreSpiritPolyglotModuleManifest,packageBytes:Uint8Array,dependencyLock:CoreSpiritPythonDependencyLock,signal?:AbortSignal):Promise<void>{
@@ -54,12 +56,16 @@ export class CoreSpiritPythonModuleServiceHost implements CoreSpiritPolyglotHost
   async invoke(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,signal?:AbortSignal):Promise<CoreSpiritPolyglotResponse>{
     validateCoreSpiritPolyglotManifest(manifest);
     if(manifest.language!=='python'||manifest.transport!=='host')throw new Error('Python executor received a non-Python manifest.');
-    const response=await this.request('v1/modules/execute',{method:'POST',headers:{'content-type':'application/json',
+    return await this.request<CoreSpiritPolyglotResponse>('v1/modules/execute',{method:'POST',headers:{'content-type':'application/json',
       'authorization':'Bearer '+this.secret,'x-corespirit-abi':'1','x-request-id':request.requestId},
-      body:JSON.stringify({manifest,request})},signal);
-    if(!response.ok)throw new Error('Python module service returned HTTP '+response.status+'.');
-    const body=await response.json() as CoreSpiritPolyglotResponse;
-    if(!body||typeof body!=='object'||!body.outputs||typeof body.checksum!=='string')throw new Error('Python module service returned an invalid ABI response.');
-    return body;
+      body:JSON.stringify({manifest,request})},signal,async response=>{
+        if(!response.ok)throw new Error('Python module service returned HTTP '+response.status+'.');
+        const raw=await response.text();
+        if(new TextEncoder().encode(raw).byteLength>manifest.maxOutputBytes+64*1024)throw new Error('Python module service response exceeds the ABI output envelope.');
+        let body:CoreSpiritPolyglotResponse;
+        try{body=JSON.parse(raw) as CoreSpiritPolyglotResponse;}catch{throw new Error('Python module service returned malformed JSON.');}
+        if(!body||typeof body!=='object'||!body.outputs||typeof body.checksum!=='string')throw new Error('Python module service returned an invalid ABI response.');
+        return body;
+      }) as CoreSpiritPolyglotResponse;
   }
 }
