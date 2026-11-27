@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildCoreSpiritResearchFeatures } from './researchFeatures.ts';
+import { buildCoreSpiritResearchFeatures, toCoreSpiritResearchRows } from './researchFeatures.ts';
 
 const rows=64;
 const timestampsMs=Float64Array.from({length:rows},(_,i)=>1_700_000_000_000+i*300_000);
@@ -25,6 +25,13 @@ assert.ok(Number.isFinite(features.features.normalized_atr_5[5]));
 assert.ok(Number.isFinite(features.features.relative_volume_5[5]));
 assert.ok(features.quality.usableRows>0);
 assert.equal(features.pointInTimeSchema.availabilityRule,'availableAt<=timestamp');
+const materializedRows=toCoreSpiritResearchRows(features);
+assert.ok(materializedRows.length>0);
+assert.ok(materializedRows.every(row=>row.featureAvailableAt?.length===features.featureNames.length));
+assert.ok(materializedRows.every(row=>row.availableAt===Math.max(...row.featureAvailableAt!)));
+assert.ok(materializedRows.every(row=>row.featureAvailableAt!.every(value=>value<=row.timestamp)));
+assert.ok(Object.isFrozen(materializedRows[0]!.featureAvailableAt),
+  'research row materialization must preserve immutable per-feature availability metadata');
 assert.ok(Number.isFinite(features.features.ema_distance_20[30]!));
 assert.ok(Number.isFinite(features.features.ema_slope_20[30]!));
 assert.ok(Number.isFinite(features.features.momentum_5[30]!));
