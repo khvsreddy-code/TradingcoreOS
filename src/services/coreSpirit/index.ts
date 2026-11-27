@@ -95,7 +95,6 @@ export * from './multiSymbolTimeframe';
 export * from './modelOrchestration';
 export * from './pythonMlModelAdapter';
 export * from './researchApiContract';
-export * from './researchFeatures';
 
 export * from './aiModel';
 export * from './modelVisualization';
