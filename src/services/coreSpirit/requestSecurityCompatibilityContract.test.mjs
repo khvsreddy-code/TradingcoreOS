@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {CoreSpiritRuntime} from './runtime.ts';
 import {makeCoreSpiritProgram} from './coreSpiritPipeline.ts';
+import {coreSpiritIntrabarsForParent,coreSpiritTimeframeDurationMs,classifyRequestRepaint,classifyMarketDataFreshness} from './requestExecutionEngine.ts';
 const source=[
   'indicator("Pine request surface") {',
   '  overlay: false',
@@ -27,3 +28,13 @@ const ltf=outputs.filter(x=>x.kind==='series'&&x.style?.title==='LTF count');
 assert.equal(htf.length,2);assert.ok(htf.every(x=>x.value===123.45));
 assert.equal(ltf.length,2);assert.ok(ltf.every(x=>x.value===3));
 console.log('CORESPIRIT_REQUEST_SECURITY_LOWER_TF_ARRAY_CONTRACT_OK');
+assert.equal(coreSpiritTimeframeDurationMs('5m'),300000);
+assert.equal(coreSpiritTimeframeDurationMs('1'),60000);
+assert.deepEqual(coreSpiritIntrabarsForParent([{timestamp:1000,close:1},{timestamp:2000,close:2},{timestamp:301000,close:3}],1000,'5m').map(x=>x.close),[1,2]);
+assert.equal(classifyRequestRepaint({lookahead:'off',confirmed:true,realtime:false,available:true,gaps:'off'}),'non-repainting-confirmed');
+assert.equal(classifyRequestRepaint({lookahead:'on',confirmed:false,realtime:false,available:true,gaps:'off'}),'historical-lookahead-risk');
+assert.equal(classifyRequestRepaint({lookahead:'off',confirmed:false,realtime:true,available:true,gaps:'on'}),'realtime-developing');
+assert.equal(classifyRequestRepaint({lookahead:'off',confirmed:false,realtime:false,available:false,gaps:'on'}),'host-data-limited');
+assert.equal(classifyMarketDataFreshness({provider:'FYERS',receivedAt:1000,sourceTimestamp:900,now:1000,liveMaxAgeMs:500}).status,'live');
+assert.equal(classifyMarketDataFreshness({provider:'Investiny',receivedAt:5000,sourceTimestamp:1000,now:5000,liveMaxAgeMs:500,delayedAfterMs:10000}).status,'delayed');
+assert.equal(classifyMarketDataFreshness({provider:'FYERS',receivedAt:50000,sourceTimestamp:1000,now:50000,liveMaxAgeMs:500,delayedAfterMs:10000}).status,'stale');

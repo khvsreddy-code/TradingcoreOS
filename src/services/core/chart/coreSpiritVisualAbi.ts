@@ -317,6 +317,10 @@ function revisionIsNewer(previous: RetainedVisualState | undefined, revision: Co
 /** A patch is prepared against a retained snapshot and committed only after chart projection succeeds. */
 export class CoreSpiritVisualAbiStore {
   private readonly streams = new Map<string, RetainedVisualState>();
+  constructor(private readonly limits: Readonly<{ maxStreams?: number; maxObjectsPerStream?: number; maxPatchOperations?: number }> = {}) {}
+  private get maxStreams(): number { return Math.max(1,Math.floor(this.limits.maxStreams ?? 256)); }
+  private get maxObjectsPerStream(): number { return Math.max(1,Math.floor(this.limits.maxObjectsPerStream ?? 20_000)); }
+  private get maxPatchOperations(): number { return Math.max(1,Math.floor(this.limits.maxPatchOperations ?? 10_000)); }
 
   prepare(mutation: CoreSpiritVisualAbiMutation): PreparedCoreSpiritVisualSnapshot | undefined {
     if (mutation.schemaVersion !== CORE_SPIRIT_VISUAL_ABI_VERSION ||
@@ -332,6 +336,9 @@ export class CoreSpiritVisualAbiStore {
       if (!revision.streamId.trim()) return undefined;
     }
     const previous = this.streams.get(revision.streamId);
+    if (!previous && this.streams.size >= this.maxStreams) return undefined;
+    if (mutation.operation === 'snapshot' && mutation.objects.length > this.maxObjectsPerStream) return undefined;
+    if (mutation.operation === 'patch' && mutation.upsert.length + mutation.removeIds.length > this.maxPatchOperations) return undefined;
     if (!revisionIsNewer(previous, revision)) return undefined;
 
     const objects = mutation.operation === 'snapshot'
@@ -354,6 +361,7 @@ export class CoreSpiritVisualAbiStore {
       }
     }
 
+    if (objects.size > this.maxObjectsPerStream) return undefined;
     const retainedObjects = Object.freeze([...objects.values()]);
     return Object.freeze({
       streamId: revision.streamId,
@@ -394,6 +402,9 @@ export class CoreSpiritVisualAbiStore {
       for (const state of this.streams.values()) state.objects.clear();
     } else this.streams.get(streamId)?.objects.clear();
   }
+
+  /** Script removal clears native objects but preserves the revision fence against delayed resurrection. */
+  removeProgram(streamId: string): void { this.streams.get(streamId)?.objects.clear(); }
 
   clear(): void {
     this.streams.clear();

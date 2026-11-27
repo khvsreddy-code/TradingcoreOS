@@ -32,6 +32,7 @@ import { CORE_SPIRIT_STDLIB } from './standardLibrary';
 import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins';
 import { executeCoreSpiritPineStringBuiltin } from './pineStringBuiltins';
 import { executeCoreSpiritPineColorBuiltin } from './pineColorBuiltins';
+import { coreSpiritIntrabarsForParent } from './requestExecutionEngine';
 import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_OPTIMIZER_ABI, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION';
 import type { CoreSpiritValueStore } from './executionValueStore';
 import type { CoreSpiritExecutionTier } from './executionTier';
@@ -2084,25 +2085,19 @@ export class CoreSpiritRuntime {
       const field=String(args[2]??'close') as CoreSpiritDataRequest['field'];
       if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));
       if(!this.admitUniqueRequestContext(symbol,timeframe,field,'last-confirmed')) return finish(null);
-      const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}`;
+      const parentTimestamp=this.toEpoch(bar.timestamp);
+      const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}:${parentTimestamp}:${this.state.barState.revision}`;
       if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
-      const resolver=this.dataResolver?.lowerTimeframe;
-      if(resolver){
-        this.resourceGovernor.recordDataRequest({symbol,timeframe,field,offset:0});
-        const values=resolver(timeframe,field,symbol);
-        if(values&&typeof (values as any).then==='function') return finish(null);
-        const bounded=(values as number[]).filter(Number.isFinite).slice(-16_384);
-        this.resourceGovernor.recordResolvedData(bounded);
-        const result=createCoreScriptArray(bounded);
-        this.dataMemo.set(key,result);
-        return finish(result);
-      }
       const intrabarsResolver=this.dataResolver?.intrabars;
+      // Value-only lowerTimeframe providers cannot establish which parent candle
+      // owns an intrabar. Refuse to leak a provider-wide array across chart bars.
       if(!intrabarsResolver) return finish(createCoreScriptArray([]));
       this.resourceGovernor.recordDataRequest({symbol,timeframe,field:'time',offset:0});
       const rows=intrabarsResolver(timeframe,symbol);
       if(rows&&typeof (rows as any).then==='function') return finish(null);
-      const bounded=(rows as CoreSpiritIntrabar[]).slice(-16_384).map(row=>Number((row as any)[field])).filter(Number.isFinite);
+      const parentRows=coreSpiritIntrabarsForParent(rows as CoreSpiritIntrabar[],parentTimestamp,this.executionContext.timeframe);
+      const bounded=parentRows.map(row=>field==='time'?row.timestamp:Number((row as any)[field]))
+        .filter(Number.isFinite).slice(0,16_384);
       this.resourceGovernor.recordResolvedData(bounded);
       const result=createCoreScriptArray(bounded);
       this.dataMemo.set(key,result);

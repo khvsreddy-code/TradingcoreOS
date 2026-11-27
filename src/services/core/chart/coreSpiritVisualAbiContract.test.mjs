@@ -202,3 +202,18 @@ assert.equal(scriptHidden.objects.length, 0, 'hidden script output cannot be pai
 visibilityStore.commit(scriptHidden);
 assert.equal(visibilityStore.objects(hiddenStreamRevision.streamId).length, 0, 'hidden script keeps its retained state fenced off from the renderer');
 console.log('CORESPIRIT_VISUAL_ABI_CONTRACT_OK');
+
+const boundedVisualStore = new CoreSpiritVisualAbiStore({maxStreams:1,maxObjectsPerStream:1,maxPatchOperations:1});
+const boundedSnapshot = createCoreSpiritVisualSnapshot([line],{streamId:'bounded-script',datasetRevision:1,outputRevision:1},'bounded-script');
+const boundedPrepared = boundedVisualStore.prepare(boundedSnapshot);
+assert.ok(boundedPrepared,'bounded visual snapshot should be admitted');
+boundedVisualStore.commit(boundedPrepared);
+assert.equal(boundedVisualStore.objects('bounded-script').length,1);
+const overflowSnapshot = createCoreSpiritVisualSnapshot([line,label],{streamId:'bounded-script',datasetRevision:1,outputRevision:2},'bounded-script');
+assert.equal(boundedVisualStore.prepare(overflowSnapshot),undefined,'object quota rejects oversized snapshots');
+const secondProgram = createCoreSpiritVisualSnapshot([],{streamId:'second-script',datasetRevision:1,outputRevision:1},'second-script');
+assert.equal(boundedVisualStore.prepare(secondProgram),undefined,'stream quota rejects unbounded program growth');
+boundedVisualStore.removeProgram('bounded-script');
+assert.equal(boundedVisualStore.objects('bounded-script').length,0,'program removal clears retained native objects');
+assert.equal(boundedVisualStore.prepare(createCoreSpiritVisualPatch([line],[],{streamId:'bounded-script',datasetRevision:1,outputRevision:1},'bounded-script')),undefined,
+  'cleanup retains revision fences and rejects stale drawing resurrection');
