@@ -126,6 +126,25 @@ assert.equal(result.metadata.production_eligible, false);
 assert.equal(result.metadata.predicted_price, null);
 assert.ok(result.outputChecksum && result.stateChecksum, 'adapter emits deterministic checksums');
 
+let adapterSignal;
+const cancellableAdapter = new CoreSpiritPythonMlServiceAdapter({
+  baseUrl: 'https://ml.example.test',
+  serviceSecret: 's'.repeat(48),
+  fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
+    adapterSignal = init.signal;
+    if (init.signal.aborted) reject(new Error('request aborted'));
+    else init.signal.addEventListener('abort', () => reject(new Error('request aborted')), { once: true });
+  }),
+});
+const controller = new AbortController();
+const pendingCall = cancellableAdapter.execute(manifest, request, controller.signal);
+assert.ok(adapterSignal, 'the adapter must pass an abort signal to the Python service request');
+controller.abort();
+await assert.rejects(pendingCall, /cancelled or timed out|aborted/,
+  'caller cancellation must abort the actual Python service request');
+assert.equal(adapterSignal.aborted, true,
+  'the external HTTP fetch must observe caller cancellation');
+
 const runtimeRegistry = new CoreSpiritModelRegistry();
 const runtimeManifest = registerCoreSpiritPythonMlRuntimeModel(runtimeRegistry, {
   modelId: 'xgb-direction',
