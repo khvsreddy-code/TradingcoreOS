@@ -33,7 +33,7 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   if(!manifest||manifest.abiVersion!==CORE_SPIRIT_POLYGLOT_ABI_VERSION) throw new Error('Unsupported CoreSpirit Polyglot ABI version.');
   if(!/^[a-z][a-z0-9-]{1,79}$/.test(manifest.moduleId)) throw new Error('Polyglot moduleId must be a normalized identifier.');
   if(!/^[a-f0-9]{64}$/.test(manifest.version)) throw new Error('Polyglot module version must be a SHA-256 artifact identity.');
-  if(!/^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.runtimeVersion)) throw new Error('Polyglot runtimeVersion must be an exact pinned semantic version.');
+  if(!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.runtimeVersion)) throw new Error('Polyglot runtimeVersion must be an exact pinned semantic version.');
   if(!['python','rust','cpp','julia','r','onnx','wasm'].includes(manifest.language)) throw new Error('Polyglot language is unsupported.');
   if(!manifest.deterministic||!manifest.stateless) throw new Error('Polyglot v1 modules must be deterministic and stateless.');
   if(!Array.isArray(manifest.exports)||!manifest.exports.length||manifest.exports.length>128||
@@ -51,7 +51,7 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   if(manifest.dependencies!==undefined&&!Array.isArray(manifest.dependencies)) throw new Error('Polyglot dependencies must be an array.');
   for(const dependency of manifest.dependencies??[]){
     if(!dependency||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(dependency.name)||dependencyNames.has(dependency.name)) throw new Error('Polyglot dependencies must have unique normalized names.');
-    if(!/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
+    if(!/^\\d+\.\\d+\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
     if(!/^[a-f0-9]{64}$/.test(dependency.artifactHash)) throw new Error('Polyglot dependency artifacts require SHA-256 identities.');
     dependencyNames.add(dependency.name);
   }
@@ -103,7 +103,7 @@ function canonical(value:unknown):string {
 }
 /** SHA-256 binds a response to the exact module artifact, request and output tensors. */
 export function coreSpiritPolyglotResponseChecksum(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,outputs:Readonly<Record<string,CoreSpiritPolyglotTensor>>):string {
-  return sha256HexSync(canonical({moduleId:manifest.moduleId,version:manifest.version,requestId:request.requestId,exportName:request.exportName,outputs}));
+  return sha256HexSync(canonical({abiVersion:manifest.abiVersion,moduleId:manifest.moduleId,version:manifest.version,language:manifest.language,transport:manifest.transport,runtimeVersion:manifest.runtimeVersion,dependencies:manifest.dependencies??[],inputs:manifest.inputs,outputsSchema:manifest.outputs,limits:{maxInputBytes:manifest.maxInputBytes,maxOutputBytes:manifest.maxOutputBytes,maxMemoryBytes:manifest.maxMemoryBytes,maxSteps:manifest.maxSteps,maxLatencyMs:manifest.maxLatencyMs},requestId:request.requestId,exportName:request.exportName,outputs}));
 }
 export class CoreSpiritPolyglotRegistry {
   private readonly entries=new Map<string,{manifest:CoreSpiritPolyglotModuleManifest;host:CoreSpiritPolyglotHost}>();
