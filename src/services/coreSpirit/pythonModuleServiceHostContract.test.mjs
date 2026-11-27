@@ -5,7 +5,7 @@ if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const bytes=new Uint8Array([1,2,3,4]);
 const digest=await crypto.subtle.digest('SHA-256',bytes);
 const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-const manifest={abiVersion:1,moduleId:'python-features',version:hash,language:'python',transport:'host',deterministic:true,stateless:true,exports:['predict'],
+const manifest={abiVersion:1,moduleId:'python-features',version:hash,language:'python',transport:'host',runtimeVersion:'3.12.3',deterministic:true,stateless:true,exports:['predict'],
  dependencies:[{name:'numpy',version:'2.1.0',artifactHash:'a'.repeat(64)}],
  inputs:{x:{dtype:'f64',shape:[1]}},outputs:{y:{dtype:'f64',shape:[1]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:10000,maxLatencyMs:1000};
 const calls=[];
