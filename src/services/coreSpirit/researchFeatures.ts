@@ -60,15 +60,19 @@ function assertColumn(name:string,column:Float64Array,length:number):void{
 function maxWindowAvailability(values:Float64Array,period:number):Float64Array{
   const result=new Float64Array(values.length);result.fill(Number.NaN);
   const deque=new Int32Array(values.length);
-  let head=0,tail=0;
+  let head=0,tail=0,invalid=0;
   for(let index=0;index<values.length;index++){
     const value=values[index]!;
-    if(!Number.isFinite(value))throw new Error('Feature availability input contains a non-finite timestamp.');
-    while(tail>head&&values[deque[tail-1]!]!<=value)tail--;
-    deque[tail++]=index;
-    const first=index-period+1;
-    while(tail>head&&deque[head]!<first)head++;
-    if(index>=period-1)result[index]=values[deque[head]!]!;
+    if(Number.isFinite(value)){
+      while(tail>head&&values[deque[tail-1]!]!<=value)tail--;
+      deque[tail++]=index;
+    }else invalid++;
+    const expired=index-period;
+    if(expired>=0){
+      if(!Number.isFinite(values[expired]!))invalid--;
+      if(tail>head&&deque[head]===expired)head++;
+    }
+    if(index>=period-1&&invalid===0&&tail>head)result[index]=values[deque[head]!]!;
   }
   return result;
 }
