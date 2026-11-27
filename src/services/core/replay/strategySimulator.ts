@@ -56,7 +56,7 @@ export type SimulationLedgerEvent=Readonly<{
 export type SimulationClosedTrade=Readonly<{
   tradeId:string; symbol:string; direction:'long'|'short'; quantity:number; averageEntryPrice:number; exitPrice:number;
   realizedGrossPnl:number; allocatedEntryFees:number; allocatedExitFees:number; netPnl:number;
-  entryOrderId:string; exitOrderId:string; entrySignalId:string; exitSignalId:string; exitTimestampMs:number; simulated:true;
+  entryOrderId:string; exitOrderId:string; entrySignalId:string; exitSignalId:string; entryTimestampMs:number; exitTimestampMs:number; simulated:true;
 }>;
 export type StrategySimulationResult=Readonly<{
   simulationId:string; environment:'simulation'; executionAuthority:'simulation-only'; strategyId:string;
@@ -71,7 +71,7 @@ export type StrategySimulationResult=Readonly<{
 type WorkingOrder={original:SimulationIntent;intent:SimulationIntent;signalTimeMs:number;sequence:number;
   status:'pending'|'partially-filled'|'filled'|'cancelled'|'rejected'|'expired';filled:number;remaining:number;eligibleBars:number;
   stopTriggered:boolean;fixedFeeCharged:boolean;openedPosition:boolean};
-type Position={symbol:string;quantity:number;averagePrice:number;entryFees:number;entryOrderId:string;entrySignalId:string;entryId:string;entryCount:number;realizedNetPnl:number};
+type Position={symbol:string;quantity:number;averagePrice:number;entryFees:number;entryOrderId:string;entrySignalId:string;entryId:string;entryCount:number;entryTimestampMs:number;realizedNetPnl:number};
 type Bracket={id:string;intent:SimulationIntent;symbol:string;direction:1|-1;remaining:number;stop?:number;target?:number;
   activeAt:number;fixedFeeCharged:boolean;ocaGroup?:string;ocaType?:'cancel'|'reduce'};
 type Frame={time:number;index:number;bars:Map<string,HistoricalCandle>};
@@ -221,7 +221,7 @@ export function runStrategySimulation(input:{
   };
   const getPosition=(symbol:string):Position=>{
     let p=positions.get(symbol);
-    if(!p){p={symbol,quantity:0,averagePrice:0,entryFees:0,entryOrderId:'',entrySignalId:'',entryId:'',entryCount:0,realizedNetPnl:0};positions.set(symbol,p);}
+    if(!p){p={symbol,quantity:0,averagePrice:0,entryFees:0,entryOrderId:'',entrySignalId:'',entryId:'',entryCount:0,entryTimestampMs:0,realizedNetPnl:0};positions.set(symbol,p);}
     return p;
   };
   const gross=():number=>{let v=0;for(const p of positions.values()){const mark=marks.get(p.symbol);if(mark!=null)v+=Math.abs(p.quantity)*mark;}return v;};
@@ -253,6 +253,7 @@ export function runStrategySimulation(input:{
     let opened=0,closed=0;
     if(old===0||Math.sign(old)===Math.sign(signed)){
       p.averagePrice=(Math.abs(old)*p.averagePrice+qty*args.price)/(Math.abs(old)+qty);p.entryFees+=fee;
+      if(old===0)p.entryTimestampMs=args.time;
       p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;p.entryId=args.current.entryId??args.current.tag??args.current.orderId;opened=qty;
       if(old===0)p.entryCount=0;
     }else{
@@ -262,10 +263,10 @@ export function runStrategySimulation(input:{
       trades.push(Object.freeze({tradeId:'sim-trade-'+String(trades.length+1).padStart(8,'0'),symbol:args.symbol,direction:old>0?'long':'short',
         quantity:rounded(closed),averageEntryPrice:rounded(p.averagePrice),exitPrice:rounded(args.price),realizedGrossPnl:rounded(grossPnl),
         allocatedEntryFees:rounded(entryFee),allocatedExitFees:rounded(exitFee),netPnl:rounded(netPnl),entryOrderId:p.entryOrderId,
-        exitOrderId:args.orderId,entrySignalId:p.entrySignalId,exitSignalId:args.signalId,exitTimestampMs:args.time,simulated:true}));
+        exitOrderId:args.orderId,entrySignalId:p.entrySignalId,exitSignalId:args.signalId,entryTimestampMs:p.entryTimestampMs,exitTimestampMs:args.time,simulated:true}));
       p.entryFees=Math.max(0,p.entryFees-entryFee);
-      if(Math.abs(next)<1e-10){p.averagePrice=0;p.entryFees=0;p.entryOrderId='';p.entrySignalId='';p.entryId='';p.entryCount=0;}
-      else if(Math.sign(next)!==Math.sign(old)){opened=Math.abs(next);p.averagePrice=args.price;p.entryFees=Math.max(0,fee-exitFee);p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;p.entryId=args.current.entryId??args.current.tag??args.current.orderId;p.entryCount=0;}
+      if(Math.abs(next)<1e-10){p.averagePrice=0;p.entryFees=0;p.entryOrderId='';p.entrySignalId='';p.entryId='';p.entryCount=0;p.entryTimestampMs=0;}
+      else if(Math.sign(next)!==Math.sign(old)){opened=Math.abs(next);p.averagePrice=args.price;p.entryFees=Math.max(0,fee-exitFee);p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;p.entryId=args.current.entryId??args.current.tag??args.current.orderId;p.entryCount=0;p.entryTimestampMs=args.time;}
     }
     p.quantity=Math.abs(next)<1e-10?0:next;
     record({eventType:args.protective?'protective_exit':args.partial?'partial_fill':'fill',orderId:args.orderId,signalId:args.signalId,

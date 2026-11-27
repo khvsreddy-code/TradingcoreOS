@@ -53,6 +53,7 @@ import { CoreSpiritResourceGovernor, type CoreSpiritResourceBudget, CoreSpiritRe
 import { createCoreSpiritOutputSemantics, canCoreSpiritSubmitConfirmedLiveIntent, type CoreSpiritOutputSemantics } from './executionSemantics';
 import type { CoreSpiritBarPhase } from './types';
 import { CoreSpiritExecutionStateMachine } from './executionStateMachine';
+import { normalizeCoreSpiritAlertFrequency } from './alertDelivery';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -2414,18 +2415,18 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='alert') {
         const semantics=this.currentOutputSemantics;
-        const rawFrequency=String(args[1]??'once-per-bar').toLowerCase();
-        const frequency=rawFrequency.startsWith('alert.freq_')?rawFrequency.slice(11):rawFrequency;
+        let frequency:ReturnType<typeof normalizeCoreSpiritAlertFrequency>|undefined;
+        try { frequency=normalizeCoreSpiritAlertFrequency(args[1]??'alert.freq_once_per_bar'); }
+        catch(error) { diagnostics.push(`output alert at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
         const confirmed=semantics?.isConfirmed===true||semantics?.barPhase==='confirmed';
-        // Pine alert() is a realtime trigger, not a historical signal. Intrabar
-        // frequencies may fire while the realtime candle is developing; close
-        // frequency is admitted only on the confirmed update.
+        // Pine alert() is realtime-only. The normalized close frequency is gated
+        // before the event enters the host transaction/outbox pipeline.
         const realtime=semantics?.executionMode==='realtime';
-        if(!this.suppressExternalEffects&&realtime&&(frequency!=='once-per-bar-close'||confirmed)){
+        if(!this.suppressExternalEffects&&realtime&&frequency&&(frequency!=='once-per-bar-close'||confirmed)){
           const message=args[0]==null?'':String(args[0]);
           this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{
             eventType:'alert',conditionId:outputId||'alert:unknown-callsite',callsiteId:outputId||'alert:unknown-callsite',
-            args,message,frequency:rawFrequency,barIndex,revision:this.state.barState.revision,execution:semantics,
+            args,message,frequency,barIndex,revision:this.state.barState.revision,execution:semantics,
           }});
         }
       }

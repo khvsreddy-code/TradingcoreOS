@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import {CoreSpiritAlertRuntime,coreSpiritAlertFromRuntimeEvent,coreSpiritAlertEventId} from './alertDelivery.ts';
+import {CoreSpiritAlertRuntime,coreSpiritAlertFromRuntimeEvent,coreSpiritAlertEventId,normalizeCoreSpiritAlertFrequency} from './alertDelivery.ts';
+
+assert.equal(normalizeCoreSpiritAlertFrequency('alert.freq_once_per_bar_close'),'once-per-bar-close');
+assert.equal(normalizeCoreSpiritAlertFrequency('once_per_bar'),'once-per-bar');
+assert.equal(normalizeCoreSpiritAlertFrequency('alert.freq_all'),'all');
+assert.throws(()=>normalizeCoreSpiritAlertFrequency('alert.freq_once'),/Unsupported Pine alert frequency/);
 
 class Store{
   records=new Map();

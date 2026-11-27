@@ -1,6 +1,15 @@
 /** Host-owned, durable, idempotent alert outbox. The VM never performs network delivery. */
 export type CoreSpiritAlertFrequency='all'|'once-per-bar'|'once-per-bar-close';
 export type CoreSpiritAlertEventType='alert'|'alertcondition';
+
+/** Canonicalize Pine enum values before runtime frequency gating or outbox admission. */
+export function normalizeCoreSpiritAlertFrequency(value:unknown):CoreSpiritAlertFrequency {
+  const raw=String(value??'once-per-bar').trim().toLowerCase();
+  const withoutPrefix=raw.startsWith('alert.freq_')?raw.slice('alert.freq_'.length):raw;
+  const normalized=withoutPrefix.replaceAll('_','-');
+  if(normalized==='all'||normalized==='once-per-bar'||normalized==='once-per-bar-close')return normalized;
+  throw new Error(`Unsupported Pine alert frequency '${raw}'.`);
+}
 export type CoreSpiritAlertIdentity=Readonly<{
   programId:string;
   instrumentId:string;
@@ -148,12 +157,7 @@ export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEven
   if(!Number.isSafeInteger(barIndex)||barIndex<0)throw new Error('Runtime alert is missing its canonical bar index.');
   const eventType=payload.eventType==='alertcondition'?'alertcondition':payload.eventType==='alert'||payload.eventType===undefined?'alert':undefined;
   if(!eventType)throw new Error('Runtime alert event type is invalid.');
-  const raw=String(payload.frequency??'once-per-bar').toLowerCase();
-  const normalized=(raw.startsWith('alert.freq_')?raw.slice(11):raw).replaceAll('_','-');
-  let frequency:CoreSpiritAlertFrequency=normalized==='all'?'all'
-    :normalized==='once-per-bar-close'?'once-per-bar-close'
-    :normalized==='once-per-bar'?'once-per-bar'
-    :(()=>{throw new Error("Unsupported alert frequency '"+normalized+"'.");})();
+  let frequency=normalizeCoreSpiritAlertFrequency(payload.frequency??'once-per-bar');
   if(eventType==='alertcondition')frequency='once-per-bar-close';
   if(!event.scriptId||!context.scriptRevision||!context.symbol||!context.timeframe||!Number.isFinite(event.time)||
      !Number.isFinite(context.createdAt))throw new Error('Runtime alert identity and timestamp are required.');
