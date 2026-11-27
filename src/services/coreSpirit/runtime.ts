@@ -704,19 +704,23 @@ export class CoreSpiritRuntime {
     if(tick.sequence!==undefined&&(!Number.isSafeInteger(tick.sequence)||tick.sequence<0))
       throw new Error('market tick sequence must be a non-negative safe integer');
     const previousHostSequence=this.currentHostEventSequence;
-    this.currentHostEventSequence=tick.sequence;
-    const bar: HistoricalCandle = {
-      timestamp: new Date(Number(tick.timestamp)).toISOString(),
-      open: Number(baseBar.open),
-      high: Math.max(Number(baseBar.high), price),
-      low: Math.min(Number(baseBar.low), price),
-      close: price,
-      volume: Math.max(0, Number(baseBar.volume || 0) + Number(tick.volume || 0)),
-    };
-    // Historical tick replays use the same forming-bar rollback path as live ticks,
-    // but their execution mode is explicitly replay and can never authorize live orders.
-    try { return this.executeBar(bar, historicalTick ? 'replay' : 'realtime'); }
-    finally { this.currentHostEventSequence=previousHostSequence; }
+    try {
+      this.currentHostEventSequence=tick.sequence;
+      const bar: HistoricalCandle = {
+        timestamp: new Date(Number(tick.timestamp)).toISOString(),
+        open: Number(baseBar.open),
+        high: Math.max(Number(baseBar.high), price),
+        low: Math.min(Number(baseBar.low), price),
+        close: price,
+        volume: Math.max(0, Number(baseBar.volume || 0) + Number(tick.volume || 0)),
+      };
+      // Historical tick replays use the same forming-bar rollback path as live ticks,
+      // but their execution mode is explicitly replay and can never authorize live orders.
+      return this.executeBar(bar, historicalTick ? 'replay' : 'realtime');
+    } finally {
+      this.currentHostEventSequence=previousHostSequence;
+    }
+  }
 
   /**
    * Execute a sequence of host-supplied historical ticks against one bar.
