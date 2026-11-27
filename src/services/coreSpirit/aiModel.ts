@@ -21,9 +21,29 @@ export interface CoreSpiritAiModelManifest extends CoreSpiritStrictModelManifest
   aiOutput: CoreSpiritAiOutputMapping;
 }
 
+export type CoreSpiritAiCalibrationStatus = 'calibrated'|'not_calibrated'|'not_applicable'|'unknown';
+export type CoreSpiritAiDataQuality = 'verified'|'degraded'|'stale'|'unknown';
+
 export interface CoreSpiritAiStructuredPrediction {
+  modelId:string;
+  modelVersion:string;
+  instrument:string|null;
+  timeframe:string|null;
+  generatedAt:number|null;
+  validUntil:number|null;
+  predictionHorizonBars:number|null;
+  featureVersion:string|null;
+  datasetHash:string|null;
+  artifactHash:string|null;
+  expectedReturn:number|null;
+  dataQuality:CoreSpiritAiDataQuality;
+  calibrationStatus:CoreSpiritAiCalibrationStatus;
+  productionEligible:boolean;
   direction: CoreSpiritAiDirection;
   probability: number;
+  probabilityUp:number|null;
+  probabilityDown:number|null;
+  probabilityFlat:number|null;
   confidence: number;
   regime?: string;
   probabilities?: Readonly<{ LONG?: number; SHORT?: number; FLAT?: number }>;
@@ -59,6 +79,7 @@ export function validateCoreSpiritAiManifest(manifest: CoreSpiritStrictModelMani
 export function aiPredictionFromResult(
   manifest: CoreSpiritStrictModelManifest,
   result: Pick<CoreSpiritExternalModelCallResult, 'prediction' | 'confidence' | 'metadata'>,
+  context?: Pick<CoreSpiritStrictModelRequest['context'], 'symbol'|'timeframe'|'timestamp'>,
 ): CoreSpiritAiStructuredPrediction {
   validateCoreSpiritAiManifest(manifest);
   const mapping = manifest.aiOutput!;
@@ -91,9 +112,59 @@ export function aiPredictionFromResult(
       typeof result.metadata[mapping.regimeMetadataKey] !== 'string') {
     throw new Error('AI regime metadata must be a string');
   }
+  const optionalNumber=(key:string):number|null=>{
+    const value=result.metadata[key];
+    if(value===null||value===undefined)return null;
+    if(typeof value!=='number'||!Number.isFinite(value))throw new Error(`AI metadata '${key}' must be a finite number`);
+    return value;
+  };
+  const optionalString=(key:string):string|null=>{
+    const value=result.metadata[key];
+    if(value===null||value===undefined)return null;
+    if(typeof value!=='string'||!value.trim())throw new Error(`AI metadata '${key}' must be a non-empty string`);
+    return value;
+  };
+  const validUntil=optionalNumber('valid_until_ms');
+  const generatedAt=context?.timestamp??null;
+  if(validUntil!==null&&(generatedAt===null||validUntil<=generatedAt))throw new Error('AI valid_until_ms must be strictly after the prediction timestamp');
+  const calibrationValue=optionalString('probability_calibration');
+  const calibrationStatus:CoreSpiritAiCalibrationStatus=calibrationValue===null?'unknown':
+    calibrationValue==='calibrated'||calibrationValue==='not_calibrated'||calibrationValue==='not_applicable'?calibrationValue:
+    (()=>{throw new Error('AI probability_calibration metadata has an unsupported status');})();
+  const qualityValue=optionalString('data_quality');
+  const dataQuality:CoreSpiritAiDataQuality=qualityValue===null?'unknown':
+    qualityValue==='verified'||qualityValue==='degraded'||qualityValue==='stale'?qualityValue:
+    (()=>{throw new Error('AI data_quality metadata has an unsupported status');})();
+  const featureVersion=optionalString('feature_schema_version')??optionalString('feature_version');
+  const artifactHash=optionalString('artifact_hash');
+  const datasetHash=optionalString('dataset_hash');
+  for(const [name,value] of [['artifact_hash',artifactHash],['dataset_hash',datasetHash]] as const){
+    if(value!==null&&!/^[a-f0-9]{64}$/.test(value))throw new Error(`AI metadata '${name}' must be a SHA-256 hash`);
+  }
+  const expectedReturn=optionalNumber('expected_return');
+  const productionEligible=result.metadata.production_eligible===true&&
+    result.metadata.release_status==='approved'&&calibrationStatus==='calibrated'&&
+    dataQuality==='verified'&&artifactHash!==null;
   return Object.freeze({
+    modelId:manifest.modelId,
+    modelVersion:manifest.version,
+    instrument:context?.symbol??null,
+    timeframe:context?.timeframe??null,
+    generatedAt,
+    validUntil,
+    predictionHorizonBars:manifest.forecastHorizonBars??null,
+    featureVersion,
+    datasetHash,
+    artifactHash,
+    expectedReturn,
+    dataQuality,
+    calibrationStatus,
+    productionEligible,
     direction,
     probability,
+    probabilityUp:hasAllClassProbabilities?probabilities.LONG!:null,
+    probabilityDown:hasAllClassProbabilities?probabilities.SHORT!:null,
+    probabilityFlat:hasAllClassProbabilities?probabilities.FLAT!:null,
     confidence,
     regime: mapping.regimeMetadataKey ? String(result.metadata[mapping.regimeMetadataKey] ?? '') || undefined : undefined,
     probabilities: hasAllClassProbabilities ? Object.freeze(probabilities) : undefined,
@@ -123,7 +194,11 @@ export class CoreSpiritAiModelCatalog {
       manifest,
       predict: async (request: CoreSpiritStrictModelRequest) => {
         const result = await this.orchestrator.infer({ ...request, modelId: manifest.modelId, version: manifest.version });
-        return aiPredictionFromResult(manifest, result);
+        return aiPredictionFromResult(manifest, result, {
+          symbol: request.context.symbol,
+          timeframe: request.context.timeframe,
+          timestamp: request.context.timestamp,
+        });
       },
     };
   }
