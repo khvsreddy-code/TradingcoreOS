@@ -36,6 +36,28 @@ assert(confirmed.length === rows.length, 'confirmed historical rows must pass va
 assert(confirmed.every((row, index) => row.values !== rows[index]!.values), 'feature vectors must be copied across the validation boundary');
 assert(confirmed.every(row => Object.isFrozen(row) && Object.isFrozen(row.values)),
   'validated research rows and feature vectors must be immutable before hashing, queuing, and training');
+const perFeatureAvailability = validateConfirmedResearchRows(rows.map((row,index)=>({
+  ...row,
+  featureAvailableAt:[row.timestamp-1_000,row.timestamp],
+})),featureNames);
+assert(perFeatureAvailability.every(row=>row.featureAvailableAt?.length===featureNames.length),
+  'exact per-feature availability must survive research validation');
+assert(perFeatureAvailability.every(row=>row.availableAt===Math.max(...row.featureAvailableAt!)),
+  'row-level availableAt must remain the conservative maximum of feature availability');
+assert(perFeatureAvailability.every(row=>Object.isFrozen(row.featureAvailableAt)),
+  'per-feature availability metadata must be immutable before snapshot hashing');
+rejects(()=>validateConfirmedResearchRows(rows.map((row,index)=>index===5?{
+  ...row,featureAvailableAt:[row.timestamp-1,row.timestamp+1],
+}:row),featureNames),
+  'a feature that became available after its decision timestamp must be rejected');
+rejects(()=>validateConfirmedResearchRows(rows.map((row,index)=>index===5?{
+  ...row,featureAvailableAt:[row.timestamp-1],
+}:row),featureNames),
+  'per-feature availability vectors must match the feature schema width');
+rejects(()=>validateConfirmedResearchRows(rows.map((row,index)=>index===5?{
+  ...row,availableAt:row.timestamp-1,featureAvailableAt:[row.timestamp-2,row.timestamp],
+}:row),featureNames),
+  'row-level availability must equal the maximum of per-feature availability');
 
 rejects(() => validateConfirmedResearchRows(
   rows.map((row, index) => index === 5 ? { ...row, confirmed: false } : row),
