@@ -16,6 +16,8 @@ assert.equal(calls[0].init.method,'PUT');
 assert.equal(calls[0].init.headers['x-dependency-lock']!==undefined,true);
 await assert.rejects(()=>host.loadModule({...manifest,version:'f'.repeat(64)},bytes,{schemaVersion:1,packages:manifest.dependencies}),/artifact hash/);
 assert.throws(()=>new CoreSpiritPythonModuleServiceHost({baseUrl:'http://python.example',serviceSecret:'s'.repeat(32)}),/HTTPS/);
+assert.throws(()=>new CoreSpiritPythonModuleServiceHost({baseUrl:'ftp://localhost/python',serviceSecret:'s'.repeat(32)}),/HTTPS or explicit HTTP loopback/);
+assert.doesNotThrow(()=>new CoreSpiritPythonModuleServiceHost({baseUrl:'http://127.0.0.1:8080/python',serviceSecret:'s'.repeat(32)}));
 let signalSeen;
 const cancellable=new CoreSpiritPythonModuleServiceHost({baseUrl:'https://python.example',serviceSecret:'s'.repeat(32),fetchImpl:(_url,init)=>new Promise((_resolve,reject)=>{signalSeen=init.signal;if(init.signal.aborted)reject(new Error('aborted'));else init.signal.addEventListener('abort',()=>reject(new Error('aborted')));})});
 const controller=new AbortController();
