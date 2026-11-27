@@ -451,7 +451,7 @@ export class CoreSpiritCompiler {
         }
         case 'member': {
           if(frontendId==='pine-v6'&&
-            ((n.target.type==='identifier'&&n.target.name==='strategy')||
+            ((n.target.type==='identifier'&&['alert','strategy'].includes(n.target.name))||
              (n.target.type==='member'&&n.target.target.type==='identifier'&&n.target.target.name==='strategy'&&n.target.member==='oca'))){
             const enumValues:Readonly<Record<string,Readonly<Record<string,string>>>>={
               alert:{
@@ -464,7 +464,7 @@ export class CoreSpiritCompiler {
               },
               strategy_oca:{cancel:'cancel',reduce:'reduce',none:'none'},
             };
-            const enumNamespace=n.target.type==='identifier'?'strategy':'strategy_oca';
+            const enumNamespace=n.target.type==='identifier'?n.target.name:'strategy_oca';
             const value=enumValues[enumNamespace]?.[n.member];
             if(value!==undefined){
               const dest='t'+temp++;
