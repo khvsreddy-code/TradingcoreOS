@@ -63,11 +63,14 @@ export type CoreScriptModeDiagnostic = Readonly<{
   message: string;
 }>;
 
+const freezeTargets = (...targets: CoreScriptExecutionTarget[]): readonly CoreScriptExecutionTarget[] =>
+  Object.freeze(targets);
+
 const ALLOWED_TARGETS: Readonly<Record<CoreScriptProgramMode, readonly CoreScriptExecutionTarget[]>> = Object.freeze({
-  indicator: Object.freeze(['chart', 'research']),
-  strategy: Object.freeze(['simulator', 'research']),
-  prediction: Object.freeze(['research', 'chart']),
-  automation: Object.freeze(['automation-host', 'research']),
+  indicator: freezeTargets('chart', 'research'),
+  strategy: freezeTargets('simulator', 'research'),
+  prediction: freezeTargets('research', 'chart'),
+  automation: freezeTargets('automation-host', 'research'),
 });
 
 export function isCoreScriptProgramMode(value: unknown): value is CoreScriptProgramMode {
