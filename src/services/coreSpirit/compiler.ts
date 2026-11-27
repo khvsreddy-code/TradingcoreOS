@@ -298,6 +298,22 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+          if (frontendId === 'pine-v6' && n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+            const resolved = resolveCoreSpiritLibraryCall(n.target.name,n.member,componentSource);
+            if (!resolved || resolved.entry.status !== 'builtin' || !resolved.builtin) {
+              throw new Error("Pine v6 namespace call '" + n.target.name + "." + n.member + "' was not resolved to an executable builtin.");
+            }
+            const args = n.args.map(expr);
+            const dest = 't' + temp++;
+            emitInstruction(n,{
+              op:'call',
+              dest,
+              name:resolved.builtin.name,
+              args,
+              callId:'pine-v6:' + n.target.name + '.' + n.member + ':' + (n.span?.start ?? temp),
+            });
+            return dest;
+          }
           const isTemporalDataReference =
             (n.target.type === 'call' && ['market','timeframe','series'].includes(n.target.name)) ||
             (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name)) ||

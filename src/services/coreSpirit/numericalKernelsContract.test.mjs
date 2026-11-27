@@ -18,6 +18,9 @@ import {
 } from './pineBuiltinRegistry.ts';
 import { CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces.ts';
 import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins.ts';
+import { executeCoreSpiritPineStringBuiltin } from './pineStringBuiltins.ts';
+import { executeCoreSpiritPineColorBuiltin } from './pineColorBuiltins.ts';
+import { CoreSpiritCompiler } from './compiler.ts';
 
 const close = (actual, expected, epsilonOrMessage = 1e-9, message) => {
   const epsilon = typeof epsilonOrMessage === 'number' ? epsilonOrMessage : 1e-9;
@@ -198,6 +201,79 @@ assert.throws(() => executeCoreSpiritNumericalKernel('matrixMultiply', [[], []],
 assert.throws(() => executeCoreSpiritNumericalKernel('matrixDecomposition', [[1]], [2]), /input length must match/);
 
 console.log('CoreSpirit numerical kernel contract: OK');
+
+// Pine v6 string and color kernels plus typed namespace compiler lowering.
+const pineString = (name,args) => executeCoreSpiritPineStringBuiltin('pine.str.' + name,args).value;
+assert.equal(pineString('upper',['Nifty 50']),'NIFTY 50');
+assert.equal(pineString('lower',['NIFTY 50']),'nifty 50');
+assert.equal(pineString('length',['A🙂B']),3,'string length counts Unicode code points');
+assert.equal(pineString('substring',['A🙂BC',1,3]),'🙂B');
+assert.equal(pineString('replace',['a-b-a','a','x']),'x-b-a');
+assert.equal(pineString('replace_all',['a-b-a','a','x']),'x-b-x');
+assert.deepEqual(pineString('split',['NIFTY,BANKNIFTY',',']),['NIFTY','BANKNIFTY']);
+assert.equal(pineString('contains',['BANKNIFTY','NIFTY']),true);
+assert.equal(pineString('startswith',['BANKNIFTY','BANK']),true);
+assert.equal(pineString('endswith',['BANKNIFTY','NIFTY']),true);
+assert.equal(pineString('pos',['NIFTY BANKNIFTY','BANK']),6);
+assert.equal(pineString('pos',['NIFTY BANKNIFTY','SENSEX']),null);
+assert.equal(pineString('trim',[' \tNIFTY 50\n']),'NIFTY 50');
+assert.equal(pineString('repeat',['AB',3,'-']),'AB-AB-AB');
+assert.equal(pineString('tonumber',['-123.50']),-123.5);
+assert.equal(pineString('tonumber',['₹123.50']),null);
+assert.equal(pineString('tostring',[1.234567891]),'1.23456789');
+assert.equal(pineString('tostring',[1.2345,'0.00']),'1.23');
+assert.equal(pineString('format',['{0} / {1}',42,true]),'42 / true');
+assert.equal(pineString('format',['Value: {0,number,#.00}',12.5]),'Value: 12.50');
+assert.throws(() => pineString('repeat',['A',50_000]),/string length limit/);
+
+const pineColor = (name,args) => executeCoreSpiritPineColorBuiltin('pine.color.' + name,args).value;
+assert.equal(pineColor('rgb',[255,0,16]),'#FF0010FF');
+assert.equal(pineColor('rgb',[255,0,16,40]),'#FF001099');
+assert.equal(pineColor('new',['#FF0010FF',40]),'#FF001099');
+assert.equal(pineColor('r',['#FF0010FF']),255);
+assert.equal(pineColor('g',['#FF0010FF']),0);
+assert.equal(pineColor('b',['#FF0010FF']),16);
+assert.equal(pineColor('t',['#FF001099']),40);
+assert.equal(pineColor('new',['color.red',100]),'#F2364500');
+assert.equal(pineColor('from_gradient',[0.5,0,1,'#000000','#FFFFFF']),'#808080FF');
+assert.equal(pineColor('from_gradient',[2,0,1,'#000000','#FFFFFF']),'#FFFFFFFF');
+
+for (const name of [
+  'format','tostring','tonumber','length','substring','replace','replace_all','split',
+  'lower','upper','contains','startswith','endswith','pos','repeat','trim',
+]) {
+  const entry=getPineV6BuiltinDefinition('str',name);
+  assert.ok(entry && pineV6BuiltinIsExecutable(entry),'str.'+name+' must be executable');
+  const resolved=resolveCoreSpiritLibraryCall('str',name);
+  assert.equal(resolved?.entry.status,'builtin','str.'+name+' must resolve as executable');
+  assert.equal(resolved?.builtin?.name,entry.executionBuiltin,'str.'+name+' runtime mapping must match its contract');
+}
+for (const name of ['rgb','new','from_gradient','r','g','b','t']) {
+  const entry=getPineV6BuiltinDefinition('color',name);
+  assert.ok(entry && pineV6BuiltinIsExecutable(entry),'color.'+name+' must be executable');
+  const resolved=resolveCoreSpiritLibraryCall('color',name);
+  assert.equal(resolved?.entry.status,'builtin','color.'+name+' must resolve as executable');
+  assert.equal(resolved?.builtin?.name,entry.executionBuiltin,'color.'+name+' runtime mapping must match its contract');
+}
+assert.equal(getPineV6BuiltinDefinition('color','red'),undefined,
+  'Pine color accessors are r/g/b/t, not red/green/blue/alpha');
+assert.equal(resolveCoreSpiritLibraryCall('str','match')?.entry.status,'catalog',
+  'regex matching remains blocked until Pine regex semantics are independently implemented');
+
+const pineStringAst=new CoreSpiritParser('let upper = str.upper("market")').parse();
+const pineStringAnalysis=analyzeCoreSpirit(pineStringAst,{frontend:'pine-v6'});
+assert.deepEqual(pineStringAnalysis.diagnostics,[],'Pine namespace calls must type-check against the API registry');
+const pineStringCompile=new CoreSpiritCompiler().compile(pineStringAst,'pine-string-call-contract',{frontend:'pine-v6'});
+assert.deepEqual(pineStringCompile.diagnostics,[],'Pine namespace calls must compile');
+assert.ok(pineStringCompile.ir?.entry.instructions.some(item=>item.op==='call'&&item.name==='pine.str.upper'),
+  'compiler must lower str.upper to its runtime builtin');
+
+const pineTaAst=new CoreSpiritParser('let average = ta.sma(close, 3)').parse();
+const pineTaCompile=new CoreSpiritCompiler().compile(pineTaAst,'pine-ta-call-contract',{frontend:'pine-v6'});
+assert.deepEqual(pineTaCompile.diagnostics,[],'TA calls must use the same Pine namespace lowering path');
+assert.ok(pineTaCompile.ir?.entry.instructions.some(item=>item.op==='call'&&item.name==='sma'),
+  'compiler must lower ta.sma to its canonical runtime builtin');
+
 
 
 // Pine v6 API inventory, typed overload and deterministic scalar execution contracts.

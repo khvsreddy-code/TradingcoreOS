@@ -30,6 +30,8 @@ import { CoreSpiritOptimizedExecutionVM, type CoreSpiritExecutionCacheVersions }
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import { CORE_SPIRIT_STDLIB } from './standardLibrary';
 import { executeCoreSpiritPineMathBuiltin } from './pineMathBuiltins';
+import { executeCoreSpiritPineStringBuiltin } from './pineStringBuiltins';
+import { executeCoreSpiritPineColorBuiltin } from './pineColorBuiltins';
 import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_OPTIMIZER_ABI, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION';
 import type { CoreSpiritValueStore } from './executionValueStore';
 import type { CoreSpiritExecutionTier } from './executionTier';
@@ -1600,7 +1602,8 @@ export class CoreSpiritRuntime {
     const lengthArgument = name === 'atr' ? args[0] : args[1];
     const defaultLength = name === 'change' ? 1 : 14;
     const length = Math.max(1,Math.floor(Number(lengthArgument ?? defaultLength)));
-    const memoizable = !['__array','__map','__collection_index','__collection_member','__collection_method','array','map','len'].includes(name);
+    const memoizable = !['__array','__map','__collection_index','__collection_member','__collection_method','array','map','len'].includes(name)
+      && !name.startsWith('pine.str.') && !name.startsWith('pine.color.');
     const memoKey = memoizable
       ? `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? String(v) : String(v)).join(',')}`
       : '';
@@ -1621,6 +1624,10 @@ export class CoreSpiritRuntime {
       if(value && typeof value==='object' && 'rows' in value && 'columns' in value) return finish(Number((value as any).rows)*Number((value as any).columns));
       throw new Error('len expects an array, map, string, vector or matrix');
     }
+    const pineString = executeCoreSpiritPineStringBuiltin(name,args);
+    if (pineString.handled) return finish(pineString.value ?? null);
+    const pineColor = executeCoreSpiritPineColorBuiltin(name,args);
+    if (pineColor.handled) return finish(pineColor.value ?? null);
     this.capabilityHost.assert(name);
     const pineMath = executeCoreSpiritPineMathBuiltin(name,args);
     if (pineMath.handled) return finish(pineMath.value ?? null);

@@ -377,6 +377,28 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
 
       case 'memberCall': {
+        if (options.frontend === 'pine-v6' && n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+          const definition = getPineV6BuiltinDefinition(n.target.name,n.member);
+          if (!definition) {
+            report(n,"'" + n.target.name + "." + n.member + "' is not registered in the Pine Script v6 built-in reference catalog",'PINE_BUILTIN_UNKNOWN');
+            return 'unknown';
+          }
+          const argumentTypes = n.args.map(argument => infer(argument,scope));
+          if (definition.status === 'host-dependent') {
+            report(n,"Pine v6 built-in '" + definition.qualifiedName + "' requires a host capability that is not available in this execution context" + (definition.knownDifferences.length ? ': ' + definition.knownDifferences.join(' ') : '.'),'PINE_BUILTIN_HOST_LIMITATION');
+            return 'unknown';
+          }
+          if (!pineV6BuiltinIsExecutable(definition)) {
+            report(n,"Pine v6 built-in '" + definition.qualifiedName + "' is catalogued but has no conformant executable implementation" + (definition.knownDifferences.length ? ': ' + definition.knownDifferences.join(' ') : '.'),'PINE_BUILTIN_UNSUPPORTED');
+            return 'unknown';
+          }
+          const validation = validatePineV6BuiltinArguments(definition,argumentTypes);
+          if (!validation.valid) {
+            report(n,validation.message ?? ("Invalid arguments for " + definition.qualifiedName),validation.code ?? 'PINE_BUILTIN_ARGUMENTS');
+            return 'unknown';
+          }
+          return (definition.overloads[0]?.returnType ?? 'unknown') as CoreSpiritType;
+        }
         if (n.target.type==='identifier' && ['broker','execution'].includes(n.target.name) && ['placeOrder','place_order','submitOrder','submit_order'].includes(n.member)) {
           report(n,'Direct broker/execution submission is not a CoreSpirit capability. Emit order-intent and let the host execution authority perform an explicitly authorized action.','CAPABILITY_LIVE_ORDER_HOST_ONLY');
           return 'unknown';
