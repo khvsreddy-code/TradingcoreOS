@@ -282,6 +282,8 @@ export class CoreSpiritRuntime {
   private realtimeRevision = 0;
   /** Host-stamped market tick sequence used for alert.freq_all idempotency. */
   private currentHostEventSequence?: number;
+  /** Latest source tick belonging to the open realtime bar; retained for close confirmation. */
+  private realtimeBarHostSequence?: number;
   private realtimeEventTransactionId?: string;
   private loadedSurface?: CoreSpiritProgram['surface'];
   private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
@@ -605,6 +607,7 @@ export class CoreSpiritRuntime {
     // A realtime bar may be evaluated many times. Roll back the previous
     // unconfirmed evaluation so stateful functions commit exactly once.
     if (!sameBucket && this.currentBarSnapshot && this.lastBarWasRealtime) this.confirmRealtimeBar();
+    if(phase==='forming'&&executionMode==='realtime')this.realtimeBarHostSequence=this.currentHostEventSequence;
 
     if (sameBucket && this.currentBarSnapshot) {
       this.executionStateMachine.rollbackRevision();
@@ -762,7 +765,10 @@ export class CoreSpiritRuntime {
         // The forming revision is rolled back and evaluated once more with
         // confirmed semantics. Close-confirmed alerts/orders therefore see the
         // final OHLC values rather than the preceding forming snapshot.
-        this.executeBar({ ...current }, 'confirmed');
+        const previousHostSequence=this.currentHostEventSequence;
+        this.currentHostEventSequence=this.realtimeBarHostSequence;
+        try { this.executeBar({ ...current }, 'confirmed'); }
+        finally { this.currentHostEventSequence=previousHostSequence; }
         return;
       }
     }
@@ -793,6 +799,7 @@ export class CoreSpiritRuntime {
     this.snapshotKernelsForBar(this.state.barIndex);
     this.currentBarSnapshot = undefined;
     this.lastBarWasRealtime = false;
+    this.realtimeBarHostSequence = undefined;
   }
 
   commitRealtimeBar(): void { this.confirmRealtimeBar(); }
