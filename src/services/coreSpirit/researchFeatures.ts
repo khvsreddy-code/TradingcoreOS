@@ -6,10 +6,10 @@
  * availability of every source observation that contributed to its value.
  * Warm-up rows stay NaN and are never fabricated as zeros.
  */
-import { atr, rollingMean, rollingStd } from './numericalKernels';
+import { atr, ema, linearRegression, rollingMean, rollingStd } from './numericalKernels';
 
 export type CoreSpiritResearchMarketField = 'open'|'high'|'low'|'close'|'volume';
-export type CoreSpiritResearchFeatureInput = Readonly<{
+export type CoreSpiritResearchAuxiliaryFeature = Readonly<{\n  values:Float64Array;\n  availableAtMs:Float64Array;\n  source:'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied';\n}>;\nexport type CoreSpiritResearchFeatureInput = Readonly<{
   symbol:string;
   timeframe:string;
   timestampsMs:Float64Array;
@@ -28,7 +28,7 @@ export type CoreSpiritResearchFeatureSet = Readonly<{
   timestampsMs:Float64Array;
   featureNames:readonly string[];
   features:Readonly<Record<string,Float64Array>>;
-  availabilityMsByFeature:Readonly<Record<string,Float64Array>>;
+  availabilityMsByFeature:Readonly<Record<string,Float64Array>>;\n  featureSources:Readonly<Record<string,'ohlcv-derived'|'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied'>>;
   pointInTimeSchema:Readonly<{
     decisionTimestampColumn:'timestamp_ms';
     confirmedColumn:'is_confirmed';
@@ -126,7 +126,7 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   for(const field of FIELDS)assertColumn(field+' availability',input.availableAtMs[field],n);
   const volPeriod=validatePeriod(input.periods?.realizedVolatility,20,'realized volatility period');
   const atrPeriod=validatePeriod(input.periods?.atr,14,'ATR period');
-  const volumePeriod=validatePeriod(input.periods?.relativeVolume,20,'relative volume period');
+  const volumePeriod=validatePeriod(input.periods?.relativeVolume,20,'relative volume period');\n  const trendPeriod=validatePeriod(input.periods?.trend,20,'trend period');\n  const momentumPeriod=validatePeriod(input.periods?.momentum,5,'momentum period');\n  const shortVolatilityPeriod=validatePeriod(input.periods?.shortVolatility,5,'short volatility period');
 
   for(let i=0;i<n;i++){
     const timestamp=input.timestampsMs[i]!;
@@ -171,7 +171,7 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   const averageVolume=rollingMean(input.volume,volumePeriod);
   const relativeVolume=new Float64Array(n);relativeVolume.fill(Number.NaN);
   for(let i=0;i<n;i++)if(Number.isFinite(averageVolume[i]!)&&averageVolume[i]!>0)relativeVolume[i]=input.volume[i]!/averageVolume[i]!;
-  const relativeVolumeAvailability=maxWindowAvailability(input.availableAtMs.volume,volumePeriod);
+  const relativeVolumeAvailability=maxWindowAvailability(input.availableAtMs.volume,volumePeriod);\n\n  const emaValues=ema(input.close,trendPeriod);\n  const emaDistance=new Float64Array(n);emaDistance.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(emaValues[i]!))emaDistance[i]=input.close[i]!/emaValues[i]!-1;\n  const trendRegression=linearRegression(input.close,trendPeriod);\n  const normalizedTrendSlope=new Float64Array(n);normalizedTrendSlope.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(trendRegression.slope[i]!))normalizedTrendSlope[i]=trendRegression.slope[i]!/input.close[i]!;\n  const trendAvailability=maxWindowAvailability(input.availableAtMs.close,trendPeriod);\n  const momentum=new Float64Array(n);momentum.fill(Number.NaN);\n  const momentumAvailability=new Float64Array(n);momentumAvailability.fill(Number.NaN);\n  for(let i=momentumPeriod;i<n;i++){momentum[i]=input.close[i]!/input.close[i-momentumPeriod]!-1;momentumAvailability[i]=Math.max(input.availableAtMs.close[i]!,input.availableAtMs.close[i-momentumPeriod]!);}\n  const shortVolatilityRaw=rollingStd(logReturns,shortVolatilityPeriod);\n  const volatilityExpansion=new Float64Array(n);volatilityExpansion.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(shortVolatilityRaw[i]!)&&Number.isFinite(volatilityRaw[i]!)&&volatilityRaw[i]!>0)volatilityExpansion[i]=shortVolatilityRaw[i]!/volatilityRaw[i]!;\n  const volatilityExpansionAvailability=maxWindowAvailability(returnAvailability,volPeriod);\n  const closeLocation=new Float64Array(n);closeLocation.fill(Number.NaN);\n  for(let i=0;i<n;i++){const width=input.high[i]!-input.low[i]!;if(width>0)closeLocation[i]=(input.close[i]!-input.low[i]!)/width;}\n  const closeLocationAvailability=rangeAvailability;
 
   const volatilityName='realized_volatility_'+volPeriod;
   const atrName='normalized_atr_'+atrPeriod;
@@ -183,6 +183,11 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
     [volatilityName]:volatility,
     [atrName]:normalizedAtr,
     [volumeName]:relativeVolume,
+    ['ema_distance_'+trendPeriod]:emaDistance,
+    ['ema_slope_'+trendPeriod]:normalizedTrendSlope,
+    ['momentum_'+momentumPeriod]:momentum,
+    ['volatility_expansion_'+shortVolatilityPeriod+'_'+volPeriod]:volatilityExpansion,
+    close_location_value:closeLocation,
   };
   const availabilityMsByFeature:Record<string,Float64Array>={
     returns_1:Float64Array.from(returnAvailability),
@@ -191,7 +196,30 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
     [volatilityName]:volatilityAvailability,
     [atrName]:atrAvailability,
     [volumeName]:relativeVolumeAvailability,
+    ['ema_distance_'+trendPeriod]:trendAvailability,
+    ['ema_slope_'+trendPeriod]:trendAvailability,
+    ['momentum_'+momentumPeriod]:momentumAvailability,
+    ['volatility_expansion_'+shortVolatilityPeriod+'_'+volPeriod]:volatilityExpansionAvailability,
+    close_location_value:closeLocationAvailability,
   };
+  const featureSources:Record<string,'ohlcv-derived'|'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied'>=
+    Object.fromEntries(Object.keys(features).map(name=>[name,'ohlcv-derived']));
+  for(const [name,auxiliary] of Object.entries(input.auxiliary??{})){
+    if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(name)||name in features)throw new Error('Auxiliary research feature name is invalid or duplicates a built-in feature: '+name);
+    assertColumn('auxiliary feature '+name,auxiliary.values,n);
+    assertColumn('auxiliary availability '+name,auxiliary.availableAtMs,n);
+    if(!['market-breadth','sector','futures','options','macro','event','user-supplied'].includes(auxiliary.source))throw new Error('Auxiliary research feature '+name+' has an invalid source category.');
+    const values=Float64Array.from(auxiliary.values);
+    const availability=Float64Array.from(auxiliary.availableAtMs);
+    for(let i=0;i<n;i++){
+      if(Number.isFinite(values[i]!)){
+        if(!Number.isSafeInteger(availability[i]!)||availability[i]!<0||availability[i]!>timestampsMs[i]!)throw new Error('Auxiliary feature '+name+' is unavailable at decision timestamp for row '+i+'.');
+      }else availability[i]=Number.NaN;
+    }
+    features[name]=values;
+    availabilityMsByFeature[name]=availability;
+    featureSources[name]=auxiliary.source;
+  }
   const featureNames=Object.keys(features);
   for(const name of featureNames)assertFeatureAvailability(name,features[name]!,availabilityMsByFeature[name]!,input.timestampsMs);
   let usableRows=0;
@@ -200,7 +228,7 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   return Object.freeze({
     symbol:input.symbol,timeframe:input.timeframe,timestampsMs:Float64Array.from(input.timestampsMs),
     featureNames:Object.freeze(featureNames),features:Object.freeze(features),
-    availabilityMsByFeature:Object.freeze(availabilityMsByFeature),
+    availabilityMsByFeature:Object.freeze(availabilityMsByFeature),\n    featureSources:Object.freeze(featureSources),
     pointInTimeSchema:Object.freeze({
       decisionTimestampColumn:'timestamp_ms' as const,confirmedColumn:'is_confirmed' as const,
       phaseColumn:'bar_phase' as const,availabilityColumns:Object.freeze(availabilityColumns),
