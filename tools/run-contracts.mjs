@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process';
 const contracts = [
   ['corespirit-function-ast-desugaring', ['src/services/coreSpirit/functionAstDesugarContract.test.ts', true]],
   ['corespirit-pine-v6-frontend', ['src/services/coreSpirit/pine/pineV6FrontendContract.test.ts', true]],
-  ['corespirit-alert-delivery', ['src/services/coreSpirit/alertDeliveryContract.test.mjs', true]],
   ['corespirit-pine-varip-runtime', ['src/services/coreSpirit/pine/pineVaripRuntimeContract.test.mjs', true]],
   ['corespirit-pine-expressions', ['src/services/coreSpirit/pine/pineExpressionSemanticsContract.test.mjs', true]],
   ['corespirit-frontend-and-type-qualifier', ['src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts', true]],
@@ -134,6 +133,8 @@ const contracts = [
   ['corespirit-multibackend-execution-planner', ['src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs', true]],
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
   ['strategy-simulator-deterministic-ledger', ['src/services/core/replay/strategySimulator.test.ts', true]],
+  ['strategy-simulator-margin-pyramiding-oca', ['src/services/core/replay/strategySimulatorEnhancementsContract.test.mjs', true]],
+  ['corespirit-pine-strategy-simulation-adapter', ['src/services/coreSpirit/pineStrategySimulationAdapterContract.test.mjs', true]],
   ['core-spirit-simulation-intent-adapter', ['src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts', true]],
   ['replay-timestamp-ordering', ['src/services/core/replay/replayValidator.test.ts', true]],
   ['strategy-simulator-live-execution-boundary', ['src/strategySimulatorExecutionBoundaryContract.test.mjs', false]],

@@ -4,7 +4,8 @@ import type { CoreSpiritType } from './typeSystem';
 export type CoreSpiritIrEmitKind =
   | 'plot'|'marker'|'label'|'labelAt'|'line'|'zone'|'box'|'band'|'fill'|'gradient'|'arrow'|'shape'
   | 'heatmap'|'polyline'|'hline'|'bg'|'barcolor'|'table'|'text'|'polygon'|'customVisual'|'plotshape'|'plotchar'|'alertcondition'
-  | 'signal'|'entry'|'exit'|'buy'|'sell'|'orderIntent'|'alert'|'webhook'|'event'|'scanCandidate'|'show';
+  | 'signal'|'entry'|'exit'|'buy'|'sell'|'orderIntent'|'alert'|'webhook'|'event'|'scanCandidate'|'show'
+  | 'strategyEntry'|'strategyOrder'|'strategyExit'|'strategyClose'|'strategyCloseAll'|'strategyCancel'|'strategyCancelAll';
 
 export type CoreSpiritMemberNamespace = 'ui'|'visual'|'app'|'scan'|'panel';
 

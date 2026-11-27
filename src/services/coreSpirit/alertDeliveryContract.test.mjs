@@ -36,6 +36,11 @@ assert.equal(action.eventType,'alert');
 assert.equal(action.frequency,'once-per-bar');
 assert.notEqual(action.id,condition.id,'alert() and alertcondition() must have distinct identities');
 assert.notEqual(action.conditionId,condition.conditionId);
+const secondCallSiteEvent=coreSpiritAlertFromRuntimeEvent({
+  ...actionRuntimeEvent,sequence:12,payload:{...actionRuntimeEvent.payload,conditionId:'alert:second-callsite:99'}
+},context);
+assert.equal(await runtime.enqueue(secondCallSiteEvent),false,
+  'alert.freq_once_per_bar is global to the script, not independently granted to each alert() callsite');
 const changedRevision=coreSpiritAlertFromRuntimeEvent(conditionRuntimeEvent,{...context,revision:5});
 assert.notEqual(changedRevision.id,condition.id,'revision is part of the deterministic event ID');
 

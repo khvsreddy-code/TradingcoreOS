@@ -1,5 +1,5 @@
 /** Host-owned, durable, idempotent alert outbox. The VM never performs network delivery. */
-export type CoreSpiritAlertFrequency='all'|'once-per-bar'|'once-per-bar-close'|'once';
+export type CoreSpiritAlertFrequency='all'|'once-per-bar'|'once-per-bar-close';
 export type CoreSpiritAlertEventType='alert'|'alertcondition';
 export type CoreSpiritAlertIdentity=Readonly<{
   programId:string;
@@ -65,16 +65,17 @@ function tupleKey(parts:readonly string[]):string{
   return parts.map(value=>value.length+':'+value).join('|');
 }
 function outboxKey(event:CoreSpiritAlertEvent):string{
-  const scope=[event.programId,event.instrumentId,event.timeframe,event.scriptRevision,event.eventType,event.conditionId];
+  const scope=[event.programId,event.instrumentId,event.timeframe,event.scriptRevision,event.eventType];
   if(event.frequency==='all'){
     if(!Number.isSafeInteger(event.sourceSequence)||Number(event.sourceSequence)<0)
       throw new Error('alert.freq_all requires a unique host-stamped event sequence.');
     return 'all|'+tupleKey([event.id,String(event.sourceSequence)]);
   }
-  if(event.frequency==='once')return 'once|'+tupleKey([...scope,'once']);
-  // Bar frequencies deliberately exclude market revision. A corrected/repeated update
-  // to an already-triggered bar is not a second automation event.
-  return 'bar|'+tupleKey([...scope,event.barId,event.frequency]);
+  // alert() frequency is script-wide: two alert() call sites do not each get a separate
+  // once-per-bar allowance. alertcondition() remains scoped to its declaration.
+  const declarationScope=event.eventType==='alertcondition'?[...scope,event.conditionId]:scope;
+  // Exclude revision so corrected/repeated updates to the same bar cannot refire it.
+  return 'bar|'+tupleKey([...declarationScope,event.barId,event.frequency]);
 }
 
 export class CoreSpiritAlertRuntime{
@@ -94,6 +95,7 @@ export class CoreSpiritAlertRuntime{
     const identity:CoreSpiritAlertIdentity={programId:input.programId,instrumentId:input.instrumentId,timeframe:input.timeframe,
       barId:input.barId,eventType:input.eventType,conditionId:input.conditionId,revision:input.revision};
     if(input.id!==coreSpiritAlertEventId(identity))throw new Error('Alert event ID does not match its deterministic identity tuple.');
+    if(!['all','once-per-bar','once-per-bar-close'].includes(input.frequency))throw new Error('Unsupported Pine alert frequency.');
     if(input.eventType==='alertcondition'&&input.frequency!=='once-per-bar-close')
       throw new Error('alertcondition events are indicator declarations and trigger only at bar close.');
     if(input.replay)return false;
@@ -149,7 +151,6 @@ export function coreSpiritAlertFromRuntimeEvent(event:CoreSpiritRuntimeAlertEven
   const raw=String(payload.frequency??'once-per-bar').toLowerCase();
   const normalized=(raw.startsWith('alert.freq_')?raw.slice(11):raw).replaceAll('_','-');
   let frequency:CoreSpiritAlertFrequency=normalized==='all'?'all'
-    :normalized==='once'?'once'
     :normalized==='once-per-bar-close'?'once-per-bar-close'
     :normalized==='once-per-bar'?'once-per-bar'
     :(()=>{throw new Error("Unsupported alert frequency '"+normalized+"'.");})();

@@ -121,7 +121,7 @@ export function validateCoreSpiritIrInstructionShape(value: unknown): value is C
 
 export function classifyCoreSpiritIrInstruction(instruction: CoreSpiritIrInstruction): CoreSpiritIrGroup {
   if (instruction.op === 'emit') {
-    if (['entry','exit','buy','sell','orderIntent','order_intent','alert','alertcondition','webhook','event','signal','scanCandidate'].includes(instruction.kind)) return 'events';
+    if (['entry','exit','buy','sell','orderIntent','order_intent','alert','alertcondition','webhook','event','signal','scanCandidate','strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll'].includes(instruction.kind)) return 'events';
     if (instruction.kind === 'show') return 'dispatch';
     return 'visual';
   }

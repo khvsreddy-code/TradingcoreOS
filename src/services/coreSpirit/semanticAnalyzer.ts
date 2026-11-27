@@ -96,9 +96,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
 
       case 'member': {
         if(options.frontend==='pine-v6'&&n.target.type==='identifier'&&n.target.name==='alert'&&
-          ['freq_all','freq_once','freq_once_per_bar','freq_once_per_bar_close'].includes(n.member)) return 'string';
+          ['freq_all','freq_once_per_bar','freq_once_per_bar_close'].includes(n.member)) return 'string';
         if(options.frontend==='pine-v6'&&n.target.type==='identifier'&&n.target.name==='strategy'&&
           ['long','short','fixed','cash','percent_of_equity'].includes(n.member)) return 'string';
+        if(options.frontend==='pine-v6'&&n.target.type==='member'&&n.target.target.type==='identifier'&&
+          n.target.target.name==='strategy'&&n.target.member==='oca'&&['cancel','reduce','none'].includes(n.member)) return 'string';
         // Pine namespace values (e.g. barstate.isconfirmed, syminfo.mintick,
         // ta.obv) must be registered as value built-ins and backed by runtime
         // metadata. Until that value ABI exists, do not fall through to UDT

@@ -450,19 +450,22 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'member': {
-          if(frontendId==='pine-v6'&&n.target.type==='identifier'){
+          if(frontendId==='pine-v6'&&
+            ((n.target.type==='identifier'&&n.target.name==='strategy')||
+             (n.target.type==='member'&&n.target.target.type==='identifier'&&n.target.target.name==='strategy'&&n.target.member==='oca'))){
             const enumValues:Readonly<Record<string,Readonly<Record<string,string>>>>={
               alert:{
                 freq_all:'all',
-                freq_once:'once',
                 freq_once_per_bar:'once-per-bar',
                 freq_once_per_bar_close:'once-per-bar-close',
               },
               strategy:{
                 long:'long',short:'short',fixed:'fixed',cash:'cash',percent_of_equity:'percent_of_equity',
               },
+              strategy_oca:{cancel:'cancel',reduce:'reduce',none:'none'},
             };
-            const value=enumValues[n.target.name]?.[n.member];
+            const enumNamespace=n.target.type==='identifier'?'strategy':'strategy_oca';
+            const value=enumValues[enumNamespace]?.[n.member];
             if(value!==undefined){
               const dest='t'+temp++;
               emitInstruction(n,{op:'const',dest,value});

@@ -10,26 +10,35 @@ export type SimulationDataset = Readonly<{ symbol:string; timeframe:string; bars
 export type SimulationIntent = Readonly<{
   orderId:string; signalId:string; symbol:string; side:SimulationSide; type:SimulationOrderType; quantity:number;
   limitPrice?:number; stopPrice?:number; stopLossPrice?:number|null; takeProfitPrice?:number|null;
-  timeInForceBars?:number; tag?:string;
+  timeInForceBars?:number; tag?:string; entryId?:string; countsTowardPyramiding?:boolean;
+  ocaGroup?:string; ocaType?:'cancel'|'reduce';
 }>;
 export type SimulationAction =
   | Readonly<{kind:'submit'; signalTimeMs:number; sequence:number; intent:SimulationIntent; reason?:string}>
   | Readonly<{kind:'reject'; signalTimeMs:number; sequence:number; orderId:string; signalId:string; symbol:string; side?:SimulationSide; reason:string}>
   | Readonly<{kind:'modify'; signalTimeMs:number; sequence:number; orderId:string;
       updates:Partial<Pick<SimulationIntent,'quantity'|'type'|'limitPrice'|'stopPrice'|'stopLossPrice'|'takeProfitPrice'|'timeInForceBars'>>}>
-  | Readonly<{kind:'cancel'; signalTimeMs:number; sequence:number; orderId:string; reason?:string}>;
+  | Readonly<{kind:'cancel'; signalTimeMs:number; sequence:number; orderId:string; entryId?:string; reason?:string}>
+  | Readonly<{kind:'cancel-all'; signalTimeMs:number; sequence:number; reason?:string}>
+  | Readonly<{kind:'exit'; signalTimeMs:number; sequence:number; orderId:string; exitId:string; signalId:string; symbol:string; entryId?:string;
+      quantity?:number; quantityPercent?:number; stopPrice?:number; limitPrice?:number; profitTicks?:number; lossTicks?:number; tickSize?:number;
+      ocaGroup?:string; reason?:string}>
+  | Readonly<{kind:'close'; signalTimeMs:number; sequence:number; orderId:string; signalId:string; symbol:string; entryId?:string;
+      quantity?:number; quantityPercent?:number; reason?:string}>
+  | Readonly<{kind:'close-all'; signalTimeMs:number; sequence:number; orderId:string; signalId:string; reason?:string}>;
 
 export type SimulationConfig = Readonly<{
   initialCash:number; slippageBps:number; spreadBps:number; brokeragePerOrder:number;
   brokerageBps:number; exchangeFeeBps:number; taxesBps:number; maxParticipationRate:number;
   lotSize:number; maxPositionQuantity:number; maxGrossExposure:number; maxGrossExposureMultiple:number;
   allowShort:boolean; defaultTimeInForceBars:number; intrabarPolicy:IntrabarPolicy; executionDetail:ExecutionDetail;
+  pyramiding:number; marginLongPercent:number; marginShortPercent:number;
 }>;
 export const DEFAULT_SIMULATION_CONFIG:SimulationConfig=Object.freeze({
   initialCash:100_000,slippageBps:1,spreadBps:0,brokeragePerOrder:20,brokerageBps:0,
   exchangeFeeBps:0,taxesBps:0,maxParticipationRate:0.1,lotSize:1,maxPositionQuantity:1_000,
   maxGrossExposure:1_000_000,maxGrossExposureMultiple:1,allowShort:false,defaultTimeInForceBars:5,
-  intrabarPolicy:'stop-first',executionDetail:'ohlc',
+  intrabarPolicy:'stop-first',executionDetail:'ohlc',pyramiding:1,marginLongPercent:100,marginShortPercent:100,
 });
 
 export type SimulationLedgerEvent=Readonly<{
@@ -61,10 +70,10 @@ export type StrategySimulationResult=Readonly<{
 
 type WorkingOrder={original:SimulationIntent;intent:SimulationIntent;signalTimeMs:number;sequence:number;
   status:'pending'|'partially-filled'|'filled'|'cancelled'|'rejected'|'expired';filled:number;remaining:number;eligibleBars:number;
-  stopTriggered:boolean;fixedFeeCharged:boolean};
-type Position={symbol:string;quantity:number;averagePrice:number;entryFees:number;entryOrderId:string;entrySignalId:string;realizedNetPnl:number};
+  stopTriggered:boolean;fixedFeeCharged:boolean;openedPosition:boolean};
+type Position={symbol:string;quantity:number;averagePrice:number;entryFees:number;entryOrderId:string;entrySignalId:string;entryId:string;entryCount:number;realizedNetPnl:number};
 type Bracket={id:string;intent:SimulationIntent;symbol:string;direction:1|-1;remaining:number;stop?:number;target?:number;
-  activeAt:number;fixedFeeCharged:boolean};
+  activeAt:number;fixedFeeCharged:boolean;ocaGroup?:string;ocaType?:'cancel'|'reduce'};
 type Frame={time:number;index:number;bars:Map<string,HistoricalCandle>};
 type Candidate={basePrice:number;phase:'open'|'intrabar';limit?:number;isLimit:boolean};
 type EventInput=Omit<SimulationLedgerEvent,'eventId'|'sequence'|'timestampMs'|'barIndex'|'phase'|'simulated'|'executionAuthority'|'strategyId'|'sourceProgramChecksum'> &
@@ -87,8 +96,11 @@ function configOf(input?:Partial<SimulationConfig>):SimulationConfig{
   if(!Number.isFinite(c.maxParticipationRate)||c.maxParticipationRate<=0||c.maxParticipationRate>1)throw new Error('maxParticipationRate must be in (0, 1].');
   if(!finitePositive(c.lotSize)||!finitePositive(c.maxPositionQuantity)||!finitePositive(c.maxGrossExposure)||!finitePositive(c.maxGrossExposureMultiple))throw new Error('Lot size and risk caps must be finite and positive.');
   if(!Number.isSafeInteger(c.defaultTimeInForceBars)||c.defaultTimeInForceBars<1||c.defaultTimeInForceBars>1_000_000)throw new Error('defaultTimeInForceBars must be a positive bounded integer.');
+  if(!Number.isSafeInteger(c.pyramiding)||c.pyramiding<1||c.pyramiding>100)throw new Error('pyramiding must be an integer from 1 to 100.');
+  if(!Number.isFinite(c.marginLongPercent)||c.marginLongPercent<=0||c.marginLongPercent>100||!Number.isFinite(c.marginShortPercent)||c.marginShortPercent<=0||c.marginShortPercent>100)throw new Error('Long and short margin percentages must be in (0, 100].');
   if(!['stop-first','target-first','reject-ambiguous'].includes(c.intrabarPolicy))throw new Error('Invalid intrabar policy.');
   if(!['ohlc','lower-timeframe','tick'].includes(c.executionDetail))throw new Error('Invalid execution-detail mode.');
+  if(c.executionDetail==='lower-timeframe')throw new Error('Lower-timeframe Bar Magnifier data is not wired; refusing to silently fall back to chart OHLC bars.');
   return Object.freeze(c);
 }
 function validateIntent(i:SimulationIntent,c:SimulationConfig):string|undefined{
@@ -103,6 +115,10 @@ function validateIntent(i:SimulationIntent,c:SimulationConfig):string|undefined{
   if(i.takeProfitPrice!=null&&!finitePositive(i.takeProfitPrice))return 'takeProfitPrice must be positive when supplied.';
   if(i.stopLossPrice!=null&&i.takeProfitPrice!=null&&(i.side==='buy'?i.stopLossPrice>=i.takeProfitPrice:i.stopLossPrice<=i.takeProfitPrice))return 'Stop-loss and target levels conflict with order direction.';
   if(i.timeInForceBars!=null&&(!Number.isSafeInteger(i.timeInForceBars)||i.timeInForceBars<1))return 'timeInForceBars must be a positive integer.';
+  if(i.entryId!=null&&(typeof i.entryId!=='string'||!i.entryId.trim()||i.entryId.length>128))return 'entryId must be a non-empty string of at most 128 characters.';
+  if(i.ocaGroup!=null&&(typeof i.ocaGroup!=='string'||!i.ocaGroup.trim()||i.ocaGroup.length>128))return 'ocaGroup must be a non-empty string of at most 128 characters.';
+  if(i.ocaType!=null&&!['cancel','reduce'].includes(i.ocaType))return 'Unsupported OCA behavior.';
+  if(i.ocaType!=null&&!i.ocaGroup)return 'ocaType requires an ocaGroup.';
   return undefined;
 }
 function timelineOf(datasets:readonly SimulationDataset[]):Frame[]{
@@ -205,7 +221,7 @@ export function runStrategySimulation(input:{
   };
   const getPosition=(symbol:string):Position=>{
     let p=positions.get(symbol);
-    if(!p){p={symbol,quantity:0,averagePrice:0,entryFees:0,entryOrderId:'',entrySignalId:'',realizedNetPnl:0};positions.set(symbol,p);}
+    if(!p){p={symbol,quantity:0,averagePrice:0,entryFees:0,entryOrderId:'',entrySignalId:'',entryId:'',entryCount:0,realizedNetPnl:0};positions.set(symbol,p);}
     return p;
   };
   const gross=():number=>{let v=0;for(const p of positions.values()){const mark=marks.get(p.symbol);if(mark!=null)v+=Math.abs(p.quantity)*mark;}return v;};
@@ -220,7 +236,8 @@ export function runStrategySimulation(input:{
     if(!config.allowShort&&intent.side==='sell'){if(old<=0)return 0;max=Math.min(max,old);}
     const projected=old+direction*max;
     if(Math.abs(projected)>config.maxPositionQuantity)max=Math.min(max,old*direction>=0?Math.max(0,config.maxPositionQuantity-Math.abs(old)):Math.max(0,Math.abs(old)+config.maxPositionQuantity));
-    const cap=Math.min(config.maxGrossExposure,Math.max(0,equity()*config.maxGrossExposureMultiple));
+    const marginPercent=intent.side==='buy'?config.marginLongPercent:config.marginShortPercent;
+    const cap=Math.min(config.maxGrossExposure,Math.max(0,equity()*config.maxGrossExposureMultiple),Math.max(0,equity()*100/marginPercent));
     const prevMark=marks.get(intent.symbol)??price,withoutSymbol=Math.max(0,gross()-Math.abs(old)*prevMark),maxAbs=Math.max(0,(cap-withoutSymbol)/price);
     const newQty=old+direction*max;
     if(Math.abs(newQty)>maxAbs){const same=old===0||Math.sign(old)===direction;max=Math.min(max,same?Math.max(0,maxAbs-Math.abs(old)):Math.max(0,Math.abs(old)+maxAbs));}
@@ -236,7 +253,8 @@ export function runStrategySimulation(input:{
     let opened=0,closed=0;
     if(old===0||Math.sign(old)===Math.sign(signed)){
       p.averagePrice=(Math.abs(old)*p.averagePrice+qty*args.price)/(Math.abs(old)+qty);p.entryFees+=fee;
-      p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;opened=qty;
+      p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;p.entryId=args.current.entryId??args.current.tag??args.current.orderId;opened=qty;
+      if(old===0)p.entryCount=0;
     }else{
       closed=Math.min(Math.abs(old),qty);
       const entryFee=p.entryFees*closed/Math.abs(old),exitFee=fee*closed/qty,grossPnl=(args.price-p.averagePrice)*closed*Math.sign(old);
@@ -246,8 +264,8 @@ export function runStrategySimulation(input:{
         allocatedEntryFees:rounded(entryFee),allocatedExitFees:rounded(exitFee),netPnl:rounded(netPnl),entryOrderId:p.entryOrderId,
         exitOrderId:args.orderId,entrySignalId:p.entrySignalId,exitSignalId:args.signalId,exitTimestampMs:args.time,simulated:true}));
       p.entryFees=Math.max(0,p.entryFees-entryFee);
-      if(Math.abs(next)<1e-10){p.averagePrice=0;p.entryFees=0;p.entryOrderId='';p.entrySignalId='';}
-      else if(Math.sign(next)!==Math.sign(old)){opened=Math.abs(next);p.averagePrice=args.price;p.entryFees=Math.max(0,fee-exitFee);p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;}
+      if(Math.abs(next)<1e-10){p.averagePrice=0;p.entryFees=0;p.entryOrderId='';p.entrySignalId='';p.entryId='';p.entryCount=0;}
+      else if(Math.sign(next)!==Math.sign(old)){opened=Math.abs(next);p.averagePrice=args.price;p.entryFees=Math.max(0,fee-exitFee);p.entryOrderId=args.orderId;p.entrySignalId=args.signalId;p.entryId=args.current.entryId??args.current.tag??args.current.orderId;p.entryCount=0;}
     }
     p.quantity=Math.abs(next)<1e-10?0:next;
     record({eventType:args.protective?'protective_exit':args.partial?'partial_fill':'fill',orderId:args.orderId,signalId:args.signalId,
@@ -292,21 +310,119 @@ export function runStrategySimulation(input:{
         requestedTotal:b.remaining,remainingAfter:Math.max(0,b.remaining-qty),feeState:b,time:frame.time,barIndex:frame.index,phase,
         protective:true,partial:qty<b.remaining,tag:targetExit?'take-profit':'stop-loss'});
       b.remaining=lotFloor(b.remaining-qty,config.lotSize);liquidity.set(b.symbol,lotFloor(available-qty,config.lotSize));
+      if(b.ocaGroup){
+        for(const [siblingId,sibling] of [...brackets])if(siblingId!==id&&sibling.ocaGroup===b.ocaGroup){
+          if((b.ocaType??'reduce')==='cancel'){brackets.delete(siblingId);}
+          else{sibling.remaining=lotFloor(Math.max(0,sibling.remaining-qty),config.lotSize);if(sibling.remaining<=1e-10)brackets.delete(siblingId);}
+        }
+      }
       if(b.remaining<=1e-10)brackets.delete(id);pruneBrackets();
     }
+  };
+
+  const submitSyntheticOrder=(intent:SimulationIntent,signalTimeMs:number,sequence:number,barIndex:number,reason:string):void=>{
+    const original=Object.freeze({...intent}) as SimulationIntent;
+    if(orders.has(original.orderId)){
+      record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+        originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:signalTimeMs,barIndex,phase:'bar-close'});return;
+    }
+    const state:WorkingOrder={original,intent:original,signalTimeMs,sequence,status:'pending',filled:0,remaining:Number(original.quantity)||0,
+      eligibleBars:0,stopTriggered:false,fixedFeeCharged:false,openedPosition:false};
+    orders.set(original.orderId,state);
+    const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
+    if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
+      side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
+      timestampMs:signalTimeMs,barIndex,phase:'bar-close'});}
+    else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+      originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason,
+      timestampMs:signalTimeMs,barIndex,phase:'bar-close'});
   };
 
   const processActions = (frame:Frame, inclusive:boolean):void => {
     while(actionCursor<actions.length&&(inclusive ? actions[actionCursor]!.signalTimeMs<=frame.time : actions[actionCursor]!.signalTimeMs<frame.time)){
       const action=actions[actionCursor++]!;
       const barIndex=frame.index;
+      if(action.kind==='cancel-all'){
+        for(const [bracketId,bracket] of [...brackets]){
+          record({eventType:'order_cancelled',orderId:bracket.id,signalId:bracket.intent.signalId,symbol:bracket.symbol,
+            side:bracket.intent.side,originalIntent:bracket.intent,currentIntent:bracket.intent,remainingQuantity:bracket.remaining,
+            reason:action.reason??'strategy.cancel_all() removed a pending protective exit.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+          brackets.delete(bracketId);
+        }
+        for(const order of orders.values())if(active(order.status)){
+          order.status='cancelled';record({eventType:'order_cancelled',orderId:order.intent.orderId,signalId:order.intent.signalId,
+            symbol:order.intent.symbol,side:order.intent.side,originalIntent:order.original,currentIntent:order.intent,
+            remainingQuantity:order.remaining,reason:action.reason??'strategy.cancel_all()',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        }
+        brackets.clear();continue;
+      }
       if(action.kind==='reject'){
         record({eventType:'signal',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
-          reason:'Strategy signal captured; host risk engine did not authorize an order.',
+          reason:'Strategy command rejected before simulation submission.',
           originalSignal:Object.freeze({id:action.signalId,timestampMs:action.signalTimeMs,reason:action.reason}),
           timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
         record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side:action.side,
           reason:action.reason,timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        continue;
+      }
+      if(action.kind==='exit'){
+        const position=getPosition(action.symbol),direction=Math.sign(position.quantity) as 1|-1;
+        if(!position.quantity||(action.entryId&&position.entryId!==action.entryId)){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,
+            reason:'strategy.exit() did not match an open position/from_entry ID.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        const requested=action.quantity!=null?Number(action.quantity):action.quantityPercent!=null
+          ?Math.abs(position.quantity)*Number(action.quantityPercent)/100:Math.abs(position.quantity);
+        const quantity=lotFloor(Math.min(Math.abs(position.quantity),requested),config.lotSize);
+        if(!finitePositive(quantity)){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,
+            reason:'strategy.exit() quantity must resolve to a positive lot-aligned amount.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        let stop=action.stopPrice,target=action.limitPrice;
+        if(action.profitTicks!=null)target=position.averagePrice+direction*Number(action.profitTicks)*Number(action.tickSize);
+        if(action.lossTicks!=null)stop=position.averagePrice-direction*Number(action.lossTicks)*Number(action.tickSize);
+        if(stop==null&&target==null){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,
+            reason:'strategy.exit() requires a stop, limit, profit or loss level; trailing stop modes are not modeled.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        if((stop!=null&&(!finitePositive(stop)||(direction>0?stop>=position.averagePrice:stop<=position.averagePrice)))||
+           (target!=null&&(!finitePositive(target)||(direction>0?target<=position.averagePrice:target>=position.averagePrice)))){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,
+            reason:'strategy.exit() stop/limit levels conflict with the modeled position direction.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        const side:SimulationSide=direction>0?'sell':'buy';
+        const intent:SimulationIntent=Object.freeze({orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side,type:'market',
+          quantity,entryId:action.entryId??position.entryId,tag:'strategy.exit:'+action.exitId});
+        const bracketId='pine-exit:'+action.exitId;
+        brackets.delete(bracketId);
+        brackets.set(bracketId,{id:bracketId,intent,symbol:action.symbol,direction,remaining:quantity,stop:stop??undefined,target:target??undefined,
+          activeAt:frame.time+1,fixedFeeCharged:false,ocaGroup:action.ocaGroup??('pine-exit:'+action.symbol+':'+(action.entryId??position.entryId)),
+          ocaType:'reduce'});
+        record({eventType:'order_submitted',orderId:action.orderId,signalId:action.signalId,symbol:action.symbol,side,
+          originalIntent:intent,currentIntent:intent,requestedQuantity:quantity,
+          reason:action.reason??'Pine strategy exit bracket accepted by the simulation broker.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        continue;
+      }
+      if(action.kind==='close'||action.kind==='close-all'){
+        const candidates=action.kind==='close'
+          ?[getPosition(action.symbol)]
+          :[...positions.values()].filter(position=>position.quantity!==0);
+        let closeIndex=0;
+        for(const position of candidates){
+          if(!position.quantity||(action.kind==='close'&&action.entryId&&position.entryId!==action.entryId))continue;
+          const requested=action.kind==='close'
+            ?(action.quantity!=null?Number(action.quantity):action.quantityPercent!=null
+              ?Math.abs(position.quantity)*Number(action.quantityPercent)/100:Math.abs(position.quantity))
+            :Math.abs(position.quantity);
+          const quantity=lotFloor(Math.min(Math.abs(position.quantity),requested),config.lotSize);
+          if(!finitePositive(quantity))continue;
+          const orderId=action.kind==='close'?action.orderId:action.orderId+':'+position.symbol+':'+closeIndex++;
+          const side:SimulationSide=position.quantity>0?'sell':'buy';
+          const intent:SimulationIntent=Object.freeze({orderId,signalId:action.signalId,symbol:position.symbol,side,type:'market',quantity,
+            entryId:position.entryId,tag:action.kind==='close'?'strategy.close':'strategy.close_all'});
+          submitSyntheticOrder(intent,action.signalTimeMs,action.sequence+closeIndex,barIndex,
+            action.reason??(action.kind==='close'?'Pine strategy.close() market exit.':'Pine strategy.close_all() market exit.'));
+        }
         continue;
       }
       if(action.kind==='submit'){
@@ -318,24 +434,30 @@ export function runStrategySimulation(input:{
           reason:action.reason??'Strategy signal captured for deterministic simulation.',
           timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',
         });
-        if(orders.has(original.orderId)){
-          record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-            originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
-        }
-        const state:WorkingOrder={original,intent:original,signalTimeMs:action.signalTimeMs,sequence:action.sequence,status:'pending',
-          filled:0,remaining:Number(original.quantity)||0,eligibleBars:0,stopTriggered:false,fixedFeeCharged:false};
-        orders.set(original.orderId,state);
-        const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
-        if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
-          side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
-        else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-          originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,
-          reason:action.reason??'Simulation-only order intent accepted; no live order was submitted.',
-          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        submitSyntheticOrder(original,action.signalTimeMs,action.sequence,barIndex,
+          action.reason??'Simulation-only order intent accepted; no live order was submitted.');
       }else{
-        const state=orders.get(action.orderId);
+        if(action.kind==='cancel'&&action.entryId){
+          const matches=[...orders.values()].filter(order=>active(order.status)&&
+            (order.intent.entryId===action.entryId||order.intent.tag===action.entryId));
+          let cancelledBracket=false;
+          for(const [bracketId,bracket] of [...brackets])if(bracket.intent.tag==='strategy.exit:'+action.entryId){
+            record({eventType:'order_cancelled',orderId:bracket.id,signalId:bracket.intent.signalId,symbol:bracket.symbol,
+              side:bracket.intent.side,originalIntent:bracket.intent,currentIntent:bracket.intent,remainingQuantity:bracket.remaining,
+              reason:action.reason??'strategy.cancel(id) removed a pending protective exit.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+            brackets.delete(bracketId);cancelledBracket=true;
+          }
+          if(!matches.length&&!cancelledBracket){
+            record({eventType:'order_rejected',signalId:action.entryId,reason:'No pending order matched strategy.cancel(id).',
+              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+          }
+          for(const state of matches){state.status='cancelled';record({eventType:'order_cancelled',orderId:state.intent.orderId,
+            signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,originalIntent:state.original,
+            currentIntent:state.intent,remainingQuantity:state.remaining,reason:action.reason??'strategy.cancel(id)',
+            timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
+          continue;
+        }
+        const state=action.kind==='modify'?orders.get(action.orderId):orders.get(action.orderId);
         if(!state||!active(state.status)){
           record({eventType:'order_rejected',orderId:action.orderId,signalId:state?.intent.signalId,symbol:state?.intent.symbol,side:state?.intent.side,
             originalIntent:state?.original,currentIntent:state?.intent,reason:'Order is not working; cancel/modify had no effect.',
@@ -361,7 +483,6 @@ export function runStrategySimulation(input:{
         }
       }
     }
-
   };
 
   for(const frame of frames){
@@ -397,12 +518,18 @@ export function runStrategySimulation(input:{
         continue;
       }
       const p=getPosition(order.intent.symbol),direction=order.intent.side==='buy'?1:-1;
+      if(order.intent.countsTowardPyramiding&&p.quantity!==0&&Math.sign(p.quantity)===direction&&p.entryCount>=config.pyramiding&&!order.openedPosition){
+        order.status='rejected';record({eventType:'order_rejected',orderId:order.intent.orderId,signalId:order.intent.signalId,symbol:order.intent.symbol,
+          side:order.intent.side,originalIntent:order.original,currentIntent:order.intent,reason:'strategy() pyramiding limit rejected another same-direction entry.',
+          timestampMs:frame.time,barIndex:frame.index,phase:'intrabar'});continue;
+      }
       const riskQty=(()=> {
         let allowed=desired;
         if(!config.allowShort&&order.intent.side==='sell'){if(p.quantity<=0)return 0;allowed=Math.min(allowed,p.quantity);}
         const projected=p.quantity+direction*allowed;
         if(Math.abs(projected)>config.maxPositionQuantity)allowed=Math.min(allowed,p.quantity*direction>=0?Math.max(0,config.maxPositionQuantity-Math.abs(p.quantity)):Math.max(0,Math.abs(p.quantity)+config.maxPositionQuantity));
-        const exposureCap=Math.min(config.maxGrossExposure,Math.max(0,equity()*config.maxGrossExposureMultiple));
+        const marginPercent=order.intent.side==='buy'?config.marginLongPercent:config.marginShortPercent;
+        const exposureCap=Math.min(config.maxGrossExposure,Math.max(0,equity()*config.maxGrossExposureMultiple),Math.max(0,equity()*100/marginPercent));
         const withoutSymbol=Math.max(0,gross()-Math.abs(p.quantity)*(marks.get(order.intent.symbol)??price));
         const maxAbs=Math.max(0,(exposureCap-withoutSymbol)/price),newQty=p.quantity+direction*allowed;
         if(Math.abs(newQty)>maxAbs){const same=p.quantity===0||Math.sign(p.quantity)===direction;allowed=Math.min(allowed,same?Math.max(0,maxAbs-Math.abs(p.quantity)):Math.max(0,Math.abs(p.quantity)+maxAbs));}
@@ -423,12 +550,37 @@ export function runStrategySimulation(input:{
           timestampMs:frame.time,barIndex:frame.index,phase:'intrabar'});continue;
       }
       const partial=riskQty<order.remaining;
+      const positionBefore=p.quantity;
       const {opened}=execute({orderId:order.intent.orderId,signalId:order.intent.signalId,symbol:order.intent.symbol,side:order.intent.side,qty:riskQty,
         price,original:order.original,current:order.intent,requestedTotal:order.intent.quantity,
         remainingAfter:Math.max(0,order.remaining-riskQty),feeState:order,time:frame.time,barIndex:frame.index,phase:candidate.phase,
         protective:false,partial,tag:order.intent.tag});
       order.filled=rounded(order.filled+riskQty);order.remaining=lotFloor(Math.max(0,order.intent.quantity-order.filled),config.lotSize);
       order.status=order.remaining<=1e-10?'filled':'partially-filled';
+      if(opened>0&&!order.openedPosition){
+        const updatedPosition=getPosition(order.intent.symbol);
+        if(order.intent.countsTowardPyramiding){
+          if(positionBefore===0||Math.sign(positionBefore)!==Math.sign(updatedPosition.quantity))updatedPosition.entryCount=1;
+          else updatedPosition.entryCount+=1;
+        }
+        updatedPosition.entryId=order.intent.entryId??order.intent.tag??order.intent.orderId;
+        order.openedPosition=true;
+      }
+      if(order.intent.ocaGroup){
+        for(const sibling of orders.values())if(sibling!==order&&active(sibling.status)&&sibling.intent.ocaGroup===order.intent.ocaGroup){
+          if((order.intent.ocaType??'cancel')==='cancel'){
+            sibling.status='cancelled';record({eventType:'order_cancelled',orderId:sibling.intent.orderId,signalId:sibling.intent.signalId,
+              symbol:sibling.intent.symbol,side:sibling.intent.side,originalIntent:sibling.original,currentIntent:sibling.intent,
+              remainingQuantity:sibling.remaining,reason:'OCA sibling cancelled after another group order filled.',timestampMs:frame.time,barIndex:frame.index,phase:'intrabar'});
+          }else{
+            sibling.remaining=lotFloor(Math.max(0,sibling.remaining-riskQty),config.lotSize);
+            sibling.intent=Object.freeze({...sibling.intent,quantity:sibling.filled+sibling.remaining});
+            if(sibling.remaining<=1e-10){sibling.status='cancelled';record({eventType:'order_cancelled',orderId:sibling.intent.orderId,
+              signalId:sibling.intent.signalId,symbol:sibling.intent.symbol,side:sibling.intent.side,originalIntent:sibling.original,
+              currentIntent:sibling.intent,remainingQuantity:0,reason:'OCA reduce group reached zero remaining quantity.',timestampMs:frame.time,barIndex:frame.index,phase:'intrabar'});}
+          }
+        }
+      }
       liquidity.set(order.intent.symbol,lotFloor(available-riskQty,config.lotSize));
       if(opened>0&&(order.intent.stopLossPrice!=null||order.intent.takeProfitPrice!=null)){
         const signed=getPosition(order.intent.symbol).quantity,directionSign=Math.sign(signed) as 1|-1,id='bracket:'+order.intent.orderId+':'+String(order.filled);

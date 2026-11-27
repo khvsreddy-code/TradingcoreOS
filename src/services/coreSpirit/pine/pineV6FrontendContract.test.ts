@@ -25,24 +25,47 @@ const alertIndicator = frontend.parse([
   'indicator("Alert semantics")',
   'alert("tick", alert.freq_all)',
   'alertcondition(close > open, "Bullish", "Bullish candle")',
-].join('\\n'));
+].join('\n'));
 assert.ok(alertIndicator.ast,alertIndicator.diagnostics.map(item=>item.message).join('; '));
 const alertCompiled = new CoreSpiritCompiler().compileSource(alertIndicator.normalizedSource,'pine-alert-semantics',{frontend:'pine-v6'});
-assert.ok(alertCompiled.ir,alertCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\\n'));
+assert.ok(alertCompiled.ir,alertCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
 assert.ok(alertCompiled.ir!.entry.instructions.some(item=>item.op==='const'&&item.value==='all'),
   'alert.freq_all must lower to its Pine frequency enum value');
 const strategyAlertCondition = frontend.parse([
   '//@version=6',
   'strategy("No alertcondition")',
   'alertcondition(close > open, "Bullish", "Bullish candle")',
-].join('\\n'));
+].join('\n'));
 assert.equal(strategyAlertCondition.diagnostics[0]?.code,'PINE_ALERTCONDITION_INDICATOR_ONLY');
 const indicatorStrategyApi = frontend.parse([
   '//@version=6',
   'indicator("No strategy API")',
   'strategy.entry("Long", strategy.long)',
-].join('\\n'));
+].join('\n'));
 assert.equal(indicatorStrategyApi.diagnostics[0]?.code,'PINE_STRATEGY_NAMESPACE_REQUIRES_STRATEGY');
+
+const strategySource = [
+  '//@version=6',
+  'strategy("Simulation only", pyramiding=1)',
+  'strategy.entry("Long", strategy.long, 2)',
+  'strategy.entry("Long OCA", strategy.long, 1, 100, 101, "entry-group", strategy.oca.reduce)',
+  'strategy.order("Scale", strategy.short, 1, 105, 106)',
+  'strategy.order("OCA", strategy.long, 1, 105, 106, "entry-group", strategy.oca.reduce)',
+  'strategy.exit("Exit", "Long", 1, 50, 5, 105, 5, 98)',
+  'strategy.close("Long", "manual", 1)',
+  'strategy.close_all()',
+  'strategy.cancel("Scale")',
+  'strategy.cancel_all()',
+].join('\n');
+const strategyParsed = frontend.parse(strategySource);
+assert.ok(strategyParsed.ast,strategyParsed.diagnostics.map(item=>item.message).join('; '));
+const strategyCompiled = new CoreSpiritCompiler().compileSource(strategyParsed.normalizedSource,'pine-strategy-simulation',{frontend:'pine-v6'});
+assert.ok(strategyCompiled.ir,strategyCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
+for(const kind of ['strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll']){
+  assert.ok(strategyCompiled.ir!.entry.instructions.some(item=>item.op==='emit'&&item.kind===kind),
+    'Pine '+kind+' should compile to a dedicated simulation-only command');
+}
+
 
 
 const varSource = [
@@ -72,7 +95,7 @@ const normalDeclarations = [
   'plot(latest)',
 ].join('\n');
 const normalCompiled = new CoreSpiritCompiler().compileSource(normalDeclarations, 'pine-normal-declarations', { frontend:'pine-v6' });
-assert.ok(normalCompiled.ir, normalCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\\n'));
+assert.ok(normalCompiled.ir, normalCompiled.diagnostics.map(item => item.code + ': ' + item.message).join('\n'));
 const normalSets = normalCompiled.ir!.entry.instructions.filter(item => item.op === 'setLocal');
 assert.ok(normalSets.some(item => item.op === 'setLocal' && item.name === 'currentClose'));
 assert.ok(normalSets.some(item => item.op === 'setLocal' && item.name === 'sampleCount'));

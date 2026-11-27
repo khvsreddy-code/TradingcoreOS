@@ -2162,7 +2162,7 @@ export class CoreSpiritRuntime {
     // Viewport/backfill rendering passes evaluate a bounded slice of history and
     // are not an execution clock. Suppress any order/alert/webhook side effects
     // before argument validation or intent construction.
-    if (this.suppressExternalEffects && ['orderIntent','buy','sell','entry','exit','alert','webhook'].includes(kind)) return;
+    if (this.suppressExternalEffects && ['orderIntent','buy','sell','entry','exit','alert','webhook','strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll'].includes(kind)) return;
     const time=this.toEpoch(bar.timestamp);
     this.outputCount += 1;
     const finite = (v:unknown) => Number.isFinite(Number(v));
@@ -2391,6 +2391,26 @@ export class CoreSpiritRuntime {
         const intent={kind:'orderIntent' as const,id:`${this.options.sourceId}:exit:${barIndex}:${tag||'exit'}`,time,side:'flat' as const,confidence:1,stop:null,target:null,tag,metadata:{source:this.options.sourceId,barIndex,exit:true,mode:this.currentOutputSemantics?.executionMode ?? this.executionContext.mode,coreSpiritExecution:this.currentOutputSemantics}};
         outputs.push(intent);
         if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
+      }
+      else if(['strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll'].includes(kind)) {
+        const commandByKind:Readonly<Record<string,string>>={
+          strategyEntry:'entry',strategyOrder:'order',strategyExit:'exit',strategyClose:'close',
+          strategyCloseAll:'close_all',strategyCancel:'cancel',strategyCancelAll:'cancel_all',
+        };
+        const command=commandByKind[kind];
+        const sourceCallId=outputId||('pine-strategy:'+kind+':'+barIndex);
+        const commandArgs=args.slice(1);
+        const commandPayload=Object.freeze({
+          version:1 as const,command,programId:this.options.sourceId,symbol:this.options.symbol,
+          timeframe:this.options.timeframe,barIndex,barTimestampMs:Math.trunc(time*1000),
+          revision:this.state.barState.revision,sourceCallId,args:Object.freeze([...commandArgs]),
+          execution:this.currentOutputSemantics,
+        });
+        // This is an inert simulator command envelope. It is deliberately not an
+        // orderIntent and is never sent to eventRouter.executionIntent/FYERS.
+        outputs.push({kind:'event',id:`${this.options.sourceId}:pine-strategy:${sourceCallId}:${barIndex}`,
+          time,name:`strategy.${command}`,metadata:{source:this.options.sourceId,barIndex,
+            execution:this.currentOutputSemantics,coreSpiritStrategyCommand:commandPayload}});
       }
       else if(kind==='alert') {
         const semantics=this.currentOutputSemantics;

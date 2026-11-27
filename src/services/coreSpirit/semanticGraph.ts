@@ -85,7 +85,7 @@ export type CoreSpiritGraphBundle = {
 const VISUAL_EMITS = new Set([
   'plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','text','polygon','customVisual',
 ]);
-const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell']);
+const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell','strategyEntry','strategyOrder','strategyExit','strategyClose','strategyCloseAll','strategyCancel','strategyCancelAll']);
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
