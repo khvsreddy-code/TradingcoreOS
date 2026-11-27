@@ -161,6 +161,7 @@ function parseRows(value: unknown, featureNames: readonly string[], range: { fro
       confirmed: true as const,
       phase: row.phase,
       values: [...row.values] as number[],
+      ...(row.featureAvailableAt ? { featureAvailableAt: [...row.featureAvailableAt] } : {}),
     };
   });
 }
