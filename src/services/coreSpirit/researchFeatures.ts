@@ -7,6 +7,7 @@
  * Warm-up rows stay NaN and are never fabricated as zeros.
  */
 import { atr, ema, linearRegression, rollingMean, rollingStd } from './numericalKernels';
+import type { ResearchFeatureRow } from './researchValidation';
 
 export type CoreSpiritResearchMarketField = 'open'|'high'|'low'|'close'|'volume';
 export type CoreSpiritResearchAuxiliaryFeature = Readonly<{
@@ -283,4 +284,28 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
       featureAvailabilityVerified:true as const,
     }),
   });
+}
+
+/**
+ * Materialize only rows where every feature is ready and point-in-time valid.
+ * Exact feature availability is retained as part of the immutable research row.
+ */
+export function toCoreSpiritResearchRows(featureSet:CoreSpiritResearchFeatureSet):ResearchFeatureRow[]{
+  const rows:ResearchFeatureRow[]=[];
+  for(let index=0;index<featureSet.timestampsMs.length;index++){
+    const values=featureSet.featureNames.map(name=>featureSet.features[name]![index]!);
+    const featureAvailableAt=featureSet.featureNames.map(name=>featureSet.availabilityMsByFeature[name]![index]!);
+    if(values.some(value=>!Number.isFinite(value))||
+       featureAvailableAt.some(value=>!Number.isSafeInteger(value)||value<0||value>featureSet.timestampsMs[index]!))continue;
+    const timestamp=featureSet.timestampsMs[index]!;
+    rows.push(Object.freeze({
+      timestamp,
+      availableAt:Math.max(...featureAvailableAt),
+      confirmed:true,
+      phase:'historical',
+      values:Object.freeze(values),
+      featureAvailableAt:Object.freeze(featureAvailableAt),
+    }));
+  }
+  return rows;
 }
