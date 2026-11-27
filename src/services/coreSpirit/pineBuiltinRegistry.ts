@@ -369,8 +369,6 @@ export const PINE_V6_BUILTIN_REGISTRY: readonly PineV6BuiltinDefinition[] = Obje
   catalog('chart','left_visible_bar_time',[],'series<int>',0,0,'pine-chart-left-visible-time'),
   catalog('barstate','isrealtime',[],'series<bool>',0,0,'pine-barstate-isrealtime'),
   catalog('barstate','isconfirmed',[],'series<bool>',0,0,'pine-barstate-isconfirmed'),
-  catalog('strategy','entry',[parameter('id','string'),parameter('direction','string')],'void',2,10,'pine-strategy-entry'),
-  catalog('strategy','exit',[parameter('id','string')],'void',1,10,'pine-strategy-exit'),
   catalog('line','new',[numeric('x1'),numeric('y1'),numeric('x2'),numeric('y2')],'line',4,8,'pine-line-new'),
   catalog('box','new',[numeric('left'),numeric('top'),numeric('right'),numeric('bottom')],'box',4,10,'pine-box-new'),
   catalog('label','new',[numeric('x'),numeric('y')],'label',2,10,'pine-label-new'),

@@ -10,7 +10,7 @@ export const PINE_FEATURE_STATUSES = Object.freeze([
 ] as const);
 
 export type PineFeatureStatus = typeof PINE_FEATURE_STATUSES[number];
-export type PineFeatureDomain = 'language'|'types'|'collections'|'functions'|'visuals'|'data'|'strategy'|'libraries'|'runtime';
+export type PineFeatureDomain = 'language'|'types'|'collections'|'functions'|'visuals'|'data'|'strategy'|'libraries'|'runtime'|'events';
 export type PineFeatureMode = 'compile'|'historical'|'realtime'|'replay'|'reference-vm'|'optimized-vm';
 export type PineExecutionMode = 'historical'|'realtime'|'replay';
 export type PineScriptKind = Extract<CoreSpiritProgramKind,'indicator'|'strategy'|'library'>;

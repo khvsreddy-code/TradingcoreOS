@@ -1,6 +1,6 @@
-import type { IRExpression } from './ir';
+import type { CoreSpiritAstNode } from './ast';
 import type { CoreSpiritExecutionContext, CoreSpiritIntrabar } from './types';
-export type TimeframeRequest = Readonly<{symbol:string;timeframe:string;expression:IRExpression;gaps:'on'|'off';lookahead:'on'|'off';sourceContext:CoreSpiritExecutionContext;session?:string;currency?:string;modifiers?:Readonly<Record<string,string|number|boolean>>;calculationLimit?:number;expressionDependencies?:readonly string[];hostAvailability?:'available'|'delayed'|'stale'|'unavailable'}>;
+export type TimeframeRequest = Readonly<{symbol:string;timeframe:string;expression:CoreSpiritAstNode;gaps:'on'|'off';lookahead:'on'|'off';sourceContext:CoreSpiritExecutionContext;session?:string;currency?:string;modifiers?:Readonly<Record<string,string|number|boolean>>;calculationLimit?:number;expressionDependencies?:readonly string[];hostAvailability?:'available'|'delayed'|'stale'|'unavailable'}>;
 export type RequestRepaintClassification='non-repainting-confirmed'|'realtime-developing'|'historical-lookahead-risk'|'host-data-limited'|'missing-or-gapped';
 export function classifyRequestRepaint(input:{lookahead:'on'|'off';confirmed:boolean;realtime:boolean;available:boolean;gaps:'on'|'off'}):RequestRepaintClassification {
  if(!input.available)return 'host-data-limited';if(input.lookahead==='on'&&!input.realtime)return 'historical-lookahead-risk';if(!input.confirmed&&input.realtime)return 'realtime-developing';if(!input.confirmed)return 'missing-or-gapped';return 'non-repainting-confirmed';
