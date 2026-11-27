@@ -144,12 +144,14 @@ export interface CoreSpiritExternalModelAdapter {
   execute(
     manifest: CoreSpiritStrictModelManifest,
     request: CoreSpiritStrictModelRequest,
+    signal?: AbortSignal,
   ): Promise<CoreSpiritStrictModelPrediction>;
 }
 
 export type CoreSpiritExternalModelInvoke = (
   manifest: CoreSpiritStrictModelManifest,
   request: CoreSpiritStrictModelRequest,
+  signal?: AbortSignal,
 ) => Promise<CoreSpiritStrictModelPrediction>;
 
 /**
@@ -166,6 +168,7 @@ export class CoreSpiritCallbackModelAdapter implements CoreSpiritExternalModelAd
   execute(
     manifest: CoreSpiritStrictModelManifest,
     request: CoreSpiritStrictModelRequest,
+    signal?: AbortSignal,
   ): Promise<CoreSpiritStrictModelPrediction> {
     if (manifest.implementation !== this.implementation) {
       return Promise.reject(new Error(`model implementation mismatch: expected ${manifest.implementation}, adapter=${this.implementation}`));
@@ -173,7 +176,7 @@ export class CoreSpiritCallbackModelAdapter implements CoreSpiritExternalModelAd
     if (manifest.transport !== this.transport) {
       return Promise.reject(new Error(`model transport mismatch: expected ${manifest.transport}, adapter=${this.transport}`));
     }
-    return this.invoke(manifest, request);
+    return this.invoke(manifest, request, signal);
   }
 }
 
@@ -370,6 +373,8 @@ export interface CoreSpiritExternalModelCallLimits {
   maxCallsPerBar: number;
   maxInputBytes: number;
   maxOutputBytes: number;
+  /** Host-call deadline; a manifest may request a shorter deadline, never a longer one. */
+  timeoutMs?: number;
 }
 
 export interface CoreSpiritExternalModelCallResult extends CoreSpiritStrictModelPrediction {
@@ -381,6 +386,7 @@ export interface CoreSpiritExternalModelCallResult extends CoreSpiritStrictModel
 export class CoreSpiritModelOrchestrator {
   private readonly callsPerBar = new Map<string, number>();
   private readonly maxTrackedBarKeys: number;
+  private readonly timeoutMs: number;
 
   constructor(
     private readonly registry: CoreSpiritExternalModelRegistry,
@@ -393,6 +399,10 @@ export class CoreSpiritModelOrchestrator {
     this.maxTrackedBarKeys = limits.maxTrackedBarKeys ?? 4096;
     if (!Number.isSafeInteger(this.maxTrackedBarKeys) || this.maxTrackedBarKeys < 64 || this.maxTrackedBarKeys > 65_536) {
       throw new Error('model orchestrator maxTrackedBarKeys must be between 64 and 65536');
+    }
+    this.timeoutMs = limits.timeoutMs ?? 8_000;
+    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 50 || this.timeoutMs > 30_000) {
+      throw new Error('model orchestrator timeoutMs must be between 50 and 30000 ms');
     }
   }
 
@@ -432,7 +442,10 @@ export class CoreSpiritModelOrchestrator {
     }
   }
 
-  async infer(request: CoreSpiritStrictModelRequest): Promise<CoreSpiritExternalModelCallResult> {
+  async infer(
+    request: CoreSpiritStrictModelRequest,
+    options: Readonly<{ signal?: AbortSignal }> = {},
+  ): Promise<CoreSpiritExternalModelCallResult> {
     if (this.executionTarget && !canUseExecutionTargetCapability(this.executionTarget, 'model-inference')) {
       throw new Error(`execution target '${this.executionTarget}' does not allow model inference`);
     }
@@ -498,7 +511,37 @@ export class CoreSpiritModelOrchestrator {
       ? request
       : { ...request, marketState: { timestamp: market.timestamp, instrument: market.instrument, timeframe: market.timeframe } };
 
-    const result = await registered.adapter.execute(manifest, adapterRequest);
+    if (options.signal?.aborted) throw new Error('external model execution was cancelled');
+    const controller = new AbortController();
+    let rejectCancellation: (reason: Error) => void = () => undefined;
+    const cancelled = new Promise<never>((_, reject) => { rejectCancellation = reject; });
+    const abort = () => {
+      const reason = new Error('external model execution was cancelled');
+      controller.abort(reason);
+      rejectCancellation(reason);
+    };
+    options.signal?.addEventListener('abort', abort, { once: true });
+    const timeoutMs = Math.min(manifest.maxLatencyMs ?? this.timeoutMs, this.timeoutMs);
+    let rejectTimeout: (reason: Error) => void = () => undefined;
+    const timeout = new Promise<never>((_, reject) => { rejectTimeout = reject; });
+    const timer = setTimeout(() => {
+      const reason = new Error('external model execution exceeded its latency budget');
+      controller.abort(reason);
+      rejectTimeout(reason);
+    }, timeoutMs);
+    let result: CoreSpiritStrictModelPrediction;
+    try {
+      if (options.signal?.aborted) abort();
+      result = await Promise.race([
+        registered.adapter.execute(manifest, adapterRequest, controller.signal),
+        timeout,
+        cancelled,
+      ]);
+      if (controller.signal.aborted) throw new Error('external model execution was cancelled or timed out');
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
+    }
     const predictionField = manifest.outputSchema.find(field => field.name === manifest.primaryPredictionField)!;
     validateSpecShape(manifest.primaryPredictionField, result.prediction, predictionField);
     if (manifest.confidenceField && result.confidence === undefined) {
