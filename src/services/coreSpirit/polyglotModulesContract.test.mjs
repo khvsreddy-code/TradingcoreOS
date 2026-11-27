@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {CoreSpiritPolyglotRegistry,CoreSpiritPythonModuleAdapter,CoreSpiritNativeModuleAdapter,CoreSpiritOnnxModuleAdapter,CoreSpiritWasmModuleAdapter,coreSpiritPolyglotResponseChecksum} from './polyglotModules.ts';
 const version='a'.repeat(64);
-const manifest=(language='python',transport='host')=>({abiVersion:1,moduleId:'numpy-features',version,language,transport,deterministic:true,stateless:true,exports:['features.transform'],inputs:{values:{dtype:'f64',shape:[2]}},outputs:{normalized:{dtype:'f64',shape:[2]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:100000,maxLatencyMs:1000});
+const manifest=(language='python',transport='host')=>({abiVersion:1,moduleId:'numpy-features',version,language,transport,runtimeVersion:language==='python'?'3.12.3':language==='rust'?'1.82.0':language==='cpp'?'18.1.8':language==='julia'?'1.11.1':language==='r'?'4.4.2':language==='onnx'?'1.20.1':'1.0.0',deterministic:true,stateless:true,exports:['features.transform'],inputs:{values:{dtype:'f64',shape:[2]}},outputs:{normalized:{dtype:'f64',shape:[2]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:100000,maxLatencyMs:1000});
 const request={requestId:'polyglot-1',moduleId:'numpy-features',version,exportName:'features.transform',context:{runId:'run-1',symbol:'NSE:NIFTY50-INDEX',timeframe:'5m',barIndex:80,timestamp:1767000000000,confirmed:true,deterministicSeed:'seed-1'},inputs:{values:{dtype:'f64',shape:[2],data:[1,2]}}};
 const outputs={normalized:{dtype:'f64',shape:[2],data:[-1,1]}};
 const output={outputs,checksum:coreSpiritPolyglotResponseChecksum(manifest(),request,outputs)};
