@@ -367,7 +367,7 @@ const lagRoc=new ChangeState(true,2);
 assert.equal(lagRoc.update(100,0),null);
 assert.equal(lagRoc.update(110,1),null);
 assert.equal(lagRoc.update(125,2),0.25);
-assert.equal(lagRoc.update(130,2),0.3,'percentage change must recalculate on same-bar replacement');
+assert.ok(Math.abs(lagRoc.update(130,2)-0.3) <= Number.EPSILON,'percentage change must recalculate on same-bar replacement within floating-point precision');
 
 const changeCursor=new CoreSpiritFusedSeriesCursor([{name:'change',length:2}]);
 assert.ok(Number.isNaN(changeCursor.update(10,0)[0]));
