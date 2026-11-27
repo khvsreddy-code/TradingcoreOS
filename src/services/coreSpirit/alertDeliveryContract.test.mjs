@@ -98,5 +98,5 @@ assert.equal((await runtime.flush(1099)).delivered,0);
 assert.equal((await runtime.flush(1100)).delivered,1);
 assert.ok([...store.records.values()].some(r=>r.status==='delivered'));
 assert.equal(coreSpiritAlertFromRuntimeEvent({...conditionRuntimeEvent,sequence:undefined},{...context,executionMode:'historical'}).replay,true);
-assert.throws(()=>coreSpiritAlertFromRuntimeEvent({...actionRuntimeEvent,payload:{...actionRuntimeEvent.payload,frequency:'invalid'}},context),/Unsupported alert frequency/);
+assert.throws(()=>coreSpiritAlertFromRuntimeEvent({...actionRuntimeEvent,payload:{...actionRuntimeEvent.payload,frequency:'invalid'}},context),/Unsupported Pine alert frequency/);
 console.log('CORESPIRIT_ALERT_DELIVERY_CONTRACT_OK');
