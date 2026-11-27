@@ -16,7 +16,7 @@ export type CoreSpiritNameResolution = {
 const builtinSeries=new Set(['open','high','low','close','volume','time']);
 const builtinState=new Set(['na','bar_index']);
 const builtinDataReferences=new Set(['market','timeframe','series']);
-const builtinNamespaces=new Set(['ui','visual','app','scan','chart',...CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES]);
+const builtinNamespaces=new Set(['ui','visual','app','scan','chart','alert',...CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES]);
 
 export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:CoreSpiritComponentRegistryLike}={}):CoreSpiritNameResolution{
   const diagnostics:CoreSpiritNameDiagnostic[]=[];
