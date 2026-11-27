@@ -31,7 +31,8 @@ export class CoreSpiritResearchServiceHost{
   constructor(config:CoreSpiritResearchServiceConfig){
     if(typeof window!=='undefined')throw new Error('Research service credentials are server-only.');
     const url=new URL(config.baseUrl);
-    if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new Error('Research service must use HTTPS outside localhost.');
+    const loopback=url.hostname==='localhost'||url.hostname==='127.0.0.1'||url.hostname==='[::1]';
+    if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))throw new Error('Research service must use HTTPS outside explicit HTTP loopback.');
     if(url.username||url.password||url.search||url.hash)throw new Error('Research service URL cannot contain credentials, query or fragment.');
     if(!config.serviceSecret||config.serviceSecret.length<16)throw new Error('Research service secret is missing or too short.');
     url.pathname=url.pathname.replace(/\/+$/,'')+'/';this.baseUrl=url;this.secret=config.serviceSecret;this.fetcher=config.fetchImpl??fetch;
