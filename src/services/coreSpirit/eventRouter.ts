@@ -62,6 +62,8 @@ export class CoreSpiritEventRouter {
   executionFill(payload: CoreEventMap['execution.fill']): void { this.emit('execution.fill', payload); }
   scriptSignal(payload: CoreEventMap['script.signal']): void { this.emit('script.signal', payload); }
   scriptAlert(payload: CoreEventMap['script.alert']): void { this.emit('script.alert', payload); }
+  /** Alerts are externally visible realtime occurrences, not speculative strategy state. */
+  scriptAlertImmediate(payload: CoreEventMap['script.alert']): void { this.bus.emit('script.alert', payload); }
   scriptWebhook(payload: CoreEventMap['script.webhook']): void { this.emit('script.webhook', payload); }
   executionIntent(source: string, payload: unknown): void { this.emit('execution.intent', { source, payload } as CoreEventMap['execution.intent']); }
 

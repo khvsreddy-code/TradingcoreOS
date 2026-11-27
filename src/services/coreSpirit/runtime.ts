@@ -2439,13 +2439,19 @@ export class CoreSpiritRuntime {
         // Pine alert() is realtime-only. The normalized close frequency is gated
         // before the event enters the host transaction/outbox pipeline.
         const realtime=semantics?.executionMode==='realtime';
-        if(!this.suppressExternalEffects&&realtime&&frequency&&(frequency!=='once-per-bar-close'||confirmed)){
+        const missingFreqAllSequence=frequency==='all'&&this.currentHostEventSequence===undefined;
+        if(missingFreqAllSequence)diagnostics.push(`output alert at bar ${barIndex}: alert.freq_all requires a host-stamped market tick sequence.`);
+        if(!this.suppressExternalEffects&&realtime&&frequency&&!missingFreqAllSequence&&(frequency!=='once-per-bar-close'||confirmed)){
           const message=args[0]==null?'':String(args[0]);
-          this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{
+          const event={scriptId:this.options.sourceId,time,payload:{
             eventType:'alert',conditionId:outputId||'alert:unknown-callsite',callsiteId:outputId||'alert:unknown-callsite',
             args,message,frequency,barIndex,revision:this.state.barState.revision,execution:semantics,
             ...(this.currentHostEventSequence!==undefined?{sourceSequence:this.currentHostEventSequence}:{}),
-          }});
+          }};
+          // Developing-bar alert() is an occurrence, not reversible strategy state.
+          // Dispatch it immediately; the outbox provides cross-revision deduplication.
+          if(semantics?.barPhase==='forming'&&frequency!=='once-per-bar-close')this.eventRouter.scriptAlertImmediate(event);
+          else this.eventRouter.scriptAlert(event);
         }
       }
       else if(kind==='alertcondition') {

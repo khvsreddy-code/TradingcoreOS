@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
 import {CoreSpiritAlertRuntime,coreSpiritAlertFromRuntimeEvent,coreSpiritAlertEventId,normalizeCoreSpiritAlertFrequency} from './alertDelivery.ts';
+import {CoreSpiritEventRouter} from './eventRouter.ts';
+import {CoreEventBus} from '../core/event/eventBus.ts';
 
 assert.equal(normalizeCoreSpiritAlertFrequency('alert.freq_once_per_bar_close'),'once-per-bar-close');
 assert.equal(normalizeCoreSpiritAlertFrequency('once_per_bar'),'once-per-bar');
 assert.equal(normalizeCoreSpiritAlertFrequency('alert.freq_all'),'all');
 assert.throws(()=>normalizeCoreSpiritAlertFrequency('alert.freq_once'),/Unsupported Pine alert frequency/);
+
+const eventBus=new CoreEventBus();
+const delivered=[];
+eventBus.on('script.alert',event=>delivered.push(event));
+const router=new CoreSpiritEventRouter(eventBus);
+router.beginTransaction('forming-bar:1');
+router.scriptAlert({scriptId:'s1',time:1,payload:{eventType:'alert'}});
+assert.equal(delivered.length,0,'ordinary alerts remain transaction-buffered');
+router.scriptAlertImmediate({scriptId:'s1',time:1,payload:{eventType:'alert',frequency:'all'}});
+assert.equal(delivered.length,1,'developing-bar alert occurrences bypass rollback buffering');
+router.rollbackTransaction('forming-bar:1');
+assert.equal(delivered.length,1,'rollback cannot retract an already-observed realtime alert');
 
 class Store{
   records=new Map();
@@ -77,7 +91,7 @@ const all13={...all12,sourceSequence:13};
 assert.equal(await runtime.enqueue(all13),true,'freq_all accepts a new host sequence on the same bar');
 assert.equal(await runtime.enqueue({...condition,confirmed:false}),false,'once-per-bar-close must wait for confirmation');
 const allNoSequence={...action,frequency:'all',sourceSequence:undefined};
-assert.throws(()=>runtime.enqueue(allNoSequence),/unique host-stamped market event sequence/);
+await assert.rejects(runtime.enqueue(allNoSequence),/unique host-stamped market event sequence/);
 assert.equal(await runtime.history(20).then(rows=>rows.length),4,'outbox records expose bounded durable event history');
 assert.equal((await runtime.flush(1000)).retried,1);
 assert.equal((await runtime.flush(1099)).delivered,0);
