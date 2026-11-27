@@ -167,6 +167,8 @@ const contracts = [
   ['vela-drawing', ['src/velaDrawingCapabilityContract.test.mjs', false]],
   ['chart-prediction-artifact-only', ['src/chartPredictionArtifactOnlyContract.test.mjs', false]],
   ['corespirit-python-ml-adapter', ['src/services/coreSpirit/pythonMlModelAdapterContract.test.mjs', true]],
+  ['corespirit-model-orchestration-security', ['src/services/coreSpirit/modelOrchestrationSecurityContract.test.mjs', true]],
+  ['corespirit-ai-model-semantics', ['src/services/coreSpirit/aiModelContract.test.mjs', true]],
   ['corespirit-polyglot-module-abi', ['src/services/coreSpirit/polyglotModulesContract.test.mjs', true]],
   ['corespirit-quant-research', ['src/services/coreSpirit/quantResearchContract.test.mjs', true]],
   ['corespirit-large-data-research-host', ['src/services/coreSpirit/quantResearchServiceHostContract.test.mjs', true]],
