@@ -99,6 +99,9 @@ export function aiPredictionFromResult(
   if (hasAnyClassProbability && !hasAllClassProbabilities) {
     throw new Error('AI class-probability mapping must provide LONG, SHORT and FLAT together');
   }
+  if (!hasAllClassProbabilities && result.prediction.data.length !== 1) {
+    throw new Error('Multi-class AI prediction tensors require an explicit LONG/SHORT/FLAT probability mapping');
+  }
   if (hasAllClassProbabilities) {
     const total = probabilities.LONG! + probabilities.SHORT! + probabilities.FLAT!;
     if (Math.abs(total - 1) > 0.03) throw new Error('AI LONG/SHORT/FLAT probabilities must sum to one within 0.03');
