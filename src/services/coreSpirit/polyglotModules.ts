@@ -12,6 +12,8 @@ export type CoreSpiritPolyglotDependency = Readonly<{ name:string; version:strin
 export type CoreSpiritPolyglotModuleManifest = Readonly<{
   abiVersion: typeof CORE_SPIRIT_POLYGLOT_ABI_VERSION; moduleId:string; version:string;
   language:CoreSpiritPolyglotLanguage; transport:CoreSpiritPolyglotTransport;
+  /** Exact runtime build (for example CPython 3.12.3, rustc 1.82.0, or ONNX Runtime 1.20.1). */
+  runtimeVersion:string;
   deterministic:true; stateless:true; exports:readonly string[]; dependencies?:readonly CoreSpiritPolyglotDependency[];
   inputs:Readonly<Record<string,{dtype:CoreSpiritPolyglotTensor['dtype'];shape:readonly number[]}>>;
   outputs:Readonly<Record<string,{dtype:CoreSpiritPolyglotTensor['dtype'];shape:readonly number[]}>>;
@@ -28,11 +30,15 @@ export interface CoreSpiritPolyglotHost {
   invoke(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,signal?:AbortSignal):Promise<CoreSpiritPolyglotResponse>;
 }
 export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotModuleManifest):void {
-  if(manifest.abiVersion!==1) throw new Error('Unsupported CoreSpirit Polyglot ABI version.');
+  if(!manifest||manifest.abiVersion!==CORE_SPIRIT_POLYGLOT_ABI_VERSION) throw new Error('Unsupported CoreSpirit Polyglot ABI version.');
   if(!/^[a-z][a-z0-9-]{1,79}$/.test(manifest.moduleId)) throw new Error('Polyglot moduleId must be a normalized identifier.');
   if(!/^[a-f0-9]{64}$/.test(manifest.version)) throw new Error('Polyglot module version must be a SHA-256 artifact identity.');
+  if(!/^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.runtimeVersion)) throw new Error('Polyglot runtimeVersion must be an exact pinned semantic version.');
+  if(!['python','rust','cpp','julia','r','onnx','wasm'].includes(manifest.language)) throw new Error('Polyglot language is unsupported.');
   if(!manifest.deterministic||!manifest.stateless) throw new Error('Polyglot v1 modules must be deterministic and stateless.');
-  if(!manifest.exports.length||new Set(manifest.exports).size!==manifest.exports.length) throw new Error('Polyglot exports must be non-empty and unique.');
+  if(!Array.isArray(manifest.exports)||!manifest.exports.length||manifest.exports.length>128||
+     manifest.exports.some(name=>typeof name!=='string'||!/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(name))||
+     new Set(manifest.exports).size!==manifest.exports.length) throw new Error('Polyglot exports must be valid, non-empty and unique.');
   for(const [name,value] of Object.entries({maxInputBytes:manifest.maxInputBytes,maxOutputBytes:manifest.maxOutputBytes,maxMemoryBytes:manifest.maxMemoryBytes,maxSteps:manifest.maxSteps,maxLatencyMs:manifest.maxLatencyMs}))
     if(!Number.isSafeInteger(value)||value<=0) throw new Error('Polyglot '+name+' must be a positive safe integer.');
   if(manifest.maxInputBytes>8*1024*1024||manifest.maxOutputBytes>8*1024*1024) throw new Error('Polyglot tensor payload limits may not exceed 8 MiB.');
@@ -42,14 +48,37 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   if(manifest.language==='onnx'&&manifest.transport!=='onnx-runtime') throw new Error('ONNX modules must use onnx-runtime transport.');
   if(manifest.language==='wasm'&&manifest.transport!=='wasm') throw new Error('WASM modules must use wasm transport.');
   const dependencyNames=new Set<string>();
+  if(manifest.dependencies!==undefined&&!Array.isArray(manifest.dependencies)) throw new Error('Polyglot dependencies must be an array.');
   for(const dependency of manifest.dependencies??[]){
-    if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(dependency.name)||dependencyNames.has(dependency.name)) throw new Error('Polyglot dependencies must have unique normalized names.');
-    if(!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
+    if(!dependency||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(dependency.name)||dependencyNames.has(dependency.name)) throw new Error('Polyglot dependencies must have unique normalized names.');
+    if(!/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
     if(!/^[a-f0-9]{64}$/.test(dependency.artifactHash)) throw new Error('Polyglot dependency artifacts require SHA-256 identities.');
     dependencyNames.add(dependency.name);
   }
-  for(const [name,spec] of Object.entries(manifest.inputs)) validateTensorSpec(name,spec.shape);
-  for(const [name,spec] of Object.entries(manifest.outputs)) validateTensorSpec(name,spec.shape);
+  if(!manifest.inputs||typeof manifest.inputs!=='object'||Array.isArray(manifest.inputs)||
+     !manifest.outputs||typeof manifest.outputs!=='object'||Array.isArray(manifest.outputs)||
+     Object.keys(manifest.inputs).length<1||Object.keys(manifest.outputs).length<1||
+     Object.keys(manifest.inputs).length>64||Object.keys(manifest.outputs).length>64) {
+    throw new Error('Polyglot module must declare 1–64 input and output tensor fields.');
+  }
+  for(const [name,spec] of Object.entries(manifest.inputs)){
+    if(!spec||!['f64','i64','bool'].includes(spec.dtype)) throw new Error("Polyglot input '"+name+"' has an unsupported dtype.");
+    validateTensorSpec(name,spec.shape);
+  }
+  for(const [name,spec] of Object.entries(manifest.outputs)){
+    if(!spec||!['f64','i64','bool'].includes(spec.dtype)) throw new Error("Polyglot output '"+name+"' has an unsupported dtype.");
+    validateTensorSpec(name,spec.shape);
+  }
+}
+
+function snapshotManifest(manifest:CoreSpiritPolyglotModuleManifest):CoreSpiritPolyglotModuleManifest {
+  const inputs=Object.freeze(Object.fromEntries(Object.entries(manifest.inputs).map(([name,spec])=>
+    [name,Object.freeze({dtype:spec.dtype,shape:Object.freeze([...spec.shape])})])));
+  const outputs=Object.freeze(Object.fromEntries(Object.entries(manifest.outputs).map(([name,spec])=>
+    [name,Object.freeze({dtype:spec.dtype,shape:Object.freeze([...spec.shape])})])));
+  const dependencies=manifest.dependencies===undefined?undefined:Object.freeze(manifest.dependencies.map(item=>Object.freeze({...item})));
+  return Object.freeze({...manifest,exports:Object.freeze([...manifest.exports]),inputs,outputs,
+    ...(dependencies?{dependencies}:{} )});
 }
 function validateTensorSpec(name:string,shape:readonly number[]):void {
   if(!name||shape.length>8||shape.some(size=>!Number.isSafeInteger(size)||size<0)) throw new Error("Polyglot tensor '"+name+"' has an invalid shape.");
@@ -80,21 +109,28 @@ export class CoreSpiritPolyglotRegistry {
   private readonly entries=new Map<string,{manifest:CoreSpiritPolyglotModuleManifest;host:CoreSpiritPolyglotHost}>();
   register(manifest:CoreSpiritPolyglotModuleManifest,host:CoreSpiritPolyglotHost):void {
     validateCoreSpiritPolyglotManifest(manifest);
-    if(host.language!==manifest.language||host.transport!==manifest.transport) throw new Error('Polyglot host does not match module manifest.');
+    if(!host||host.language!==manifest.language||host.transport!==manifest.transport) throw new Error('Polyglot host does not match module manifest.');
     const key=manifest.moduleId+'@'+manifest.version;
     if(this.entries.has(key)) throw new Error("Polyglot module '"+key+"' is already registered.");
-    this.entries.set(key,{manifest,host});
+    this.entries.set(key,{manifest:snapshotManifest(manifest),host});
   }
   list():CoreSpiritPolyglotModuleManifest[]{return [...this.entries.values()].map(entry=>entry.manifest);}
   async execute(request:CoreSpiritPolyglotRequest,options:Readonly<{signal?:AbortSignal}>={}):Promise<CoreSpiritPolyglotResponse>{
+    if(!request||!request.context||!request.inputs||typeof request.requestId!=='string'||
+      !/^[A-Za-z0-9._:-]{1,128}$/.test(request.requestId)) throw new Error('Polyglot request identity or envelope is invalid.');
     const entry=this.entries.get(request.moduleId+'@'+request.version);
     if(!entry) throw new Error("Polyglot module '"+request.moduleId+"@"+request.version+"' is not registered.");
     const {manifest,host}=entry;
     if(!manifest.exports.includes(request.exportName)) throw new Error("Polyglot export '"+request.exportName+"' is not declared.");
-    if(!request.context.confirmed) throw new Error('Polyglot v1 inference accepts confirmed-bar inputs only.');
-    if(!request.context.symbol||!request.context.timeframe||!request.context.deterministicSeed) throw new Error('Polyglot request context is incomplete.');
+    const context=request.context;
+    if(!context.confirmed) throw new Error('Polyglot v1 inference accepts confirmed-bar inputs only.');
+    if(!context.runId?.trim()||context.runId.length>128||!context.symbol?.trim()||context.symbol.length>128||
+       !context.timeframe?.trim()||context.timeframe.length>32||!context.deterministicSeed?.trim()||
+       !Number.isSafeInteger(context.barIndex)||context.barIndex<0||
+       !Number.isSafeInteger(context.timestamp)||context.timestamp<0) throw new Error('Polyglot request context is incomplete or invalid.');
     for(const [name,spec] of Object.entries(manifest.inputs)) validateTensor(name,request.inputs[name],spec);
-    if(Object.keys(request.inputs).some(name=>!(name in manifest.inputs))) throw new Error('Polyglot request contains undeclared inputs.');
+    if(Object.keys(request.inputs).length!==Object.keys(manifest.inputs).length||
+       Object.keys(request.inputs).some(name=>!(name in manifest.inputs))) throw new Error('Polyglot request contains missing or undeclared inputs.');
     if(payloadBytes(request.inputs)>manifest.maxInputBytes) throw new Error('Polyglot input byte quota exceeded.');
     if(options.signal?.aborted) throw new Error('Polyglot execution was cancelled.');
     const controller=new AbortController();
@@ -109,8 +145,12 @@ export class CoreSpiritPolyglotRegistry {
       if(options.signal?.aborted)abort();
       const response=await Promise.race([host.invoke(manifest,request,controller.signal),timeout,cancelled]);
       if(controller.signal.aborted) throw new Error('Polyglot execution was cancelled or exceeded its latency budget.');
+      if(!response||typeof response!=='object'||!response.outputs||typeof response.outputs!=='object'||typeof response.checksum!=='string') {
+        throw new Error('Polyglot host returned an invalid response envelope.');
+      }
       for(const [name,spec] of Object.entries(manifest.outputs)) validateTensor(name,response.outputs[name],spec);
-      if(Object.keys(response.outputs).some(name=>!(name in manifest.outputs))) throw new Error('Polyglot response contains undeclared outputs.');
+      if(Object.keys(response.outputs).length!==Object.keys(manifest.outputs).length||
+         Object.keys(response.outputs).some(name=>!(name in manifest.outputs))) throw new Error('Polyglot response contains missing or undeclared outputs.');
       if(payloadBytes(response.outputs)>manifest.maxOutputBytes) throw new Error('Polyglot output byte quota exceeded.');
       const expected=coreSpiritPolyglotResponseChecksum(manifest,request,response.outputs);
       if(response.checksum!==expected) throw new Error('Polyglot response checksum does not match its module/request/output payload.');
