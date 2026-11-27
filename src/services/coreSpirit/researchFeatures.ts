@@ -213,7 +213,7 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
     const availability=Float64Array.from(auxiliary.availableAtMs);
     for(let i=0;i<n;i++){
       if(Number.isFinite(values[i]!)){
-        if(!Number.isSafeInteger(availability[i]!)||availability[i]!<0||availability[i]!>timestampsMs[i]!)throw new Error('Auxiliary feature '+name+' is unavailable at decision timestamp for row '+i+'.');
+        if(!Number.isSafeInteger(availability[i]!)||availability[i]!<0||availability[i]!>input.timestampsMs[i]!)throw new Error('Auxiliary feature '+name+' is unavailable at decision timestamp for row '+i+'.');
       }else availability[i]=Number.NaN;
     }
     features[name]=values;
