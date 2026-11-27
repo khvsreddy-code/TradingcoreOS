@@ -121,6 +121,21 @@ const concurrent = await Promise.allSettled([
 assert.equal(concurrent.filter(item => item.status === 'fulfilled').length, 1,
   'the per-bar quota must be reserved synchronously before concurrent host invocation');
 assert.equal(concurrentCalls, 1, 'the host must never observe more calls than the per-bar limit');
+concurrentOrchestrator.resetBar('run-1', 1);
+await assert.rejects(() => concurrentOrchestrator.infer(makeRequest({ requestId: 'after-reset' })), /quota exceeded/,
+  'resetBar must be idempotent and must not refund an already-consumed bar quota');
+concurrentOrchestrator.completeRun('run-1');
+assert.equal((await concurrentOrchestrator.infer(makeRequest({ requestId: 'after-finalize' })).then(() => 'ok')), 'ok',
+  'finalizing the run explicitly releases its bounded quota ledger entries');
+
+const boundedOrchestrator = new CoreSpiritModelOrchestrator(concurrentRegistry, {
+  maxCallsPerBar: 1, maxInputBytes: 1024, maxOutputBytes: 1024, maxTrackedBarKeys: 64,
+});
+for (let bar = 0; bar < 64; bar += 1) boundedOrchestrator.resetBar('bounded-run', bar);
+assert.throws(() => boundedOrchestrator.resetBar('new-run', 0), /ledger is full/,
+  'quota-ledger capacity must fail closed rather than evict old bar budgets');
+boundedOrchestrator.completeRun('bounded-run');
+boundedOrchestrator.resetBar('new-run', 0);
 
 const metadataRegistry = new CoreSpiritExternalModelRegistry();
 metadataRegistry.register(makeManifest(), new CoreSpiritPythonModelAdapter(async () => ({
