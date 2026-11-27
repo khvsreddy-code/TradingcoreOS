@@ -69,14 +69,20 @@ function validateRows(rows: readonly CoreSpiritFeatureObservation[], width: numb
     const row = rows[index];
     if (!row || typeof row !== 'object' || !Number.isSafeInteger(row.timestamp) || !Number.isSafeInteger(row.availableAt) ||
         row.timestamp <= previousTimestamp || !Array.isArray(row.values) || row.values.length !== width ||
-        (row.featureAvailableAt !== undefined && (
-          !Array.isArray(row.featureAvailableAt) || row.featureAvailableAt.length !== width ||
-          row.featureAvailableAt.some(value => !Number.isSafeInteger(value) || value < 0 || value > row.timestamp) ||
-          Math.max(...row.featureAvailableAt) !== row.availableAt
-        )) ||
         typeof row.confirmed !== 'boolean' ||
         !['historical', 'confirmed', 'developing', 'realtime', 'forecast'].includes(String(row.phase))) {
       throw new Error(label + ' observation ' + index + ' has an invalid timestamp, phase, confirmation flag, or feature schema.');
+    }
+    if (row.featureAvailableAt !== undefined) {
+      if (!Array.isArray(row.featureAvailableAt) || row.featureAvailableAt.length !== width) {
+        throw new Error(label + ' observation ' + index + ' per-feature availability does not match the feature schema.');
+      }
+      if (row.featureAvailableAt.some(value => !Number.isSafeInteger(value) || value < 0 || value > row.timestamp)) {
+        throw new Error(label + ' observation ' + index + ' contains per-feature availability after its decision timestamp.');
+      }
+      if (Math.max(...row.featureAvailableAt) !== row.availableAt) {
+        throw new Error(label + ' observation ' + index + ' row-level availability must equal the maximum per-feature availability.');
+      }
     }
     if (row.availableAt > row.timestamp && row.phase !== 'forecast') {
       throw new Error(label + ' observation ' + index + ' contains a feature unavailable at its decision timestamp.');
