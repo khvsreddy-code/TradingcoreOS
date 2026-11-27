@@ -142,13 +142,12 @@ function validateScriptKindOperations(
   metadata:CoreSpiritPineDeclarationMetadata,
   source:string,
 ):CoreSpiritFrontendDiagnostic[] {
-  if(metadata.kind==='strategy') return [];
   const diagnostics:CoreSpiritFrontendDiagnostic[]=[];
   const visit=(value:unknown):void=>{
     if(Array.isArray(value)){for(const item of value)visit(item);return;}
     if(!value||typeof value!=='object')return;
     const node=value as Record<string,unknown>;
-    if((node.type==='member'||node.type==='memberCall')&&
+    if(metadata.kind!=='strategy'&&(node.type==='member'||node.type==='memberCall')&&
        node.target&&typeof node.target==='object'&&
        (node.target as Record<string,unknown>).type==='identifier'&&
        (node.target as Record<string,unknown>).name==='strategy'){
@@ -157,6 +156,13 @@ function validateScriptKindOperations(
       const end=Number.isInteger(span?.end)?Number(span?.end):start+1;
       diagnostics.push(diagnostic(source,'PINE_STRATEGY_NAMESPACE_REQUIRES_STRATEGY',
         `The strategy.* namespace is available only in scripts declared with strategy().`,start,end));
+    }
+    if(metadata.kind==='strategy'&&node.type==='call'&&node.name==='alertcondition'){
+      const span=node.span as {start?:number;end?:number}|undefined;
+      const start=Number.isInteger(span?.start)?Number(span.start):0;
+      const end=Number.isInteger(span?.end)?Number(span.end):start+1;
+      diagnostics.push(diagnostic(source,'PINE_ALERTCONDITION_INDICATOR_ONLY',
+        'alertcondition() is available only in indicator scripts; use alert() in a strategy script.',start,end));
     }
     for(const [key,child] of Object.entries(node)){
       if(key==='metadata'||key==='span')continue;

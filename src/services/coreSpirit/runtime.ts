@@ -2392,8 +2392,39 @@ export class CoreSpiritRuntime {
         outputs.push(intent);
         if (this.canDispatchConfirmedStrategyEvent()) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
-      else if(kind==='alert' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,message:typeof args[0]==='string'?args[0]:undefined,frequency:args[1]??'once-per-bar',barIndex,execution:this.currentOutputSemantics}});
-      else if(kind==='alertcondition' && this.truthy(args[0]) && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{condition:true,title:typeof args[1]==='string'?args[1]:undefined,message:typeof args[2]==='string'?args[2]:undefined,frequency:'once-per-bar-close',barIndex,execution:this.currentOutputSemantics}});
+      else if(kind==='alert') {
+        const semantics=this.currentOutputSemantics;
+        const rawFrequency=String(args[1]??'once-per-bar').toLowerCase();
+        const frequency=rawFrequency.startsWith('alert.freq_')?rawFrequency.slice(11):rawFrequency;
+        const confirmed=semantics?.isConfirmed===true||semantics?.barPhase==='confirmed';
+        // Pine alert() is a realtime trigger, not a historical signal. Intrabar
+        // frequencies may fire while the realtime candle is developing; close
+        // frequency is admitted only on the confirmed update.
+        const realtime=semantics?.executionMode==='realtime';
+        if(!this.suppressExternalEffects&&realtime&&(frequency!=='once-per-bar-close'||confirmed)){
+          const message=args[0]==null?'':String(args[0]);
+          this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{
+            eventType:'alert',conditionId:outputId||'alert:unknown-callsite',callsiteId:outputId||'alert:unknown-callsite',
+            args,message,frequency:rawFrequency,barIndex,revision:this.state.barState.revision,execution:semantics,
+          }});
+        }
+      }
+      else if(kind==='alertcondition') {
+        const semantics=this.currentOutputSemantics;
+        const confirmed=semantics?.isConfirmed===true||semantics?.barPhase==='confirmed';
+        // alertcondition() declares an indicator condition. Preserve confirmed
+        // historical/replay events for history and testing; the durable outbox
+        // excludes replay delivery. It never shares alert()'s event type or ID.
+        if(this.truthy(args[0])&&confirmed&&!this.suppressExternalEffects){
+          const title=typeof args[1]==='string'?args[1]:'';
+          const message=typeof args[2]==='string'?args[2]:'';
+          this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{
+            eventType:'alertcondition',condition:true,conditionId:outputId||'alertcondition:unknown-callsite',
+            callsiteId:outputId||'alertcondition:unknown-callsite',title,message,frequency:'once-per-bar-close',
+            barIndex,revision:this.state.barState.revision,execution:semantics,
+          }});
+        }
+      }
       else if(kind==='webhook' && this.canDispatchConfirmedStrategyEvent()) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex,execution:this.currentOutputSemantics}});
     } catch(error) { if (error instanceof CoreSpiritResourceLimitError) throw error; diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }

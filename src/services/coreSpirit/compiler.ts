@@ -450,6 +450,25 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'member': {
+          if(frontendId==='pine-v6'&&n.target.type==='identifier'){
+            const enumValues:Readonly<Record<string,Readonly<Record<string,string>>>>={
+              alert:{
+                freq_all:'all',
+                freq_once:'once',
+                freq_once_per_bar:'once-per-bar',
+                freq_once_per_bar_close:'once-per-bar-close',
+              },
+              strategy:{
+                long:'long',short:'short',fixed:'fixed',cash:'cash',percent_of_equity:'percent_of_equity',
+              },
+            };
+            const value=enumValues[n.target.name]?.[n.member];
+            if(value!==undefined){
+              const dest='t'+temp++;
+              emitInstruction(n,{op:'const',dest,value});
+              return dest;
+            }
+          }
           const memberTargetType=n.target.type==='identifier'?semantic.symbols.get(n.target.name):undefined;
           if(memberTargetType && /^(array|map|matrix|vector)</.test(String(memberTargetType))){
             const target=expr(n.target); const member=`t${temp++}`;

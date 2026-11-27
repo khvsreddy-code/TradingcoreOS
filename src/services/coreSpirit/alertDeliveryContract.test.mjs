@@ -1,24 +1,64 @@
 import assert from 'node:assert/strict';
-import {CoreSpiritAlertRuntime,coreSpiritAlertFromRuntimeEvent} from './alertDelivery.ts';
-class Store{records=new Map();async putIfAbsent(r){if(this.records.has(r.key))return false;this.records.set(r.key,r);return true;}async claimPending(now,limit,leaseMs){const claimed=[...this.records.values()].filter(r=>(r.status==='pending'&&r.nextAttemptAt<=now)||(r.status==='delivering'&&(r.leaseUntil??0)<=now)).slice(0,limit).map(r=>({...r,status:'delivering',leaseUntil:now+leaseMs}));for(const r of claimed)this.records.set(r.key,r);return claimed;}async update(r){this.records.set(r.key,r);}}
-const store=new Store();let attempts=0;const runtime=new CoreSpiritAlertRuntime(store,async()=>{attempts++;if(attempts===1)throw Error('temporary');},3,100);
-const event={id:'event-1',scriptId:'s1',scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',barIndex:10,barTimestamp:1000,confirmed:true,replay:false,message:'breakout',frequency:'once-per-bar-close',createdAt:1000};
-assert.equal(await runtime.enqueue(event),true);assert.equal(await runtime.enqueue({...event,id:'event-2'}),false);
-assert.equal(await runtime.enqueue({...event,id:'replay',replay:true}),false);
-assert.deepEqual(await runtime.flush(1000),{delivered:0,retried:1,failed:0});
-assert.deepEqual(await runtime.flush(1099),{delivered:0,retried:0,failed:0});
-assert.deepEqual(await runtime.flush(1100),{delivered:1,retried:0,failed:0});
-assert.equal(attempts,2);
-const mapped=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:22,payload:{barIndex:10,message:'Mapped alert',frequency:'alert.freq_once_per_bar_close',execution:{isConfirmed:true}}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
-assert.equal(mapped.message,'Mapped alert');assert.equal(mapped.frequency,'once-per-bar-close');assert.equal(mapped.confirmed,true);assert.equal(mapped.replay,false);
-const once=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:23,payload:{barIndex:10,message:'One-time',frequency:'alert.freq_once'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
-assert.equal(once.frequency,'once','Pine alert.freq_once must remain once, not once-per-bar');
-const everyBar=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:24,payload:{barIndex:10,message:'Every bar',frequency:'alert.freq_once_per_bar'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
-assert.equal(everyBar.frequency,'once-per-bar');
-const every=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,sequence:25,payload:{barIndex:10,message:'All',frequency:'alert.freq_all'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000});
-assert.equal(every.frequency,'all');
-assert.throws(()=>coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'All',frequency:'alert.freq_all'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000}),/unique host-stamped event sequence/);
-assert.throws(()=>coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'Unknown',frequency:'sometimes'}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000}),/Unsupported alert frequency/);
-const historical=coreSpiritAlertFromRuntimeEvent({scriptId:'s1',time:1000,payload:{barIndex:10,message:'Historical',execution:{barPhase:'historical'}}},{scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'historical',createdAt:1000});
-assert.equal(historical.replay,true,'historical backfill alerts must never reach external delivery');
+import {CoreSpiritAlertRuntime,coreSpiritAlertFromRuntimeEvent,coreSpiritAlertEventId} from './alertDelivery.ts';
+
+class Store{
+  records=new Map();
+  async putIfAbsent(record){if(this.records.has(record.key))return false;this.records.set(record.key,record);return true;}
+  async claimPending(now,limit,leaseMs){
+    const claimed=[...this.records.values()].filter(r=>(r.status==='pending'&&r.nextAttemptAt<=now)||
+      (r.status==='delivering'&&(r.leaseUntil??0)<=now)).slice(0,limit).map(r=>({...r,status:'delivering',leaseUntil:now+leaseMs}));
+    for(const record of claimed)this.records.set(record.key,record);
+    return claimed;
+  }
+  async update(record){this.records.set(record.key,record);}
+  async listRecent(limit){return [...this.records.values()].sort((a,b)=>b.event.createdAt-a.event.createdAt).slice(0,limit);}
+}
+const context={scriptRevision:'r1',symbol:'NIFTY',timeframe:'5m',executionMode:'realtime',createdAt:1000,revision:4};
+const conditionRuntimeEvent={scriptId:'s1',time:1000,sequence:10,payload:{
+  eventType:'alertcondition',conditionId:'indicator:bullish:42',barIndex:10,title:'Bullish',
+  message:'Bullish candle',execution:{isConfirmed:true,barPhase:'confirmed'},
+}};
+const condition=coreSpiritAlertFromRuntimeEvent(conditionRuntimeEvent,context);
+assert.equal(condition.eventType,'alertcondition');
+assert.equal(condition.frequency,'once-per-bar-close');
+assert.equal(condition.conditionId,'indicator:bullish:42');
+assert.equal(condition.programId,'s1');
+assert.equal(condition.instrumentId,'NIFTY');
+assert.equal(condition.revision,4);
+assert.equal(condition.id,coreSpiritAlertEventId(condition));
+assert.equal(condition.id,coreSpiritAlertFromRuntimeEvent(conditionRuntimeEvent,context).id);
+const actionRuntimeEvent={scriptId:'s1',time:1000,sequence:11,payload:{
+  eventType:'alert',conditionId:'alert:breakout:88',barIndex:10,message:'breakout',
+  frequency:'alert.freq_once_per_bar',execution:{isRealtime:true,barPhase:'forming'},
+}};
+const action=coreSpiritAlertFromRuntimeEvent(actionRuntimeEvent,context);
+assert.equal(action.eventType,'alert');
+assert.equal(action.frequency,'once-per-bar');
+assert.notEqual(action.id,condition.id,'alert() and alertcondition() must have distinct identities');
+assert.notEqual(action.conditionId,condition.conditionId);
+const changedRevision=coreSpiritAlertFromRuntimeEvent(conditionRuntimeEvent,{...context,revision:5});
+assert.notEqual(changedRevision.id,condition.id,'revision is part of the deterministic event ID');
+
+const store=new Store();let attempts=0;
+const runtime=new CoreSpiritAlertRuntime(store,async()=>{attempts++;if(attempts===1)throw Error('temporary');},3,100);
+assert.equal(await runtime.enqueue(condition),true);
+assert.equal(await runtime.enqueue(condition),false,'same event cannot be enqueued twice');
+assert.equal(await runtime.enqueue(changedRevision),false,'once-per-bar dedupe survives duplicate/corrected revisions');
+assert.equal(await runtime.enqueue({...condition,replay:true}),false);
+assert.equal(await runtime.enqueue({...action,confirmed:false}),true,'once-per-bar can fire on a realtime developing bar');
+const all12={...action,frequency:'all',sourceSequence:12};
+assert.equal(await runtime.enqueue(all12),true);
+assert.equal(await runtime.enqueue(all12),false);
+const all13={...action,frequency:'all',sourceSequence:13};
+assert.equal(await runtime.enqueue(all13),true,'freq_all accepts a new host sequence on the same bar');
+assert.equal(await runtime.enqueue({...condition,confirmed:false}),false,'once-per-bar-close must wait for confirmation');
+const allNoSequence={...action,frequency:'all',sourceSequence:undefined};
+assert.throws(()=>runtime.enqueue(allNoSequence),/unique host-stamped event sequence/);
+assert.equal(await runtime.history(20).then(rows=>rows.length),4,'outbox records expose bounded durable event history');
+assert.equal((await runtime.flush(1000)).retried,1);
+assert.equal((await runtime.flush(1099)).delivered,0);
+assert.equal((await runtime.flush(1100)).delivered,1);
+assert.ok([...store.records.values()].some(r=>r.status==='delivered'));
+assert.equal(coreSpiritAlertFromRuntimeEvent({...conditionRuntimeEvent,sequence:undefined},{...context,executionMode:'historical'}).replay,true);
+assert.throws(()=>coreSpiritAlertFromRuntimeEvent({...actionRuntimeEvent,payload:{...actionRuntimeEvent.payload,frequency:'invalid'}},context),/Unsupported alert frequency/);
 console.log('CORESPIRIT_ALERT_DELIVERY_CONTRACT_OK');
