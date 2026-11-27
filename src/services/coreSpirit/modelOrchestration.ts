@@ -400,20 +400,36 @@ export class CoreSpiritModelOrchestrator {
     return JSON.stringify([runId, barIndex]);
   }
 
-  private trimBarLedger(): void {
-    while (this.callsPerBar.size > this.maxTrackedBarKeys) {
-      const oldest = this.callsPerBar.keys().next().value as string | undefined;
-      if (oldest === undefined) break;
-      this.callsPerBar.delete(oldest);
+  private ensureBarLedgerCapacity(key: string): void {
+    if (!this.callsPerBar.has(key) && this.callsPerBar.size >= this.maxTrackedBarKeys) {
+      // Never evict a quota record: replaying an old run/bar must not reset its
+      // call budget. Hosts release entries explicitly when a run is finalized.
+      throw new Error('model call quota ledger is full; finalize an existing run before admitting more bars');
     }
   }
 
   resetBar(runId: string, barIndex: number): void {
-    if (!runId.trim() || !Number.isSafeInteger(barIndex) || barIndex < 0) throw new Error('model call quota bar identity is invalid');
+    if (!runId.trim() || /[\u0000-\u001f]/.test(runId) || !Number.isSafeInteger(barIndex) || barIndex < 0) {
+      throw new Error('model call quota bar identity is invalid');
+    }
     const key = this.barKey(runId, barIndex);
-    this.callsPerBar.delete(key);
+    // Idempotent initialization only. A public reset method must never refund
+    // calls for a bar that has already consumed its execution quota.
+    if (this.callsPerBar.has(key)) return;
+    this.ensureBarLedgerCapacity(key);
     this.callsPerBar.set(key, 0);
-    this.trimBarLedger();
+  }
+
+  completeRun(runId: string): void {
+    if (!runId.trim() || /[\u0000-\u001f]/.test(runId)) throw new Error('model call quota run identity is invalid');
+    for (const key of this.callsPerBar.keys()) {
+      try {
+        const parsed = JSON.parse(key) as unknown;
+        if (Array.isArray(parsed) && parsed[0] === runId) this.callsPerBar.delete(key);
+      } catch {
+        // Internal keys are created by barKey(); malformed entries are ignored.
+      }
+    }
   }
 
   async infer(request: CoreSpiritStrictModelRequest): Promise<CoreSpiritExternalModelCallResult> {
@@ -462,11 +478,10 @@ export class CoreSpiritModelOrchestrator {
     const key = this.barKey(context.runId, context.barIndex);
     const count = this.callsPerBar.get(key) ?? 0;
     if (count >= this.limits.maxCallsPerBar) throw new Error(`external model call quota exceeded at bar ${context.barIndex}`);
+    this.ensureBarLedgerCapacity(key);
     // Reserve synchronously before awaiting the remote host so concurrent calls
     // cannot all observe the same remaining quota and race past the per-bar cap.
-    this.callsPerBar.delete(key);
     this.callsPerBar.set(key, count + 1);
-    this.trimBarLedger();
 
     const requestChecksum = coreSpiritChecksum({
       contractVersion: CORE_SPIRIT_EXTERNAL_MODEL_CONTRACT_VERSION,
