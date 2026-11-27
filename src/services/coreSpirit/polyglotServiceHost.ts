@@ -23,12 +23,14 @@ export class CoreSpiritIsolatedPolyglotServiceHost implements CoreSpiritPolyglot
     this.maxArtifactBytes=config.maxArtifactBytes??256*1024*1024;
     if(!Number.isSafeInteger(this.maxArtifactBytes)||this.maxArtifactBytes<1||this.maxArtifactBytes>512*1024*1024)throw new Error('Polyglot artifact limit must be between 1 byte and 512 MiB.');
   }
-  private async request(path:string,init:RequestInit,signal?:AbortSignal):Promise<Response>{
+  private async request<T=Response>(path:string,init:RequestInit,signal?:AbortSignal,consume?:(response:Response)=>Promise<T>):Promise<T|Response>{
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(new Error('Polyglot service timeout')),this.timeoutMs);
     const abort=()=>controller.abort(signal?.reason??new Error('Polyglot operation cancelled'));
     if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
-    try{return await this.fetcher(new URL(path,this.baseUrl).toString(),{...init,signal:controller.signal});}
-    finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+    try{
+      const response=await this.fetcher(new URL(path,this.baseUrl).toString(),{...init,redirect:'error',signal:controller.signal});
+      return consume?await consume(response):response;
+    }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
   async loadModule(manifest:CoreSpiritPolyglotModuleManifest,artifact:Uint8Array,signal?:AbortSignal):Promise<void>{
     validateCoreSpiritPolyglotManifest(manifest);
@@ -48,14 +50,15 @@ export class CoreSpiritIsolatedPolyglotServiceHost implements CoreSpiritPolyglot
   async invoke(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,signal?:AbortSignal):Promise<CoreSpiritPolyglotResponse>{
     validateCoreSpiritPolyglotManifest(manifest);
     if(manifest.language!==this.language||manifest.transport!==this.transport)throw new Error('Polyglot request manifest does not match this host.');
-    const response=await this.request('v1/modules/execute',{method:'POST',headers:{authorization:'Bearer '+this.secret,
+    return await this.request<CoreSpiritPolyglotResponse>('v1/modules/execute',{method:'POST',headers:{authorization:'Bearer '+this.secret,
       'content-type':'application/json','x-corespirit-abi':'1','x-corespirit-language':this.language,
-      'x-corespirit-transport':this.transport,'x-request-id':request.requestId},body:JSON.stringify({manifest,request})},signal);
-    if(!response.ok)throw new Error('Polyglot service returned HTTP '+response.status+'.');
-    const raw=await response.text();
-    if(new TextEncoder().encode(raw).byteLength>manifest.maxOutputBytes+64*1024)throw new Error('Polyglot response exceeds the ABI output envelope.');
-    let body:CoreSpiritPolyglotResponse;try{body=JSON.parse(raw) as CoreSpiritPolyglotResponse;}catch{throw new Error('Polyglot service returned malformed JSON.');}
-    if(!body||typeof body!=='object'||!body.outputs||typeof body.checksum!=='string')throw new Error('Polyglot service returned an invalid ABI response.');
-    return body;
+      'x-corespirit-transport':this.transport,'x-request-id':request.requestId},body:JSON.stringify({manifest,request})},signal,async response=>{
+        if(!response.ok)throw new Error('Polyglot service returned HTTP '+response.status+'.');
+        const raw=await response.text();
+        if(new TextEncoder().encode(raw).byteLength>manifest.maxOutputBytes+64*1024)throw new Error('Polyglot response exceeds the ABI output envelope.');
+        let body:CoreSpiritPolyglotResponse;try{body=JSON.parse(raw) as CoreSpiritPolyglotResponse;}catch{throw new Error('Polyglot service returned malformed JSON.');}
+        if(!body||typeof body!=='object'||!body.outputs||typeof body.checksum!=='string')throw new Error('Polyglot service returned an invalid ABI response.');
+        return body;
+      }) as CoreSpiritPolyglotResponse;
   }
 }
