@@ -161,4 +161,29 @@ const confidenceOrchestrator = new CoreSpiritModelOrchestrator(confidenceRegistr
 });
 await assert.rejects(() => confidenceOrchestrator.infer(makeRequest()), /confidence output is required/);
 
+const slowRegistry = new CoreSpiritExternalModelRegistry();
+slowRegistry.register(makeManifest({ maxLatencyMs: 50 }), new CoreSpiritPythonModelAdapter((_manifest, _request, signal) =>
+  new Promise((_resolve, reject) => {
+    if (signal?.aborted) reject(new Error('host aborted'));
+    else signal?.addEventListener('abort', () => reject(new Error('host aborted')), { once: true });
+  })));
+const slowOrchestrator = new CoreSpiritModelOrchestrator(slowRegistry, {
+  maxCallsPerBar: 1, maxInputBytes: 1024, maxOutputBytes: 1024, timeoutMs: 100,
+});
+await assert.rejects(() => slowOrchestrator.infer(makeRequest()), /latency budget/,
+  'the orchestrator must enforce the manifest deadline even when the host never resolves');
+const callerController = new AbortController();
+const cancelRegistry = new CoreSpiritExternalModelRegistry();
+cancelRegistry.register(makeManifest(), new CoreSpiritPythonModelAdapter((_manifest, _request, signal) =>
+  new Promise((_resolve, reject) => {
+    if (signal?.aborted) reject(new Error('host aborted'));
+    else signal?.addEventListener('abort', () => reject(new Error('host aborted')), { once: true });
+  })));
+const cancelOrchestrator = new CoreSpiritModelOrchestrator(cancelRegistry, {
+  maxCallsPerBar: 1, maxInputBytes: 1024, maxOutputBytes: 1024, timeoutMs: 1_000,
+});
+const cancelledInference = cancelOrchestrator.infer(makeRequest(), { signal: callerController.signal });
+callerController.abort();
+await assert.rejects(cancelledInference, /cancelled/);
+
 console.log('CORESPIRIT_MODEL_ORCHESTRATION_SECURITY_OK');
