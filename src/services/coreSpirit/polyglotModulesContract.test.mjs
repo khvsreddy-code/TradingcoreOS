@@ -22,6 +22,12 @@ await assert.rejects(()=>registry.execute({...request,inputs:{values:request.inp
 await assert.rejects(()=>registry.execute({...request,inputs:{}}),/does not match declared dtype\/shape/);
 assert.ok(Object.isFrozen(registeredSnapshot));
 await assert.rejects(()=>registry.execute({...request,requestId:'tampered'},{}),/checksum/);
+await assert.rejects(()=>registry.execute({...request,context:{...request.context,timestamp:request.context.timestamp+1}}),/checksum/,
+  'a host response must be bound to the exact decision timestamp and execution context');
+await assert.rejects(()=>registry.execute({...request,inputs:{values:{...request.inputs.values,data:[2,3]}}}),/checksum/,
+  'a host response must be bound to the exact input feature tensor values');
+await assert.rejects(()=>registry.execute({...request,context:{...request.context,confirmed:1}}),/confirmed-bar/,
+  'truthy non-boolean confirmation flags must never bypass the confirmed-bar gate');
 await assert.rejects(()=>registry.execute({...request,exportName:'os.system'}),/not declared/);
 await assert.rejects(()=>registry.execute({...request,context:{...request.context,confirmed:false}}),/confirmed-bar/);
 await assert.rejects(()=>registry.execute({...request,inputs:{values:{dtype:'i64',shape:[2],data:[1.2,2]}}}),/dtype/);
