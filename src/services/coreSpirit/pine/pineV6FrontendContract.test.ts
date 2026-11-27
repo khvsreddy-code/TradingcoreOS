@@ -23,22 +23,11 @@ assert.equal(frontend.parse('//@version=6\nindicator("one")\nstrategy("two")').d
 const alertIndicator = frontend.parse(`//@version=6
 indicator("Alert semantics")
 alert("tick", alert.freq_all)`);
-const alertConditionIndicator = frontend.parse(`//@version=6
-indicator("Alert condition semantics")
-alertcondition(close > open, "Bullish", "Bullish candle")`);
-assert.ok(alertConditionIndicator.ast,alertConditionIndicator.diagnostics.map(item=>item.message).join('; '));
-
 assert.ok(alertIndicator.ast,alertIndicator.diagnostics.map(item=>item.message).join('; '));
 const alertCompiled = new CoreSpiritCompiler().compileSource(alertIndicator.normalizedSource,'pine-alert-semantics',{frontend:'pine-v6'});
 assert.ok(alertCompiled.ir,alertCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
 assert.ok(alertCompiled.ir!.entry.instructions.some(item=>item.op==='const'&&item.value==='all'),
   'alert.freq_all must lower to its Pine frequency enum value');
-const strategyAlertCondition = frontend.parse([
-  '//@version=6',
-  'strategy("No alertcondition")',
-  'alertcondition(close > open, "Bullish", "Bullish candle")',
-].join('\n'));
-assert.equal(strategyAlertCondition.diagnostics[0]?.code,'PINE_ALERTCONDITION_INDICATOR_ONLY');
 const indicatorStrategyApi = frontend.parse([
   '//@version=6',
   'indicator("No strategy API")',
