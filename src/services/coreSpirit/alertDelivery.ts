@@ -70,7 +70,7 @@ function outboxKey(event:CoreSpiritAlertEvent):string{
   const scope=[event.programId,event.instrumentId,event.timeframe,event.scriptRevision,event.eventType];
   if(event.frequency==='all'){
     if(!Number.isSafeInteger(event.sourceSequence)||Number(event.sourceSequence)<0)
-      throw new Error('alert.freq_all requires a unique host-stamped event sequence.');
+      throw new Error('alert.freq_all requires a unique host-stamped market event sequence.');
     return 'all|'+tupleKey([...scope,event.barId,event.conditionId,String(event.sourceSequence)]);
   }
   // alert() frequency is script-wide: two alert() call sites do not each get a separate
