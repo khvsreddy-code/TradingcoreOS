@@ -143,7 +143,7 @@ export const PINE_V6_BUILTIN_NAMESPACE_INVENTORY: readonly PineV6NamespaceInvent
   { namespace:'matrix', coverage:'catalog-only', description:'Typed matrices, element access, mutation and linear-algebra operations.', referenceUrl:reference },
   { namespace:'map', coverage:'catalog-only', description:'Typed key/value maps with reference identity and collection methods.', referenceUrl:reference },
   { namespace:'str', coverage:'partial', description:'String formatting, conversion, searching, splitting, replacement and Unicode operations; regex and date/time formatting remain catalog-only.', referenceUrl:reference },
-  { namespace:'color', coverage:'partial', description:'Color construction, channel extraction, transparency and gradient operations; named constant values remain catalog-only.', referenceUrl:reference }
+  { namespace:'color', coverage:'partial', description:'Color construction, channel extraction, transparency and gradient operations; named constant values remain catalog-only.', referenceUrl:reference },
   { namespace:'input', coverage:'catalog-only', description:'Settings declarations, constraints, grouping and input-qualified values.', referenceUrl:reference },
   { namespace:'request', coverage:'host-dependent', description:'Cross-symbol/timeframe, intrabar, financial and economic data requests.', referenceUrl:reference },
   { namespace:'timeframe', coverage:'catalog-only', description:'Chart timeframe metadata and conversion helpers.', referenceUrl:reference },
