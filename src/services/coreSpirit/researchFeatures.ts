@@ -117,7 +117,7 @@ function assertFeatureAvailability(name:string,values:Float64Array,availableAt:F
 export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureInput):CoreSpiritResearchFeatureSet{
   const n=input.timestampsMs.length;
   if(!input.symbol?.trim()||!input.timeframe?.trim()||n<3||n>MAX_ROWS)throw new Error('Research feature input identity or row count is invalid.');
-  assertColumn('confirmed',input.confirmed as unknown as Float64Array,n);
+  if(!(input.confirmed instanceof Uint8Array)||input.confirmed.length!==n)throw new Error('Research confirmed flags must be a Uint8Array with '+n+' rows.');
   for(const field of FIELDS)assertColumn(field,input[field],n);
   for(const field of FIELDS)assertColumn(field+' availability',input.availableAtMs[field],n);
   const volPeriod=validatePeriod(input.periods?.realizedVolatility,20,'realized volatility period');
@@ -169,7 +169,6 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   for(let i=0;i<n;i++)if(Number.isFinite(averageVolume[i]!)&&averageVolume[i]!>0)relativeVolume[i]=input.volume[i]!/averageVolume[i]!;
   const relativeVolumeAvailability=maxWindowAvailability(input.availableAtMs.volume,volumePeriod);
 
-  const prefix='returns_1','log_returns_1','range_pct_1';
   const volatilityName='realized_volatility_'+volPeriod;
   const atrName='normalized_atr_'+atrPeriod;
   const volumeName='relative_volume_'+volumePeriod;
