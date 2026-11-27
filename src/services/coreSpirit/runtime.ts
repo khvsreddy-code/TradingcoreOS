@@ -2085,7 +2085,8 @@ export class CoreSpiritRuntime {
       const field=String(args[2]??'close') as CoreSpiritDataRequest['field'];
       if(!symbol||!timeframe||!['open','high','low','close','volume','time'].includes(field)) return finish(createCoreScriptArray([]));
       if(!this.admitUniqueRequestContext(symbol,timeframe,field,'last-confirmed')) return finish(null);
-      const parentTimestamp=this.toEpoch(bar.timestamp);
+      // Intrabar timestamps are canonical epoch milliseconds; the VM's bar clock is epoch seconds.
+      const parentTimestamp=this.toEpoch(bar.timestamp)*1000;
       const key=`ltf-array:${index}:${symbol}:${timeframe}:${field}:${parentTimestamp}:${this.state.barState.revision}`;
       if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
       const intrabarsResolver=this.dataResolver?.intrabars;
