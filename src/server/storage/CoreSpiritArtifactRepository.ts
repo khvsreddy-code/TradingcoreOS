@@ -32,6 +32,7 @@ type StoredResearchRow = {
   confirmed: boolean;
   phase: ResearchFeatureRow['phase'];
   values: number[];
+  featureAvailableAt?: number[];
 };
 
 type StoredDatasetSnapshotFields = {
@@ -187,7 +188,10 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
       // Chunked snapshots keep only a manifest pointer in this row. The worker streams
       // separately hashed chunks instead of materializing the dataset in this object.
-      rows: (data.rows as ResearchFeatureRow[]).map((row) => ({ ...row, values: [...row.values] })),
+      rows: (data.rows as ResearchFeatureRow[]).map((row) => ({
+        ...row, values: [...row.values],
+        ...(row.featureAvailableAt ? { featureAvailableAt: [...row.featureAvailableAt] } : {}),
+      })),
     };
     if (storageMode === 'chunked-v1') {
       if (!batchSessionId || !datasetManifest) throw new Error('Chunked dataset snapshot is missing its session or manifest.');
