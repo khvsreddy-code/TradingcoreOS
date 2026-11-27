@@ -13,6 +13,8 @@ export type CoreSpiritFeatureObservation = Readonly<{
   confirmed: boolean;
   phase: CoreSpiritFeaturePhase;
   values: readonly (number | null)[];
+  /** Exact per-feature availability; availableAt remains the maximum for legacy consumers. */
+  featureAvailableAt?: readonly number[];
 }>;
 
 export type CoreSpiritFeatureDriftOptions = Readonly<{
@@ -67,6 +69,11 @@ function validateRows(rows: readonly CoreSpiritFeatureObservation[], width: numb
     const row = rows[index];
     if (!row || typeof row !== 'object' || !Number.isSafeInteger(row.timestamp) || !Number.isSafeInteger(row.availableAt) ||
         row.timestamp <= previousTimestamp || !Array.isArray(row.values) || row.values.length !== width ||
+        (row.featureAvailableAt !== undefined && (
+          !Array.isArray(row.featureAvailableAt) || row.featureAvailableAt.length !== width ||
+          row.featureAvailableAt.some(value => !Number.isSafeInteger(value) || value < 0 || value > row.timestamp) ||
+          Math.max(...row.featureAvailableAt) !== row.availableAt
+        )) ||
         typeof row.confirmed !== 'boolean' ||
         !['historical', 'confirmed', 'developing', 'realtime', 'forecast'].includes(String(row.phase))) {
       throw new Error(label + ' observation ' + index + ' has an invalid timestamp, phase, confirmation flag, or feature schema.');
@@ -168,7 +175,11 @@ export function monitorCoreSpiritFeatureDrift(input: {
   const warnings: string[] = [];
   const baselineEligible = input.baseline.filter(row => row.confirmed && (row.phase === 'historical' || row.phase === 'confirmed'));
   const observedEligible = input.observed.filter(row => row.phase !== 'forecast' && row.phase !== 'developing' && row.confirmed);
-  const temporalViolations = input.observed.filter(row => row.availableAt > row.timestamp || row.phase === 'forecast' || row.phase === 'developing' || !row.confirmed).length;
+  const temporalViolations = input.observed.filter(row =>
+    row.availableAt > row.timestamp ||
+    row.featureAvailableAt?.some(value => value > row.timestamp) === true ||
+    row.phase === 'forecast' || row.phase === 'developing' || !row.confirmed
+  ).length;
 
   if (baselineEligible.length < options.minimumBaselineRows) blockers.push('Baseline has too few confirmed historical observations.');
   if (observedEligible.length < options.minimumObservedRows) blockers.push('Observed window has too few confirmed, causally available observations.');
