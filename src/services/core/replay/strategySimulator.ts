@@ -70,7 +70,7 @@ export type StrategySimulationResult=Readonly<{
 
 type WorkingOrder={original:SimulationIntent;intent:SimulationIntent;signalTimeMs:number;sequence:number;
   status:'pending'|'partially-filled'|'filled'|'cancelled'|'rejected'|'expired';filled:number;remaining:number;eligibleBars:number;
-  stopTriggered:boolean;fixedFeeCharged:boolean;openedPosition:boolean};
+  stopTriggered:boolean;fixedFeeCharged:boolean;openedPosition:boolean;reversalAdjusted:boolean};
 type Position={symbol:string;quantity:number;averagePrice:number;entryFees:number;entryOrderId:string;entrySignalId:string;entryId:string;entryCount:number;entryTimestampMs:number;realizedNetPnl:number};
 type Bracket={id:string;intent:SimulationIntent;symbol:string;direction:1|-1;remaining:number;stop?:number;target?:number;
   activeAt:number;fixedFeeCharged:boolean;ocaGroup?:string;ocaType?:'cancel'|'reduce'};
@@ -328,7 +328,7 @@ export function runStrategySimulation(input:{
         originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:signalTimeMs,barIndex,phase:'bar-close'});return;
     }
     const state:WorkingOrder={original,intent:original,signalTimeMs,sequence,status:'pending',filled:0,remaining:Number(original.quantity)||0,
-      eligibleBars:0,stopTriggered:false,fixedFeeCharged:false,openedPosition:false};
+      eligibleBars:0,stopTriggered:false,fixedFeeCharged:false,openedPosition:false,reversalAdjusted:false};
     orders.set(original.orderId,state);
     const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
     if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
@@ -505,7 +505,7 @@ export function runStrategySimulation(input:{
         continue;
       }
       const price=executionPrice(candidate,order.intent.side,config),available=liquidity.get(order.intent.symbol)??0;
-      const desired=lotFloor(Math.min(order.remaining,available),config.lotSize);
+      let desired=lotFloor(Math.min(order.remaining,available),config.lotSize);
       if(desired<=0){
         if(order.intent.type==='market'){
           order.status='cancelled';record({eventType:'order_cancelled',orderId:order.intent.orderId,signalId:order.intent.signalId,symbol:order.intent.symbol,
@@ -519,6 +519,16 @@ export function runStrategySimulation(input:{
         continue;
       }
       const p=getPosition(order.intent.symbol),direction=order.intent.side==='buy'?1:-1;
+      // Pine strategy.entry() reverses an opposing position by first flattening it.
+      // Its transaction quantity therefore includes the existing position size.
+      // strategy.order() deliberately does not receive this automatic adjustment.
+      if(order.intent.countsTowardPyramiding&&!order.reversalAdjusted&&p.quantity!==0&&Math.sign(p.quantity)!==direction){
+        const transactionQuantity=order.intent.quantity+Math.abs(p.quantity);
+        order.intent=Object.freeze({...order.intent,quantity:transactionQuantity});
+        order.remaining=lotFloor(Math.max(0,transactionQuantity-order.filled),config.lotSize);
+        order.reversalAdjusted=true;
+        desired=lotFloor(Math.min(order.remaining,available),config.lotSize);
+      }
       if(order.intent.countsTowardPyramiding&&p.quantity!==0&&Math.sign(p.quantity)===direction&&p.entryCount>=config.pyramiding&&!order.openedPosition){
         order.status='rejected';record({eventType:'order_rejected',orderId:order.intent.orderId,signalId:order.intent.signalId,symbol:order.intent.symbol,
           side:order.intent.side,originalIntent:order.original,currentIntent:order.intent,reason:'strategy() pyramiding limit rejected another same-direction entry.',
