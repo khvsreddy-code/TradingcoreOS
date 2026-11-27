@@ -87,6 +87,8 @@ export function createCoreSpiritPythonMlManifest(spec: CoreSpiritPythonMlModelSp
       'lower_bound', 'upper_bound', 'return_estimate_kind', 'model_version',
       'artifact_hash', 'release_status', 'probability_calibration',
       'production_eligible', 'probability_semantics', 'forecast_horizon_bars',
+      'feature_schema_version', 'feature_version', 'dataset_hash', 'data_quality',
+      'valid_until_ms', 'provider',
     ],
     maxMemoryBytes: 64 * 1024 * 1024,
     maxSteps: 1_000_000,
@@ -292,6 +294,12 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
       production_eligible: safeMetadataValue(result.production_eligible),
       probability_semantics: safeMetadataValue(result.probability_semantics),
       forecast_horizon_bars: safeMetadataValue(result.forecast_horizon_bars),
+      feature_schema_version: safeMetadataValue(result.feature_schema_version),
+      feature_version: safeMetadataValue(result.feature_version),
+      dataset_hash: safeMetadataValue(result.dataset_hash),
+      data_quality: safeMetadataValue(result.data_quality),
+      valid_until_ms: safeMetadataValue(result.valid_until_ms),
+      provider: safeMetadataValue(result.provider),
     };
     const outputChecksum = coreSpiritChecksum({ modelId: manifest.modelId, version: manifest.version, prediction, confidence, metadata });
     const stateChecksum = coreSpiritChecksum({ modelId: manifest.modelId, version: manifest.version, stateToken: request.stateToken ?? null, context: request.context });
