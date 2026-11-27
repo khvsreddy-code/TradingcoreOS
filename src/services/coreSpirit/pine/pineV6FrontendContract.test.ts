@@ -29,6 +29,19 @@ const alertCompiled = new CoreSpiritCompiler().compileSource(alertSource,'pine-a
 assert.ok(alertCompiled.ir,alertCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\n'));
 assert.ok(alertCompiled.ir!.entry.instructions.some(item=>item.op==='const'&&item.value==='all'),
   'alert.freq_all must lower to its Pine frequency enum value');
+const alertConditionSource = `//@version=6
+indicator("Alert condition declaration")
+alertcondition(close > open, "Bullish", "Bullish candle")`;
+const alertConditionParsed = frontend.parse(alertConditionSource);
+assert.ok(alertConditionParsed.ast,alertConditionParsed.diagnostics.map(item=>item.code+': '+item.message).join('; '));
+const alertConditionCompiled = new CoreSpiritCompiler().compileSource(alertConditionSource,'pine-alertcondition-semantics',{frontend:'pine-v6'});
+assert.ok(alertConditionCompiled.ir,alertConditionCompiled.diagnostics.map(item=>item.code+': '+item.message).join('\\n'));
+assert.ok(alertConditionCompiled.ir!.entry.instructions.some(item=>item.op==='emit'&&item.kind==='alertcondition'),
+  'alertcondition() must remain a distinct Pine indicator event declaration');
+const strategyAlertCondition = frontend.parse(`//@version=6
+strategy("Alertcondition is not strategy API")
+alertcondition(close > open, "Bullish", "Bullish candle")`);
+assert.equal(strategyAlertCondition.diagnostics[0]?.code,'PINE_ALERTCONDITION_INDICATOR_ONLY');
 const indicatorStrategyApi = frontend.parse([
   '//@version=6',
   'indicator("No strategy API")',
