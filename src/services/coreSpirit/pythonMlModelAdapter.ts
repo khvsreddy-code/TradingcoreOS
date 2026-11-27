@@ -172,6 +172,7 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
   async execute(
     manifest: CoreSpiritStrictModelManifest,
     request: CoreSpiritStrictModelRequest,
+    signal?: AbortSignal,
   ): Promise<CoreSpiritStrictModelPrediction> {
     validateCoreSpiritStrictModelManifest(manifest);
     if (manifest.implementation !== this.implementation || manifest.transport !== this.transport) {
@@ -231,23 +232,37 @@ export class CoreSpiritPythonMlServiceAdapter implements CoreSpiritExternalModel
     const timeframe = String(request.marketState.timeframe || request.context.timeframe || '').trim();
     if (!symbol || !timeframe) throw new Error('Python ML inference requires a canonical symbol and timeframe.');
 
-    const upstream = await this.fetchImpl(this.baseUrl + '/predict', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-TradingCore-ML-Secret': this.secret,
-      },
-      signal: AbortSignal.timeout(this.timeoutMs),
-      body: JSON.stringify({
-        symbol,
-        timeframe,
-        horizon: manifest.forecastHorizonBars ?? 1,
-        models: [manifest.modelId],
-        model_versions: { [manifest.modelId]: manifest.version },
-        candles,
-      }),
-    });
-    const responseText = await upstream.text();
+    if (signal?.aborted) throw new Error('Python ML model invocation was cancelled before dispatch.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('Python ML service request timed out.')), this.timeoutMs);
+    const abort = () => controller.abort(signal?.reason ?? new Error('Python ML model invocation was cancelled.'));
+    signal?.addEventListener('abort', abort, { once: true });
+    let upstream: Response;
+    let responseText: string;
+    try {
+      if (signal?.aborted) abort();
+      upstream = await this.fetchImpl(this.baseUrl + '/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-TradingCore-ML-Secret': this.secret,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          symbol,
+          timeframe,
+          horizon: manifest.forecastHorizonBars ?? 1,
+          models: [manifest.modelId],
+          model_versions: { [manifest.modelId]: manifest.version },
+          candles,
+        }),
+      });
+      responseText = await upstream.text();
+      if (controller.signal.aborted) throw new Error('Python ML model invocation was cancelled or timed out.');
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    }
     if (responseText.length > 512 * 1024) throw new Error('Python ML response exceeded the 512 KiB response limit.');
     if (!upstream.ok) throw new Error(`Python ML service rejected ${manifest.modelId}@${manifest.version}: ${safeJsonError(responseText)}`);
 
