@@ -25,7 +25,12 @@ export type CoreSpiritResearchFeatureInput = Readonly<{
   close:Float64Array;
   volume:Float64Array;
   availableAtMs:Readonly<Record<CoreSpiritResearchMarketField,Float64Array>>;
-  periods?:Readonly<{realizedVolatility?:number;atr?:number;relativeVolume?:number}>;
+  /** Timestamped upstream features such as breadth, sector strength, futures basis, OI, IV, Greeks or licensed event data. */
+  auxiliary?:Readonly<Record<string,CoreSpiritResearchAuxiliaryFeature>>;
+  periods?:Readonly<{
+    realizedVolatility?:number;atr?:number;relativeVolume?:number;
+    trend?:number;momentum?:number;shortVolatility?:number;
+  }>;
 }>;
 export type CoreSpiritResearchFeatureSet = Readonly<{
   symbol:string;
