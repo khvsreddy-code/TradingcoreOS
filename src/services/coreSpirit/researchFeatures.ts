@@ -130,6 +130,8 @@ function assertFeatureAvailability(name:string,values:Float64Array,availableAt:F
  * family, not a substitute for licensed options, breadth, futures or event data.
  */
 export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureInput):CoreSpiritResearchFeatureSet{
+  if(!(input.timestampsMs instanceof Float64Array))throw new Error('Research timestamps must be a Float64Array.');
+  if(!input.availableAtMs||typeof input.availableAtMs!=='object')throw new Error('Research source availability map is required.');
   const n=input.timestampsMs.length;
   if(!input.symbol?.trim()||!input.timeframe?.trim()||n<3||n>MAX_ROWS)throw new Error('Research feature input identity or row count is invalid.');
   if(!(input.confirmed instanceof Uint8Array)||input.confirmed.length!==n)throw new Error('Research confirmed flags must be a Uint8Array with '+n+' rows.');
