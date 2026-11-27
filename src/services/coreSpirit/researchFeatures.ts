@@ -9,7 +9,12 @@
 import { atr, ema, linearRegression, rollingMean, rollingStd } from './numericalKernels';
 
 export type CoreSpiritResearchMarketField = 'open'|'high'|'low'|'close'|'volume';
-export type CoreSpiritResearchAuxiliaryFeature = Readonly<{\n  values:Float64Array;\n  availableAtMs:Float64Array;\n  source:'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied';\n}>;\nexport type CoreSpiritResearchFeatureInput = Readonly<{
+export type CoreSpiritResearchAuxiliaryFeature = Readonly<{
+  values:Float64Array;
+  availableAtMs:Float64Array;
+  source:'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied';
+}>;
+export type CoreSpiritResearchFeatureInput = Readonly<{
   symbol:string;
   timeframe:string;
   timestampsMs:Float64Array;
@@ -28,7 +33,8 @@ export type CoreSpiritResearchFeatureSet = Readonly<{
   timestampsMs:Float64Array;
   featureNames:readonly string[];
   features:Readonly<Record<string,Float64Array>>;
-  availabilityMsByFeature:Readonly<Record<string,Float64Array>>;\n  featureSources:Readonly<Record<string,'ohlcv-derived'|'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied'>>;
+  availabilityMsByFeature:Readonly<Record<string,Float64Array>>;
+  featureSources:Readonly<Record<string,'ohlcv-derived'|'market-breadth'|'sector'|'futures'|'options'|'macro'|'event'|'user-supplied'>>;
   pointInTimeSchema:Readonly<{
     decisionTimestampColumn:'timestamp_ms';
     confirmedColumn:'is_confirmed';
@@ -126,7 +132,10 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   for(const field of FIELDS)assertColumn(field+' availability',input.availableAtMs[field],n);
   const volPeriod=validatePeriod(input.periods?.realizedVolatility,20,'realized volatility period');
   const atrPeriod=validatePeriod(input.periods?.atr,14,'ATR period');
-  const volumePeriod=validatePeriod(input.periods?.relativeVolume,20,'relative volume period');\n  const trendPeriod=validatePeriod(input.periods?.trend,20,'trend period');\n  const momentumPeriod=validatePeriod(input.periods?.momentum,5,'momentum period');\n  const shortVolatilityPeriod=validatePeriod(input.periods?.shortVolatility,5,'short volatility period');
+  const volumePeriod=validatePeriod(input.periods?.relativeVolume,20,'relative volume period');
+  const trendPeriod=validatePeriod(input.periods?.trend,20,'trend period');
+  const momentumPeriod=validatePeriod(input.periods?.momentum,5,'momentum period');
+  const shortVolatilityPeriod=validatePeriod(input.periods?.shortVolatility,5,'short volatility period');
 
   for(let i=0;i<n;i++){
     const timestamp=input.timestampsMs[i]!;
@@ -171,7 +180,25 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   const averageVolume=rollingMean(input.volume,volumePeriod);
   const relativeVolume=new Float64Array(n);relativeVolume.fill(Number.NaN);
   for(let i=0;i<n;i++)if(Number.isFinite(averageVolume[i]!)&&averageVolume[i]!>0)relativeVolume[i]=input.volume[i]!/averageVolume[i]!;
-  const relativeVolumeAvailability=maxWindowAvailability(input.availableAtMs.volume,volumePeriod);\n\n  const emaValues=ema(input.close,trendPeriod);\n  const emaDistance=new Float64Array(n);emaDistance.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(emaValues[i]!))emaDistance[i]=input.close[i]!/emaValues[i]!-1;\n  const trendRegression=linearRegression(input.close,trendPeriod);\n  const normalizedTrendSlope=new Float64Array(n);normalizedTrendSlope.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(trendRegression.slope[i]!))normalizedTrendSlope[i]=trendRegression.slope[i]!/input.close[i]!;\n  const trendAvailability=maxWindowAvailability(input.availableAtMs.close,trendPeriod);\n  const momentum=new Float64Array(n);momentum.fill(Number.NaN);\n  const momentumAvailability=new Float64Array(n);momentumAvailability.fill(Number.NaN);\n  for(let i=momentumPeriod;i<n;i++){momentum[i]=input.close[i]!/input.close[i-momentumPeriod]!-1;momentumAvailability[i]=Math.max(input.availableAtMs.close[i]!,input.availableAtMs.close[i-momentumPeriod]!);}\n  const shortVolatilityRaw=rollingStd(logReturns,shortVolatilityPeriod);\n  const volatilityExpansion=new Float64Array(n);volatilityExpansion.fill(Number.NaN);\n  for(let i=0;i<n;i++)if(Number.isFinite(shortVolatilityRaw[i]!)&&Number.isFinite(volatilityRaw[i]!)&&volatilityRaw[i]!>0)volatilityExpansion[i]=shortVolatilityRaw[i]!/volatilityRaw[i]!;\n  const volatilityExpansionAvailability=maxWindowAvailability(returnAvailability,volPeriod);\n  const closeLocation=new Float64Array(n);closeLocation.fill(Number.NaN);\n  for(let i=0;i<n;i++){const width=input.high[i]!-input.low[i]!;if(width>0)closeLocation[i]=(input.close[i]!-input.low[i]!)/width;}\n  const closeLocationAvailability=rangeAvailability;
+  const relativeVolumeAvailability=maxWindowAvailability(input.availableAtMs.volume,volumePeriod);
+
+  const emaValues=ema(input.close,trendPeriod);
+  const emaDistance=new Float64Array(n);emaDistance.fill(Number.NaN);
+  for(let i=0;i<n;i++)if(Number.isFinite(emaValues[i]!))emaDistance[i]=input.close[i]!/emaValues[i]!-1;
+  const trendRegression=linearRegression(input.close,trendPeriod);
+  const normalizedTrendSlope=new Float64Array(n);normalizedTrendSlope.fill(Number.NaN);
+  for(let i=0;i<n;i++)if(Number.isFinite(trendRegression.slope[i]!))normalizedTrendSlope[i]=trendRegression.slope[i]!/input.close[i]!;
+  const trendAvailability=maxWindowAvailability(input.availableAtMs.close,trendPeriod);
+  const momentum=new Float64Array(n);momentum.fill(Number.NaN);
+  const momentumAvailability=new Float64Array(n);momentumAvailability.fill(Number.NaN);
+  for(let i=momentumPeriod;i<n;i++){momentum[i]=input.close[i]!/input.close[i-momentumPeriod]!-1;momentumAvailability[i]=Math.max(input.availableAtMs.close[i]!,input.availableAtMs.close[i-momentumPeriod]!);}
+  const shortVolatilityRaw=rollingStd(logReturns,shortVolatilityPeriod);
+  const volatilityExpansion=new Float64Array(n);volatilityExpansion.fill(Number.NaN);
+  for(let i=0;i<n;i++)if(Number.isFinite(shortVolatilityRaw[i]!)&&Number.isFinite(volatilityRaw[i]!)&&volatilityRaw[i]!>0)volatilityExpansion[i]=shortVolatilityRaw[i]!/volatilityRaw[i]!;
+  const volatilityExpansionAvailability=maxWindowAvailability(returnAvailability,volPeriod);
+  const closeLocation=new Float64Array(n);closeLocation.fill(Number.NaN);
+  for(let i=0;i<n;i++){const width=input.high[i]!-input.low[i]!;if(width>0)closeLocation[i]=(input.close[i]!-input.low[i]!)/width;}
+  const closeLocationAvailability=rangeAvailability;
 
   const volatilityName='realized_volatility_'+volPeriod;
   const atrName='normalized_atr_'+atrPeriod;
@@ -228,7 +255,8 @@ export function buildCoreSpiritResearchFeatures(input:CoreSpiritResearchFeatureI
   return Object.freeze({
     symbol:input.symbol,timeframe:input.timeframe,timestampsMs:Float64Array.from(input.timestampsMs),
     featureNames:Object.freeze(featureNames),features:Object.freeze(features),
-    availabilityMsByFeature:Object.freeze(availabilityMsByFeature),\n    featureSources:Object.freeze(featureSources),
+    availabilityMsByFeature:Object.freeze(availabilityMsByFeature),
+    featureSources:Object.freeze(featureSources),
     pointInTimeSchema:Object.freeze({
       decisionTimestampColumn:'timestamp_ms' as const,confirmedColumn:'is_confirmed' as const,
       phaseColumn:'bar_phase' as const,availabilityColumns:Object.freeze(availabilityColumns),
