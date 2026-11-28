@@ -53,21 +53,50 @@
       "runNumber": 5656,
       "headCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
       "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46104176100",
-      "status": "validate_job_still_in_progress_at_last_check",
+      "status": "completed_failure",
       "dependencySecurity": "passed",
-      "contractStep": "failed",
+      "contractResults": {
+        "total": 258,
+        "executed": 258,
+        "passed": 245,
+        "failed": 13,
+        "skipped": 0,
+        "failFast": false
+      },
+      "pineStrategyEntryRegression": "resolved_in_this_run",
+      "remainingFailures": [
+        "corespirit-pine-feature-registry",
+        "corespirit-language-parity",
+        "corespirit-numerical-kernels",
+        "strategy-simulator-margin-pyramiding-oca",
+        "corespirit-pine-strategy-simulation-adapter",
+        "corespirit-pine-backtest-execution-host",
+        "corespirit-model-orchestration-security",
+        "corespirit-ai-model-semantics",
+        "corespirit-large-data-research-host",
+        "corespirit-point-in-time-research-features",
+        "corespirit-request-security-lower-tf-arrays",
+        "corespirit-python-module-host",
+        "corespirit-polyglot-remote-hosts"
+      ],
       "typecheck": "passed",
+      "gatewayContainerBuild": "passed",
       "productionBuild": "failed_bundle_budget",
-      "coreSpiritBenchmark": "in_progress_or_archiving_at_last_check",
-      "note": "Contract step failed overall; the job log was not yet available to identify whether the Pine strategy assertion was among remaining failures. Do not infer that the specific regression passed."
+      "chartInitialStaticGraphGzipKb": 663.1,
+      "chartHardLimitGzipKb": 650,
+      "coreSpiritBenchmark": "passed",
+      "wasmBenchmark": "passed",
+      "browserPerformance": "skipped",
+      "note": "The Pine strategyEntry contract no longer appears in failures; do not treat the overall CI run as green because 13 independent contracts and the bundle budget still fail."
     },
     "latestAuditArtifactRun": {
       "runId": 46104290299,
       "runNumber": 5657,
       "headCommit": "ffbd8fc7e95ce3d77ba4e03d16512975d7fca04b",
       "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46104290299",
-      "status": "in_progress_at_last_check",
-      "note": "This run tests the latest main revision, including the audit JSON reconciliation. Contract step was still running."
+      "status": "validate_job_in_progress_at_last_check",
+      "contractStep": "failed",
+      "note": "This run uses the same production code as 5656 plus audit metadata. Do not infer full run completion."
     }
   },
   "totals": {
@@ -2454,6 +2483,38 @@
         "assertion": "Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'",
         "triage": "Same stable diagnostic mismatch as research host; preserve HTTPS/loopback enforcement."
       }
-    ]
+    ],
+    "postFixComparison": {
+      "before": {
+        "run": 46103957654,
+        "passed": 244,
+        "failed": 14,
+        "skipped": 0
+      },
+      "after": {
+        "run": 46104176100,
+        "passed": 245,
+        "failed": 13,
+        "skipped": 0
+      },
+      "fixed": [
+        "corespirit-pine-v6-frontend"
+      ],
+      "remaining": [
+        "corespirit-pine-feature-registry",
+        "corespirit-language-parity",
+        "corespirit-numerical-kernels",
+        "strategy-simulator-margin-pyramiding-oca",
+        "corespirit-pine-strategy-simulation-adapter",
+        "corespirit-pine-backtest-execution-host",
+        "corespirit-model-orchestration-security",
+        "corespirit-ai-model-semantics",
+        "corespirit-large-data-research-host",
+        "corespirit-point-in-time-research-features",
+        "corespirit-request-security-lower-tf-arrays",
+        "corespirit-python-module-host",
+        "corespirit-polyglot-remote-hosts"
+      ]
+    }
   }
 }

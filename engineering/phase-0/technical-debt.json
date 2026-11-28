@@ -21,9 +21,11 @@
       "evidence": "PineV6FrontendContract.test.ts:65 asserts Pine strategyEntry compiles to a dedicated simulation-only command.",
       "impact": "Main CI contract step is red before most tests.",
       "action": "Triage lowering versus contract expectation; fix and preserve the simulation-only boundary.",
-      "status": "fix_committed_pending_ci",
+      "status": "resolved",
       "fixCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
-      "fixDescription": "Namespaced member-call lowering emits the declared builtin emitKind after the call instruction."
+      "fixDescription": "Namespaced member-call lowering emits the declared builtin emitKind after the call instruction.",
+      "resolvedInCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
+      "resolution": "Confirmed by run #5656: corespirit-pine-v6-frontend is absent from the remaining 13 failures and overall contract passed count rose from 244 to 245."
     },
     {
       "id": "TD-004",
@@ -160,7 +162,8 @@
         "corespirit-point-in-time-research-features: SyntaxError at close[i]!-0.1 in .mjs file",
         "corespirit-request-security-lower-tf-arrays: Lower-timeframe array values are not all equal to 3",
         "corespirit-python-module-host: Polyglot dependencies must use exact pinned versions",
-        "corespirit-polyglot-remote-hosts: Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'"
+        "corespirit-polyglot-remote-hosts: Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'",
+        "Follow-up run #5656 on the namespaced emitKind compiler-fix commit: 245/258 passed, 13 failed, 0 skipped. The previously failing Pine strategyEntry frontend contract passed; the 13 remaining failures are listed in test-feature-mapping.json."
       ],
       "impact": "The runner now exposes failures previously masked by fail-fast behavior. These failures span temporal incremental correctness, simulation/margin behavior, security validation, Pine registry metadata and test syntax; they are not all related and must be triaged independently.",
       "action": "Fix in risk order: security validation and data/series correctness; Pine compiler and strategy simulation; then registry/test-harness mismatches and stable diagnostic wording. Require all 258 tests to execute and reach an agreed passing state before marking CI green.",
@@ -171,7 +174,7 @@
         "failed": 14,
         "skipped": 0
       },
-      "status": "open"
+      "status": "partially_reduced_open"
     }
   ],
   "resolvedItems": [
