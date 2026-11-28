@@ -32,7 +32,7 @@ import { buildCoreSpiritArtifactSemanticFingerprint } from './artifactLookupIden
 import { readCoreScriptEdition, type CoreScriptEdition } from './languageEdition.js';
 import { parseWithCoreSpiritFrontend } from './frontends';
 import { desugarCoreSpiritFunctions } from './functionDesugar';
-import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritLanguageDefinition';
+import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
