@@ -76,6 +76,7 @@ export type CoreSpiritIrProgram = {
   version:1;
   sourceId:string;
   programKind?:CoreSpiritProgramKind;
+  programTitle?:string;
   pineDeclaration?:CoreSpiritPineDeclarationMetadata;
   entry:CoreSpiritIrBlock;
   locals:string[];
