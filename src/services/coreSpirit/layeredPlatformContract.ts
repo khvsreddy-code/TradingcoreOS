@@ -31,6 +31,7 @@ export type CoreSpiritCapability =
   | 'order-intents'
   | 'risk-queries'
   | 'policy-evaluation'
+  | 'alert'
   | 'webhooks';
 
 export type CoreSpiritForbiddenCapability =
