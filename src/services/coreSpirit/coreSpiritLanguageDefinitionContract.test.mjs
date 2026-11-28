@@ -28,7 +28,9 @@ assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, ['indicator','aut
 assert.equal(CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(','), 'beginner,trader,quant,system');
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramKind/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /TypeName/);
-assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /EditionDirective/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /Edition10Directive|Edition12Directive/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramHeader/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /Block ::= Block10 \\| Block12/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /SurfaceLowering/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /QualifiedName/);
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURES.some(feature => feature.id === 'prediction-feature-blocks' && feature.status === 'planned'));
