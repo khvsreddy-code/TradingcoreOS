@@ -768,9 +768,15 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       for(const expectedName of n.metadata?.expectedTypes ?? []){
         const expected=semanticTypeForDeclaredName(expectedName);
         if(!expected){report(n,`Unsupported function type '${expectedName}'`,'FUNCTION_UNKNOWN_TYPE');continue;}
-        const typeMatches=(expected.atom===inferred.atom || (expected.atom==='number' && isSemanticNumeric(inferred))) && (expected.container===inferred.container);
-        const qualifierMatches=!expected.qualifier || isSemanticQualifierAssignable(expected.qualifier,semanticTypeQualifier(inferred));
-        if(!typeMatches || !qualifierMatches)report(n,`Function value expects '${expectedName}' but inferred '${semanticTypeToString(inferred)}'`,'FUNCTION_TYPE_MISMATCH');
+        // Scalar function parameters accept bar-aligned series by element type,
+        // but explicit temporal/provenance constraints must still be enforced.
+        const actualForFunctionContract =
+          expected.kind === 'scalar' && inferred.kind === 'series'
+            ? scalarize(inferred)
+            : inferred;
+        if(!semanticTypeCompatible(expected,actualForFunctionContract)) {
+          report(n,`Function value expects '${expectedName}' but inferred '${semanticTypeToString(inferred)}'`,'FUNCTION_TYPE_MISMATCH');
+        }
       }
     }
     return inferred;

@@ -250,7 +250,7 @@ assert.throws(() => executeCoreSpirit(
   marketBars,
   'language-automation-runtime-conflicting-lane',
   { layer:'script' },
-), /requires the automation execution layer/);
+), /must compile for the automation execution layer/);
 
 
 const functionProgram = [
