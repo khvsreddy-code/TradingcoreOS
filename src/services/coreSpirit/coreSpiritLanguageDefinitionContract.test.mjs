@@ -108,6 +108,10 @@ const compactCompiled = compileCoreSpirit(compactSource, 'language-program-compa
 assert.deepEqual(compactCompiled.diagnostics.filter(item => item.severity === 'error'), [], compactCompiled.diagnostics.map(item => item.message).join('\n'));
 assert.equal(compactCompiled.ir?.programKind, 'indicator');
 assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
+const indicatorIr = compileCoreSpirit('indicator "IR Validator" { let x = close; }', 'language-ir-validator').ir;
+assert.ok(indicatorIr);
+assert.equal(validateCoreSpiritIr({ ...indicatorIr, programKind:'script', programLayer:'automation' }), false);
+assert.equal(validateCoreSpiritIr({ ...indicatorIr, programKind:'library', programLayer:'strategy' }), false);
 const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
 assert.ok(mismatchedPolicy.diagnostics.some(item => item.code === 'PROGRAM_LAYER_MISMATCH'));
 
