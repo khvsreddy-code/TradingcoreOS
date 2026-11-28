@@ -106,7 +106,8 @@ ForEachStatement       ::= "for" "(" ("let")? Identifier "in" Expression ")" Blo
 BreakStatement         ::= "break" Terminator
 ContinueStatement      ::= "continue" Terminator
 ErrorPropagationStatement
-                        ::= "return" ErrorExpression Terminator
+                        ::= Expression "?" Terminator
+ErrorExpression         ::= Expression "?"
 PredictionFeatureBlock ::= "features" "{" FeatureDeclaration* "}"
 FeatureDeclaration     ::= Identifier ":" Expression Terminator
 PredictionOutputStatement
@@ -542,18 +543,19 @@ export const CORE_SPIRIT_FINAL_TYPE_SYSTEM = Object.freeze({
   marketTypes: Object.freeze(['Bar','Price','Volume','Timestamp','Symbol','Timeframe'] as const),
   collectionTypes: Object.freeze(['Array<T>','Map<K,V>','Matrix<T>','Tensor<T>'] as const),
   executionTypes: Object.freeze(['Event<T>','Signal<T>','OrderIntent','Position','Prediction<T>','Model<T>'] as const),
+  errorTypes: Object.freeze(['Result<T,E>','Option<T>'] as const),
   temporalConstructors: Object.freeze([
-    Object.freeze({name:'Series<T>',axis:'shape',meaning:'Bar-aligned values for one symbol/timeframe; scalar and series values never silently exchange.'}),
-    Object.freeze({name:'Historical<T>',axis:'phase',meaning:'Finalized past observations only; positive/future indexing is forbidden.'}),
-    Object.freeze({name:'CurrentBar<T>',axis:'phase',meaning:'The active bar snapshot; may be revised until the host commits the bar.'}),
-    Object.freeze({name:'Realtime<T>',axis:'phase',meaning:'Live host observations with revision identity and policy-gated effects.'}),
-    Object.freeze({name:'Confirmed<T>',axis:'phase',meaning:'Finalized bar value; developing inputs cannot satisfy this requirement.'}),
-    Object.freeze({name:'Developing<T>',axis:'phase',meaning:'An unconfirmed value that can change and must be replay-safe.'}),
-    Object.freeze({name:'State<T>',axis:'storage',meaning:'Persistent mutable state with deterministic checkpoint and rollback semantics.'}),
-    Object.freeze({name:'Intrabar<T>',axis:'storage',meaning:'Intrabar-persistent state with separate storage and rollback behavior.'}),
-    Object.freeze({name:'External<T>',axis:'provenance',meaning:'Host-resolved external data carrying provider, symbol, timeframe, availability and causality metadata.'}),
-    Object.freeze({name:'Forecast<T>',axis:'value-kind',meaning:'Model-produced future value; not an observed market value or historical feature.'}),
-    Object.freeze({name:'Option<T>',axis:'availability',meaning:'Explicitly present or absent; unsafe access requires narrowing or handling.'}),
+    Object.freeze({name:'Series<T>',sourceName:'series<T>',axis:'shape',meaning:'Bar-aligned values for one symbol/timeframe; scalar and series values never silently exchange.'}),
+    Object.freeze({name:'Historical<T>',sourceName:'historical<T>',axis:'phase',meaning:'Finalized past observations only; positive/future indexing is forbidden.'}),
+    Object.freeze({name:'CurrentBar<T>',sourceName:'bar<T>',axis:'phase',meaning:'The active bar snapshot; may be revised until the host commits the bar.'}),
+    Object.freeze({name:'Realtime<T>',sourceName:'realtime<T>',axis:'phase',meaning:'Live host observations with revision identity and policy-gated effects.'}),
+    Object.freeze({name:'Confirmed<T>',sourceName:'confirmed<T>',axis:'phase',meaning:'Finalized bar value; developing inputs cannot satisfy this requirement.'}),
+    Object.freeze({name:'Developing<T>',sourceName:'developing<T>',axis:'phase',meaning:'An unconfirmed value that can change and must be replay-safe.'}),
+    Object.freeze({name:'State<T>',sourceName:'state<T>',axis:'storage',meaning:'Persistent mutable state with deterministic checkpoint and rollback semantics.'}),
+    Object.freeze({name:'Intrabar<T>',sourceName:'intrabar<T>',axis:'storage',meaning:'Intrabar-persistent state with separate storage and rollback behavior.'}),
+    Object.freeze({name:'External<T>',sourceName:'external<T>',axis:'provenance',meaning:'Host-resolved external data carrying provider, symbol, timeframe, availability and causality metadata.'}),
+    Object.freeze({name:'Forecast<T>',sourceName:'forecast<T>',axis:'value-kind',meaning:'Model-produced future value; not an observed market value or historical feature.'}),
+    Object.freeze({name:'Option<T>',sourceName:'option<T>',axis:'availability',meaning:'Explicitly present or absent; unsafe access requires narrowing or handling.'}),
   ]),
   orthogonalAxes: Object.freeze({
     shape:Object.freeze(['scalar','series','array','map','matrix','tensor']),
