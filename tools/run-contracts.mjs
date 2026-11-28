@@ -62,7 +62,7 @@ const contracts = [
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['vela-drawing-groups', ['src/velaDrawingGroupContract.test.mjs', false]],
   ['vela-synthetic-price-styles', ['src/velaSyntheticPriceStylesContract.test.ts', true]],
-  ['vela-p1-chart-terminal', ['src/velaP1ChartTerminalContract.test.mjs', true]],
+
   ['options-black-scholes', ['src/optionsBlackScholesContract.test.mjs', true]],
   ['vela-p1-workspace-marketdata', ['src/velaP1WorkspaceMarketDataContract.test.mjs', false]],
   ['live-gap-policy', ['src/liveGapPolicyContract.test.ts', true]],
@@ -94,7 +94,6 @@ const contracts = [
   ['market-frame-facade', ['src/services/coreSpirit/marketFrameFacade.test.ts', true]],
   ['corespirit-off-thread-compile-cache', ['src/coreSpiritOffThreadCompileContract.test.mjs', false]],
   ['corespirit-worker-generation-lifecycle', ['src/coreSpiritWorkerLifecycleContract.test.mjs', false]],
-  ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
   ['corescript-program-mode-security', ['src/services/coreSpirit/coreScriptProgramModesContract.test.mjs', true]],
   ['corespirit-smc-deterministic-acceptance', ['src/services/coreSpirit/luxAlgoSmcDeterministicAcceptance.test.mjs', true]],
@@ -155,6 +154,7 @@ const contracts = [
   ['indicator-incremental', ['src/indicatorIncrementalContract.test.mjs', false]],
   ['vela-p1-indicator-incremental', ['src/velaP1IndicatorIncrementalContract.test.mjs', true]],
   ['vela-p1-incremental-catalog', ['src/velaP1IncrementalCatalogContract.test.mjs', true]],
+
   ['vela-p1-chart-terminal', ['src/velaP1ChartTerminalContract.test.mjs', true]],
   ['indicator-appearance', ['src/indicatorAppearanceContract.test.mjs', false]],
   ['indicator-parameter-system', ['src/indicatorParameterSystemContract.test.mjs', false]],
@@ -253,7 +253,22 @@ const contracts = [
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
   ['p0-latency-trace', ['src/p0LatencyTraceContract.test.mjs', false]],
   ['corespirit-vela-secondary-data-p0', ['tools/coreSpiritVelaSecondaryDataContract.mjs', false]],
+  ['corespirit-artifact-identity-parity', ['src/services/coreSpirit/artifactIdentityParityContract.test.mjs', true]],
+  ['corespirit-causality-analysis', ['src/services/coreSpirit/causalityAnalysisContract.test.mjs', true]],
+  ['corespirit-browser-budgets', ['src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs', false]],
+  ['corespirit-execution-lifecycle', ['src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs', true]],
+  ['corespirit-performance-contract', ['src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs', true]],
+  ['corespirit-plot-snapshot', ['src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs', true]],
+  ['corespirit-worker-policy', ['src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs', true]],
+  ['corespirit-worker-pool-diagnostics', ['src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs', true]],
+  ['corespirit-luxalgo-smc-port', ['src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs', true]],
+  ['corespirit-shared-market-buffer', ['src/services/coreSpirit/sharedMarketBufferContract.test.mjs', true]],
+  ['corespirit-deep-stateful-indicator-kernels', ['src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts', true]],
 ];
+
+const failFast = process.argv.includes('--fail-fast');
+const failures = [];
+const results = [];
 
 for (const [name, [file, needsTsLoader]] of contracts) {
   console.log(`[contract] START ${name}`);
@@ -274,4 +289,50 @@ for (const [name, [file, needsTsLoader]] of contracts) {
   }
   console.log(`[contract] PASS ${name}`);
 }
-console.log('[contract] ALL PASS');
+  const startedAt = Date.now();
+  console.log(`[contract] START ${name}`);
+  const args = needsTsLoader
+    ? ['--loader', './tools/nodeTsTranspileLoader.mjs', file]
+    : [file];
+  const result = spawnSync(process.execPath, args, {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  const durationMs = Date.now() - startedAt;
+
+  if (result.error || result.status !== 0) {
+    const failure = {
+      name,
+      file,
+      exitCode: result.status,
+      signal: result.signal ?? null,
+      durationMs,
+      error: result.error ? String(result.error.message ?? result.error) : undefined,
+    };
+    failures.push(failure);
+    results.push({ ...failure, status: 'failed' });
+    console.error(`[contract] FAIL ${name} exit=${result.status ?? result.signal ?? 'spawn-error'}`);
+    if (failFast) break;
+    continue;
+  }
+
+  results.push({ name, file, status: 'passed', durationMs });
+  console.log(`[contract] PASS ${name} (${durationMs}ms)`);
+}
+
+const summary = {
+  total: contracts.length,
+  executed: results.length,
+  passed: results.filter(result => result.status === 'passed').length,
+  failed: failures.length,
+  skipped: contracts.length - results.length,
+  failFast,
+  failures,
+};
+console.log(`[contract] SUMMARY_JSON=${JSON.stringify(summary)}`);
+if (failures.length > 0) {
+  console.error(`[contract] ${failures.length} of ${results.length} executed contracts failed.`);
+  process.exitCode = 1;
+} else {
+  console.log('[contract] ALL PASS');
+}
