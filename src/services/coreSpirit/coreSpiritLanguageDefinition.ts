@@ -41,8 +41,10 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'ReturnStatement ::= "return" Expression Terminator?',
   'ExpressionStatement ::= Expression Terminator?',
   'SurfaceShow ::= "show" Expression',
-  'SurfaceWhen ::= "when" Expression (Block | ":" IndentedBlock)',
-  'SurfaceLowering ::= SurfaceShow -> visual-emission | SurfaceWhen -> ConditionalStatement',
+  'SurfaceWhen ::= "when" SurfaceCondition (Block | ":" IndentedBlock)',
+  'SurfaceCondition ::= SurfaceCrossingExpression | Expression',
+  'SurfaceCrossingExpression ::= Postfix ("crosses_above" | "crosses_below") Postfix',
+  'SurfaceLowering ::= SurfaceShow -> visual-emission | SurfaceWhen -> ConditionalStatement | SurfaceCrossingExpression -> crossover/crossunder',
   'Terminator ::= ";" | implicit-end-of-statement',
   'TypeName ::= QualifiedName ("<" TypeName ("," TypeName)* ">")?',
   'QualifiedName ::= Identifier ("." Identifier)*',
@@ -124,6 +126,7 @@ export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureCo
   { id: 'external-data-provenance', status: 'partial', semantics: 'External data resolution is host-owned and causality-checked, but provenance is not yet a first-class type qualifier on every value.' },
   { id: 'prediction-feature-blocks', status: 'planned', semantics: 'A declarative features block with typed feature extraction, missing-data rules and feature provenance is not yet a native CoreSpirit construct.' },
   { id: 'prediction-output-statements', status: 'planned', semantics: 'The proposed output <prediction> statement requires a typed output declaration and host artifact contract; visual show/plot is not a substitute for model output.' },
+  { id: 'strategy-position-actions', status: 'partial', semantics: 'OrderIntent and strategy-layer operations exist, but the proposed enter/exit long/short authoring forms and default sizing rules are not yet a stable native syntax.' },
   { id: 'operator-overloading', status: 'deferred', semantics: 'Not included in v1: built-in domain-safe operators are preferred over user-defined overload resolution.' },
 ]);
 
