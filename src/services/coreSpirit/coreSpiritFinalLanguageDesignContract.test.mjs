@@ -122,10 +122,10 @@ assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.operators.userDefinedOverloading.include
 // Each authoring level and workload uses the same parser/compiler/IR contract.
 // Only the program declaration and compiler-enforced execution lane differ.
 const cases = [
-  ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" { let value = close; }'],
-  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" { let value = close; }'],
-  ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" { let value = close / close[1]; }'],
-  ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" { let value = close; }'],
+  ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" { let value = ta.ema(close, 20); }'],
+  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" { let value = ta.ema(close, 20); }'],
+  ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" { let value = ta.ema(close, 20); }'],
+  ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" { let value = ta.ema(close, 20); }'],
 ];
 let pipelineStages;
 for (const [kind, title, source] of cases) {
