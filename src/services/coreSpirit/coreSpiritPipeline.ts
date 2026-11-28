@@ -139,7 +139,9 @@ export function executeCoreSpirit(
   // This convenience entry point must use the same canonical executable
   // compiler/artifact boundary as editor, CLI and production runners. The
   // authoring AST/program shape is not an executable fallback.
-  const compiled = compileCoreSpirit(source, sourceId, { layer:runtimeOptions.layer });
+  const compiled = runtimeOptions.layer
+    ? compileCoreSpirit(source, sourceId, { layer:runtimeOptions.layer })
+    : compileCoreSpirit(source, sourceId);
   if (!compiled.ir || !compiled.artifact) {
     const detail = compiled.diagnostics.map(item => item.message).join('\n');
     throw new Error(detail || 'CoreSpirit compilation failed; no executable artifact was produced.');
