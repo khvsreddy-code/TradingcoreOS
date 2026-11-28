@@ -48,6 +48,7 @@ assert.deepEqual(CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS, {
 });
 assert.ok(CORE_SPIRIT_LAYER_PROFILES.automation.capabilities.includes('series'));
 assert.ok(CORE_SPIRIT_LAYER_PROFILES.automation.capabilities.includes('indicators'));
+assert.ok(CORE_SPIRIT_LAYER_PROFILES.automation.capabilities.includes('alert'));
 assert.equal(canUseCapability('automation', 'series'), true);
 assert.equal(CORE_SPIRIT_LAYER_PROFILES.automation.forbidden.includes('direct-broker-api'), true);
 assert.equal(normalizeDeclaredType('bool'), 'boolean');
