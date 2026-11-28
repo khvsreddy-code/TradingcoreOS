@@ -1,7 +1,7 @@
 import {CORE_SPIRIT_BUILTINS,type CoreSpiritBuiltin} from './standardLibrary';
 import {CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES} from './standardLibraryNamespaces';
 import {CORE_SPIRIT_MEMBER_REGISTRY} from './memberRegistry';
-import {PINE_V6_BUILTIN_REGISTRY,pineV6BuiltinIsExecutable} from './pineBuiltinRegistry';
+import {PINE_V6_BUILTIN_REGISTRY} from './pineBuiltinRegistry';
 /**
  * Canonical executable manifest projection. Existing registries remain source
  * adapters during migration; this projection detects duplicate/conflicting
@@ -11,14 +11,14 @@ export type CoreSpiritBuiltinManifestEntry=Readonly<{name:string;qualifiedNames:
 const byName=new Map<string,CoreSpiritBuiltinManifestEntry>();
 for(const builtin of CORE_SPIRIT_BUILTINS.values()){
  const qualified=CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.filter(x=>x.status==='builtin'&&(x.canonicalBuiltin??x.member)===builtin.name).map(x=>x.qualifiedName);
- byName.set(builtin.name,Object.freeze({name:builtin.name,qualifiedNames:Object.freeze(qualified),minArgs:builtin.minArgs,maxArgs:builtin.maxArgs??builtin.minArgs,returnType:String(builtin.returnType),pure:builtin.pure,...(builtin.capability?{capability:builtin.capability}:{}),...(builtin.emitKind?{emitKind:builtin.emitKind}:{}),runtimeRegistered:true,autocompleteVisible:qualified.length>0,source:'standard-library',status:'executable'}));
+ byName.set(builtin.name,Object.freeze({name:builtin.name,qualifiedNames:Object.freeze(qualified),minArgs:builtin.minArgs,maxArgs:builtin.maxArgs??builtin.minArgs,returnType:String(builtin.returnType),pure:builtin.pure,...(builtin.capability?{capability:builtin.capability}:{}),...(builtin.emitKind?{emitKind:builtin.emitKind}:{}),runtimeRegistered:false,autocompleteVisible:qualified.length>0,source:'standard-library',status:'unresolved'}));
 }
 const CORE_SPIRIT_BUILTIN_MANIFEST_CANDIDATES:readonly CoreSpiritBuiltinManifestEntry[]=[
  ...byName.values(),
  ...CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES.filter(x=>x.status==='catalog').map(x=>Object.freeze({name:x.qualifiedName,qualifiedNames:Object.freeze([x.qualifiedName]),minArgs:0,maxArgs:0,returnType:'unknown',pure:false,runtimeRegistered:false,autocompleteVisible:true,source:'namespace' as const,status:'catalog-only' as const})),
  ...PINE_V6_BUILTIN_REGISTRY.map(x=>{
-  const runtime=!!x.executionBuiltin&&CORE_SPIRIT_BUILTINS.has(x.executionBuiltin);
-  const executable=pineV6BuiltinIsExecutable(x)&&runtime;
+  const runtime=false;
+  const executable=false;
   const first=x.overloads[0];
   return Object.freeze({name:x.qualifiedName,qualifiedNames:Object.freeze([x.qualifiedName]),minArgs:first?.minArgs??0,maxArgs:first?.maxArgs??0,returnType:first?.returnType??'unknown',pure:false,runtimeRegistered:runtime,autocompleteVisible:true,source:'pine-v6' as const,status:executable?'executable' as const:'catalog-only' as const});
  }),
