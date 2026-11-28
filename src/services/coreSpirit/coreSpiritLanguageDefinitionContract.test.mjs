@@ -55,6 +55,7 @@ const programCases = [
   ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n  if (fast > slow) {\n    let bullish = true;\n  }\n}'],
 ];
 
+let sharedPipelineSignature;
 for (const [kind, title, source] of programCases) {
   const direct = new CoreSpiritParser(source).parseDetailed();
   assert.deepEqual(direct.diagnostics, [], kind + ' direct parser diagnostics');
@@ -79,6 +80,10 @@ for (const [kind, title, source] of programCases) {
   assert.equal(compiled.ir.programLayer, kind === 'strategy' ? 'strategy' : kind === 'automation' ? 'automation' : kind === 'prediction' ? 'model' : 'script');
   assert.equal(compiled.ir.language, 'CoreScript');
   assert.equal(compiled.ir.languageVersion, 1);
+  const pipelineSignature = compiled.ir.compilerPipeline.join('>');
+  if (sharedPipelineSignature === undefined) sharedPipelineSignature = pipelineSignature;
+  assert.equal(pipelineSignature, sharedPipelineSignature, 'all four program kinds must use the same compiler/optimizer pipeline');
+  assert.equal(compiled.artifact?.abi.kind, 'CoreSpiritExecutable');
   assert.ok(validateCoreSpiritIr(compiled.ir));
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programKind: 'not-a-program' }), false);
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
