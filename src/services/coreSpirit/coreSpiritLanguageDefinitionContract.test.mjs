@@ -67,6 +67,20 @@ for (const [kind, title, source] of programCases) {
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programLayer:'automation' }), kind === 'automation');
 }
 
+const beginnerSurface = [
+  'indicator "Trend Geometry" {',
+  '  fast = ema(close, 20)',
+  '  slow = ema(close, 50)',
+  '  show fast',
+  '  show slow',
+  '}',
+].join('\\n');
+const beginnerSurfaceResult = compileCoreSpirit(beginnerSurface, 'language-beginner-surface-example');
+assert.deepEqual(beginnerSurfaceResult.diagnostics.filter(item => item.severity === 'error'), [],
+  beginnerSurfaceResult.diagnostics.map(item => item.message).join('\\n'));
+assert.equal(beginnerSurfaceResult.ir?.programKind, 'indicator');
+assert.equal(beginnerSurfaceResult.ir?.programTitle, 'Trend Geometry');
+
 const compactSource = 'indicator "Compact Program" { let value = close; if (value > 0) { let note = "brace } is text"; } // } comment must not close wrapper\n}';
 const compactParsed = parseCoreSpiritDetailed(compactSource);
 assert.deepEqual(compactParsed.diagnostics, [], 'compact block must parse with nested braces and quoted/comment braces');
@@ -79,7 +93,14 @@ assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
 const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
 assert.ok(mismatchedPolicy.diagnostics.some(item => item.code === 'PROGRAM_LAYER_MISMATCH'));
 
-const whenSurface = 'automation "Crossing Event" { let resistance = high[1]; when close crosses_above resistance { let triggered = true; } }';
+const whenSurface = [
+  'automation "Crossing Event" {',
+  '  let resistance = high[1];',
+  '  when close crosses_above resistance {',
+  '    let triggered = true;',
+  '  }',
+  '}',
+].join('\\n');
 const whenCompiled = compileCoreSpirit(whenSurface, 'language-when-brace-snake-case');
 assert.deepEqual(whenCompiled.diagnostics.filter(item => item.severity === 'error'), [], whenCompiled.diagnostics.map(item => item.message).join('\\n'));
 assert.equal(whenCompiled.ir?.programKind, 'automation');
