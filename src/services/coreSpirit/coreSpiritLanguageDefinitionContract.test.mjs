@@ -32,7 +32,7 @@ assert.deepEqual(CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS, {
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
-  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  let resistance = high[1];\n  when close crosses_above resistance {\n    let triggered = true;\n  }\n}'],
+  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  let resistance = high[1];\n  if (close > resistance) {\n    let triggered = true;\n  }\n}'],
   ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" {\n  let returns = close / close[1] - 1;\n  let forecast = returns;\n}'],
   ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n  if (fast > slow) {\n    let bullish = true;\n  }\n}'],
 ];
@@ -78,6 +78,12 @@ assert.equal(compactCompiled.ir?.programKind, 'indicator');
 assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
 const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
 assert.ok(mismatchedPolicy.diagnostics.some(item => item.code === 'PROGRAM_LAYER_MISMATCH'));
+
+const whenSurface = 'automation "Crossing Event" { let resistance = high[1]; when close crosses_above resistance { let triggered = true; } }';
+const whenCompiled = compileCoreSpirit(whenSurface, 'language-when-brace-snake-case');
+assert.deepEqual(whenCompiled.diagnostics.filter(item => item.severity === 'error'), [], whenCompiled.diagnostics.map(item => item.message).join('\\n'));
+assert.equal(whenCompiled.ir?.programKind, 'automation');
+assert.equal(whenCompiled.ir?.programLayer, 'automation');
 
 const automationSource = programCases.find(([kind]) => kind === 'automation')[2];
 const automationIr = compileCoreSpirit(automationSource, 'language-program-automation-runtime').ir;
