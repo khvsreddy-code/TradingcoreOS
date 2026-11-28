@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { validateCoreSpiritFeatureMatrix, validateCoreSpiritPineCompatibilityMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_PINE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
+import { validateCoreSpiritFeatureMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
+import { PINE_FEATURE_REGISTRY, validatePineFeatureRegistry } from './services/coreSpirit/pine/pineFeatureRegistry.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 
 assert.deepEqual(validateCoreSpiritFeatureMatrix(), []);
-assert.deepEqual(validateCoreSpiritPineCompatibilityMatrix(), []);
+assert.deepEqual(validatePineFeatureRegistry(), []);
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='tuples'&&item.status==='planned'));
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='temporal-qualifiers'&&item.status==='partial'));
 assert.equal(getCoreSpiritFeatureParity('tuples')?.status,'planned');
 assert.equal(getCoreSpiritFeatureParity('version-annotation'),undefined,'Pine-only declarations must not define CoreSpirit language maturity');
-assert.notEqual(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX,CORE_SPIRIT_PINE_FEATURE_MATRIX);
+assert.notEqual(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX,PINE_FEATURE_REGISTRY);
 for (const level of ['beginner','trader','quant','system']) {
   assert.equal(CORE_SPIRIT_AUTHORING_SURFACES[level].parser,'CoreSpiritParser');
   assert.equal(CORE_SPIRIT_AUTHORING_SURFACES[level].compiler,'CoreSpiritCompiler');
@@ -49,8 +50,8 @@ assert.deepEqual(beginner.ir?.compilerPipeline, advanced.ir?.compilerPipeline);
 assert.equal(beginner.artifact?.abi.kind, advanced.artifact?.abi.kind);
 assert.ok(beginner.ir?.semanticDependencyGraph);
 assert.ok(advanced.ir?.semanticDependencyGraph);
-assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='collections-arrays'&&item.status==='partially_conformant'));
-assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='conditional-switch'&&item.status==='partially_conformant'));
-assert.ok(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='version-annotation'));
-assert.equal(CORE_SPIRIT_PINE_FEATURE_MATRIX.some(item=>item.id==='orderbook'),false,'Pine language compatibility registry must not mix in unrelated host/domain features');
+assert.ok(PINE_FEATURE_REGISTRY.some(item=>item.id==='collections-arrays'&&item.status==='partially_conformant'));
+assert.ok(PINE_FEATURE_REGISTRY.some(item=>item.id==='conditional-switch'&&item.status==='partially_conformant'));
+assert.ok(PINE_FEATURE_REGISTRY.some(item=>item.id==='version-annotation'));
+assert.equal(PINE_FEATURE_REGISTRY.some(item=>item.id==='orderbook'),false,'Pine language compatibility registry must not mix in unrelated host/domain features');
 console.log('CORESPIRIT_LANGUAGE_PARITY_CONTRACT_OK');
