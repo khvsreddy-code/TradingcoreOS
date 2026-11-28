@@ -227,6 +227,19 @@ export function semanticTypeCompatible(expected: CoreSpiritSemanticType, actual:
   if (expected.timeframe && actual.timeframe && expected.timeframe !== actual.timeframe) return false;
   if (expected.valueKind && actual.valueKind && expected.valueKind !== actual.valueKind) return false;
   if (expected.valueKind && !actual.valueKind) return false;
+
+  // Temporal certainty is a type constraint, not editor metadata. A value
+  // with a more permissive phase cannot flow into a declaration that promises
+  // a safer phase (for example developing -> confirmed or forecast -> realtime).
+  if (expected.phase && (
+    !actual.phase ||
+    PHASE_RANK[actual.phase] > PHASE_RANK[expected.phase]
+  )) return false;
+
+  // Causal and no-lookahead declarations are assertions about data provenance.
+  // Unknown provenance does not satisfy an explicit safety requirement.
+  if (expected.causal === true && actual.causal !== true) return false;
+  if (expected.lookahead === false && actual.lookahead !== false) return false;
   return true;
 }
 

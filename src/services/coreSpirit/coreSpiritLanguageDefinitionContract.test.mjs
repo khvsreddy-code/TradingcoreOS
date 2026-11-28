@@ -5,6 +5,7 @@ import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { normalizeDeclaredType } from './typeSystem.ts';
 import { parseCoreSpiritTemporalType, makeCoreSpiritTemporalType, temporalAssignmentCompatible } from './temporalTypes.ts';
+import { semanticScalar, semanticTypeCompatible, semanticTypeForDeclaredName } from './semanticTypeSystem.ts';
 import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
@@ -78,6 +79,22 @@ assert.equal(temporalAssignmentCompatible('forecast<float>','confirmed<float>'),
 assert.equal(temporalAssignmentCompatible('state<float>','intrabar<float>'),false);
 assert.throws(()=>makeCoreSpiritTemporalType('confirmed','float','developing'),/conflicts with phase/);
 assert.equal(makeCoreSpiritTemporalType('forecast','float'),'forecast<float> @forecast');
+const confirmedSemantic = semanticTypeForDeclaredName('confirmed<float>');
+const developingSemantic = semanticTypeForDeclaredName('developing<float>');
+const realtimeSemantic = semanticTypeForDeclaredName('series<float>');
+assert.ok(confirmedSemantic && developingSemantic && realtimeSemantic);
+assert.equal(semanticTypeCompatible(confirmedSemantic,developingSemantic),false,
+  'a developing value must not satisfy a confirmed declaration');
+assert.equal(semanticTypeCompatible(developingSemantic,confirmedSemantic),true,
+  'a confirmed value is safe to use where a developing value is accepted');
+const safeProvenance = semanticScalar('number',{causal:true,lookahead:false});
+const unknownProvenance = semanticScalar('number',{causal:undefined,lookahead:undefined});
+const futureLeakingProvenance = semanticScalar('number',{causal:false,lookahead:true});
+assert.equal(semanticTypeCompatible(safeProvenance,unknownProvenance),false,
+  'unknown provenance must not satisfy an explicit causal/no-lookahead contract');
+assert.equal(semanticTypeCompatible(safeProvenance,futureLeakingProvenance),false,
+  'non-causal/lookahead values must not satisfy a causal declaration');
+
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
