@@ -1,7 +1,6 @@
 import { CORE_SPIRIT_LAYER_PROFILES } from './layeredPlatformContract';
 import {
   CORE_SPIRIT_LANGUAGE_FEATURES,
-  CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_TYPE_MODEL,
   validateCoreSpiritLanguageDefinition,
 } from './coreSpiritLanguageDefinition';
