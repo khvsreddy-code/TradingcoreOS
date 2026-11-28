@@ -34,18 +34,31 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
  * before name resolution, semantic analysis and lowering. This describes the
  * public source language, not its internal lexer tokens.
  */
+/**
+ * Normative CoreSpirit source grammar.
+ *
+ * Edition-specific conveniences are normalized into the same CoreSpirit AST
+ * before name resolution, semantic analysis and lowering. This describes the
+ * public source language, not its internal lexer tokens.
+ */
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = String.raw`
-Source                 ::= EditionDirective? CapabilityRequirement* (Program | LegacyScript) EOF
-EditionDirective       ::= "edition@" EditionNumber
-EditionNumber          ::= "1.0" | "1.2"
+Source                 ::= Edition10Source | Edition12Source
+Edition10Source        ::= Edition10Directive? CapabilityRequirement* (Program10 | LegacyScript10) EOF
+Edition12Source        ::= Edition12Directive CapabilityRequirement* (Program12 | LegacyScript12) EOF
+Edition10Directive     ::= "edition@1.0"
+Edition12Directive     ::= "edition@1.2"
 CapabilityRequirement ::= "requires" QualifiedName ("," QualifiedName)*
 
-Program                ::= ProgramKind String Block
+Program10              ::= ProgramHeader Block10
+Program12              ::= ProgramHeader Block12
+ProgramHeader          ::= ProgramKind String
 ProgramKind            ::= "indicator" | "strategy" | "automation" | "prediction"
-LegacyScript           ::= Statement*
-Block                  ::= "{" Statement* "}"
+LegacyScript10         ::= CoreStatement*
+LegacyScript12         ::= (CoreStatement | Edition12OnlyStatement)*
+Block10                ::= "{" CoreStatement* "}"
+Block12                ::= "{" (CoreStatement | Edition12OnlyStatement)* "}"
 
-Statement              ::= VariableDeclaration
+CoreStatement          ::= VariableDeclaration
                          | FunctionDeclaration
                          | RecordDeclaration
                          | EventHandler
@@ -54,19 +67,18 @@ Statement              ::= VariableDeclaration
                          | ReturnStatement
                          | ExpressionStatement
                          | SurfaceStatement
-                         | Edition12Statement
 VariableDeclaration    ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
 TypeAnnotation         ::= ":" TypeName
 AssignmentStatement    ::= Identifier ":=" Expression Terminator
-FunctionDeclaration    ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block
+FunctionDeclaration    ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block10
 ParameterList          ::= Parameter ("," Parameter)*
 Parameter              ::= Identifier ":" TypeName
 ReturnStatement        ::= "return" Expression Terminator
 RecordDeclaration      ::= "type" Identifier "{" FieldDeclaration* "}"
 FieldDeclaration       ::= Identifier ":" TypeName Terminator?
 
-EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
-IfStatement            ::= "if" "(" Expression ")" Block ("else" Block)?
+EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block10
+IfStatement            ::= "if" "(" Expression ")" Block10 ("else" Block10)?
 ExpressionStatement    ::= Expression Terminator
 
 Expression             ::= ConditionalExpression
@@ -98,24 +110,25 @@ Exponent               ::= ("e" | "E") ("+" | "-")? Digit+
 Integer                ::= Digit+
 String                 ::= '"' StringCharacter* '"' | "'" StringCharacter* "'"
 StringCharacter        ::= EscapeSequence | any character except active quote or EOF
-EscapeSequence         ::= "\" ("n" | "r" | "t" | any single escaped character)
+EscapeSequence         ::= Backslash ("n" | "r" | "t" | any single escaped character)
 Boolean                ::= "true" | "false"
 Letter                 ::= "A".."Z" | "a".."z" | "_"
 Digit                  ::= "0".."9"
 HexDigit               ::= Digit | "A".."F" | "a".."f"
+Backslash              ::= U+005C
 Terminator             ::= ";" | ImplicitLineTerminator
 ImplicitLineTerminator ::= source-line boundary recognized by surface normalization
 Comment                ::= "//" characters-to-line-end | "/*" characters "*/"
 
 SurfaceStatement       ::= SurfaceWhen | SurfaceShow
-SurfaceWhen            ::= "when" SurfaceCondition (Block | ":" IndentedBlock)
+SurfaceWhen            ::= "when" SurfaceCondition (Block10 | ":" IndentedBlock)
 SurfaceCondition       ::= Expression (CrossingOperator Expression)?
 CrossingOperator       ::= "crosses_above" | "crosses_below"
 SurfaceShow            ::= "show" Expression
 SurfaceLowering        ::= SurfaceWhen -> IfStatement
                          | SurfaceShow -> canonical visual-emission call
 
-Edition12Statement     ::= EnumDeclaration | ImportDeclaration | WhileStatement
+Edition12OnlyStatement ::= EnumDeclaration | ImportDeclaration | WhileStatement
                          | ForEachStatement | BreakStatement | ContinueStatement
                          | CompactPlot
 EnumDeclaration        ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
@@ -123,14 +136,14 @@ EnumMember             ::= Identifier ("=" (String | Number))?
 ImportDeclaration      ::= "import" ("*" "as" Identifier
                          | "{" ImportBinding ("," ImportBinding)* "}") "from" String
 ImportBinding          ::= Identifier ("as" Identifier)?
-WhileStatement         ::= "while" "(" Expression ")" Block
-ForEachStatement       ::= "for" "(" "let"? Identifier "in" Expression ")" Block
+WhileStatement         ::= "while" "(" Expression ")" Block12
+ForEachStatement       ::= "for" "(" "let"? Identifier "in" Expression ")" Block12
 BreakStatement         ::= "break" Terminator
 ContinueStatement      ::= "continue" Terminator
 CompactPlot            ::= "plot" Expression PlotOptions?
 PlotOptions            ::= ("color" "=" Expression)? ("width" "=" Integer)?
                          ("style" "=" Identifier)? ("title" "=" String)?
-IndentedBlock          ::= indentation-delimited Statement+
+IndentedBlock          ::= indentation-delimited CoreStatement+
 `.trim();
 
 /**

@@ -4,6 +4,7 @@ import { compileCoreSpirit, executeCoreSpirit, parseCoreSpirit, parseCoreSpiritD
 import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { normalizeDeclaredType } from './typeSystem.ts';
+import { parseCoreSpiritTemporalType, makeCoreSpiritTemporalType, temporalAssignmentCompatible } from './temporalTypes.ts';
 import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
@@ -55,6 +56,28 @@ assert.equal(normalizeDeclaredType('series<price>'), 'series<price>');
 assert.equal(normalizeDeclaredType('void'), 'udt:void');
 assert.ok(CORE_SPIRIT_TYPE_MODEL.collectionContracts.find(item => item.name === 'Map<K,V>')?.status === 'partial');
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalTypeContracts.find(item => item.name === 'Optional<T>')?.status === 'planned');
+
+// Expression precedence and associativity are stable CoreSpirit parser contracts.
+const precedenceAst = new CoreSpiritParser('let result = 2 + 3 * 4;').parseDetailed();
+assert.deepEqual(precedenceAst.diagnostics,[]);
+const precedenceExpression = precedenceAst.ast.body[0].expression;
+assert.equal(precedenceExpression.type,'binary');
+assert.equal(precedenceExpression.operator,'+');
+assert.equal(precedenceExpression.right.operator,'*');
+const ternaryAst = new CoreSpiritParser('let result = a ? b : c ? d : e;').parseDetailed();
+assert.deepEqual(ternaryAst.diagnostics,[]);
+assert.equal(ternaryAst.ast.body[0].expression.type,'conditional');
+assert.equal(ternaryAst.ast.body[0].expression.whenFalse.type,'conditional');
+
+// Temporal containers are semantically distinct; names alone are not enough.
+assert.equal(parseCoreSpiritTemporalType('confirmed<float>')?.phase,'confirmed');
+assert.equal(parseCoreSpiritTemporalType('developing<float>')?.phase,'developing');
+assert.equal(parseCoreSpiritTemporalType('forecast<float>')?.phase,'forecast');
+assert.equal(temporalAssignmentCompatible('confirmed<float>','developing<float>'),false);
+assert.equal(temporalAssignmentCompatible('forecast<float>','confirmed<float>'),false);
+assert.equal(temporalAssignmentCompatible('state<float>','intrabar<float>'),false);
+assert.throws(()=>makeCoreSpiritTemporalType('confirmed','float','developing'),/conflicts with phase/);
+assert.equal(makeCoreSpiritTemporalType('forecast','float'),'forecast<float> @forecast');
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
