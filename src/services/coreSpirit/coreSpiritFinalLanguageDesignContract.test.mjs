@@ -29,7 +29,7 @@ for (const production of [
   'TupleExpression', 'TupleType', 'EnumDeclaration', 'TypeDeclaration',
   'ImplementationDeclaration', 'TraitDeclaration', 'ConditionalExpression',
   'SwitchStatement', 'SwitchExpression', 'WhileStatement', 'ForEachStatement',
-  'ClosureExpression', 'NamespaceDeclaration', 'ImportDeclaration',
+  'ClosureExpression', 'NamespaceDeclaration', 'ImportDeclaration', 'PlotOptions',
   'ExportDeclaration', 'LibraryModule', 'ErrorPropagationStatement',
   'TypeParameters', 'PredictionFeatureBlock', 'PredictionOutputStatement',
   'StrategyAction', 'EventHandler',
@@ -38,6 +38,24 @@ for (const production of [
     CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.includes(production),
     'final grammar must define ' + production,
   );
+}
+
+// Grammar closure: every named nonterminal used on a production right-hand
+// side must itself have a production. This catches missing grammar fragments.
+const grammarProductions = new Set(
+  [...CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.matchAll(/^\\s*([A-Za-z][A-Za-z0-9_]*)\\s*::=/gm)]
+    .map(match => match[1]),
+);
+const grammarRightHandSide = CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR
+  .split('\\n')
+  .map(line => line.replace(/^\\s*[A-Za-z][A-Za-z0-9_]*\\s*::=/, ''))
+  .join('\\n')
+  .replace(/"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'/g, '');
+const referencedNonterminals = new Set(
+  [...grammarRightHandSide.matchAll(/\\b[A-Z][A-Za-z0-9_]*\\b/g)].map(match => match[0]),
+);
+for (const symbol of referencedNonterminals) {
+  assert.ok(grammarProductions.has(symbol), 'undefined grammar nonterminal: ' + symbol);
 }
 
 // The feature maturity catalogue must cover every required construct. Planned
