@@ -74,10 +74,10 @@ const beginnerSurface = [
   '  show fast',
   '  show slow',
   '}',
-].join('\\n');
+].join('\n');
 const beginnerSurfaceResult = compileCoreSpirit(beginnerSurface, 'language-beginner-surface-example');
 assert.deepEqual(beginnerSurfaceResult.diagnostics.filter(item => item.severity === 'error'), [],
-  beginnerSurfaceResult.diagnostics.map(item => item.message).join('\\n'));
+  beginnerSurfaceResult.diagnostics.map(item => item.message).join('\n'));
 assert.equal(beginnerSurfaceResult.ir?.programKind, 'indicator');
 assert.equal(beginnerSurfaceResult.ir?.programTitle, 'Trend Geometry');
 
@@ -87,7 +87,7 @@ assert.deepEqual(compactParsed.diagnostics, [], 'compact block must parse with n
 assert.equal(compactParsed.ast.programKind, 'indicator');
 assert.equal(compactParsed.ast.programTitle, 'Compact Program');
 const compactCompiled = compileCoreSpirit(compactSource, 'language-program-compact');
-assert.deepEqual(compactCompiled.diagnostics.filter(item => item.severity === 'error'), [], compactCompiled.diagnostics.map(item => item.message).join('\\n'));
+assert.deepEqual(compactCompiled.diagnostics.filter(item => item.severity === 'error'), [], compactCompiled.diagnostics.map(item => item.message).join('\n'));
 assert.equal(compactCompiled.ir?.programKind, 'indicator');
 assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
 const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
@@ -100,9 +100,9 @@ const whenSurface = [
   '    let triggered = true;',
   '  }',
   '}',
-].join('\\n');
+].join('\n');
 const whenCompiled = compileCoreSpirit(whenSurface, 'language-when-brace-snake-case');
-assert.deepEqual(whenCompiled.diagnostics.filter(item => item.severity === 'error'), [], whenCompiled.diagnostics.map(item => item.message).join('\\n'));
+assert.deepEqual(whenCompiled.diagnostics.filter(item => item.severity === 'error'), [], whenCompiled.diagnostics.map(item => item.message).join('\n'));
 assert.equal(whenCompiled.ir?.programKind, 'automation');
 assert.equal(whenCompiled.ir?.programLayer, 'automation');
 
