@@ -23,6 +23,11 @@ assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, ['indicator','aut
 assert.equal(CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(','), 'beginner,trader,quant,system');
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramHeader/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /TypeName/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /EditionDirective/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /SurfaceLowering/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /QualifiedName/);
+assert.ok(CORE_SPIRIT_LANGUAGE_FEATURES.some(feature => feature.id === 'prediction-feature-blocks' && feature.status === 'planned'));
+assert.ok(CORE_SPIRIT_LANGUAGE_FEATURES.some(feature => feature.id === 'prediction-output-statements' && feature.status === 'planned'));
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalContainers.includes('confirmed<T>'));
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalPhases.includes('realtime'));
 assert.equal(CORE_SPIRIT_TYPE_MODEL.primitiveContracts.find(item => item.name === 'Bool')?.runtimeName, 'boolean');
