@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { validateCoreSpiritFeatureMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_PINE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
+import { validateCoreSpiritFeatureMatrix, validateCoreSpiritPineCompatibilityMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_PINE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 
 assert.deepEqual(validateCoreSpiritFeatureMatrix(), []);
+assert.deepEqual(validateCoreSpiritPineCompatibilityMatrix(), []);
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='tuples'&&item.status==='planned'));
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='temporal-qualifiers'&&item.status==='partial'));
 assert.equal(getCoreSpiritFeatureParity('tuples')?.status,'planned');
