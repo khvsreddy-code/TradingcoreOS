@@ -1323,6 +1323,9 @@ export class CoreSpiritRuntime {
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
     this.assertCanonicalExecutableIr(ir);
+    if(ir.programLayer && ir.programLayer !== this.layer){
+      throw new Error(`CoreSpirit program '${ir.programTitle ?? ir.sourceId}' requires the ${ir.programLayer} execution layer; this runtime is configured for ${this.layer}.`);
+    }
     if (ir.languagePolicy && ir.authoringLevel !== undefined &&
         ir.languagePolicy.level !== ir.authoringLevel) {
       throw new Error('CoreSpirit runtime rejected inconsistent authoring-level metadata in the compiled artifact.');
