@@ -1,5 +1,6 @@
 import type { CoreSpiritGraphBundle } from './semanticGraph';
 import type { CoreSpiritProgramKind, CoreSpiritPineDeclarationMetadata } from './ast';
+import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import type { CoreSpiritOptimizationPlan } from './optimizer';
@@ -77,6 +78,8 @@ export type CoreSpiritIrProgram = {
   sourceId:string;
   programKind?:CoreSpiritProgramKind;
   programTitle?:string;
+  /** Execution lane selected by the declared program type; legacy IR may omit it. */
+  programLayer?:CoreSpiritProgramLayer;
   pineDeclaration?:CoreSpiritPineDeclarationMetadata;
   entry:CoreSpiritIrBlock;
   locals:string[];
