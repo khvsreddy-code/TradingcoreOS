@@ -95,7 +95,8 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
   const replacements:SpanReplacement[]=[];
   for(let i=0;i<tokens.length;i+=1){
     const token=tokens[i];
-    if(token.type!=='identifier'||(token.lexeme!=='crossesAbove'&&token.lexeme!=='crossesBelow')) continue;
+    if(token.type!=='identifier'||!['crossesAbove','crossesBelow','crosses_above','crosses_below'].includes(token.lexeme)) continue;
+    const isAbove=token.lexeme==='crossesAbove'||token.lexeme==='crosses_above';
     const previous=tokens[i-1];
     const functionalBoundary=i===0||!previous||BOUNDARY_TYPES.has(previous.type)||
       previous.type==='leftParen'||previous.type==='leftBracket'||
@@ -108,7 +109,7 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
         else if(tokens[end].type==='rightParen'){depth-=1;if(depth===0)break;}
       }
       if(end<tokens.length&&tokens[end].type==='rightParen'){
-        replacements.push({start:token.offset,end:token.offset+token.lexeme.length,text:token.lexeme==='crossesAbove'?'crossover':'crossunder'});
+        replacements.push({start:token.offset,end:token.offset+token.lexeme.length,text:isAbove?'crossover':'crossunder'});
         continue;
       }
     }
@@ -125,7 +126,7 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
     const left=input.slice(leftStart,leftEnd).trim();
     const right=input.slice(rightStart,rightEnd).trim();
     if(!left||!right) continue;
-    const call=token.lexeme==='crossesAbove'?'crossover':'crossunder';
+    const call=isAbove?'crossover':'crossunder';
     replacements.push({start:leftStart,end:rightEnd,text:`${call}(${left}, ${right})`});
   }
 
