@@ -29,7 +29,7 @@
 
 1. Pine v6 remains a production frontend and is coupled to shared parser mode, AST/IR metadata, semantic analysis, runtime builtin dispatch, editor completions, public exports, namespace metadata and strategy simulation.
 2. The Pine feature registry has 31 definitions. The Pine builtin registry has 167 catalog-only helper registrations (registration counts, not unique executable APIs).
-3. CoreSpirit already has a real compiler/IR/optimizer/reference VM/optimized VM/runtime/worker/columnar data/output-to-Vela architecture. It is a meaningful foundation, but not yet a clean zero-Pine architecture.
+3. CoreSpirit already has a real compiler/IR/optimizer/reference VM/optimized VM/runtime/worker/columnar data/output-to-Vela architecture. It is a meaningful foundation, but not yet a clean zero-Pine architecture. The targeted import scan also found 18 type-only metadata dependencies in `ir.ts`, coupling the IR schema to optimizer/planner/research/language-policy types.
 4. On the audited CI run, the first contract passed and the second contract failed. The sequential fail-fast runner did not reach the later entries.
 5. TypeScript typecheck passed; chart bundle budget failed at 663.0 KB gzip against a 650 KB hard limit and 550 KB optimization target.
 6. The authenticated browser soak failed before measurement because Supabase rejected the CI account with Invalid login credentials.
@@ -40,6 +40,7 @@
 
 - `source-inventory.json`: complete tracked-file path/blob index, with domain and review status.
 - `source-review.json`: targeted direct source findings for compiler/runtime/Pine/data/Vela/strategy/automation/model/IDE paths.
+- `source-import-graph.json`: declared import edges extracted from 10 high-risk compiler/runtime/editor files (142 declared imports; no unresolved relative imports).
 - `dependency-graph.json` and `dependency-graph.mmd`: native architecture graph and integration edges.
 - `capability-registry.json`: vendor-neutral capabilities using the requested status taxonomy.
 - `test-feature-mapping.json`: 249 contract registrations, observed fail-fast position and unregistered CoreSpirit tests.

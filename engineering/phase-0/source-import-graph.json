@@ -1,0 +1,1650 @@
+{
+  "schemaVersion": 1,
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "branch": "main",
+  "auditedCommit": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
+  "generatedAt": "2026-11-28",
+  "scope": "Exact declared imports extracted from 10 high-risk CoreSpirit compiler/runtime/editor files. This is a targeted subgraph, not the full CoreSpirit import graph.",
+  "importCount": 142,
+  "unresolvedRelativeImports": 0,
+  "interpretation": "importForm records TypeScript source syntax (import type versus value-or-mixed syntax); a value-syntax import may still be erased by TypeScript when imported symbols are only types.",
+  "nodes": [
+    {
+      "path": "src/services/coreSpirit/frontends.ts",
+      "bytes": 3336,
+      "lineCount": 79,
+      "exports": [
+        "CoreSpiritFrontendDiagnostic",
+        "CoreSpiritFrontendParseResult",
+        "CoreSpiritLanguageFrontend",
+        "CoreScriptFrontend",
+        "registerCoreSpiritFrontend",
+        "getCoreSpiritFrontend",
+        "parseWithCoreSpiritFrontend"
+      ],
+      "imports": [
+        {
+          "specifier": "./ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./parser",
+          "target": "src/services/coreSpirit/parser.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./syntax",
+          "target": "src/services/coreSpirit/syntax.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pine/pineV6Frontend",
+          "target": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "bytes": 13998,
+      "lineCount": 236,
+      "exports": [
+        "PineV6Frontend",
+        "validatePineV6DeclarationMetadata"
+      ],
+      "imports": [
+        {
+          "specifier": "../ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "../parser",
+          "target": "src/services/coreSpirit/parser.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "../syntax",
+          "target": "src/services/coreSpirit/syntax.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "../frontends",
+          "target": "src/services/coreSpirit/frontends.ts",
+          "importForm": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/parser.ts",
+      "bytes": 21500,
+      "lineCount": 455,
+      "exports": [
+        "CoreSpiritParser"
+      ],
+      "imports": [
+        {
+          "specifier": "./ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./lexer",
+          "target": "src/services/coreSpirit/lexer.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/ast.ts",
+      "bytes": 9060,
+      "lineCount": 166,
+      "exports": [
+        "CoreSpiritFrontendId",
+        "CoreSpiritProgramKind",
+        "CoreSpiritPineDeclarationArgument",
+        "CoreSpiritPineDeclarationMetadata",
+        "CoreSpiritLiteral",
+        "CoreSpiritAnnotation",
+        "CoreSpiritAstDiagnosticReference",
+        "CoreSpiritAstNodeMetadata",
+        "CoreSpiritAstNode",
+        "CoreSpiritProgramNode",
+        "CoreSpiritLetNode",
+        "CoreSpiritAssignmentNode",
+        "CoreSpiritOnEventNode",
+        "CoreSpiritExpressionStatementNode",
+        "CoreSpiritIfNode",
+        "CoreSpiritLiteralNode",
+        "CoreSpiritIdentifierNode",
+        "CoreSpiritUnaryNode",
+        "CoreSpiritBinaryNode",
+        "CoreSpiritConditionalNode",
+        "CoreSpiritSwitchArm",
+        "CoreSpiritSwitchNode",
+        "CoreSpiritCallNode",
+        "CoreSpiritMemberCallNode",
+        "CoreSpiritIndexNode",
+        "CoreSpiritMemberNode",
+        "CoreSpiritTypeField",
+        "CoreSpiritTypeDeclarationNode",
+        "CoreSpiritArrayLiteralNode",
+        "CoreSpiritMapLiteralNode",
+        "CoreSpiritWhileNode",
+        "CoreSpiritForEachNode",
+        "CoreSpiritBreakNode",
+        "CoreSpiritContinueNode",
+        "CoreSpiritFunctionParameter",
+        "CoreSpiritFunctionDeclarationNode",
+        "CoreSpiritReturnNode",
+        "CoreSpiritSpan",
+        "CoreSpiritAst",
+        "updateCoreSpiritAstNodeMetadata",
+        "annotateCoreSpiritAst"
+      ],
+      "imports": []
+    },
+    {
+      "path": "src/services/coreSpirit/ir.ts",
+      "bytes": 6270,
+      "lineCount": 111,
+      "exports": [
+        "CoreSpiritIrValueType",
+        "CoreSpiritIrValue",
+        "CoreSpiritStateStorage",
+        "CoreSpiritIrInstructionOrigin",
+        "CoreSpiritIrInstruction",
+        "CoreSpiritIrBlock",
+        "CoreSpiritSourceMapEntry",
+        "CoreSpiritSourceMap",
+        "coreSpiritSourceMapFromInstructions",
+        "CoreSpiritIrProgram"
+      ],
+      "imports": [
+        {
+          "specifier": "./semanticGraph",
+          "target": "src/services/coreSpirit/semanticGraph.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./semanticDependencyGraph",
+          "target": "src/services/coreSpirit/semanticDependencyGraph.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./optimizer",
+          "target": "src/services/coreSpirit/optimizer.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./executionPlanner",
+          "target": "src/services/coreSpirit/executionPlanner.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./compilerPipeline",
+          "target": "src/services/coreSpirit/compilerPipeline.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./callContract",
+          "target": "src/services/coreSpirit/callContract.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./specializedPlan",
+          "target": "src/services/coreSpirit/specializedPlan.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./tradingNativePlan",
+          "target": "src/services/coreSpirit/tradingNativePlan.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./repaintSafety",
+          "target": "src/services/coreSpirit/repaintSafety.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./causalityAnalysis",
+          "target": "src/services/coreSpirit/causalityAnalysis.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./executionPlanVisualizer",
+          "target": "src/services/coreSpirit/executionPlanVisualizer.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./researchSurface",
+          "target": "src/services/coreSpirit/researchSurface.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./coreSpiritExecutionModel",
+          "target": "src/services/coreSpirit/coreSpiritExecutionModel.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./semanticTypeSystem",
+          "target": "src/services/coreSpirit/semanticTypeSystem.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./languageEdition.js",
+          "target": "src/services/coreSpirit/languageEdition.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./coreScriptLanguagePolicy",
+          "target": "src/services/coreSpirit/coreScriptLanguagePolicy.ts",
+          "importForm": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "bytes": 66179,
+      "lineCount": 937,
+      "exports": [
+        "CoreSpiritDiagnostic",
+        "CoreSpiritUdt",
+        "CoreSpiritSemanticOptions",
+        "CoreSpiritSemanticResult",
+        "analyzeCoreSpirit"
+      ],
+      "imports": [
+        {
+          "specifier": "./ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibrary",
+          "target": "src/services/coreSpirit/standardLibrary.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./typeSystem",
+          "target": "src/services/coreSpirit/typeSystem.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreSpiritComponents",
+          "target": "src/services/coreSpirit/coreSpiritComponents.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./semanticTypeSystem",
+          "target": "src/services/coreSpirit/semanticTypeSystem.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./memberRegistry",
+          "target": "src/services/coreSpirit/memberRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibraryNamespaces",
+          "target": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pineBuiltinRegistry",
+          "target": "src/services/coreSpirit/pineBuiltinRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./layeredPlatformContract",
+          "target": "src/services/coreSpirit/layeredPlatformContract.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/compiler.ts",
+      "bytes": 52720,
+      "lineCount": 807,
+      "exports": [
+        "CoreSpiritCompileDiagnostic",
+        "CoreSpiritCompileSymbol",
+        "CoreSpiritCompileResult",
+        "CoreSpiritCompilerOptions",
+        "parseModelFeatureExpression",
+        "CoreSpiritCompiler"
+      ],
+      "imports": [
+        {
+          "specifier": "./ast",
+          "target": "src/services/coreSpirit/ast.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./parser",
+          "target": "src/services/coreSpirit/parser.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./syntax",
+          "target": "src/services/coreSpirit/syntax.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./ir",
+          "target": "src/services/coreSpirit/ir.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./semanticAnalyzer",
+          "target": "src/services/coreSpirit/semanticAnalyzer.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./artifact",
+          "target": "src/services/coreSpirit/artifact.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./nameResolver",
+          "target": "src/services/coreSpirit/nameResolver.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./optimizer",
+          "target": "src/services/coreSpirit/optimizer.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./irContract",
+          "target": "src/services/coreSpirit/irContract.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./layeredPlatformContract",
+          "target": "src/services/coreSpirit/layeredPlatformContract.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./semanticGraph",
+          "target": "src/services/coreSpirit/semanticGraph.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibrary",
+          "target": "src/services/coreSpirit/standardLibrary.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./memberRegistry",
+          "target": "src/services/coreSpirit/memberRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./coreSpiritComponents",
+          "target": "src/services/coreSpirit/coreSpiritComponents.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreSpiritComponents",
+          "target": "src/services/coreSpirit/coreSpiritComponents.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./standardLibraryNamespaces",
+          "target": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./compilerPipeline",
+          "target": "src/services/coreSpirit/compilerPipeline.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./semanticDependencyGraph",
+          "target": "src/services/coreSpirit/semanticDependencyGraph.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionPlanner",
+          "target": "src/services/coreSpirit/executionPlanner.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./specializedPlan",
+          "target": "src/services/coreSpirit/specializedPlan.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./tradingNativePlan",
+          "target": "src/services/coreSpirit/tradingNativePlan.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./typeSystem",
+          "target": "src/services/coreSpirit/typeSystem.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./repaintSafety",
+          "target": "src/services/coreSpirit/repaintSafety.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./causalityAnalysis",
+          "target": "src/services/coreSpirit/causalityAnalysis.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionPlanVisualizer",
+          "target": "src/services/coreSpirit/executionPlanVisualizer.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./researchSurface",
+          "target": "src/services/coreSpirit/researchSurface.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreSpiritExecutionModel",
+          "target": "src/services/coreSpirit/coreSpiritExecutionModel.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreScriptLanguagePolicy",
+          "target": "src/services/coreSpirit/coreScriptLanguagePolicy.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./artifactLookupIdentity",
+          "target": "src/services/coreSpirit/artifactLookupIdentity.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageEdition.js",
+          "target": "src/services/coreSpirit/languageEdition.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./frontends",
+          "target": "src/services/coreSpirit/frontends.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./functionDesugar",
+          "target": "src/services/coreSpirit/functionDesugar.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/optimizer.ts",
+      "bytes": 23540,
+      "lineCount": 425,
+      "exports": [
+        "CoreSpiritOptimizationNode",
+        "CoreSpiritOptimizationPass",
+        "CoreSpiritOptimizationCost",
+        "CoreSpiritOptimizationPlan",
+        "optimizeCoreSpiritIr"
+      ],
+      "imports": [
+        {
+          "specifier": "./ir",
+          "target": "src/services/coreSpirit/ir.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./ir",
+          "target": "src/services/coreSpirit/ir.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibrary",
+          "target": "src/services/coreSpirit/standardLibrary.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/runtime.ts",
+      "bytes": 162856,
+      "lineCount": 2508,
+      "exports": [
+        "CoreSpiritModelOutputResolver",
+        "CoreSpiritModelPredictionResolver",
+        "CoreSpiritRiskResolver",
+        "CoreSpiritHMMArtifactResolver",
+        "CoreSpiritRuntimeOptions",
+        "CoreSpiritKernelState",
+        "CoreSpiritRuntimeState",
+        "CoreSpiritExecutionResult",
+        "CoreSpiritRuntime",
+        "coreSpiritRuntime"
+      ],
+      "imports": [
+        {
+          "specifier": "./types",
+          "target": "src/services/coreSpirit/types.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./marketData",
+          "target": "src/services/coreSpirit/marketData.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "../core/event/eventBus",
+          "target": "src/services/core/event/eventBus.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./types",
+          "target": "src/services/coreSpirit/types.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./layeredPlatformContract",
+          "target": "src/services/coreSpirit/layeredPlatformContract.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./executionTarget",
+          "target": "src/services/coreSpirit/executionTarget.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./uiRuntime",
+          "target": "src/services/coreSpirit/uiRuntime.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./visualApp",
+          "target": "src/services/coreSpirit/visualApp.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./declarativeVisual",
+          "target": "src/services/coreSpirit/declarativeVisual.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./visualScene",
+          "target": "src/services/coreSpirit/visualScene.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./visualCoordinates",
+          "target": "src/services/coreSpirit/visualCoordinates.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./ir",
+          "target": "src/services/coreSpirit/ir.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./compiler",
+          "target": "src/services/coreSpirit/compiler.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./irContract",
+          "target": "src/services/coreSpirit/irContract.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionContext",
+          "target": "src/services/coreSpirit/executionContext.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./types",
+          "target": "src/services/coreSpirit/types.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./visualApp",
+          "target": "src/services/coreSpirit/visualApp.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./visualCoordinates",
+          "target": "src/services/coreSpirit/visualCoordinates.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./statefulIndicatorKernel",
+          "target": "src/services/coreSpirit/statefulIndicatorKernel.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./quantKernels",
+          "target": "src/services/coreSpirit/quantKernels.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./quantMath",
+          "target": "src/services/coreSpirit/quantMath.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreScriptCollections",
+          "target": "src/services/coreSpirit/coreScriptCollections.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./orderIntent",
+          "target": "src/services/coreSpirit/orderIntent.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./seriesFusion",
+          "target": "src/services/coreSpirit/seriesFusion.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./seriesVector",
+          "target": "src/services/coreSpirit/seriesVector.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionVM",
+          "target": "src/services/coreSpirit/executionVM.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionVM",
+          "target": "src/services/coreSpirit/executionVM.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./optimizedExecutionVM",
+          "target": "src/services/coreSpirit/optimizedExecutionVM.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./coreSpiritComponents",
+          "target": "src/services/coreSpirit/coreSpiritComponents.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibrary",
+          "target": "src/services/coreSpirit/standardLibrary.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pineMathBuiltins",
+          "target": "src/services/coreSpirit/pineMathBuiltins.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pineStringBuiltins",
+          "target": "src/services/coreSpirit/pineStringBuiltins.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pineColorBuiltins",
+          "target": "src/services/coreSpirit/pineColorBuiltins.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./requestExecutionEngine",
+          "target": "src/services/coreSpirit/requestExecutionEngine.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./VERSION",
+          "target": "src/services/coreSpirit/VERSION.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionValueStore",
+          "target": "src/services/coreSpirit/executionValueStore.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./executionTier",
+          "target": "src/services/coreSpirit/executionTier.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./stateStore",
+          "target": "src/services/coreSpirit/stateStore.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./outputCollector",
+          "target": "src/services/coreSpirit/outputCollector.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./eventRouter",
+          "target": "src/services/coreSpirit/eventRouter.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./capabilityHost",
+          "target": "src/services/coreSpirit/capabilityHost.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./debugHost",
+          "target": "src/services/coreSpirit/debugHost.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./seriesRegistry",
+          "target": "src/services/coreSpirit/seriesRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./profiler",
+          "target": "src/services/coreSpirit/profiler.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./dirtyGraph",
+          "target": "src/services/coreSpirit/dirtyGraph.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./columnarMarketData",
+          "target": "src/services/coreSpirit/columnarMarketData.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./kernelStateSnapshots",
+          "target": "src/services/coreSpirit/kernelStateSnapshots.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./capabilitySandbox",
+          "target": "src/services/coreSpirit/capabilitySandbox.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./multiSymbolTimeframe",
+          "target": "src/services/coreSpirit/multiSymbolTimeframe.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./sessionCalendar",
+          "target": "src/services/coreSpirit/sessionCalendar.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./resourceGovernor",
+          "target": "src/services/coreSpirit/resourceGovernor.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./executionSemantics",
+          "target": "src/services/coreSpirit/executionSemantics.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./types",
+          "target": "src/services/coreSpirit/types.ts",
+          "importForm": "type-only"
+        },
+        {
+          "specifier": "./executionStateMachine",
+          "target": "src/services/coreSpirit/executionStateMachine.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./alertFrequency",
+          "target": "src/services/coreSpirit/alertFrequency.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    },
+    {
+      "path": "src/services/coreSpirit/languageService.ts",
+      "bytes": 25195,
+      "lineCount": 387,
+      "exports": [
+        "CoreSpiritCompletion",
+        "CoreSpiritTypeInfo",
+        "CoreSpiritUdtInfo",
+        "CoreSpiritEditorDiagnostic",
+        "CoreSpiritHover",
+        "CoreSpiritSemanticToken",
+        "CoreSpiritDefinition",
+        "CoreSpiritCodeAction",
+        "CoreSpiritFoldingRange",
+        "CoreSpiritCompletionContext",
+        "CoreSpiritEditorSnapshot",
+        "getCoreSpiritUdtMembers",
+        "getCoreSpiritTypeInfo",
+        "getCoreSpiritLanguageConcepts",
+        "getCoreSpiritCompletionContext",
+        "getCoreSpiritCompletions",
+        "formatCoreSpiritSource",
+        "diagnoseCoreSpiritSource",
+        "getCoreSpiritSignature",
+        "getCoreSpiritHover",
+        "getCoreSpiritSemanticTokens",
+        "getCoreSpiritDefinitions",
+        "getCoreSpiritDefinitionAt",
+        "getCoreSpiritFoldingRanges",
+        "getCoreSpiritCodeActions",
+        "getCoreSpiritEditorPreviewSnapshot",
+        "getCoreSpiritEditorSnapshot"
+      ],
+      "imports": [
+        {
+          "specifier": "./standardLibrary",
+          "target": "src/services/coreSpirit/standardLibrary.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./parser",
+          "target": "src/services/coreSpirit/parser.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./semanticAnalyzer",
+          "target": "src/services/coreSpirit/semanticAnalyzer.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./syntax",
+          "target": "src/services/coreSpirit/syntax.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./memberRegistry",
+          "target": "src/services/coreSpirit/memberRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./modelSurface",
+          "target": "src/services/coreSpirit/modelSurface.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./compilerPipeline",
+          "target": "src/services/coreSpirit/compilerPipeline.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./standardLibraryNamespaces",
+          "target": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./pine/pineFeatureRegistry",
+          "target": "src/services/coreSpirit/pine/pineFeatureRegistry.ts",
+          "importForm": "value-or-mixed-syntax"
+        },
+        {
+          "specifier": "./languageConcepts",
+          "target": "src/services/coreSpirit/languageConcepts.ts",
+          "importForm": "value-or-mixed-syntax"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "src/services/coreSpirit/frontends.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/frontends.ts",
+      "to": "src/services/coreSpirit/parser.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/frontends.ts",
+      "to": "src/services/coreSpirit/syntax.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/frontends.ts",
+      "to": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "to": "src/services/coreSpirit/parser.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "to": "src/services/coreSpirit/syntax.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "to": "src/services/coreSpirit/frontends.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/parser.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/parser.ts",
+      "to": "src/services/coreSpirit/lexer.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/semanticGraph.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/semanticDependencyGraph.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/optimizer.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/executionPlanner.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/compilerPipeline.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/callContract.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/specializedPlan.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/tradingNativePlan.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/repaintSafety.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/causalityAnalysis.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/executionPlanVisualizer.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/researchSurface.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/coreSpiritExecutionModel.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/semanticTypeSystem.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/languageEdition.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/ir.ts",
+      "to": "src/services/coreSpirit/coreScriptLanguagePolicy.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/standardLibrary.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/typeSystem.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/coreSpiritComponents.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/semanticTypeSystem.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/memberRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/pineBuiltinRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/layeredPlatformContract.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/ast.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/parser.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/syntax.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/ir.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/artifact.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/nameResolver.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/optimizer.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/irContract.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/layeredPlatformContract.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/semanticGraph.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/standardLibrary.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/memberRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/coreSpiritComponents.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/coreSpiritComponents.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/compilerPipeline.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/semanticDependencyGraph.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/executionPlanner.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/specializedPlan.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/tradingNativePlan.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/typeSystem.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/repaintSafety.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/causalityAnalysis.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/executionPlanVisualizer.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/researchSurface.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/coreSpiritExecutionModel.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/coreScriptLanguagePolicy.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/artifactLookupIdentity.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/languageEdition.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/frontends.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/compiler.ts",
+      "to": "src/services/coreSpirit/functionDesugar.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/optimizer.ts",
+      "to": "src/services/coreSpirit/ir.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/optimizer.ts",
+      "to": "src/services/coreSpirit/ir.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/optimizer.ts",
+      "to": "src/services/coreSpirit/standardLibrary.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/types.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/marketData.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/core/event/eventBus.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/types.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/layeredPlatformContract.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionTarget.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/uiRuntime.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/visualApp.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/declarativeVisual.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/visualScene.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/visualCoordinates.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/ir.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/compiler.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/irContract.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionContext.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/types.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/visualApp.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/visualCoordinates.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/statefulIndicatorKernel.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/quantKernels.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/quantMath.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/coreScriptCollections.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/orderIntent.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/seriesFusion.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/seriesVector.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionVM.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionVM.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/optimizedExecutionVM.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/coreSpiritComponents.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/standardLibrary.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/pineMathBuiltins.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/pineStringBuiltins.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/pineColorBuiltins.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/requestExecutionEngine.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/VERSION.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionValueStore.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionTier.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/stateStore.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/outputCollector.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/eventRouter.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/capabilityHost.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/debugHost.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/seriesRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/profiler.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/dirtyGraph.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/columnarMarketData.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/kernelStateSnapshots.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/capabilitySandbox.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/multiSymbolTimeframe.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/sessionCalendar.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/resourceGovernor.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionSemantics.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/types.ts",
+      "importForm": "type-only"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/executionStateMachine.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/runtime.ts",
+      "to": "src/services/coreSpirit/alertFrequency.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/standardLibrary.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/parser.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/syntax.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/memberRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/modelSurface.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/compilerPipeline.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/pine/pineFeatureRegistry.ts",
+      "importForm": "value-or-mixed-syntax"
+    },
+    {
+      "from": "src/services/coreSpirit/languageService.ts",
+      "to": "src/services/coreSpirit/languageConcepts.ts",
+      "importForm": "value-or-mixed-syntax"
+    }
+  ],
+  "findings": [
+    "frontends.ts registers PineV6Frontend as a direct value import.",
+    "pineV6Frontend.ts imports frontends.ts with import type, so the observed two-way source reference is not a two-way runtime import.",
+    "semanticAnalyzer.ts directly imports pineBuiltinRegistry.ts using value-or-mixed syntax.",
+    "runtime.ts directly imports Pine math, string and color adapters using value-or-mixed syntax.",
+    "ir.ts imports 18 optional metadata/report types from optimizer, planner, compiler pipeline, specialized plan, research and policy modules; all 18 declarations use import type. This is compile-time coupling, not a runtime side-effect edge.",
+    "languageService.ts imports the Pine feature registry for editor completions."
+  ],
+  "limitations": [
+    "Only these 10 high-risk files are included; use the complete source-inventory.json for the full tracked path list.",
+    "No dependency-cycle or bundler-graph analysis is claimed by this source-import extraction."
+  ]
+}

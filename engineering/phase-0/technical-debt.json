@@ -72,7 +72,7 @@
       "priority": "P1",
       "area": "Compiler layering",
       "title": "Pine concepts leak into native parser, AST, IR and semantic analysis",
-      "evidence": "pine frontend mode, Pine declaration metadata, semantic import of Pine builtin registry.",
+      "evidence": "pine frontend mode, Pine declaration metadata, semantic import of Pine builtin registry.; ir.ts imports 18 optional optimizer/planner/compiler-trace/research/policy metadata types.",
       "impact": "Language evolution and zero-Pine migration remain coupled.",
       "action": "Introduce neutral declarations and compatibility adapters outside native compiler internals."
     },
@@ -129,6 +129,19 @@
       "evidence": "Commit combined status target points to Vercel build-rate-limit/blocked deployment.",
       "impact": "A green code build does not guarantee latest main is deployed.",
       "action": "Inspect deployment quota/status and verify production alias against the intended green commit."
+    },
+    {
+      "id": "TD-015",
+      "priority": "P1",
+      "area": "IR ownership and dependency direction",
+      "title": "CoreSpirit IR schema carries a large compiler/planner/report metadata surface",
+      "evidence": [
+        "src/services/coreSpirit/ir.ts is 111 lines and its CoreSpiritIrProgram optional metadata fields import 18 modules using import type.",
+        "Those type dependencies include optimizer, execution planner, compiler pipeline, specialized plans, repaint/causality reports, research surface and language policy.",
+        "CoreSpiritPineDeclarationMetadata remains embedded in the IR's shared AST metadata types."
+      ],
+      "impact": "These are compile-time rather than demonstrated runtime cycles, but they couple the canonical IR schema to higher-level compilation, planning, inspection and Pine compatibility layers. Artifact schema evolution becomes harder to isolate.",
+      "action": "Split executable IR from derived analysis/inspection metadata. Keep the canonical IR schema dependent only on language-neutral value/instruction contracts; attach optional analysis reports through a versioned artifact envelope or sidecar metadata."
     }
   ]
 }

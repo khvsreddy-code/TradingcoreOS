@@ -28,7 +28,7 @@
       "id": "language.lexer",
       "domain": "Language",
       "name": "CoreScript lexical analysis",
-      "signature": "new CoreSpiritLexer(source).tokenize()",
+      "signature": "CoreSpiritLexer.tokenize(): CoreSpiritToken[]",
       "inputs": "source:string",
       "outputs": "tokens:CoreSpiritToken[]",
       "status": "implemented_unverified",
@@ -36,6 +36,7 @@
         "src/services/coreSpirit/lexer.ts"
       ],
       "tests": [
+        "src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts",
         "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts"
       ],
       "knownLimitations": [
@@ -50,7 +51,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -58,7 +59,7 @@
       "id": "language.parser",
       "domain": "Language",
       "name": "CoreScript parser",
-      "signature": "new CoreSpiritParser(source, options?).parse()",
+      "signature": "new CoreSpiritParser(source, options?).parse(): CoreSpiritAst",
       "inputs": "source:string; options:{pine?:boolean}",
       "outputs": "CoreSpiritAst",
       "status": "partially_implemented",
@@ -67,6 +68,7 @@
         "src/services/coreSpirit/ast.ts"
       ],
       "tests": [
+        "src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts",
         "src/services/coreSpirit/functionAstDesugarContract.test.ts",
         "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts"
       ],
@@ -82,7 +84,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -102,7 +104,8 @@
         "src/services/coreSpirit/irSpecificationContract.test.ts"
       ],
       "knownLimitations": [
-        "FrontendId includes pine-v6 and AST declares Pine declaration metadata."
+        "FrontendId includes pine-v6 and AST declares Pine declaration metadata.",
+        "AST/IR retain Pine frontend/declaration metadata; IR also imports planner/compiler/report metadata as type-only dependencies."
       ],
       "acceptanceCriteria": [
         "Native AST schema contains no vendor-specific fields."
@@ -113,7 +116,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -121,7 +124,7 @@
       "id": "language.semantic",
       "domain": "Language",
       "name": "Semantic analysis and name resolution",
-      "signature": "analyzeCoreSpirit(ast, options)",
+      "signature": "analyzeCoreSpirit(ast:CoreSpiritAst, options?:CoreSpiritSemanticOptions): CoreSpiritSemanticResult",
       "inputs": "AST; layer; surface; components",
       "outputs": "symbols; diagnostics; dependency graph",
       "status": "partially_implemented",
@@ -146,7 +149,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -178,7 +181,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -186,7 +189,7 @@
       "id": "execution.ir",
       "domain": "Execution",
       "name": "Typed IR generation and validation",
-      "signature": "CoreSpirit compiler pipeline -> CoreSpiritIrProgram",
+      "signature": "new CoreSpiritCompiler().compileSource(source, sourceId?, options?): CoreSpiritCompileResult (contains validated executable artifact/IR when compilation succeeds)",
       "inputs": "source and compile options",
       "outputs": "validated CoreSpirit IR/artifact",
       "status": "implemented_unverified",
@@ -200,7 +203,8 @@
         "src/services/coreSpirit/canonicalCompilerPipelineContract.test.mjs"
       ],
       "knownLimitations": [
-        "IR still imports Pine declaration metadata; full pipeline contract suite did not complete in CI."
+        "IR still imports Pine declaration metadata; full pipeline contract suite did not complete in CI.",
+        "IR's optional report/plan metadata has 18 type-only import dependencies on optimization, planning, compiler trace, visualization, research and language-policy modules; this is compile-time coupling, not a proven runtime cycle."
       ],
       "acceptanceCriteria": [
         "Every AST form lowers deterministically with source maps and schema validation."
@@ -211,7 +215,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -219,7 +223,7 @@
       "id": "execution.optimizer",
       "domain": "Execution",
       "name": "IR optimizer",
-      "signature": "optimizeCoreSpiritIr(program)",
+      "signature": "optimizeCoreSpiritIr(program:CoreSpiritIrProgram): CoreSpiritIrProgram",
       "inputs": "validated CoreSpirit IR",
       "outputs": "optimized IR and cost metadata",
       "status": "implemented_unverified",
@@ -243,7 +247,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -251,7 +255,7 @@
       "id": "execution.reference-vm",
       "domain": "Execution",
       "name": "Reference VM",
-      "signature": "CoreSpiritExecutionVM",
+      "signature": "CoreSpiritExecutionVM.run(instructions, barIndex, host, output): void",
       "inputs": "IR instruction stream and host callbacks",
       "outputs": "deterministic outputs/state effects",
       "status": "implemented_unverified",
@@ -275,7 +279,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -283,7 +287,7 @@
       "id": "execution.optimized-vm",
       "domain": "Execution",
       "name": "Optimized VM",
-      "signature": "CoreSpiritOptimizedExecutionVM",
+      "signature": "CoreSpiritOptimizedExecutionVM.prepare(...); CoreSpiritOptimizedExecutionVM.run(...): void",
       "inputs": "specialized IR and execution context",
       "outputs": "reference-equivalent optimized outputs",
       "status": "implemented_unverified",
@@ -307,7 +311,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -340,7 +344,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -372,7 +376,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -404,7 +408,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -435,7 +439,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -468,7 +472,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -501,7 +505,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -509,7 +513,7 @@
       "id": "data.multi-symbol-timeframe",
       "domain": "Data Requests",
       "name": "Multi-symbol/timeframe data resolution",
-      "signature": "CoreSpiritDataResolverService.resolveValue(symbol,timeframe,field,index,offset,alignment,maxStalenessMs?)",
+      "signature": "CoreSpiritDataResolverService.resolveValue(symbol, timeframe, field, index, offset?, alignment?, maxStalenessMs?): number | null",
       "inputs": "symbol; timeframe; field; offset; alignment",
       "outputs": "number|null host snapshot",
       "status": "host_limited",
@@ -534,7 +538,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -567,7 +571,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -589,7 +593,8 @@
         "src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs"
       ],
       "knownLimitations": [
-        "No independent native TA conformance registry yet; Pine builtin registry remains in semantic/runtime path."
+        "No independent native TA conformance registry yet; Pine builtin registry remains in semantic/runtime path.",
+        "The source inventory still identifies Pine builtin metadata as a semantic-analysis input; a fully native CoreSpirit-owned TA signature/runtime registry has not yet been established."
       ],
       "acceptanceCriteria": [
         "Every public TA function has warmup, missing-value, realtime correction and causal fixtures."
@@ -600,7 +605,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -633,7 +638,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -641,7 +646,7 @@
       "id": "collections.core",
       "domain": "Collections",
       "name": "Bounded arrays/maps/matrices/vectors",
-      "signature": "CoreScript collection operation surface",
+      "signature": "coreScriptCollectionIndex(value,index); coreScriptCollectionMember(value,member); coreScriptCollectionMethod(value,method,args)",
       "inputs": "typed values, capacities, dimensions",
       "outputs": "bounded collection objects and numeric arrays",
       "status": "partially_implemented",
@@ -665,7 +670,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -673,20 +678,20 @@
       "id": "inputs.parameters",
       "domain": "Inputs",
       "name": "Declarative indicator parameter schema",
-      "signature": "Indicator settings schema and input bindings",
+      "signature": "validateIndicatorSettingsSchema(schema); resolveIndicatorParameterState(schema, values); validateIndicatorSettingValue(field, value)",
       "inputs": "serializable schema/defaults/current values",
       "outputs": "validated input snapshot",
       "status": "implemented_unverified",
       "implementationFiles": [
-        "src/services/coreSpirit/indicatorSettingsSchema.ts",
-        "src/services/coreSpirit/indicatorParameterState.test.ts"
+        "src/services/coreSpirit/indicatorSettingsSchema.ts"
       ],
       "tests": [
         "src/services/coreSpirit/indicatorParameterState.test.ts",
         "src/services/coreSpirit/surfaceSourceInputDefaultsContract.test.mjs"
       ],
       "knownLimitations": [
-        "Pine input namespace remains largely catalog-only; schema-to-runtime round-trip needs proof."
+        "Pine input namespace remains largely catalog-only; schema-to-runtime round-trip needs proof.",
+        "The included parameter-state contract exercises the schema resolver, but this file alone does not prove the full editor persistence and worker input lifecycle."
       ],
       "acceptanceCriteria": [
         "Defaults, constraints, conditional fields and persistence round-trip into VM snapshots."
@@ -697,7 +702,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -730,7 +735,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -762,7 +767,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -770,7 +775,7 @@
       "id": "strategies.simulation",
       "domain": "Strategies",
       "name": "Deterministic strategy simulation",
-      "signature": "runStrategySimulation(dataset, actions, config)",
+      "signature": "runStrategySimulation(input: StrategySimulationInput): StrategySimulationResult",
       "inputs": "time-ordered datasets, actions and simulation settings",
       "outputs": "simulation-only ledger and metrics",
       "status": "implemented_unverified",
@@ -794,7 +799,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -826,7 +831,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -861,7 +866,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -894,7 +899,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -926,7 +931,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -959,7 +964,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -989,7 +994,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     },
@@ -1022,7 +1027,7 @@
       "evidence": {
         "sourceInspected": true,
         "runtimeVerified": false,
-        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "sourceRevision": "b988d9fdb2a7c7f32962c86e8211e5656d632ddf",
         "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
       }
     }

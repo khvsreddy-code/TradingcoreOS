@@ -40,10 +40,12 @@
     {
       "path": "src/services/coreSpirit/ir.ts",
       "bytes": 6270,
-      "description": "Executable IR imports Pine declaration metadata through the shared AST type surface.",
+      "description": "Executable IR imports Pine declaration metadata through the shared AST type surface. Direct import inspection confirms 18 import-type dependencies for optional plan/report/policy metadata, including Pine declaration metadata; these are compile-time dependencies, not runtime imports.",
       "sourceEvidence": "directly inspected in audited main-branch source",
       "implementationStatus": "not_inferred_from_file_presence",
-      "migration": "retain or refactor only after consumer and test contracts are mapped"
+      "migration": "retain or refactor only after consumer and test contracts are mapped",
+      "importDependencyCount": 18,
+      "importDependencyKind": "type-only"
     },
     {
       "path": "src/services/coreSpirit/semanticAnalyzer.ts",
