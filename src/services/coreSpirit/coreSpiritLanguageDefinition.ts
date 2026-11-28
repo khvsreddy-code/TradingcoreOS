@@ -35,7 +35,7 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
  */
 export const CORE_SPIRIT_LANGUAGE_DESIGN_REVISION = 'core-spirit-language-design/1' as const;
 
-export const CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR = String.raw\`
+export const CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR = String.raw`
 SourceFile              ::= EditionDirective? CapabilityRequirement* Module EOF
 Module                  ::= ProgramModule | LibraryModule
 ProgramModule           ::= ProgramHeader Block
@@ -164,14 +164,16 @@ Hexadecimal            ::= ("0x" | "0X") HexDigit+
 Decimal                ::= Digit+ ("." Digit+)? Exponent? | "." Digit+ Exponent?
 Exponent               ::= ("e" | "E") ("+" | "-")? Digit+
 Integer                ::= Digit+
-String                 ::= "\\"" StringCharacter* "\\"" | "'" StringCharacter* "'"
+String                  ::= DoubleQuotedString | SingleQuotedString
+DoubleQuotedString      ::= U+0022 StringCharacter* U+0022
+SingleQuotedString      ::= U+0027 StringCharacter* U+0027
 StringCharacter        ::= EscapeSequence | any character except active quote or EOF
 EscapeSequence         ::= Backslash ("n" | "r" | "t" | any single escaped character)
 Boolean                ::= "true" | "false"
 Terminator             ::= ";" | ImplicitLineTerminator
 ImplicitLineTerminator ::= source-line boundary recognized outside delimiters
 Comment                ::= "//" characters-to-line-end | "/*" characters "*/"
-\`.trim();
+`.trim();
 
 export const CORE_SPIRIT_LANGUAGE_DESIGN_RULES = Object.freeze({
   programKinds: Object.freeze({
