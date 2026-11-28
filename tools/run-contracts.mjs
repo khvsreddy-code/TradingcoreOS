@@ -170,6 +170,8 @@ const contracts = [
   ['corespirit-model-orchestration-security', ['src/services/coreSpirit/modelOrchestrationSecurityContract.test.mjs', true]],
   ['corespirit-ai-model-semantics', ['src/services/coreSpirit/aiModelContract.test.mjs', true]],
   ['corespirit-polyglot-module-abi', ['src/services/coreSpirit/polyglotModulesContract.test.mjs', true]],
+  ['corespirit-module-system', ['src/services/coreSpirit/coreSpiritModuleSystemContract.test.mjs', true]],
+  ['corespirit-builtin-manifest', ['src/services/coreSpirit/coreSpiritBuiltinManifestContract.test.mjs', true]],
   ['corespirit-quant-research', ['src/services/coreSpirit/quantResearchContract.test.mjs', true]],
   ['corespirit-large-data-research-host', ['src/services/coreSpirit/quantResearchServiceHostContract.test.mjs', true]],
   ['corespirit-point-in-time-research-features', ['src/services/coreSpirit/researchFeaturesContract.test.mjs', true]],

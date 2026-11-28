@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
-import {CoreSpiritPolyglotRegistry,CoreSpiritPythonModuleAdapter,CoreSpiritNativeModuleAdapter,CoreSpiritOnnxModuleAdapter,CoreSpiritWasmModuleAdapter,coreSpiritPolyglotResponseChecksum} from './polyglotModules.ts';
+import {isCoreSpiritExactSemVer,CoreSpiritPolyglotRegistry,CoreSpiritPythonModuleAdapter,CoreSpiritNativeModuleAdapter,CoreSpiritOnnxModuleAdapter,CoreSpiritWasmModuleAdapter,coreSpiritPolyglotResponseChecksum} from './polyglotModules.ts';
 const version='a'.repeat(64);
 const manifest=(language='python',transport='host')=>({abiVersion:1,moduleId:'numpy-features',version,language,transport,runtimeVersion:language==='python'?'3.12.3':language==='rust'?'1.82.0':language==='cpp'?'18.1.8':language==='julia'?'1.11.1':language==='r'?'4.4.2':language==='onnx'?'1.20.1':'1.0.0',deterministic:true,stateless:true,exports:['features.transform'],inputs:{values:{dtype:'f64',shape:[2]}},outputs:{normalized:{dtype:'f64',shape:[2]}},maxInputBytes:1024,maxOutputBytes:1024,maxMemoryBytes:1024*1024,maxSteps:100000,maxLatencyMs:1000});
+// SemVer 2.0: ordinary pins, prereleases and build metadata are accepted;
+ // ranges, wildcards, malformed identifiers and numeric leading zeroes are rejected.
+for(const valid of ['3.12.3','1.2.3-rc.1','0.0.1-alpha','2.4.6+build.7','1.0.0-alpha.1+build.9'])assert.equal(isCoreSpiritExactSemVer(valid),true,valid);
+for(const invalid of ['','v3.12.3','^3.12.3','~3.12.3','3.12','3.12.3.4','03.12.3','3.012.3','3.12.03','3.12.3-01','3.12.3-','3.12.3+','3.12.3-rc..1','3.12.3 || 4.0.0'])assert.equal(isCoreSpiritExactSemVer(invalid),false,invalid);
+assert.equal(manifest().runtimeVersion,'3.12.3');
+
 const request={requestId:'polyglot-1',moduleId:'numpy-features',version,exportName:'features.transform',context:{runId:'run-1',symbol:'NSE:NIFTY50-INDEX',timeframe:'5m',barIndex:80,timestamp:1767000000000,confirmed:true,deterministicSeed:'seed-1'},inputs:{values:{dtype:'f64',shape:[2],data:[1,2]}}};
 const outputs={normalized:{dtype:'f64',shape:[2],data:[-1,1]}};
 const output={outputs,checksum:coreSpiritPolyglotResponseChecksum(manifest(),request,outputs)};
+// Runtime and dependency pins use the same exact SemVer parser.
+const prereleaseManifest={...manifest(),runtimeVersion:'3.13.0-rc.1'};
+assert.doesNotThrow(()=>new CoreSpiritPolyglotRegistry().register(prereleaseManifest,new CoreSpiritPythonModuleAdapter(async()=>output)));
+const malformedRuntime={...manifest(),runtimeVersion:'3.13.0rc1'};
+assert.throws(()=>new CoreSpiritPolyglotRegistry().register(malformedRuntime,new CoreSpiritPythonModuleAdapter(async()=>output)),/exact pinned semantic version/);
+const validDependencyManifest={...manifest(),dependencies:[{name:'numpy',version:'2.1.0-rc.1',artifactHash:'b'.repeat(64)}]};
+assert.doesNotThrow(()=>new CoreSpiritPolyglotRegistry().register(validDependencyManifest,new CoreSpiritPythonModuleAdapter(async()=>output)));
+for(const badVersion of ['^2.1.0','2.1','02.1.0','2.1.0-01','2.1.0 || 3.0.0']) {
+ const bad={...manifest(),dependencies:[{name:'numpy',version:badVersion,artifactHash:'b'.repeat(64)}]};
+ assert.throws(()=>new CoreSpiritPolyglotRegistry().register(bad,new CoreSpiritPythonModuleAdapter(async()=>output)),/exact pinned versions/);
+}
 const registry=new CoreSpiritPolyglotRegistry();
 registry.register(manifest(),new CoreSpiritPythonModuleAdapter(async()=>output));
 assert.deepEqual(await registry.execute(request),output);

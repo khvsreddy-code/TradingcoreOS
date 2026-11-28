@@ -29,11 +29,25 @@ export interface CoreSpiritPolyglotHost {
   readonly language:CoreSpiritPolyglotLanguage; readonly transport:CoreSpiritPolyglotTransport;
   invoke(manifest:CoreSpiritPolyglotModuleManifest,request:CoreSpiritPolyglotRequest,signal?:AbortSignal):Promise<CoreSpiritPolyglotResponse>;
 }
+/**
+ * Strict SemVer 2.0 validation for runtime and dependency pins.
+ * Rejects leading zeroes in numeric identifiers and empty prerelease/build parts.
+ */
+export function isCoreSpiritExactSemVer(value:unknown):value is string {
+  if(typeof value!=='string'||value.length===0||value.length>128)return false;
+  const match=/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(value);
+  if(!match)return false;
+  const prerelease=match[4];
+  if(prerelease!==undefined&&prerelease.split('.').some(identifier=>
+    identifier.length===0||(!/^[0-9]+$/.test(identifier)?false:(identifier.length>1&&identifier.startsWith('0')))))return false;
+  return true;
+}
+
 export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotModuleManifest):void {
   if(!manifest||manifest.abiVersion!==CORE_SPIRIT_POLYGLOT_ABI_VERSION) throw new Error('Unsupported CoreSpirit Polyglot ABI version.');
   if(!/^[a-z][a-z0-9-]{1,79}$/.test(manifest.moduleId)) throw new Error('Polyglot moduleId must be a normalized identifier.');
   if(!/^[a-f0-9]{64}$/.test(manifest.version)) throw new Error('Polyglot module version must be a SHA-256 artifact identity.');
-  if(!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.runtimeVersion)) throw new Error('Polyglot runtimeVersion must be an exact pinned semantic version.');
+  if(!isCoreSpiritExactSemVer(manifest.runtimeVersion)) throw new Error('Polyglot runtimeVersion must be an exact pinned semantic version.');
   if(!['python','rust','cpp','julia','r','onnx','wasm'].includes(manifest.language)) throw new Error('Polyglot language is unsupported.');
   if(!manifest.deterministic||!manifest.stateless) throw new Error('Polyglot v1 modules must be deterministic and stateless.');
   if(!Array.isArray(manifest.exports)||!manifest.exports.length||manifest.exports.length>128||
@@ -51,7 +65,7 @@ export function validateCoreSpiritPolyglotManifest(manifest:CoreSpiritPolyglotMo
   if(manifest.dependencies!==undefined&&!Array.isArray(manifest.dependencies)) throw new Error('Polyglot dependencies must be an array.');
   for(const dependency of manifest.dependencies??[]){
     if(!dependency||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(dependency.name)||dependencyNames.has(dependency.name)) throw new Error('Polyglot dependencies must have unique normalized names.');
-    if(!/^\\d+\.\\d+\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
+    if(!isCoreSpiritExactSemVer(dependency.version)) throw new Error('Polyglot dependencies must use exact pinned versions.');
     if(!/^[a-f0-9]{64}$/.test(dependency.artifactHash)) throw new Error('Polyglot dependency artifacts require SHA-256 identities.');
     dependencyNames.add(dependency.name);
   }
