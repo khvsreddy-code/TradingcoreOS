@@ -6,7 +6,7 @@ import { CoreSpiritRuntime } from './runtime.ts';
 import { normalizeDeclaredType } from './typeSystem.ts';
 import { CORE_SPIRIT_V1_SURFACE, CORE_SPIRIT_V1_2_SURFACE } from './languageSpec.ts';
 import { parseCoreSpiritTemporalType, makeCoreSpiritTemporalType, temporalAssignmentCompatible } from './temporalTypes.ts';
-import { semanticScalar, semanticTypeCompatible, semanticTypeForDeclaredName } from './semanticTypeSystem.ts';
+import { semanticScalar, semanticSeriesField, semanticTypeCompatible, semanticTypeForDeclaredName } from './semanticTypeSystem.ts';
 import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
@@ -94,6 +94,15 @@ const confirmedSemantic = semanticTypeForDeclaredName('confirmed<float>');
 const developingSemantic = semanticTypeForDeclaredName('developing<float>');
 const realtimeSemantic = semanticTypeForDeclaredName('series<float>');
 assert.ok(confirmedSemantic && developingSemantic && realtimeSemantic);
+const seriesFloatType = semanticTypeForDeclaredName('series<float>');
+const observedCloseType = semanticSeriesField('close');
+assert.ok(seriesFloatType);
+assert.equal(observedCloseType.valueKind,'observed');
+assert.equal(observedCloseType.phase,'developing');
+assert.equal(observedCloseType.causal,true);
+assert.equal(observedCloseType.lookahead,false);
+assert.equal(semanticTypeCompatible(seriesFloatType,observedCloseType),true,
+  'the observed current close series must satisfy the unqualified causal series contract');
 assert.equal(semanticTypeCompatible(confirmedSemantic,developingSemantic),false,
   'a developing value must not satisfy a confirmed declaration');
 assert.equal(semanticTypeCompatible(developingSemantic,confirmedSemantic),true,

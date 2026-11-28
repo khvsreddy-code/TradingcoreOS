@@ -101,18 +101,30 @@ export function isSemanticNumeric(type: CoreSpiritSemanticType | undefined): boo
 }
 
 export function semanticSeriesField(field: string, symbol = 'current', timeframe = 'chart'): CoreSpiritSemanticType {
+  // Market fields are host-observed, bar-aligned inputs. Their current tail is
+  // developing until confirmation; the host supplies only causal, no-lookahead
+  // history to this standard market namespace.
+  const provenance = {
+    valueKind: 'observed' as const,
+    phase: 'developing' as const,
+    causal: true,
+    lookahead: false,
+    lookback: 0,
+    symbol,
+    timeframe,
+  };
   switch (field) {
     case 'open':
     case 'high':
     case 'low':
     case 'close':
-      return semanticSeries('price', { unit: 'price', symbol, timeframe });
+      return semanticSeries('price', { ...provenance, unit: 'price' });
     case 'volume':
-      return semanticSeries('volume', { unit: 'volume', symbol, timeframe });
+      return semanticSeries('volume', { ...provenance, unit: 'volume' });
     case 'time':
-      return semanticSeries('time', { unit: 'timestamp', symbol, timeframe });
+      return semanticSeries('time', { ...provenance, unit: 'timestamp' });
     default:
-      return semanticSeries('number', { symbol, timeframe });
+      return semanticSeries('number', provenance);
   }
 }
 
