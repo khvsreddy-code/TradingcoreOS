@@ -1,0 +1,30 @@
+flowchart TD
+ SRC[CoreScript source] --> LEX[Lexer] --> PAR[Parser] --> AST[Native AST]
+ AST --> SEM[Semantic analysis and name resolution] --> COMP[Compiler] --> IR[Typed CoreSpirit IR]
+ IR --> OPT[Optimizer] --> PLAN[Execution planner]
+ PLAN --> VM[Reference VM]
+ PLAN --> OVM[Optimized VM]
+ VM --> RT[CoreSpiritRuntime]
+ OVM --> RT
+ COL[Columnar market data] --> RT
+ HOST[Host-owned data resolver] --> RT
+ RT --> OUT[Retained outputs] --> VA[Vela output adapter] --> VE[CoreSpiritVelaEngine] --> VELA[Vela chart]
+ subgraph Compute backends
+  CPU[CPU kernels]
+  WASM[WASM scalar/SIMD]
+  GPU[GPU adapter - host-limited]
+ end
+ CPU --> PLAN
+ WASM --> PLAN
+ GPU --> PLAN
+ subgraph Broker authority boundary
+  AUTO[Automation] --> RISK[Mandatory risk/policy] --> GATE[Execution gateway] --> BROKER[Broker host]
+ end
+ RT -. events/order intents .-> AUTO
+ subgraph Pine compatibility coupling
+  PFE[PineV6Frontend] --> PAR
+  SEM -. direct import .-> PB[Pine builtin registry]
+  RT -. math/string/color .-> PB
+  LS[Language service] -. completions .-> PFR[Pine feature registry]
+  AST -. Pine metadata .-> IR
+ end

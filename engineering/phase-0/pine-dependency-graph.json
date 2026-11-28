@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "auditedCommit": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+  "objective": "First-party production Pine dependency inventory to guide safe zero-Pine removal.",
+  "externalPineNpmDependency": false,
+  "evidence": "package.json dependencies were inspected; Pine features are implemented in first-party source modules and connected through internal imports.",
+  "nodes": [
+    {
+      "id": "frontends",
+      "file": "src/services/coreSpirit/frontends.ts",
+      "role": "Imports and registers PineV6Frontend beside CoreScriptFrontend."
+    },
+    {
+      "id": "pineFrontend",
+      "file": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "role": "Pine header/declaration adapter; calls shared parser with pine:true."
+    },
+    {
+      "id": "parser",
+      "file": "src/services/coreSpirit/parser.ts",
+      "role": "One shared parser has explicit pine mode state."
+    },
+    {
+      "id": "ast",
+      "file": "src/services/coreSpirit/ast.ts",
+      "role": "Frontend ID and shared AST retain Pine declaration metadata."
+    },
+    {
+      "id": "ir",
+      "file": "src/services/coreSpirit/ir.ts",
+      "role": "IR type surface imports Pine declaration metadata."
+    },
+    {
+      "id": "semantic",
+      "file": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "role": "Direct imports of Pine builtin definition/executability/argument validation."
+    },
+    {
+      "id": "builtinRegistry",
+      "file": "src/services/coreSpirit/pineBuiltinRegistry.ts",
+      "role": "Pine signatures and overloads with supported, partial, host-bound and catalog-only registrations."
+    },
+    {
+      "id": "runtime",
+      "file": "src/services/coreSpirit/runtime.ts",
+      "role": "Direct Pine math/string/color execution adapters."
+    },
+    {
+      "id": "pineMath",
+      "file": "src/services/coreSpirit/pineMathBuiltins.ts",
+      "role": "Pine math execution adapter."
+    },
+    {
+      "id": "pineString",
+      "file": "src/services/coreSpirit/pineStringBuiltins.ts",
+      "role": "Pine string execution adapter."
+    },
+    {
+      "id": "pineColor",
+      "file": "src/services/coreSpirit/pineColorBuiltins.ts",
+      "role": "Pine color execution adapter."
+    },
+    {
+      "id": "languageService",
+      "file": "src/services/coreSpirit/languageService.ts",
+      "role": "Imports Pine editor completions."
+    },
+    {
+      "id": "featureRegistry",
+      "file": "src/services/coreSpirit/pine/pineFeatureRegistry.ts",
+      "role": "31 Pine feature definitions plus evidence-based status calculation."
+    },
+    {
+      "id": "compatTypes",
+      "file": "src/services/coreSpirit/pine/pineCompatibilityTypes.ts",
+      "role": "Pine status, fixture and compatibility type contracts."
+    },
+    {
+      "id": "namespaceRegistry",
+      "file": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+      "role": "Mixed namespace registry includes Pine-derived roots such as ta/request/array/matrix/map/str/color/input/syminfo/barstate."
+    },
+    {
+      "id": "barrel",
+      "file": "src/services/coreSpirit/index.ts",
+      "role": "Public exports of Pine registry and Pine math adapter."
+    },
+    {
+      "id": "strategyAdapter",
+      "file": "src/services/coreSpirit/pineStrategySimulationAdapter.ts",
+      "role": "Maps Pine strategy command envelopes into generic simulation-only actions."
+    },
+    {
+      "id": "tests",
+      "file": "tools/run-contracts.mjs",
+      "role": "Registers six Pine-specific contracts in the primary suite."
+    }
+  ],
+  "edges": [
+    {
+      "from": "frontends",
+      "to": "pineFrontend",
+      "kind": "direct_import_registration"
+    },
+    {
+      "from": "pineFrontend",
+      "to": "parser",
+      "kind": "shared_parser_pine_mode"
+    },
+    {
+      "from": "pineFrontend",
+      "to": "ast",
+      "kind": "attaches_vendor_declaration_metadata"
+    },
+    {
+      "from": "ast",
+      "to": "ir",
+      "kind": "type_dependency"
+    },
+    {
+      "from": "semantic",
+      "to": "builtinRegistry",
+      "kind": "direct_import"
+    },
+    {
+      "from": "runtime",
+      "to": "pineMath",
+      "kind": "direct_import_execution"
+    },
+    {
+      "from": "runtime",
+      "to": "pineString",
+      "kind": "direct_import_execution"
+    },
+    {
+      "from": "runtime",
+      "to": "pineColor",
+      "kind": "direct_import_execution"
+    },
+    {
+      "from": "languageService",
+      "to": "featureRegistry",
+      "kind": "direct_import"
+    },
+    {
+      "from": "featureRegistry",
+      "to": "compatTypes",
+      "kind": "type_dependency"
+    },
+    {
+      "from": "namespaceRegistry",
+      "to": "builtinRegistry",
+      "kind": "overlapping_vendor_namespace_model"
+    },
+    {
+      "from": "barrel",
+      "to": "builtinRegistry",
+      "kind": "public_export"
+    },
+    {
+      "from": "barrel",
+      "to": "pineMath",
+      "kind": "public_export"
+    },
+    {
+      "from": "strategyAdapter",
+      "to": "generic-simulator",
+      "kind": "simulation_action_adapter"
+    },
+    {
+      "from": "tests",
+      "to": "pineFrontend",
+      "kind": "registered_contract"
+    },
+    {
+      "from": "tests",
+      "to": "featureRegistry",
+      "kind": "registered_contract"
+    }
+  ],
+  "builtinRegistrationCounts": {
+    "basis": "Syntactic helper calls in pineBuiltinRegistry.ts; not unique API signatures or runtime coverage.",
+    "supported": 45,
+    "partial": 15,
+    "hostBound": 11,
+    "catalogOnly": 167
+  },
+  "featureDefinitions": 31,
+  "legacyStatusRule": "A missing implementation-file list yields not_implemented; known differences or failed fixtures yield partially_conformant; explicit host_limited evidence yields host_limited; absent fixture evidence yields implemented_unverified; conformant requires all declared fixtures passed and no known differences.",
+  "safeRemovalSequence": [
+    "Replace native builtin signatures, type validation, runtime providers and editor completions with CoreSpirit-owned definitions.",
+    "Move compatibility parsing to an isolated conformance harness outside the native compiler/runtime package.",
+    "Remove Pine-specific AST/IR metadata only after native declaration contracts and artifact migration exist.",
+    "Remove Pine-specific strategy command adapter only after native simulation command semantics are independently specified.",
+    "Remove Pine re-exports, namespace aliases, frontend registration, test entries and source files after import graph reports zero production references."
+  ]
+}

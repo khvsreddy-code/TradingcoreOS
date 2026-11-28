@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "auditedCommit": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+  "generatedAt": "2026-11-28",
+  "items": [
+    {
+      "id": "TD-001",
+      "priority": "P0",
+      "area": "Pine architecture",
+      "title": "Pine is an active compiler/runtime/editor dependency",
+      "evidence": "frontends registers Pine; semanticAnalyzer imports Pine builtins; runtime imports Pine math/string/color; languageService imports Pine completions; AST/IR metadata and exports retain Pine.",
+      "impact": "Delete would break production compile/semantic/runtime/editor paths.",
+      "action": "Replace each dependency with native CoreSpirit capabilities before removing Pine."
+    },
+    {
+      "id": "TD-002",
+      "priority": "P0",
+      "area": "CI reliability",
+      "title": "Fail-fast suite hides the remaining contract results",
+      "evidence": "249 contracts are registered; CI stopped on entry 2 after the Pine frontend assertion failed.",
+      "impact": "The other entries were not reached and cannot be treated as passed.",
+      "action": "Aggregate independent failures and emit structured per-contract results; retain optional fail-fast local mode."
+    },
+    {
+      "id": "TD-003",
+      "priority": "P0",
+      "area": "Current regression",
+      "title": "Pine strategyEntry contract is failing",
+      "evidence": "PineV6FrontendContract.test.ts:65 asserts Pine strategyEntry compiles to a dedicated simulation-only command.",
+      "impact": "Main CI contract step is red before most tests.",
+      "action": "Triage lowering versus contract expectation; fix and preserve the simulation-only boundary."
+    },
+    {
+      "id": "TD-004",
+      "priority": "P0",
+      "area": "Bundle size",
+      "title": "Chart initial bundle exceeds hard gzip limit",
+      "evidence": "Chart static graph 663.0 KB gzip; hard limit 650 KB; optimization target 550 KB.",
+      "impact": "Production build gate fails by 13 KB beyond the hard limit.",
+      "action": "Split heavy chart/editor/model dependencies and optimize real graph contributors; do not raise the budget."
+    },
+    {
+      "id": "TD-005",
+      "priority": "P0",
+      "area": "Browser verification",
+      "title": "Authenticated soak cannot sign in",
+      "evidence": "Soak run 46007338048 failed in create-browser-auth-state.mjs with Supabase CI test-account error: Invalid login credentials.",
+      "impact": "The 8-chart 30-minute performance/heap measurement never started.",
+      "action": "Repair or rotate dedicated CI account credentials; verify auth bootstrap and rerun full soak."
+    },
+    {
+      "id": "TD-006",
+      "priority": "P1",
+      "area": "Test completeness",
+      "title": "11 CoreSpirit test files absent from the primary contract runner",
+      "evidence": "src/services/coreSpirit/artifactIdentityParityContract.test.mjs; src/services/coreSpirit/causalityAnalysisContract.test.mjs; src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs; src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs; src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs; src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs; src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs; src/services/coreSpirit/sharedMarketBufferContract.test.mjs; src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts",
+      "impact": "These tests are not run by npm run test:contracts.",
+      "action": "Assign each test to a suite and CI step; avoid ambiguous manual-only tests."
+    },
+    {
+      "id": "TD-007",
+      "priority": "P1",
+      "area": "Capability inventory",
+      "title": "Existing registries do not provide the required neutral capability map",
+      "evidence": "capabilityMaturity.ts is a stage-evidence builder; Pine feature registry is vendor-specific; library namespace registry includes catalog-only metadata.",
+      "impact": "No single neutral surface shows source/API/runtime/tests/limitations/performance/acceptance.",
+      "action": "Use the new vendor-neutral phase-0 capability registry as the controlled audit baseline."
+    },
+    {
+      "id": "TD-008",
+      "priority": "P1",
+      "area": "Compiler layering",
+      "title": "Pine concepts leak into native parser, AST, IR and semantic analysis",
+      "evidence": "pine frontend mode, Pine declaration metadata, semantic import of Pine builtin registry.",
+      "impact": "Language evolution and zero-Pine migration remain coupled.",
+      "action": "Introduce neutral declarations and compatibility adapters outside native compiler internals."
+    },
+    {
+      "id": "TD-009",
+      "priority": "P1",
+      "area": "Runtime maintainability",
+      "title": "CoreSpirit runtime is a large multi-responsibility module",
+      "evidence": "runtime.ts is 162,858 bytes at audited revision and imports data, state, kernels, output and Pine builtin adapters.",
+      "impact": "Large regression surface across language/runtime changes.",
+      "action": "Split state, data requests, builtin dispatch, orchestration and output services behind stable contracts."
+    },
+    {
+      "id": "TD-010",
+      "priority": "P1",
+      "area": "First-party UI maintainability",
+      "title": "Large chart/editor composition modules",
+      "evidence": "tcoVelaChrome.ts 262,284 bytes; CoreSpiritEditorPage.tsx 132,405 bytes; NativeRenderer.ts 302,085 bytes (vendored).",
+      "impact": "High review and change-risk cost.",
+      "action": "Decompose first-party modules; treat vendor code as a separate upstream/fork ownership decision."
+    },
+    {
+      "id": "TD-011",
+      "priority": "P1",
+      "area": "Prediction integrity",
+      "title": "Algorithm-like prediction catalogue mixes heuristic proxies with trained models",
+      "evidence": "predictionEngine.ts labels many 'ready' entries as research-heuristic and describes them as proxies; production trained-server entries are separately planned.",
+      "impact": "Users may mistake heuristics for trained/calibrated model inference.",
+      "action": "Separate heuristic and trained artifact surfaces; show provenance; require OOS/calibration/drift release gates."
+    },
+    {
+      "id": "TD-012",
+      "priority": "P1",
+      "area": "Backend evidence",
+      "title": "Execution planner can be mistaken for actual GPU support",
+      "evidence": "executionPlanner.ts states it is a planner, not GPU implementation; backendRegistry requires an actual adapter.",
+      "impact": "Planned backend is not proof that hardware executed work.",
+      "action": "Expose actual backend, adapter version, fallback reason and parity in telemetry."
+    },
+    {
+      "id": "TD-013",
+      "priority": "P2",
+      "area": "Library namespaces",
+      "title": "Native namespaces and catalog/vendor names share one registry",
+      "evidence": "standardLibraryNamespaces.ts carries native and Pine-derived namespaces and entries with builtin/component/catalog status.",
+      "impact": "Editor discovery can expose unsupported catalog items and native names remain coupled to compatibility.",
+      "action": "Separate native API registry from compatibility fixtures; completions should prefer executable native providers."
+    },
+    {
+      "id": "TD-014",
+      "priority": "P2",
+      "area": "Deployment",
+      "title": "Vercel check reports build-rate-limit failure",
+      "evidence": "Commit combined status target points to Vercel build-rate-limit/blocked deployment.",
+      "impact": "A green code build does not guarantee latest main is deployed.",
+      "action": "Inspect deployment quota/status and verify production alias against the intended green commit."
+    }
+  ]
+}

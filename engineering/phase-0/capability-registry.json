@@ -1,0 +1,1030 @@
+{
+  "schemaVersion": 1,
+  "registryId": "corespirit-capability-registry",
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "auditedCommit": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+  "generatedAt": "2026-11-28",
+  "authority": "Vendor-neutral CoreSpirit capability inventory. This is a conservative audit baseline, not a feature-completion claim.",
+  "statuses": [
+    "missing",
+    "catalog_only",
+    "implemented_unverified",
+    "partially_implemented",
+    "implemented_verified",
+    "host_limited",
+    "not_applicable"
+  ],
+  "rules": {
+    "implemented_verified": "Only after feature-specific runtime contracts and required execution modes/backends passed on the same revision.",
+    "implemented_unverified": "Implementation source exists, but current evidence does not prove complete runtime behavior.",
+    "partially_implemented": "A subset exists and a known semantic or functional gap is recorded.",
+    "catalog_only": "Metadata exists without a proven executable provider.",
+    "host_limited": "CoreSpirit delegates the capability to a host/provider/device not guaranteed by the language runtime.",
+    "missing": "No implementation found for the declared capability.",
+    "not_applicable": "Capability does not apply to this runtime/domain."
+  },
+  "entries": [
+    {
+      "id": "language.lexer",
+      "domain": "Language",
+      "name": "CoreScript lexical analysis",
+      "signature": "new CoreSpiritLexer(source).tokenize()",
+      "inputs": "source:string",
+      "outputs": "tokens:CoreSpiritToken[]",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/lexer.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts"
+      ],
+      "knownLimitations": [
+        "Dedicated golden tests and malformed-source span matrix are not established."
+      ],
+      "acceptanceCriteria": [
+        "All lexical forms and invalid inputs have deterministic tests."
+      ],
+      "performanceBudget": [
+        "O(source length); max-input budget not measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "language.parser",
+      "domain": "Language",
+      "name": "CoreScript parser",
+      "signature": "new CoreSpiritParser(source, options?).parse()",
+      "inputs": "source:string; options:{pine?:boolean}",
+      "outputs": "CoreSpiritAst",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/parser.ts",
+        "src/services/coreSpirit/ast.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/functionAstDesugarContract.test.ts",
+        "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts"
+      ],
+      "knownLimitations": [
+        "Shared parser exposes pine?:boolean mode; AST still carries Pine identity/metadata."
+      ],
+      "acceptanceCriteria": [
+        "Native grammar is independent of compatibility-mode branches; grammar fuzz and recovery tests pass."
+      ],
+      "performanceBudget": [
+        "Parse throughput/nesting limits not baselined."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "language.ast",
+      "domain": "Language",
+      "name": "Canonical AST schema",
+      "signature": "CoreSpiritAst",
+      "inputs": "source syntax",
+      "outputs": "typed AST",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/ast.ts",
+        "src/services/coreSpirit/ir.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/irSpecificationContract.test.ts"
+      ],
+      "knownLimitations": [
+        "FrontendId includes pine-v6 and AST declares Pine declaration metadata."
+      ],
+      "acceptanceCriteria": [
+        "Native AST schema contains no vendor-specific fields."
+      ],
+      "performanceBudget": [
+        "AST memory per source node not measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "language.semantic",
+      "domain": "Language",
+      "name": "Semantic analysis and name resolution",
+      "signature": "analyzeCoreSpirit(ast, options)",
+      "inputs": "AST; layer; surface; components",
+      "outputs": "symbols; diagnostics; dependency graph",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/semanticAnalyzer.ts",
+        "src/services/coreSpirit/nameResolver.ts",
+        "src/services/coreSpirit/semanticTypeSystem.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts",
+        "src/services/coreSpirit/semanticSeriesTypeRuntime.test.ts"
+      ],
+      "knownLimitations": [
+        "Semantic analyzer directly imports Pine builtin definitions and validation."
+      ],
+      "acceptanceCriteria": [
+        "Name/scope/type/effect resolution has a native-only differential suite."
+      ],
+      "performanceBudget": [
+        "Compile throughput and peak memory require measurement."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "language.types",
+      "domain": "Types",
+      "name": "Typed series and qualifier system",
+      "signature": "CoreSpiritSemanticType / CoreSpiritType",
+      "inputs": "scalar, series, temporal and declared types",
+      "outputs": "typed values and diagnostics",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/typeSystem.ts",
+        "src/services/coreSpirit/semanticTypeSystem.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/temporalTypesContract.test.mjs",
+        "src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts"
+      ],
+      "knownLimitations": [
+        "Qualifier lattice, reference/custom type identity and missing-value propagation need broader proof."
+      ],
+      "acceptanceCriteria": [
+        "Type soundness and invalid conversion tests cover every public type."
+      ],
+      "performanceBudget": [
+        "Type-check throughput not baselined."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.ir",
+      "domain": "Execution",
+      "name": "Typed IR generation and validation",
+      "signature": "CoreSpirit compiler pipeline -> CoreSpiritIrProgram",
+      "inputs": "source and compile options",
+      "outputs": "validated CoreSpirit IR/artifact",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/compiler.ts",
+        "src/services/coreSpirit/ir.ts",
+        "src/services/coreSpirit/irContract.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/irSpecificationContract.test.ts",
+        "src/services/coreSpirit/canonicalCompilerPipelineContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "IR still imports Pine declaration metadata; full pipeline contract suite did not complete in CI."
+      ],
+      "acceptanceCriteria": [
+        "Every AST form lowers deterministically with source maps and schema validation."
+      ],
+      "performanceBudget": [
+        "Compile latency and memory baseline required."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.optimizer",
+      "domain": "Execution",
+      "name": "IR optimizer",
+      "signature": "optimizeCoreSpiritIr(program)",
+      "inputs": "validated CoreSpirit IR",
+      "outputs": "optimized IR and cost metadata",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/optimizer.ts",
+        "src/services/coreSpirit/specializedPlan.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/optimizerProductionContract.test.mjs",
+        "src/services/coreSpirit/optimizerDifferentialPropertyContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Stateful/control-flow mutation parity requires full differential test execution."
+      ],
+      "acceptanceCriteria": [
+        "Reference and optimized VM state/output match across generated and trading fixtures."
+      ],
+      "performanceBudget": [
+        "Must improve or match reference throughput without p95 regression."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.reference-vm",
+      "domain": "Execution",
+      "name": "Reference VM",
+      "signature": "CoreSpiritExecutionVM",
+      "inputs": "IR instruction stream and host callbacks",
+      "outputs": "deterministic outputs/state effects",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/executionVM.ts",
+        "src/services/coreSpirit/runtime.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/coreSpiritExecutionSafetyContract.test.mjs",
+        "src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Primary suite aborts before the majority of VM contracts on the audited commit."
+      ],
+      "acceptanceCriteria": [
+        "Instruction semantics, budgets, state transitions, errors and cancellation pass."
+      ],
+      "performanceBudget": [
+        "Per-bar budget and 2k/5k bar benchmark required."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.optimized-vm",
+      "domain": "Execution",
+      "name": "Optimized VM",
+      "signature": "CoreSpiritOptimizedExecutionVM",
+      "inputs": "specialized IR and execution context",
+      "outputs": "reference-equivalent optimized outputs",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/optimizedExecutionVM.ts",
+        "src/services/coreSpirit/executionValueStore.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/optimizerDifferentialPropertyContract.test.mjs",
+        "src/services/coreSpirit/optimizerRegisterVersionContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Cache context/version boundaries and register reuse need broad differential coverage."
+      ],
+      "acceptanceCriteria": [
+        "Outputs, state and error behavior match reference VM for supported programs."
+      ],
+      "performanceBudget": [
+        "Heap and p95 benchmark across 1/4/8 chart contexts."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.workers",
+      "domain": "Execution",
+      "name": "Worker execution lifecycle",
+      "signature": "CoreSpirit execution worker protocol",
+      "inputs": "validated artifacts; shared market frames; execution options",
+      "outputs": "revisioned output patches",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/coreSpirit.worker.ts",
+        "src/services/coreSpirit/coreSpiritWorkerPool.ts",
+        "src/services/coreSpirit/workerTransport.ts"
+      ],
+      "tests": [
+        "src/coreSpiritWorkerLifecycleContract.test.mjs",
+        "src/coreSpiritPersistentWorkerSabContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Browser lifecycle, cancellation, SAB and pooled worker behavior require live browser evidence."
+      ],
+      "acceptanceCriteria": [
+        "Generation fencing, worker termination/restart, cancellation and structured-clone safety pass."
+      ],
+      "performanceBudget": [
+        "Tick-to-patch p95 16.7ms; worker queue and memory budget measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.cpu-kernels",
+      "domain": "Execution",
+      "name": "CPU numerical kernels",
+      "signature": "CoreSpirit numerical-kernel operation registry",
+      "inputs": "Float64Array columns; period/state",
+      "outputs": "typed numeric result arrays",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/numericalKernels.ts",
+        "src/services/coreSpirit/quantKernels.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/numericalKernelsContract.test.mjs",
+        "src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "The audited benchmark passes, but not every full numerical/VM test is reached in the fail-fast suite."
+      ],
+      "acceptanceCriteria": [
+        "Reference kernels cover warmup, gaps, corrections and deterministic state."
+      ],
+      "performanceBudget": [
+        "Benchmark 2k/5k/50k/250k bar cases and multi-chart load."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.wasm",
+      "domain": "Execution",
+      "name": "WASM scalar/SIMD kernels",
+      "signature": "CoreSpiritWasmBackend lifecycle and manifest",
+      "inputs": "operation ID and typed buffers",
+      "outputs": "typed numerical outputs",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/wasmBackend.ts",
+        "src/services/coreSpirit/numericalKernels.ts",
+        "tools/build-core-spirit-wasm.sh"
+      ],
+      "tests": [
+        "src/services/coreSpirit/numericalKernelsContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Successful WASM build does not prove SIMD selection for every operation at runtime."
+      ],
+      "acceptanceCriteria": [
+        "Real SIMD execution is recorded per operation and parity-tested against CPU."
+      ],
+      "performanceBudget": [
+        "Only dispatch when transfer-adjusted speedup is measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "execution.gpu",
+      "domain": "Execution",
+      "name": "GPU/WebGPU compute",
+      "signature": "Backend registry with host adapter admission",
+      "inputs": "eligible pure numerical graph",
+      "outputs": "backend result or explicit fallback",
+      "status": "host_limited",
+      "implementationFiles": [
+        "src/services/coreSpirit/backendRegistry.ts",
+        "src/services/coreSpirit/executionPlanner.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Execution planner is not a GPU implementation; actual adapter must be registered and executable."
+      ],
+      "acceptanceCriteria": [
+        "Adapter runs real device work, reports driver/device, parity and fallback behavior."
+      ],
+      "performanceBudget": [
+        "Dispatch only over measured transfer/dispatch break-even size."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "data.historical",
+      "domain": "Historical Data",
+      "name": "Historical data, canonical columns and corrections",
+      "signature": "CoreSpiritMarketFrame / columnar history contract",
+      "inputs": "timestamp and OHLCV columns/revisions",
+      "outputs": "historical series and replay snapshots",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/marketData.ts",
+        "src/services/coreSpirit/columnarMarketData.ts",
+        "src/services/marketData/HistoryStore.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/historicalCorrectionReplay.test.ts",
+        "src/services/marketData/HistoryStoreRevision.test.ts"
+      ],
+      "knownLimitations": [
+        "Provider/source provenance and correction semantics need full history integration tests."
+      ],
+      "acceptanceCriteria": [
+        "History reconciliation, correction replay, ordering and missing-bar policies are deterministic."
+      ],
+      "performanceBudget": [
+        "Load/merge memory and cold-start budgets are measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "data.realtime",
+      "domain": "Realtime Data",
+      "name": "Live ticks and candle state machine",
+      "signature": "LiveCandleStateMachine / chart data plane",
+      "inputs": "broker trade/tick events",
+      "outputs": "forming and confirmed candle revisions",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/marketData/liveCandleStateMachine.ts",
+        "src/services/marketData/chartDataPlane.ts",
+        "src/services/core/data/canonicalDataPlane.ts"
+      ],
+      "tests": [
+        "src/services/marketData/liveCandleStateMachine.test.ts",
+        "src/services/marketData/chartCandleEvents.test.ts"
+      ],
+      "knownLimitations": [
+        "Reconnect, slow-consumer and 8-chart steady-state behavior need authenticated soak evidence."
+      ],
+      "acceptanceCriteria": [
+        "No out-of-order mutation loss; forming-to-confirmed updates and correction replay deterministic."
+      ],
+      "performanceBudget": [
+        "Tick-to-compute p95 <= 8ms; tick-to-render p95 <= 16.7ms; soak heap growth <=32MiB."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "data.multi-symbol-timeframe",
+      "domain": "Data Requests",
+      "name": "Multi-symbol/timeframe data resolution",
+      "signature": "CoreSpiritDataResolverService.resolveValue(symbol,timeframe,field,index,offset,alignment,maxStalenessMs?)",
+      "inputs": "symbol; timeframe; field; offset; alignment",
+      "outputs": "number|null host snapshot",
+      "status": "host_limited",
+      "implementationFiles": [
+        "src/services/coreSpirit/dataResolver.ts",
+        "src/services/coreSpirit/multiSymbolTimeframe.ts",
+        "src/services/coreSpirit/requestExecutionEngine.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/requestSecurityCompatibilityContract.test.mjs",
+        "src/services/coreSpirit/timeframeAlignmentTemporalContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Provider-owned; rejects developing/future values and enforces a default 40 unique requests per revision."
+      ],
+      "acceptanceCriteria": [
+        "Alignment, gaps, session behavior, lookahead and lower-timeframe requests pass differential tests."
+      ],
+      "performanceBudget": [
+        "Default unique request budget 40/revision; request latency and cache-hit ratio TBD."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "stdlib.math",
+      "domain": "Math",
+      "name": "Numeric, vector and series mathematics",
+      "signature": "CoreSpirit standard library and quantMath",
+      "inputs": "numeric scalars/series/vectors/matrices",
+      "outputs": "typed numeric outputs",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/standardLibrary.ts",
+        "src/services/coreSpirit/quantMath.ts",
+        "src/services/coreSpirit/pineMathBuiltins.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/numericalKernelsContract.test.mjs",
+        "src/services/coreSpirit/typedQuantAndHmm.test.ts"
+      ],
+      "knownLimitations": [
+        "Some runtime pathways still use Pine-named adapters; native API ownership is not fully separated."
+      ],
+      "acceptanceCriteria": [
+        "Native math has reference behavior for NaN/inf/missing values and exact edge cases."
+      ],
+      "performanceBudget": [
+        "Rolling kernels O(n) full pass; incremental work proportional to dirty range."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "stdlib.ta",
+      "domain": "TA",
+      "name": "Technical-analysis functions and kernels",
+      "signature": "Native series/TA surface (current registry requires audit)",
+      "inputs": "OHLCV series; lengths; source series",
+      "outputs": "series<float|bool>",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/standardLibrary.ts",
+        "src/services/coreSpirit/numericalKernels.ts",
+        "src/services/coreSpirit/pineBuiltinRegistry.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/numericalKernelsContract.test.mjs",
+        "src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "No independent native TA conformance registry yet; Pine builtin registry remains in semantic/runtime path."
+      ],
+      "acceptanceCriteria": [
+        "Every public TA function has warmup, missing-value, realtime correction and causal fixtures."
+      ],
+      "performanceBudget": [
+        "O(n) full pass; incremental work proportional to dirty bars; per-kernel p95."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "stdlib.statistics",
+      "domain": "Statistics",
+      "name": "Statistics and quant-research primitives",
+      "signature": "quantMath and research feature APIs",
+      "inputs": "series/windows/model parameters",
+      "outputs": "probability/statistics outputs",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/quantMath.ts",
+        "src/services/coreSpirit/researchFeatures.ts",
+        "src/services/coreSpirit/numericalKernels.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/typedQuantAndHmm.test.ts",
+        "src/services/coreSpirit/researchFeaturesContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Numerical, statistical and calibration APIs exist in subsets; not every expected statistic is enumerated or verified."
+      ],
+      "acceptanceCriteria": [
+        "Numerical stability, online update, missing values and point-in-time correctness pass reference tests."
+      ],
+      "performanceBudget": [
+        "Vector workloads and incremental state benchmark required."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "collections.core",
+      "domain": "Collections",
+      "name": "Bounded arrays/maps/matrices/vectors",
+      "signature": "CoreScript collection operation surface",
+      "inputs": "typed values, capacities, dimensions",
+      "outputs": "bounded collection objects and numeric arrays",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/coreSpirit/coreScriptCollections.ts",
+        "src/services/coreSpirit/quantMath.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/functionAstDesugarContract.test.ts",
+        "src/services/coreSpirit/typedQuantAndHmm.test.ts"
+      ],
+      "knownLimitations": [
+        "CoreScript collection operations exist; complete API, aliasing, reference identity and full native method semantics remain open."
+      ],
+      "acceptanceCriteria": [
+        "Shape/type/copy/alias/mutation/index/capacity and worker-serialization contracts pass."
+      ],
+      "performanceBudget": [
+        "Max collection length 16,384; matrix allocation and multiplication budgets measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "inputs.parameters",
+      "domain": "Inputs",
+      "name": "Declarative indicator parameter schema",
+      "signature": "Indicator settings schema and input bindings",
+      "inputs": "serializable schema/defaults/current values",
+      "outputs": "validated input snapshot",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/indicatorSettingsSchema.ts",
+        "src/services/coreSpirit/indicatorParameterState.test.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/indicatorParameterState.test.ts",
+        "src/services/coreSpirit/surfaceSourceInputDefaultsContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Pine input namespace remains largely catalog-only; schema-to-runtime round-trip needs proof."
+      ],
+      "acceptanceCriteria": [
+        "Defaults, constraints, conditional fields and persistence round-trip into VM snapshots."
+      ],
+      "performanceBudget": [
+        "Settings serialization and chart-wide update costs measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "visualization.primitives",
+      "domain": "Visualization",
+      "name": "Retained native visual objects and Vela projection",
+      "signature": "CoreSpiritOutputCollector / Vela output adapter",
+      "inputs": "typed visual commands/stable IDs/bar coordinates",
+      "outputs": "revisioned scene patches",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/outputCollector.ts",
+        "src/services/coreSpirit/velaOutputAdapter.ts",
+        "src/CoreSpiritVelaEngine.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/visualPrimitivesContract.test.mjs",
+        "src/services/coreSpirit/velaOutputAdapterContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Primitive identity and Vela projection exist; complete object mutation/resource lifecycle needs browser verification."
+      ],
+      "acceptanceCriteria": [
+        "Stable ID upserts, removals, history and replay produce idempotent scene patches."
+      ],
+      "performanceBudget": [
+        "Frame p95 <=16.7ms; patch work bounded by changed objects/dirty ranges."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "events.alerts",
+      "domain": "Alerts",
+      "name": "Idempotent alert events and durable outbox",
+      "signature": "CoreSpirit alert delivery API",
+      "inputs": "program/symbol/timeframe/bar/revision/event identity",
+      "outputs": "durable alert event",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/alertDelivery.ts",
+        "src/services/coreSpirit/alertFrequency.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/alertDeliveryContract.test.mjs",
+        "src/services/coreSpirit/plotShapeCharAlertconditionRuntimeContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Notification delivery, placeholder expansion and durable storage adapters are host-owned."
+      ],
+      "acceptanceCriteria": [
+        "Duplicate suppression, retries and replay pass fault-injection tests."
+      ],
+      "performanceBudget": [
+        "Queue bound and delivery latency need baseline."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "strategies.simulation",
+      "domain": "Strategies",
+      "name": "Deterministic strategy simulation",
+      "signature": "runStrategySimulation(dataset, actions, config)",
+      "inputs": "time-ordered datasets, actions and simulation settings",
+      "outputs": "simulation-only ledger and metrics",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/core/replay/strategySimulator.ts",
+        "src/services/coreSpirit/pineStrategySimulationAdapter.ts"
+      ],
+      "tests": [
+        "src/services/core/replay/strategySimulator.test.ts",
+        "src/services/core/replay/strategySimulatorEnhancementsContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Simulation is isolated from broker authority; position feedback, some trailing-stop/OCA and exact fill parity remain open."
+      ],
+      "acceptanceCriteria": [
+        "Order timing, OHLC ambiguity, fees, margin, partial fills, OCA, pyramiding and replay pass exact fixtures."
+      ],
+      "performanceBudget": [
+        "Bars/sec and peak memory measured for multi-symbol portfolios."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "automation.lifecycle",
+      "domain": "Automation",
+      "name": "Event-to-order-intent automation lifecycle",
+      "signature": "CoreSpirit automation pipeline",
+      "inputs": "signal/event; symbol; policy; risk context",
+      "outputs": "authorized order intent or rejection",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/automationPipeline.ts",
+        "src/services/coreSpirit/strategyContract.ts"
+      ],
+      "tests": [
+        "src/services/automationEngineRegression.test.ts",
+        "src/externalAutomationTradingContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Broker credential and submission belong to host; full fault-injected risk/policy flow still needs release evidence."
+      ],
+      "acceptanceCriteria": [
+        "Mandatory risk checks, idempotent intent and denied gateway calls pass integration tests."
+      ],
+      "performanceBudget": [
+        "Event-to-decision latency and queue depth baselined under burst."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "prediction.models",
+      "domain": "Prediction",
+      "name": "Forecast, probability and uncertainty models",
+      "signature": "Prediction engine and CoreSpirit model runtime",
+      "inputs": "point-in-time features; artifact; symbol/timeframe",
+      "outputs": "forecast/probability/uncertainty/provenance",
+      "status": "partially_implemented",
+      "implementationFiles": [
+        "src/services/predictionEngine.ts",
+        "src/services/coreSpirit/modelRuntime.ts",
+        "src/services/coreSpirit/modelArtifacts.ts",
+        "ml/app/main.py"
+      ],
+      "tests": [
+        "src/services/coreSpirit/aiModelContract.test.mjs",
+        "src/services/coreSpirit/modelLifecycle.test.ts",
+        "src/services/coreSpirit/researchValidation.test.ts"
+      ],
+      "knownLimitations": [
+        "Many model-family names map to research heuristics/proxies, not trained XGBoost/TFT/LSTM/Transformer artifacts; trained-server models need installed artifacts and provenance."
+      ],
+      "acceptanceCriteria": [
+        "Production models require immutable artifacts, point-in-time leakage tests, OOS validation, calibration, drift and release gates."
+      ],
+      "performanceBudget": [
+        "Inference p95 and feature freshness by symbol/timeframe measured; training isolated from chart runtime."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "external.polyglot",
+      "domain": "External Modules",
+      "name": "Versioned sandboxed external modules",
+      "signature": "CoreSpirit polyglot module ABI",
+      "inputs": "typed tensors; manifest; artifact hash; declared capabilities",
+      "outputs": "typed result artifact",
+      "status": "host_limited",
+      "implementationFiles": [
+        "src/services/coreSpirit/polyglotModules.ts",
+        "src/services/coreSpirit/pythonModuleServiceHost.ts",
+        "src/services/coreSpirit/polyglotServiceHost.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/polyglotModulesContract.test.mjs",
+        "src/services/coreSpirit/pythonModuleServiceHostContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "ABI lists multiple languages but every runtime requires an actual host adapter, reproducibility and deterministic contract."
+      ],
+      "acceptanceCriteria": [
+        "Each adapter pins runtime/dependencies, bounds resources, supports cancellation and cannot access broker/filesystem/socket directly."
+      ],
+      "performanceBudget": [
+        "Cross-language transfer and remote service latency measured per backend."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "ide.editor",
+      "domain": "IDE",
+      "name": "CoreSpirit editor and language tooling",
+      "signature": "Monaco adapter/editor model/language service",
+      "inputs": "source; cursor; compile/preview requests",
+      "outputs": "diagnostics/completion/hover/definition/preview",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/pages/CoreSpiritEditorPage.tsx",
+        "src/services/coreSpirit/languageService.ts",
+        "src/services/coreSpirit/monacoAdapter.ts"
+      ],
+      "tests": [
+        "src/coreSpiritEditorCompilerContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Editor completions still import Pine feature suggestions; editor page composition is very large."
+      ],
+      "acceptanceCriteria": [
+        "Native language tooling has no compatibility dependency; browser run/stop/preview lifecycle passes."
+      ],
+      "performanceBudget": [
+        "Cold start and completion latency need dedicated browser budgets."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "security.sandbox",
+      "domain": "Security",
+      "name": "Capability sandbox and execution boundary",
+      "signature": "CoreSpiritCapabilitySandbox and policy validation",
+      "inputs": "artifact requirements; authoring level; runtime context",
+      "outputs": "allowed/denied capability decision",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/capabilitySandbox.ts",
+        "src/services/coreSpirit/coreScriptLanguagePolicy.ts",
+        "src/services/coreSpirit/automationPipeline.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/coreSpiritExecutionSafetyContract.test.mjs",
+        "src/coreSpiritBrokerBoundaryContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Contracts exist, but all adversarial tests and service-boundary threat model must be revalidated in CI."
+      ],
+      "acceptanceCriteria": [
+        "Denied capabilities fail closed; source cannot directly access process/filesystem/network/broker authority."
+      ],
+      "performanceBudget": [
+        "Policy overhead measured separately; correctness is absolute."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "catalog.placeholder",
+      "domain": "Standard Library",
+      "name": "Non-executable catalog entries",
+      "signature": "CoreSpirit library namespace entries with status=catalog",
+      "inputs": "namespace/member descriptor",
+      "outputs": "editor metadata only; no runtime provider",
+      "status": "catalog_only",
+      "implementationFiles": [
+        "src/services/coreSpirit/standardLibraryNamespaces.ts"
+      ],
+      "tests": [
+        "src/services/coreSpirit/irSpecificationContract.test.ts"
+      ],
+      "knownLimitations": [
+        "Catalog namespace rows may describe APIs that do not resolve to builtin/component implementations."
+      ],
+      "acceptanceCriteria": [
+        "Every completion shown to users resolves to an executable provider or is explicitly labeled unavailable."
+      ],
+      "performanceBudget": [
+        "No runtime budget; catalog count and stale metadata checked in CI."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    },
+    {
+      "id": "artifacts.cache",
+      "domain": "Execution",
+      "name": "Versioned executable artifact cache",
+      "signature": "Artifact identity/cache/ABI handoff",
+      "inputs": "source hash; compiler/runtime ABI; context",
+      "outputs": "validated immutable artifact",
+      "status": "implemented_unverified",
+      "implementationFiles": [
+        "src/services/coreSpirit/artifact.ts",
+        "src/services/coreSpirit/artifactCache.ts",
+        "src/services/coreSpirit/artifactAbi.ts"
+      ],
+      "tests": [
+        "src/coreSpiritArtifactCacheAbiContract.test.mjs",
+        "src/services/coreSpirit/artifactIdentityParityContract.test.mjs"
+      ],
+      "knownLimitations": [
+        "Cache invalidation across compiler/runtime/component ABI changes requires release-wide verification."
+      ],
+      "acceptanceCriteria": [
+        "Cache keys include every semantic input and reject stale/corrupt artifacts."
+      ],
+      "performanceBudget": [
+        "Hit rate, cache size and invalidation costs measured."
+      ],
+      "evidence": {
+        "sourceInspected": true,
+        "runtimeVerified": false,
+        "sourceRevision": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+        "note": "A test path is evidence of intended coverage, not a passing test. Runtime verification remains false until the feature contract is run and observed passing on this revision."
+      }
+    }
+  ]
+}

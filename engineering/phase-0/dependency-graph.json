@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 1,
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "auditedCommit": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+  "graphKind": "source-grounded high-level dependency graph",
+  "nodes": [
+    {
+      "id": "source",
+      "label": "CoreScript source",
+      "path": "source",
+      "layer": "implementation"
+    },
+    {
+      "id": "lexer",
+      "label": "CoreSpiritLexer",
+      "path": "src/services/coreSpirit/lexer.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "parser",
+      "label": "CoreSpiritParser",
+      "path": "src/services/coreSpirit/parser.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "ast",
+      "label": "CoreSpirit AST",
+      "path": "src/services/coreSpirit/ast.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "semantic",
+      "label": "Semantic analysis/name/type resolution",
+      "path": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "compiler",
+      "label": "CoreSpirit compiler",
+      "path": "src/services/coreSpirit/compiler.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "ir",
+      "label": "Typed CoreSpirit IR",
+      "path": "src/services/coreSpirit/ir.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "optimizer",
+      "label": "CoreSpirit optimizer",
+      "path": "src/services/coreSpirit/optimizer.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "planner",
+      "label": "Execution planner",
+      "path": "src/services/coreSpirit/executionPlanner.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "refvm",
+      "label": "Reference VM",
+      "path": "src/services/coreSpirit/executionVM.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "optvm",
+      "label": "Optimized VM",
+      "path": "src/services/coreSpirit/optimizedExecutionVM.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "runtime",
+      "label": "CoreSpiritRuntime",
+      "path": "src/services/coreSpirit/runtime.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "columnar",
+      "label": "Columnar market frame",
+      "path": "src/services/coreSpirit/columnarMarketData.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "resolver",
+      "label": "Host data resolver",
+      "path": "src/services/coreSpirit/dataResolver.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "cpu",
+      "label": "CPU numerical kernels",
+      "path": "src/services/coreSpirit/numericalKernels.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "wasm",
+      "label": "WASM backend",
+      "path": "src/services/coreSpirit/wasmBackend.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "registry",
+      "label": "Backend registry",
+      "path": "src/services/coreSpirit/backendRegistry.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "worker",
+      "label": "Execution worker",
+      "path": "src/services/coreSpirit/coreSpirit.worker.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "collector",
+      "label": "Retained output collector",
+      "path": "src/services/coreSpirit/outputCollector.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "adapter",
+      "label": "CoreSpirit Vela output adapter",
+      "path": "src/services/coreSpirit/velaOutputAdapter.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "engine",
+      "label": "CoreSpiritVelaEngine",
+      "path": "src/CoreSpiritVelaEngine.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "vela",
+      "label": "Vela chart/workspace",
+      "path": "vendor/vela/src",
+      "layer": "rendering"
+    },
+    {
+      "id": "dataPlane",
+      "label": "ChartDataPlane",
+      "path": "src/services/marketData/chartDataPlane.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "provider",
+      "label": "TcoVelaDataProvider",
+      "path": "src/TcoVelaDataProvider.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "history",
+      "label": "HistoryStore",
+      "path": "src/services/marketData/HistoryStore.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "simulator",
+      "label": "Generic strategy simulator",
+      "path": "src/services/core/replay/strategySimulator.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "automation",
+      "label": "Automation pipeline",
+      "path": "src/services/coreSpirit/automationPipeline.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "risk",
+      "label": "Mandatory risk/policy boundary",
+      "path": "src/services/coreSpirit/automationPipeline.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "gateway",
+      "label": "Execution gateway/broker host",
+      "path": "fyers-execution-gateway",
+      "layer": "implementation"
+    },
+    {
+      "id": "editor",
+      "label": "CoreSpirit editor",
+      "path": "src/pages/CoreSpiritEditorPage.tsx",
+      "layer": "implementation"
+    },
+    {
+      "id": "languageService",
+      "label": "Editor language service",
+      "path": "src/services/coreSpirit/languageService.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "compileClient",
+      "label": "Off-thread compiler client",
+      "path": "src/services/coreSpirit/coreSpiritCompilerClient.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "compileWorker",
+      "label": "Compiler worker",
+      "path": "src/services/coreSpirit/coreSpiritCompiler.worker.ts",
+      "layer": "implementation"
+    },
+    {
+      "id": "pineFrontend",
+      "label": "PineV6Frontend (compatibility path)",
+      "path": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "layer": "compatibility"
+    },
+    {
+      "id": "pineBuiltins",
+      "label": "Pine builtin registry",
+      "path": "src/services/coreSpirit/pineBuiltinRegistry.ts",
+      "layer": "compatibility"
+    },
+    {
+      "id": "pineFeatures",
+      "label": "Pine feature registry",
+      "path": "src/services/coreSpirit/pine/pineFeatureRegistry.ts",
+      "layer": "compatibility"
+    }
+  ],
+  "edges": [
+    {
+      "from": "source",
+      "to": "lexer",
+      "kind": "source_frontend"
+    },
+    {
+      "from": "lexer",
+      "to": "parser",
+      "kind": "tokens"
+    },
+    {
+      "from": "parser",
+      "to": "ast",
+      "kind": "produces"
+    },
+    {
+      "from": "ast",
+      "to": "semantic",
+      "kind": "semantic_input"
+    },
+    {
+      "from": "semantic",
+      "to": "compiler",
+      "kind": "typed_semantic_result"
+    },
+    {
+      "from": "compiler",
+      "to": "ir",
+      "kind": "lowers_to"
+    },
+    {
+      "from": "ir",
+      "to": "optimizer",
+      "kind": "optimizer_input"
+    },
+    {
+      "from": "optimizer",
+      "to": "planner",
+      "kind": "optimized_ir"
+    },
+    {
+      "from": "planner",
+      "to": "refvm",
+      "kind": "reference_execution"
+    },
+    {
+      "from": "planner",
+      "to": "optvm",
+      "kind": "specialized_execution"
+    },
+    {
+      "from": "refvm",
+      "to": "runtime",
+      "kind": "hosted_execution"
+    },
+    {
+      "from": "optvm",
+      "to": "runtime",
+      "kind": "hosted_execution"
+    },
+    {
+      "from": "columnar",
+      "to": "runtime",
+      "kind": "market_frame"
+    },
+    {
+      "from": "resolver",
+      "to": "runtime",
+      "kind": "host_owned_data_request"
+    },
+    {
+      "from": "cpu",
+      "to": "registry",
+      "kind": "backend_capability"
+    },
+    {
+      "from": "wasm",
+      "to": "registry",
+      "kind": "backend_capability"
+    },
+    {
+      "from": "registry",
+      "to": "planner",
+      "kind": "backend_admission"
+    },
+    {
+      "from": "worker",
+      "to": "runtime",
+      "kind": "instantiates"
+    },
+    {
+      "from": "runtime",
+      "to": "collector",
+      "kind": "emits"
+    },
+    {
+      "from": "collector",
+      "to": "adapter",
+      "kind": "output_projection"
+    },
+    {
+      "from": "adapter",
+      "to": "engine",
+      "kind": "Vela_contract"
+    },
+    {
+      "from": "engine",
+      "to": "vela",
+      "kind": "native_rendering"
+    },
+    {
+      "from": "dataPlane",
+      "to": "history",
+      "kind": "historical_lifecycle"
+    },
+    {
+      "from": "dataPlane",
+      "to": "columnar",
+      "kind": "canonical_market_columns"
+    },
+    {
+      "from": "dataPlane",
+      "to": "provider",
+      "kind": "data_source"
+    },
+    {
+      "from": "provider",
+      "to": "vela",
+      "kind": "OHLCV_provider"
+    },
+    {
+      "from": "simulator",
+      "to": "automation",
+      "kind": "simulation_separate_from_live"
+    },
+    {
+      "from": "automation",
+      "to": "risk",
+      "kind": "mandatory_risk_gate"
+    },
+    {
+      "from": "risk",
+      "to": "gateway",
+      "kind": "authorized_request"
+    },
+    {
+      "from": "editor",
+      "to": "languageService",
+      "kind": "editor_intelligence"
+    },
+    {
+      "from": "editor",
+      "to": "compileClient",
+      "kind": "off_thread_compile"
+    },
+    {
+      "from": "compileClient",
+      "to": "compileWorker",
+      "kind": "worker_RPC"
+    },
+    {
+      "from": "compileWorker",
+      "to": "compiler",
+      "kind": "compile_validate"
+    },
+    {
+      "from": "pineFrontend",
+      "to": "parser",
+      "kind": "shared_parser_pine_mode"
+    },
+    {
+      "from": "pineFrontend",
+      "to": "ast",
+      "kind": "Pine_declaration_metadata"
+    },
+    {
+      "from": "semantic",
+      "to": "pineBuiltins",
+      "kind": "direct_import"
+    },
+    {
+      "from": "runtime",
+      "to": "pineBuiltins",
+      "kind": "Pine_builtin_dispatch"
+    },
+    {
+      "from": "languageService",
+      "to": "pineFeatures",
+      "kind": "direct_import"
+    }
+  ],
+  "boundaries": [
+    "CoreSpirit is downstream of canonical/columnar market frames and host-owned data resolution.",
+    "Vela consumes native output projections; chart rendering should not rerun strategy logic.",
+    "The VM/runtime does not own broker credentials or directly submit broker orders.",
+    "Execution planner eligibility is not proof a backend adapter is installed or selected."
+  ],
+  "limitations": [
+    "High-level verified edges only; not a complete import graph for every source file.",
+    "Pine frontend, semantic, runtime, AST/IR and editor paths remain coupled."
+  ]
+}

@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "repository": "khvsreddy-code/TradingcoreOS",
+  "auditedCommit": "8dd1dfb171e96848bcbe31a368f026e0228979f6",
+  "generatedAt": "2026-11-28",
+  "scope": "Source-level review of compiler, runtime, Pine integration, market data, Vela, strategy, automation, model, IDE and CI seams. The complete path index is not a claim that every file has been read line-by-line.",
+  "reviewedFiles": [
+    {
+      "path": "src/services/coreSpirit/frontends.ts",
+      "bytes": 3336,
+      "description": "Imports and registers CoreScriptFrontend and PineV6Frontend in the same frontend map; dispatches source by frontend ID.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pine/pineV6Frontend.ts",
+      "bytes": 13998,
+      "description": "Parses explicit Pine v6 declaration/header, rejects selected unsupported constructs, normalizes body, calls shared parser with pine:true, attaches Pine declaration metadata.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/parser.ts",
+      "bytes": 21500,
+      "description": "Shared parser constructor has a pine?:boolean switch; this is an explicit vendor-specific branch in the native parser.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/ast.ts",
+      "bytes": 9060,
+      "description": "Frontend ID includes pine-v6; shared AST declares CoreSpiritPineDeclarationMetadata.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/ir.ts",
+      "bytes": 6270,
+      "description": "Executable IR imports Pine declaration metadata through the shared AST type surface.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/semanticAnalyzer.ts",
+      "bytes": 66181,
+      "description": "Directly imports Pine builtin definition, executability and argument-validation helpers.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/compiler.ts",
+      "bytes": 52720,
+      "description": "Coordinates parse, semantic/name resolution, IR generation, optimization, graph/planner construction, IR validation and artifact creation.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/compilerPipeline.ts",
+      "bytes": 6132,
+      "description": "Editor-only partial diagnostics pipeline; also defines canonical compiler-stage trace versions.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/optimizer.ts",
+      "bytes": 23540,
+      "description": "Builds IR dependency/optimization metadata and tracks purity, determinism, state/effects and work estimates.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/executionVM.ts",
+      "bytes": 5153,
+      "description": "Reference VM executes IR instructions through a host contract for data, state, builtins and side effects.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/optimizedExecutionVM.ts",
+      "bytes": 21997,
+      "description": "Specialized slot-based VM with reusable context-scoped value stores and cache/version identity.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/runtime.ts",
+      "bytes": 162858,
+      "description": "Large orchestrator for history/state, resolver, execution VMs, kernel fusion, output collection and checkpoints; imports Pine math/string/color adapters.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pineBuiltinRegistry.ts",
+      "bytes": 56047,
+      "description": "Pine builtin signature registry; helper registrations include executable, partial, host-bound and catalog-only categories.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pine/pineFeatureRegistry.ts",
+      "bytes": 28353,
+      "description": "31 Pine language/runtime feature definitions; derives status from source list, known differences and supplied fixture evidence.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pine/pineCompatibilityTypes.ts",
+      "bytes": 2230,
+      "description": "Pine-specific compatibility contract and status taxonomy; separate from the requested neutral capability statuses.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pineMathBuiltins.ts",
+      "bytes": 2940,
+      "description": "Pine math runtime adapter imported by CoreSpirit runtime.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pineStringBuiltins.ts",
+      "bytes": 7638,
+      "description": "Pine string runtime adapter imported by CoreSpirit runtime.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/pineColorBuiltins.ts",
+      "bytes": 4527,
+      "description": "Pine color runtime adapter imported by CoreSpirit runtime.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/languageService.ts",
+      "bytes": 25269,
+      "description": "Editor language service imports Pine feature completions alongside CoreSpirit-native concepts.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/index.ts",
+      "bytes": 6848,
+      "description": "Public barrel re-exports Pine builtin registry and Pine math adapter alongside CoreSpirit APIs.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/standardLibraryNamespaces.ts",
+      "bytes": 30039,
+      "description": "One namespace registry mixes CoreSpirit-native APIs, Pine-derived roots and catalog entries; statuses are builtin/component/catalog.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/standardLibrary.ts",
+      "bytes": 32090,
+      "description": "Defines builtin argument bounds, return types, purity, capability, emission kind, series execution and temporal-safety metadata.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/coreScriptCollections.ts",
+      "bytes": 6940,
+      "description": "Bounded CoreScript collections, vectors and matrices; avoids prototype reflection, arbitrary host I/O and native-code access.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/capabilityMaturity.ts",
+      "bytes": 2921,
+      "description": "Evidence-gated CoreScript maturity report; later stage cannot leapfrog earlier proof, but this is not the full domain-wide capability registry.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/backendRegistry.ts",
+      "bytes": 18964,
+      "description": "Backend selection requires a real registered adapter claiming the requested operation; hardware availability alone is insufficient.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/executionPlanner.ts",
+      "bytes": 26971,
+      "description": "Plans eligible pure numerical workloads; source explicitly says planner is not a GPU implementation.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/wasmBackend.ts",
+      "bytes": 16851,
+      "description": "Defines WASM kernel manifest and scalar/SIMD lifecycle.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/workerTransport.ts",
+      "bytes": 3585,
+      "description": "Converts runtime data to structured-cloneable values and strips functions/symbols at worker boundary.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/dataResolver.ts",
+      "bytes": 8742,
+      "description": "Host-owned bounded data resolver with request admission and time/confirmation eligibility checks.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/outputCollector.ts",
+      "bytes": 2449,
+      "description": "Retained output collector; stable visual IDs are upserted, while identity-less event outputs append.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/velaOutputAdapter.ts",
+      "bytes": 12262,
+      "description": "Translates CoreSpirit market/output types to Vela time and visual alignment.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/automationPipeline.ts",
+      "bytes": 17520,
+      "description": "Event-to-automation-to-risk-to-order-intent-to-policy-to-gateway orchestration; broker credentials/submission remain outside CoreSpirit.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/alertDelivery.ts",
+      "bytes": 10428,
+      "description": "Host-owned durable idempotent alert outbox; VM does not perform network delivery.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/modelRuntime.ts",
+      "bytes": 4292,
+      "description": "Executes validated MODEL_CALLs deterministically through a quota-limited host capability.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/polyglotModules.ts",
+      "bytes": 16504,
+      "description": "Constrained module ABI covering Python/Rust/C++/Julia/R/ONNX/WASM; VM does not receive process/filesystem/socket/broker authority.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/marketData/chartDataPlane.ts",
+      "bytes": 77319,
+      "description": "Composes normalized history, live candle state, canonical data plane, chart store, HistoryStore, shared feed, graph and chart-compute coordination.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/marketData/HistoryStore.ts",
+      "bytes": 26618,
+      "description": "Candle history store with revisions, checkpoints, persistence lifecycle and 1.5-second checkpoint interval.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/CoreSpiritVelaEngine.ts",
+      "bytes": 58410,
+      "description": "Connects Vela native execution to CoreSpirit artifact cache/compile, worker execution, sandbox validation, scene diff and output adaptation.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/TcoVelaDataProvider.ts",
+      "bytes": 53239,
+      "description": "Vela DataProvider backed by chart data plane, HistoryStore, columnar projections and FYERS-oriented symbol catalog.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/core/replay/strategySimulator.ts",
+      "bytes": 57930,
+      "description": "Generic deterministic simulation ledger for market/limit/stop/stop-limit intents with explicit simulation-only authority.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/predictionEngine.ts",
+      "bytes": 25509,
+      "description": "Prediction catalogue lists many heuristic/proxy implementations as ready; descriptions distinguish them from genuine trained artifacts.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/pages/CoreSpiritEditorPage.tsx",
+      "bytes": 132405,
+      "description": "Large editor composition using Monaco, compile/preview, sandbox, persistence, authoring profiles and lifecycle diagnostics.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/coreSpiritCompilerClient.ts",
+      "bytes": 15550,
+      "description": "Off-thread compile/validation/replay client with request IDs, source versions, abort handling and timeouts.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/coreSpiritCompiler.worker.ts",
+      "bytes": 2554,
+      "description": "Compile-worker entry invokes CoreSpirit compiler pipeline and validates returned artifacts.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "src/services/coreSpirit/coreSpirit.worker.ts",
+      "bytes": 12437,
+      "description": "Execution-worker entry constructs CoreSpiritRuntime over shared/columnar market frames and graph resolvers.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    },
+    {
+      "path": "tools/run-contracts.mjs",
+      "bytes": 25293,
+      "description": "Sequential fail-fast contract runner; current CI stopped after its second registered contract failed.",
+      "sourceEvidence": "directly inspected in audited main-branch source",
+      "implementationStatus": "not_inferred_from_file_presence",
+      "migration": "retain or refactor only after consumer and test contracts are mapped"
+    }
+  ]
+}
