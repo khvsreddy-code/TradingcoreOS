@@ -19,7 +19,7 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
 
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'Program ::= EditionDirective? CapabilityRequirement* (ProgramBlock | LegacyStatement*) EOF',
-  'EditionDirective ::= "edition@" String',
+  'EditionDirective ::= "edition@" Number',
   'CapabilityRequirement ::= "requires" QualifiedName',
   'ProgramBlock ::= ProgramHeader Block',
   'ProgramHeader ::= "indicator" String | "automation" String | "prediction" String | "strategy" String',
@@ -70,6 +70,8 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'Number ::= integer | decimal | exponent | hexadecimal',
   'Boolean ::= "true" | "false"',
   'IndentedBlock ::= indentation-delimited StatementOrSurface+',
+  'Letter ::= "A".."Z" | "a".."z"',
+  'Digit ::= "0".."9"',
 ].join('\n');
 
 export const CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS = Object.freeze({
@@ -121,6 +123,7 @@ export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureCo
   { id: 'temporal-qualifiers', status: 'partial', semantics: 'Series/state/intrabar/confirmed/developing/forecast concepts exist; compile-time prevention across every external-data and prediction boundary is not yet exhaustive.' },
   { id: 'external-data-provenance', status: 'partial', semantics: 'External data resolution is host-owned and causality-checked, but provenance is not yet a first-class type qualifier on every value.' },
   { id: 'prediction-feature-blocks', status: 'planned', semantics: 'A declarative features block with typed feature extraction, missing-data rules and feature provenance is not yet a native CoreSpirit construct.' },
+  { id: 'prediction-output-statements', status: 'planned', semantics: 'The proposed output <prediction> statement requires a typed output declaration and host artifact contract; visual show/plot is not a substitute for model output.' },
   { id: 'operator-overloading', status: 'deferred', semantics: 'Not included in v1: built-in domain-safe operators are preferred over user-defined overload resolution.' },
 ]);
 
@@ -219,7 +222,7 @@ export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
   temporalPhases: Object.freeze(['historical','confirmed','developing','realtime','forecast']),
   modelAndExecution: Object.freeze(['model<T>','prediction<T>','distribution<T>','feature<T>','featureSet<T>','dataset<T>','trainingData<T>','experiment<T>','modelArtifact<T>','signal-intent','order-intent']),
   invariants: Object.freeze([
-    'Series and scalar values are distinct; scalar-to-series broadcast is explicit in semantic typing.',
+    'Series and scalar values are distinct; scalar numeric operands broadcast only in semantic operations that explicitly permit it, while structured collection broadcasting is rejected.',
     'Price, volume, time and duration carry domain meaning and cannot be mixed as arbitrary dimensionless numbers.',
     'Historical/confirmed/developing/realtime/forecast are temporal phases, not interchangeable labels.',
     'Persistent state and intrabar state have different rollback/storage semantics.',
