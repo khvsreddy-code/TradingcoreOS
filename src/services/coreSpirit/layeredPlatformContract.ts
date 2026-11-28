@@ -94,7 +94,7 @@ export const CORE_SPIRIT_LAYER_PROFILES: Readonly<Record<CoreSpiritProgramLayer,
   automation: {
     layer: 'automation',
     // Automation monitors may read market bars and run indicator functions; all writes stay policy-gated host effects.
-    capabilities: ['series', 'indicators', 'signals', 'strategy-events', 'order-intents', 'risk-queries', 'policy-evaluation', 'webhooks'],
+    capabilities: ['series', 'indicators', 'signals', 'strategy-events', 'order-intents', 'risk-queries', 'policy-evaluation', 'alert', 'webhooks'],
     forbidden: ['broker-credentials', 'direct-broker-api', 'direct-account-mutation', 'raw-network', 'filesystem', 'arbitrary-process'],
   },
 };
