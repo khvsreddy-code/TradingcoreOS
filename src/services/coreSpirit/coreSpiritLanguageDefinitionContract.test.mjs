@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritParser } from './services/coreSpirit/parser.ts';
-import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './services/coreSpirit/coreSpiritPipeline.ts';
-import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
-import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
-import { normalizeDeclaredType } from './services/coreSpirit/typeSystem.ts';
-import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './services/coreSpirit/layeredPlatformContract.ts';
+import { CoreSpiritParser } from './parser.ts';
+import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './coreSpiritPipeline.ts';
+import { validateCoreSpiritIr } from './irContract.ts';
+import { CoreSpiritRuntime } from './runtime.ts';
+import { normalizeDeclaredType } from './typeSystem.ts';
+import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_PROGRAM_GRAMMAR,
@@ -14,7 +14,7 @@ import {
   CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS,
   getCoreSpiritLanguageFeature,
   validateCoreSpiritLanguageDefinition,
-} from './services/coreSpirit/coreSpiritLanguageDefinition.ts';
+} from './coreSpiritLanguageDefinition.ts';
 
 assert.deepEqual(validateCoreSpiritLanguageDefinition(), []);
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.name, 'CoreSpirit');
