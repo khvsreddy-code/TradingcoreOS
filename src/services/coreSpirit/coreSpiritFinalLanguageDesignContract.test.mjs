@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritParser } from './parser.ts';
+import { CORE_SPIRIT_AUTHORING_SURFACES } from './languageParity.ts';
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { serializeCoreSpiritIr, validateCoreSpiritIr } from './irContract.ts';
 import {
@@ -146,7 +147,12 @@ for (const [kind, title, source] of cases) {
 }
 
 // The authoring model explicitly separates a guided surface from compiler
-// identity. A level is not permitted to introduce a second grammar.
+// identity. Every level is bound to the same frontend, AST, compiler and runtime.
+const authoringPipelines = ['beginner','trader','quant','system'].map(level => CORE_SPIRIT_AUTHORING_SURFACES[level]);
+for (const key of ['parser','ast','compiler','runtime']) {
+  assert.equal(new Set(authoringPipelines.map(item => item[key])).size, 1,
+    'all authoring levels must share the same ' + key);
+}
 for (const level of ['beginner','trader','quant','system']) {
   const policy = CORE_SPIRIT_LANGUAGE_DESIGN_RULES.authoringLevels[level];
   assert.ok(policy && policy.length > 20, 'missing authoring contract for ' + level);
