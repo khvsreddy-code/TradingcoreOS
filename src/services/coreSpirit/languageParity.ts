@@ -10,7 +10,6 @@ import {
   validateCoreSpiritLanguageDefinition,
   type CoreSpiritLanguageFeatureStatus,
 } from './coreSpiritLanguageDefinition';
-import { PINE_FEATURE_REGISTRY, getPineFeature, validatePineFeatureRegistry } from './pine/pineFeatureRegistry';
 
 export type CoreSpiritParityStatus = CoreSpiritLanguageFeatureStatus;
 export type CoreSpiritParityDomain = 'language'|'types'|'collections'|'functions'|'events'|'runtime'|'authoring';
@@ -54,9 +53,6 @@ export const CORE_SPIRIT_AUTHORING_SURFACES = Object.freeze({
 
 export const CORE_SPIRIT_AUTHORING_LEVELS_CONTRACT = CORE_SPIRIT_AUTHORING_LEVELS;
 
-/** Pine feature status is deliberately exposed under a Pine-specific name only. */
-export const CORE_SPIRIT_PINE_FEATURE_MATRIX = PINE_FEATURE_REGISTRY;
-
 export function getCoreSpiritFeatureParity(id:string):CoreSpiritFeatureParity|undefined {
   const feature=getCoreSpiritLanguageFeature(id);
   return feature ? Object.freeze({
@@ -78,10 +74,3 @@ export function validateCoreSpiritFeatureMatrix():string[] {
   return errors;
 }
 
-export function validateCoreSpiritPineCompatibilityMatrix():string[] {
-  return validatePineFeatureRegistry();
-}
-
-export function getCoreSpiritPineCompatibilityFeature(id:string) {
-  return getPineFeature(id);
-}
