@@ -423,7 +423,7 @@ export function normalizeCoreSpiritSource(source: string): string {
   const out: string[] = [];
   const whenBlocks: number[] = [];
   const eventBlocks: number[] = [];
-  const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' }> = [];
+  const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' | 'prediction' }> = [];
   const modelBraceIndents: number[] = [];
   // Track braces nested inside a brace-style indicator/strategy wrapper so an if-block
   // closing brace cannot be mistaken for the end of the indicator declaration.
@@ -515,7 +515,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     // preserve nested control-flow braces such as if-condition blocks.
     const activeIndicatorWrapper = wrappers[wrappers.length - 1];
     if (trimmed === '}' && activeIndicatorWrapper &&
-        (activeIndicatorWrapper.kind === 'indicator' || activeIndicatorWrapper.kind === 'strategy')) {
+        (activeIndicatorWrapper.kind === 'indicator' || activeIndicatorWrapper.kind === 'strategy' || activeIndicatorWrapper.kind === 'automation' || activeIndicatorWrapper.kind === 'prediction')) {
       if (indicatorInnerBraceDepth > 0) {
         indicatorInnerBraceDepth -= 1;
         out.push(raw);
@@ -544,15 +544,15 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
-    const wrapperHeader = trimmed.match(/^(indicator|strategy|model|automate)\s+(?:"[^"]*"|'[^']*')\s*(?::)?\s*$/i);
+    const wrapperHeader = trimmed.match(/^(indicator|strategy|model|automate|automation|prediction)\s+(?:"[^"]*"|'[^']*')\s*(?::)?\s*$/i);
     if (wrapperHeader) {
       wrappers.push({ indent, kind: wrapperHeader[1].toLowerCase() as any });
       continue;
     }
 
-    const oldIndicatorBrace = trimmed.match(/^(indicator|strategy)\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
+    const oldIndicatorBrace = trimmed.match(/^(indicator|strategy|automation|prediction)\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
     if (oldIndicatorBrace) {
-      wrappers.push({ indent, kind: oldIndicatorBrace[1].toLowerCase() as 'indicator'|'strategy' });
+      wrappers.push({ indent, kind: oldIndicatorBrace[1].toLowerCase() as 'indicator'|'strategy'|'automation'|'prediction' });
       indicatorInnerBraceDepth = 0;
       continue;
     }
@@ -564,7 +564,7 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
-    if (wrappers.length && (wrappers[wrappers.length - 1].kind === 'indicator' || wrappers[wrappers.length - 1].kind === 'strategy')) {
+    if (wrappers.length && (wrappers[wrappers.length - 1].kind === 'indicator' || wrappers[wrappers.length - 1].kind === 'strategy' || wrappers[wrappers.length - 1].kind === 'automation' || wrappers[wrappers.length - 1].kind === 'prediction')) {
       const prop = parseCoreSpiritDeclarationProperty(trimmed, 0, raw.length);
       if (prop) {
         continue;
