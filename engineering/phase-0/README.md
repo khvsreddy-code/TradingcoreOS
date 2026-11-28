@@ -47,7 +47,7 @@
 - `pine-dependency-graph.json`: production Pine consumers and safe removal sequence.
 - `technical-debt.json`: prioritized evidence-backed issues.
 
-The contract runner now covers 258 unique test files, including all 82 CoreSpirit test files. The seven-family Pine strategy namespace emit fix is committed at `7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea` and awaits CI verification.
+The contract runner now covers 258 unique test files, including all 82 CoreSpirit test files. Its first aggregate run executed all 258: 244 passed, 14 failed and none were skipped. Failures are itemized in `test-feature-mapping.json`; the seven-family Pine namespace emit fix is committed at `7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea`, but the follow-up CI contract step still failed overall and does not yet prove the specific regression passed.
 
 ## Phase 0 completion gate
 

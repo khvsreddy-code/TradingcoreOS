@@ -36,16 +36,38 @@
       "contractStep": "failed",
       "typecheck": "passed",
       "productionBuild": "failed_bundle_budget",
-      "benchmark": "in_progress_at_last_inspection",
-      "detail": "Per-contract SUMMARY_JSON not yet retrievable while validate job was still active."
+      "compilerVmBenchmark": "passed",
+      "wasmBenchmark": "passed",
+      "contractResults": {
+        "total": 258,
+        "executed": 258,
+        "passed": 244,
+        "failed": 14,
+        "skipped": 0,
+        "failFast": false
+      },
+      "note": "This run is against the corrected aggregate runner, but before the namespaced builtin emitKind compiler fix. Its failing Pine frontend strategyEntry assertion predates commit 7a2d7b5."
     },
     "postStrategyCompilerFixRun": {
       "runId": 46104176100,
       "runNumber": 5656,
       "headCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
       "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46104176100",
-      "status": "in_progress_at_last_inspection",
-      "purpose": "Verify namespaced Pine builtin emitKind lowering fix."
+      "status": "validate_job_still_in_progress_at_last_check",
+      "dependencySecurity": "passed",
+      "contractStep": "failed",
+      "typecheck": "passed",
+      "productionBuild": "failed_bundle_budget",
+      "coreSpiritBenchmark": "in_progress_or_archiving_at_last_check",
+      "note": "Contract step failed overall; the job log was not yet available to identify whether the Pine strategy assertion was among remaining failures. Do not infer that the specific regression passed."
+    },
+    "latestAuditArtifactRun": {
+      "runId": 46104290299,
+      "runNumber": 5657,
+      "headCommit": "ffbd8fc7e95ce3d77ba4e03d16512975d7fca04b",
+      "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46104290299",
+      "status": "in_progress_at_last_check",
+      "note": "This run tests the latest main revision, including the audit JSON reconciliation. Contract step was still running."
     }
   },
   "totals": {
@@ -2313,5 +2335,125 @@
       "change": "Runner now aggregates failures and continues by default.",
       "evidence": "Runner prints SUMMARY_JSON and sets process.exitCode after all entries; --fail-fast remains optional."
     }
-  ]
+  ],
+  "failureInventory": {
+    "sourceRun": 46103957654,
+    "sourceRunSha": "d8577eb6e1f7e3d72c7a9d4e3ce18e1b00ceb24c",
+    "timing": "Pre-Pine-compiler-fix baseline",
+    "total": 14,
+    "records": [
+      {
+        "test": "corespirit-pine-v6-frontend",
+        "file": "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts",
+        "line": 65,
+        "category": "compiler_lowering",
+        "assertion": "Pine strategyEntry should compile to a dedicated simulation-only command",
+        "triage": "Compiler namespace-call branch omitted builtin emitKind IR event; fix committed in 7a2d7b5; CI verification pending."
+      },
+      {
+        "test": "corespirit-pine-feature-registry",
+        "file": "src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts",
+        "line": 10,
+        "category": "registry_dependency",
+        "assertion": "unknown prerequisite 'bar-state-machine' for pine-strategy-simulator",
+        "triage": "Registry dependency references an undeclared feature ID."
+      },
+      {
+        "test": "corespirit-language-parity",
+        "file": "src/coreSpiritLanguageParityContract.test.mjs",
+        "line": 5,
+        "category": "registry_dependency",
+        "assertion": "unknown prerequisite 'bar-state-machine' for pine-strategy-simulator",
+        "triage": "Same missing Pine feature ID as the feature-registry contract; one metadata correction should address both."
+      },
+      {
+        "test": "corespirit-numerical-kernels",
+        "file": "src/services/coreSpirit/numericalKernelsContract.test.mjs",
+        "line": 387,
+        "category": "runtime_behavior",
+        "assertion": "Rolling range forming-bar revision: actual 4, expected 3",
+        "triage": "Investigate replacement/revision semantics so an update replaces the forming sample instead of appending."
+      },
+      {
+        "test": "strategy-simulator-margin-pyramiding-oca",
+        "file": "src/services/core/replay/strategySimulatorEnhancementsContract.test.mjs",
+        "line": 21,
+        "category": "simulation_behavior_or_contract_drift",
+        "assertion": "50% initial margin should cap gross position at 2x equity; observed actual undefined, expected 2000",
+        "triage": "Inspect result exposure metric shape and margin-cap admission path; do not weaken test without proving intended API."
+      },
+      {
+        "test": "corespirit-pine-strategy-simulation-adapter",
+        "file": "src/services/coreSpirit/pineStrategySimulationAdapterContract.test.mjs",
+        "line": 37,
+        "category": "simulation_behavior",
+        "assertion": "Expected protective_exit ledger event for exit-event",
+        "triage": "Trace Pine strategy.exit translation, bracket activation, fill and protective-exit classification."
+      },
+      {
+        "test": "corespirit-pine-backtest-execution-host",
+        "file": "src/services/coreSpirit/pineStrategyBacktestHostContract.test.mjs",
+        "line": null,
+        "category": "test_harness_or_source_syntax",
+        "assertion": "SyntaxError: Unexpected token '!'",
+        "triage": "Inspect loader/test source syntax. Determine whether TS syntax is placed in .mjs or whether the transpile loader skips this import."
+      },
+      {
+        "test": "corespirit-model-orchestration-security",
+        "file": "src/services/coreSpirit/modelOrchestrationSecurityContract.test.mjs",
+        "line": 73,
+        "category": "security_validation",
+        "assertion": "Expected exception for dynamic tensor dimensions; no exception thrown",
+        "triage": "Validate tensor shape/dimension schema at manifest/model admission boundary; do not let dynamic dimensions pass silently."
+      },
+      {
+        "test": "corespirit-ai-model-semantics",
+        "file": "src/services/coreSpirit/aiModelContract.test.mjs",
+        "line": 99,
+        "category": "model_contract_ordering",
+        "assertion": "Expected 'must provide LONG, SHORT and FLAT'; source instead throws for invalid probability_flat first",
+        "triage": "Define deterministic output-validation order and update either validation or contract based on the public model ABI."
+      },
+      {
+        "test": "corespirit-large-data-research-host",
+        "file": "src/services/coreSpirit/quantResearchServiceHostContract.test.mjs",
+        "line": 16,
+        "category": "test_message_contract",
+        "assertion": "Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'",
+        "triage": "Semantics appear secure; align stable diagnostic wording and contract."
+      },
+      {
+        "test": "corespirit-point-in-time-research-features",
+        "file": "src/services/coreSpirit/researchFeaturesContract.test.mjs",
+        "line": 7,
+        "category": "test_harness_or_source_syntax",
+        "assertion": "SyntaxError at close[i]!-0.1 in .mjs file",
+        "triage": "Replace TypeScript non-null assertion in .mjs or convert test to TypeScript with proper loader."
+      },
+      {
+        "test": "corespirit-request-security-lower-tf-arrays",
+        "file": "src/services/coreSpirit/requestSecurityCompatibilityContract.test.mjs",
+        "line": 29,
+        "category": "data_alignment_behavior",
+        "assertion": "Lower-timeframe array values are not all equal to 3",
+        "triage": "Trace lower timeframe request aggregation, timestamp alignment, inclusion and missing-bar handling."
+      },
+      {
+        "test": "corespirit-python-module-host",
+        "file": "src/services/coreSpirit/pythonModuleServiceHostContract.test.mjs",
+        "line": 13,
+        "category": "polyglot_manifest_contract",
+        "assertion": "Polyglot dependencies must use exact pinned versions",
+        "triage": "Inspect dependency manifest version plus artifact-hash contract; align test fixture with declared ABI and retain exact-version enforcement."
+      },
+      {
+        "test": "corespirit-polyglot-remote-hosts",
+        "file": "src/services/coreSpirit/polyglotServiceHostContract.test.mjs",
+        "line": 15,
+        "category": "test_message_contract",
+        "assertion": "Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'",
+        "triage": "Same stable diagnostic mismatch as research host; preserve HTTPS/loopback enforcement."
+      }
+    ]
+  }
 }

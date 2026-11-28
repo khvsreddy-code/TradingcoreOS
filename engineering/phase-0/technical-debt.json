@@ -140,6 +140,38 @@
       ],
       "impact": "The intended lazy boundary does not split artifactCache out of the static chunk graph; chart remains over its hard bundle budget.",
       "action": "Inspect synchronous cache consumers; move them behind an async cache service or isolate safe metadata. Re-run static-closure budget and browser cold-start benchmarks before merging."
+    },
+    {
+      "id": "TD-017",
+      "priority": "P0",
+      "area": "Aggregate CI triage",
+      "title": "First complete 258-contract run reveals 14 failures across runtime, metadata, security and test harnesses",
+      "evidence": [
+        "corespirit-pine-v6-frontend: Pine strategyEntry should compile to a dedicated simulation-only command",
+        "corespirit-pine-feature-registry: unknown prerequisite 'bar-state-machine' for pine-strategy-simulator",
+        "corespirit-language-parity: unknown prerequisite 'bar-state-machine' for pine-strategy-simulator",
+        "corespirit-numerical-kernels: Rolling range forming-bar revision: actual 4, expected 3",
+        "strategy-simulator-margin-pyramiding-oca: 50% initial margin should cap gross position at 2x equity; observed actual undefined, expected 2000",
+        "corespirit-pine-strategy-simulation-adapter: Expected protective_exit ledger event for exit-event",
+        "corespirit-pine-backtest-execution-host: SyntaxError: Unexpected token '!'",
+        "corespirit-model-orchestration-security: Expected exception for dynamic tensor dimensions; no exception thrown",
+        "corespirit-ai-model-semantics: Expected 'must provide LONG, SHORT and FLAT'; source instead throws for invalid probability_flat first",
+        "corespirit-large-data-research-host: Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'",
+        "corespirit-point-in-time-research-features: SyntaxError at close[i]!-0.1 in .mjs file",
+        "corespirit-request-security-lower-tf-arrays: Lower-timeframe array values are not all equal to 3",
+        "corespirit-python-module-host: Polyglot dependencies must use exact pinned versions",
+        "corespirit-polyglot-remote-hosts: Expected regex /HTTPS or explicit HTTP loopback/; actual message says 'must use HTTPS outside explicit HTTP loopback.'"
+      ],
+      "impact": "The runner now exposes failures previously masked by fail-fast behavior. These failures span temporal incremental correctness, simulation/margin behavior, security validation, Pine registry metadata and test syntax; they are not all related and must be triaged independently.",
+      "action": "Fix in risk order: security validation and data/series correctness; Pine compiler and strategy simulation; then registry/test-harness mismatches and stable diagnostic wording. Require all 258 tests to execute and reach an agreed passing state before marking CI green.",
+      "run": {
+        "id": 46103957654,
+        "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46103957654",
+        "passed": 244,
+        "failed": 14,
+        "skipped": 0
+      },
+      "status": "open"
     }
   ],
   "resolvedItems": [
