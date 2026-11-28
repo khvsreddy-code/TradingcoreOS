@@ -83,7 +83,8 @@ for (const [kind, title, source] of programCases) {
   const pipelineSignature = compiled.ir.compilerPipeline.join('>');
   if (sharedPipelineSignature === undefined) sharedPipelineSignature = pipelineSignature;
   assert.equal(pipelineSignature, sharedPipelineSignature, 'all four program kinds must use the same compiler/optimizer pipeline');
-  assert.equal(compiled.artifact?.abi.kind, 'CoreSpiritExecutable');
+  assert.equal(compiled.artifact?.abi.magic, 'CSPIRIT');
+  assert.equal(compiled.artifact?.abi.version, 2);
   assert.ok(validateCoreSpiritIr(compiled.ir));
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programKind: 'not-a-program' }), false);
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
