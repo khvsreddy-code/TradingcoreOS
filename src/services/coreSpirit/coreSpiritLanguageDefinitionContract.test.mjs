@@ -96,6 +96,21 @@ assert.equal(semanticTypeCompatible(safeProvenance,futureLeakingProvenance),fals
   'non-causal/lookahead values must not satisfy a causal declaration');
 
 
+
+// const is a semantic invariant, not just a parser alias for let.
+const constParsed = new CoreSpiritParser('const answer: int = 42;').parseDetailed();
+assert.deepEqual(constParsed.diagnostics,[]);
+assert.equal(constParsed.ast.body[0].constant,true);
+const validConstant = compileCoreSpirit('indicator "Immutable" { const answer: int = 42; }','language-const-valid');
+assert.deepEqual(validConstant.diagnostics.filter(item=>item.severity==='error'),[]);
+assert.ok(validConstant.ir);
+const reassignedConstant = compileCoreSpirit('indicator "Immutable Violation" { const answer: int = 42; answer := 43; }','language-const-reassignment');
+assert.ok(reassignedConstant.diagnostics.some(item=>item.code==='CONST_ASSIGNMENT'));
+assert.equal(reassignedConstant.ir,undefined);
+const mutableConstant = compileCoreSpirit('indicator "Mutable Const" { const memory: state<float> = 1.0; }','language-const-mutable-state');
+assert.ok(mutableConstant.diagnostics.some(item=>item.code==='CONST_MUTABLE_TYPE'));
+assert.equal(mutableConstant.ir,undefined);
+
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
   ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  let resistance = high[1];\n  if (close > resistance) {\n    let triggered = true;\n  }\n}'],
@@ -249,7 +264,7 @@ assert.ok(trailing.diagnostics.some(item => item.message.includes('Unexpected to
 
 const expectedFeatureStatuses = {
   variables:'implemented',
-  constants:'partial',
+  constants:'implemented',
   functions:'partial',
   parameters:'implemented',
   'return-values':'implemented',

@@ -183,7 +183,7 @@ export type CoreSpiritLanguageFeatureContract = Readonly<{ id: string; status: C
 /** A token or AST node alone is not evidence that a feature is implemented end-to-end. */
 export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureContract[] = Object.freeze([
   { id: 'variables', status: 'implemented', semantics: 'let declarations infer a type or validate an explicit type; assignment uses := for stateful values.' },
-  { id: 'constants', status: 'partial', semantics: 'const is parsed, but immutable binding enforcement is not yet a complete semantic invariant.' },
+  { id: 'constants', status: 'implemented', semantics: 'const declarations create immutable bindings; const cannot be reassigned or use mutable state<T>/intrabar<T> storage. Referenced collection contents retain their collection mutability contract.' },
   { id: 'functions', status: 'partial', semantics: 'Named functions have typed parameters and one return type; the current implementation inlines pure expression functions only. Recursion, closures, effectful calls and general control flow are rejected.' }, 
   { id: 'parameters', status: 'implemented', semantics: 'Function parameters use explicit TypeName declarations.' },
   { id: 'return-values', status: 'implemented', semantics: 'A function returns one typed expression; bare and multiple returns are not part of this grammar yet.' },

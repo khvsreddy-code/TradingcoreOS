@@ -29,6 +29,7 @@ const comparisonOps=new Set(['==','!=','<','<=','>','>=']);
 export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticOptions = {}):CoreSpiritSemanticResult {
   const diagnostics:CoreSpiritDiagnostic[]=[];
   const symbols=new Map<string,CoreSpiritType>();
+  const constantSymbols=new Set<string>();
   const udts=new Map<string,CoreSpiritUdt>();
   const modelBindings=new Map<string,unknown>();
   const componentBindings=new Map<string,string>();
@@ -842,6 +843,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           }
           semanticSymbols.set(n.name,pineSeriesInitializer && semanticType ? semanticType : declared ?? semanticType ?? semanticScalar('number'));
         } else if(semanticType) semanticSymbols.set(n.name,n.pineMode && semanticType.kind==='series' ? scalarize(semanticType) : semanticType);
+        if(n.constant){
+          constantSymbols.add(n.name);
+          if(isPersistentStateType(type)) report(n,"const bindings cannot use mutable state<T> or intrabar<T> storage",'CONST_MUTABLE_TYPE');
+        }
         symbols.set(n.name,type);
         scope.set(n.name,type);
         if(n.expression.type==='call'){
@@ -853,6 +858,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'expressionStatement':
         visit(n.expression,scope); infer(n.expression,scope); break;
       case 'assignment': {
+        if(constantSymbols.has(n.name)) {
+          report(n,`Cannot assign to constant '${n.name}'`,'CONST_ASSIGNMENT');
+          break;
+        }
         const current=scope.get(n.name);
         if(!current) { report(n,`Unknown state variable '${n.name}'`,'UNKNOWN_STATE'); break; }
         if(!isPersistentStateType(current)) { report(n,`':=' can only update state<T> or intrabar<T>; '${n.name}' is '${current}'`,'STATE_ASSIGNMENT_TARGET'); break; }

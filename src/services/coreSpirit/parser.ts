@@ -226,7 +226,7 @@ export class CoreSpiritParser {
     const start=this.consume('identifier','Expected const keyword');
     const declaration=this.letStatement();
     if(declaration.type!=='let') throw this.error('Expected constant declaration');
-    return {...declaration,span:this.makeSpan(start,this.previous())};
+    return {...declaration,constant:true,span:this.makeSpan(start,this.previous())};
   }
 
   private assignmentStatement():CoreSpiritAstNode {
