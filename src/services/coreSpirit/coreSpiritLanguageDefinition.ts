@@ -18,21 +18,26 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
 });
 
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
-  'Program ::= ProgramHeader Block EOF',
+  'Program ::= EditionDirective? CapabilityRequirement* (ProgramBlock | LegacyStatement*) EOF',
+  'ProgramBlock ::= ProgramHeader Block',
   'ProgramHeader ::= "indicator" String | "automation" String | "prediction" String | "strategy" String',
   'Block ::= "{" Statement* "}"',
-  'Statement ::= VariableDeclaration | FunctionDeclaration | TypeDeclaration | EventDeclaration | ConditionalStatement | WhileStatement | ForEachStatement | ReturnStatement | AssignmentStatement | ExpressionStatement | "break" | "continue"',
-  'VariableDeclaration ::= ("let" | "const") Identifier (":" TypeName)? "=" Expression',
+  'Statement ::= VariableDeclaration | FunctionDeclaration | TypeDeclaration | EventDeclaration | ConditionalStatement | WhenStatement | WhileStatement | ForEachStatement | ReturnStatement | AssignmentStatement | ExpressionStatement | "break" | "continue"',
+  'VariableDeclaration ::= ("let" | "const") Identifier (":" TypeName)? "=" Expression Terminator?',
   'FunctionDeclaration ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block',
+  'ParameterList ::= Parameter ("," Parameter)*',
   'Parameter ::= Identifier ":" TypeName',
   'TypeDeclaration ::= "type" Identifier "{" Field* "}"',
   'Field ::= Identifier ":" TypeName (";" | newline)',
-  'EventDeclaration ::= "on" QualifiedName "(" ArgumentList? ")"? Block',
+  'EventDeclaration ::= "on" QualifiedName ("(" ArgumentList? ")")? Block',
   'ConditionalStatement ::= "if" "(" Expression ")" Block ("else" Block)?',
+  'WhenStatement ::= "when" Expression Block | "when" Expression ":" IndentedBlock',
   'WhileStatement ::= "while" "(" Expression ")" Block',
-  'ForEachStatement ::= "for" "(" Identifier "in" Expression ")" Block',
-  'AssignmentStatement ::= Identifier ":=" Expression',
-  'ReturnStatement ::= "return" Expression',
+  'ForEachStatement ::= "for" "(" ("let")? Identifier "in" Expression ")" Block',
+  'AssignmentStatement ::= Identifier ":=" Expression Terminator?',
+  'ReturnStatement ::= "return" Expression Terminator?',
+  'ExpressionStatement ::= Expression Terminator?',
+  'Terminator ::= ";" | newline',
   'TypeName ::= QualifiedName ("<" TypeName ("," TypeName)* ">")?',
   'Expression ::= Conditional',
   'Conditional ::= OrExpression ("?" Expression ":" Expression)?',
@@ -48,7 +53,10 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'ArrayLiteral ::= "[" (Expression ("," Expression)*)? "]"',
   'MapLiteral ::= "{" (MapEntry ("," MapEntry)*)? "}"',
   'MapEntry ::= (Identifier | String) ":" Expression',
-].join('\n');
+  'LegacyStatement ::= Statement | SurfaceShow | SurfaceWhen',
+  'SurfaceShow ::= "show" Expression',
+  'SurfaceWhen ::= "when" Expression ":" IndentedBlock | "when" Expression Block',
+].join('\\n');
 
 export const CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS = Object.freeze({
   indicator:'script',
@@ -97,6 +105,48 @@ export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureCo
   { id: 'operator-overloading', status: 'deferred', semantics: 'Not included in v1: built-in domain-safe operators are preferred over user-defined overload resolution.' },
 ]);
 
+export const CORE_SPIRIT_LANGUAGE_SEMANTICS = Object.freeze({
+  programs: Object.freeze({
+    sharedPipeline: Object.freeze(['lexer','parser','AST','name-resolution','semantic-analysis','typed-IR','optimizer','execution-planner','runtime']),
+    executionLayers: CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS,
+    defaultProgram: 'script',
+    declarationRule: 'A declared program kind owns its execution layer; an explicit conflicting layer is a compile error.',
+    compatibility: 'Unwrapped source remains a legacy script program and uses the same pipeline.',
+  }),
+  declarations: Object.freeze({
+    let: 'A local declaration is initialized once; unqualified types are inferred from the initializer.',
+    const: 'Parsed as a declaration but immutable assignment rejection is not yet complete.',
+    assignment: 'The := operator updates a stateful binding; ordinary = is reserved for declarations/surface shorthand.',
+    functions: 'Named functions use typed parameters and a declared return type; function bodies desugar before IR lowering.',
+    return: 'Exactly one expression value is supported by the current function ABI.',
+  }),
+  temporalValues: Object.freeze({
+    scalar: 'One value independent of a bar-indexed series.',
+    series: 'A value aligned to a symbol/timeframe bar sequence; indexing uses historical bar offsets.',
+    currentBar: 'A field read without an offset resolves against the active bar revision.',
+    historical: 'Previously observed bars are immutable inputs to a given replay revision.',
+    developing: 'The active unconfirmed bar can change and causes deterministic revision rollback/recompute.',
+    realtime: 'Live host observations are revisioned; side effects must pass host execution policy.',
+    confirmed: 'A finalised bar value; live order intents are gated on confirmation policy.',
+    state: 'Persistent state survives bar transitions and is checkpointed.',
+    intrabar: 'Intrabar state has separate storage/rollback semantics from persistent state.',
+    forecast: 'A model-produced future value; it is not an observed market input and must not flow backward into historical features.',
+    externalData: 'External symbol/timeframe data is host-resolved, capability-checked and causality-checked.',
+  }),
+  effects: Object.freeze({
+    pureExpressions: 'Expressions and numerical functions may be evaluated by the shared runtime without host side effects.',
+    visuals: 'show/plot surface declarations lower to canonical visual emission contracts.',
+    orderIntents: 'Strategies create broker-neutral intent records; broker credentials and direct broker APIs are unavailable to source programs.',
+    automation: 'Automation requires an automation execution layer and explicit host capabilities for privileged effects.',
+    prediction: 'Prediction programs execute in the model lane and consume validated model/data artifacts through host resolvers.',
+  }),
+  collections: Object.freeze({
+    arrays: 'Array elements are homogeneous at the semantic type boundary; indexing is bounds-checked by collection runtime.',
+    maps: 'Map keys and values have typed contracts; key iteration order is not a language guarantee.',
+    matricesTensors: 'Shape is part of the semantic contract; implicit broadcasting is rejected in numeric semantic operations.',
+  }),
+} as const);
+
 export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({  primitiveContracts: Object.freeze([
     Object.freeze({ name:'Int', sourceName:'int', runtimeName:'int', status:'implemented' as const }),
     Object.freeze({ name:'Float', sourceName:'float', runtimeName:'float', status:'implemented' as const }),
@@ -123,8 +173,8 @@ export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({  primitiveContracts: Objec
     Object.freeze({ name:'Model<T>', sourceName:'model<T>', status:'partial' as const }),
   ]),
 
-  primitives: Object.freeze(['int','float','number','boolean','string','color','null','probability']),
-  market: Object.freeze(['price','volume','time','market<T>','bar<T>','tick<T>','orderbook<T>','footprint<T>','portfolio<T>','position<T>','order<T>','fill<T>']),
+  primitives: Object.freeze(['int','float','number','bool','boolean','string','color','null','probability','void']),
+  market: Object.freeze(['Price','Volume','Timestamp','Symbol','Timeframe','Bar','price','volume','time','market<T>','bar<T>','tick<T>','orderbook<T>','footprint<T>','portfolio<T>','position<T>','order<T>','fill<T>']),
   collections: Object.freeze(['array<T>','map<K,V>','vector<T>','matrix<T>','tensor<T>']),
   temporalContainers: Object.freeze(['scalar<T>','series<T>','window<T>','state<T>','intrabar<T>','event<T>','snapshot<T>','stream<T>','confirmed<T>','developing<T>','forecast<T>']),
   temporalPhases: Object.freeze(['historical','confirmed','developing','realtime','forecast']),
