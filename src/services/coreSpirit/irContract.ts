@@ -37,6 +37,10 @@ export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIr
 export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {
   const p = program as CoreSpiritIrProgram | undefined;
   if (!p || p.version !== CORE_SPIRIT_IR_VERSION || typeof p.sourceId !== 'string') return false;
+  const programKinds=['indicator','strategy','automation','prediction','library','script'] as const;
+  if (p.programKind !== undefined && !(programKinds as readonly string[]).includes(p.programKind)) return false;
+  if (p.programTitle !== undefined && (typeof p.programTitle !== 'string' || !p.programTitle.trim() || p.programTitle.length > 160)) return false;
+  if (p.programTitle !== undefined && p.programKind === undefined) return false;
   if (p.languageEdition !== undefined && p.languageEdition !== '1.0' && p.languageEdition !== '1.2') return false;
   if (!p.entry || !Array.isArray(p.entry.instructions) || !Array.isArray(p.locals)) return false;
   if (!Number.isInteger(p.maxLookback) || p.maxLookback < 0) return false;
