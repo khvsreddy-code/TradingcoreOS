@@ -132,10 +132,10 @@ const functionProgram = [
   '  }',
   '  let mid = midpoint(1.0, 2.0);',
   '}',
-].join('\\n');
+].join('\n');
 const functionResult = compileCoreSpirit(functionProgram, 'language-typed-function');
 assert.deepEqual(functionResult.diagnostics.filter(item => item.severity === 'error'), [],
-  functionResult.diagnostics.map(item => item.message).join('\\n'));
+  functionResult.diagnostics.map(item => item.message).join('\n'));
 assert.equal(functionResult.ir?.programKind, 'indicator');
 assert.ok(functionResult.ir);
 
