@@ -1,5 +1,5 @@
 import type { CoreSpiritAst, CoreSpiritFrontendId } from './ast';
-import { CoreSpiritParser } from './parser';
+import { CoreSpiritParser, readCoreSpiritProgramDeclaration } from './parser';
 import { normalizeCoreSpiritSource } from './syntax';
 import { PineV6Frontend } from './pine/pineV6Frontend';
 
@@ -33,6 +33,11 @@ export class CoreScriptFrontend implements CoreSpiritLanguageFrontend {
     try {
       normalizedSource=normalizeCoreSpiritSource(original);
       const parsed=new CoreSpiritParser(normalizedSource).parseDetailed();
+      const programDeclaration=readCoreSpiritProgramDeclaration(original);
+      if(programDeclaration){
+        parsed.ast.programKind=programDeclaration.kind;
+        parsed.ast.programTitle=programDeclaration.title;
+      }
       const diagnostics=parsed.diagnostics.map(item => ({
         severity:'error' as const, code:'SYNTAX_ERROR', message:item.message,
         start:item.start, end:item.end, line:item.line, column:item.column,
