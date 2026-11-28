@@ -529,6 +529,76 @@ export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
   ]),
 } as const);
 
+
+/**
+ * Full public type vocabulary and orthogonal type axes. The status fields in
+ * CORE_SPIRIT_TYPE_MODEL remain the implementation gate; these names define
+ * the stable design surface and do not imply every constructor is executable.
+ */
+export const CORE_SPIRIT_FINAL_TYPE_SYSTEM = Object.freeze({
+  primitiveTypes: Object.freeze(['Int','Float','Bool','String','Color','Void'] as const),
+  marketTypes: Object.freeze(['Bar','Price','Volume','Timestamp','Symbol','Timeframe'] as const),
+  collectionTypes: Object.freeze(['Array<T>','Map<K,V>','Matrix<T>','Tensor<T>'] as const),
+  executionTypes: Object.freeze(['Event<T>','Signal<T>','OrderIntent','Position','Prediction<T>','Model<T>'] as const),
+  temporalConstructors: Object.freeze([
+    Object.freeze({name:'Series<T>',axis:'shape',meaning:'Bar-aligned values for one symbol/timeframe; scalar and series values never silently exchange.'}),
+    Object.freeze({name:'Historical<T>',axis:'phase',meaning:'Finalized past observations only; positive/future indexing is forbidden.'}),
+    Object.freeze({name:'CurrentBar<T>',axis:'phase',meaning:'The active bar snapshot; may be revised until the host commits the bar.'}),
+    Object.freeze({name:'Realtime<T>',axis:'phase',meaning:'Live host observations with revision identity and policy-gated effects.'}),
+    Object.freeze({name:'Confirmed<T>',axis:'phase',meaning:'Finalized bar value; developing inputs cannot satisfy this requirement.'}),
+    Object.freeze({name:'Developing<T>',axis:'phase',meaning:'An unconfirmed value that can change and must be replay-safe.'}),
+    Object.freeze({name:'State<T>',axis:'storage',meaning:'Persistent mutable state with deterministic checkpoint and rollback semantics.'}),
+    Object.freeze({name:'Intrabar<T>',axis:'storage',meaning:'Intrabar-persistent state with separate storage and rollback behavior.'}),
+    Object.freeze({name:'External<T>',axis:'provenance',meaning:'Host-resolved external data carrying provider, symbol, timeframe, availability and causality metadata.'}),
+    Object.freeze({name:'Forecast<T>',axis:'value-kind',meaning:'Model-produced future value; not an observed market value or historical feature.'}),
+    Object.freeze({name:'Option<T>',axis:'availability',meaning:'Explicitly present or absent; unsafe access requires narrowing or handling.'}),
+  ]),
+  orthogonalAxes: Object.freeze({
+    shape:Object.freeze(['scalar','series','array','map','matrix','tensor']),
+    phase:Object.freeze(['historical','current-bar','developing','confirmed','realtime','forecast']),
+    storage:Object.freeze(['immutable','persistent-state','intrabar-state']),
+    provenance:Object.freeze(['observed','derived','external','model-produced']),
+    availability:Object.freeze(['required','optional']),
+    identity:Object.freeze(['symbol','timeframe','unit','currency','scale']),
+  }),
+  invariants:Object.freeze([
+    'A type may carry one value shape, temporal phase, storage policy, provenance and availability state at the same time.',
+    'Temporal safety is not inferred from a variable name or authoring level; it is checked from typed value metadata.',
+    'Series identity includes symbol and timeframe. Cross-symbol or cross-timeframe values require an explicit conversion/request boundary.',
+    'Historical and confirmed values are immutable observations; developing and realtime values may be revised.',
+    'Forecast/model-produced values cannot be treated as observed market history.',
+    'Persistent State<T> and Intrabar<T> are different storage contracts and are not assignable to one another.',
+    'Option<T> must be narrowed before extracting T; null is reserved for foreign-boundary compatibility.',
+    'Price, Volume, Timestamp and Duration are domain values, not interchangeable dimensionless floats.',
+    'Array, Map, Matrix and Tensor element/key/value/shape constraints are checked before runtime execution.',
+  ]),
+  inference:{
+    localBindings:'Infer from the initializer after resolving literal, builtin, series and collection types.',
+    functionParameters:'Explicit types at exported/public boundaries; inferred generic arguments at call sites.',
+    returns:'Infer only when the declaration has a single unambiguous return type; exported functions declare the return type.',
+    collections:'Infer homogeneous element/value types; empty collection literals require an explicit element/key/value type.',
+    numericLiterals:'Integer literals begin as Int; mixed Int/Float arithmetic promotes to Float only under defined numeric rules.',
+    nullability:'null never widens an arbitrary value to a nullable top type; use Option<T>.',
+  },
+  operators:{
+    arithmetic:'Fixed built-in overloads for numeric and domain-safe Price/Volume/Time/Duration combinations.',
+    comparison:'Compatible scalar/series domains only; ordered comparisons reject Bool/String and incompatible units.',
+    logical:'and/or/not require Bool and preserve deterministic short-circuit semantics.',
+    collections:'No implicit Matrix/Tensor broadcasting, shape coercion or collection arithmetic.',
+    userDefinedOverloading:'Excluded from the language to avoid unpredictable overload resolution and hidden effects.',
+  },
+} as const);
+
+export const CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS = Object.freeze([
+  'variables','constants','functions','parameters','return-values','multiple-return-values','tuples',
+  'enums','user-defined-record-types','methods','generics','interfaces-traits',
+  'conditional-expressions','switch-expressions','loops','iterators','closures','namespaces',
+  'imports-exports','libraries','error-handling','type-inference','lexical-scope',
+  'operator-overloading','nullability','symbol-timeframe-types','temporal-qualifiers',
+  'external-data-provenance','prediction-feature-blocks','prediction-output-statements',
+  'strategy-position-actions',
+] as const);
+
 export function getCoreSpiritLanguageFeature(id: string): CoreSpiritLanguageFeatureContract | undefined {
   return CORE_SPIRIT_LANGUAGE_FEATURES.find(feature => feature.id === id);
 }
@@ -544,5 +614,25 @@ export function validateCoreSpiritLanguageDefinition(): string[] {
   if (CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(',') !== 'beginner,trader,quant,system') errors.push('Authoring levels must remain ordered beginner, trader, quant, system.');
   if (CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(',') !== RUNTIME_AUTHORING_LEVELS.join(',')) errors.push('Language authoring levels diverge from runtime policy levels.');
   if (CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds.join(',') !== 'indicator,automation,prediction,strategy') errors.push('The four primary CoreSpirit program kinds changed without a language-version review.');
+  for (const id of CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS) {
+    if (!ids.has(id)) errors.push('Required CoreSpirit language construct is missing from the maturity matrix: ' + id);
+  }
+  for (const [name, semantics] of Object.entries(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.declarations)) {
+    if (!String(semantics).trim()) errors.push('CoreSpirit declaration semantics are missing: ' + name);
+  }
+  const typeNames = [
+    ...CORE_SPIRIT_FINAL_TYPE_SYSTEM.primitiveTypes,
+    ...CORE_SPIRIT_FINAL_TYPE_SYSTEM.marketTypes,
+    ...CORE_SPIRIT_FINAL_TYPE_SYSTEM.collectionTypes,
+    ...CORE_SPIRIT_FINAL_TYPE_SYSTEM.executionTypes,
+    ...CORE_SPIRIT_FINAL_TYPE_SYSTEM.temporalConstructors.map(item => item.name),
+  ];
+  if (new Set(typeNames).size !== typeNames.length) errors.push('CoreSpirit final type system contains duplicate type constructors.');
+  if (!CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.includes('TraitDeclaration') ||
+      !CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.includes('TupleBinding') ||
+      !CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.includes('ClosureExpression') ||
+      !CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.includes('ErrorPropagationStatement')) {
+    errors.push('CoreSpirit final grammar is missing a required language production.');
+  }
   return errors;
 }
