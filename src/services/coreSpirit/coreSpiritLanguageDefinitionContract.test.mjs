@@ -23,10 +23,10 @@ assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalContainers.includes('confirmed<T>'));
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalPhases.includes('realtime'));
 
 const programCases = [
-  ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" { let fast = ta.ema(close, 20); let slow = ta.ema(close, 50); }'],
-  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" { on market.tick { if (close > high[1]) { automation.notify("Resistance broken"); } } }'],
-  ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" { let returns = close / close[1] - 1; let forecast = returns; }'],
-  ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" { let fast = ta.ema(close, 20); let slow = ta.ema(close, 50); if (fast > slow) { let bullish = true; } }'],
+  ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
+  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  on timer.tick {\n    let tickPrice = close;\n  }\n}'],
+  ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" {\n  let returns = close / close[1] - 1;\n  let forecast = returns;\n}'],
+  ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n  if (fast > slow) {\n    let bullish = true;\n  }\n}'],
 ];
 
 for (const [kind, title, source] of programCases) {
