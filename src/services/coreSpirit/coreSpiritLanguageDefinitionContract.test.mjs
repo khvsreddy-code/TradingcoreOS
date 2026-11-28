@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritParser } from './parser.ts';
-import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './coreSpiritPipeline.ts';
+import { compileCoreSpirit, executeCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './coreSpiritPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { normalizeDeclaredType } from './typeSystem.ts';
@@ -124,6 +124,22 @@ const automationIr = compileCoreSpirit(automationSource, 'language-program-autom
 assert.ok(automationIr);
 const chartRuntime = new CoreSpiritRuntime({ layer:'script', executionTarget:'chart' });
 assert.throws(() => chartRuntime.loadIr(automationIr), /requires the automation execution layer/);
+const marketBars = [
+  { timestamp:'2026-01-02T09:15:00+05:30', open:100, high:102, low:99, close:101, volume:1000 },
+  { timestamp:'2026-01-02T09:20:00+05:30', open:101, high:103, low:100, close:102, volume:1200 },
+];
+assert.doesNotThrow(() => executeCoreSpirit(
+  'strategy "Strategy Runtime" { let current = close; }',
+  marketBars,
+  'language-strategy-runtime-default-lane',
+));
+assert.throws(() => executeCoreSpirit(
+  'automation "Automation Runtime" { let current = close; }',
+  marketBars,
+  'language-automation-runtime-conflicting-lane',
+  { layer:'script' },
+), /requires the automation execution layer/);
+
 
 const functionProgram = [
   'indicator "Typed Function" {',
