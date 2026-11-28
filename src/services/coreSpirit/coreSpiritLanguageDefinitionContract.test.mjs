@@ -267,6 +267,30 @@ assert.deepEqual(functionResult.diagnostics.filter(item => item.severity === 'er
 assert.equal(functionResult.ir?.programKind, 'indicator');
 assert.ok(functionResult.ir);
 
+const seriesFunction = compileCoreSpirit([
+  'indicator "Series Function" {',
+  '  fn identity(value: float) -> float {',
+  '    return value;',
+  '  }',
+  '  let result = identity(close);',
+  '}',
+].join('\n'), 'language-series-function-argument');
+assert.deepEqual(seriesFunction.diagnostics.filter(item=>item.severity==='error'),[],
+  seriesFunction.diagnostics.map(item=>item.message).join('\n'));
+assert.ok(seriesFunction.ir,'scalar element parameters may accept bar-aligned series');
+
+const confirmedFunction = compileCoreSpirit([
+  'indicator "Confirmed Function" {',
+  '  fn requireConfirmed(value: confirmed<float>) -> confirmed<float> {',
+  '    return value;',
+  '  }',
+  '  let result = requireConfirmed(close);',
+  '}',
+].join('\n'), 'language-confirmed-function-rejects-developing');
+assert.ok(confirmedFunction.diagnostics.some(item=>item.code==='FUNCTION_TYPE_MISMATCH'),
+  'a developing market series must not satisfy a confirmed temporal function parameter/return contract');
+assert.equal(confirmedFunction.ir,undefined);
+
 const recordProgram = new CoreSpiritParser('type PriceRange { high: price; low: price; }').parseDetailed();
 assert.deepEqual(recordProgram.diagnostics, []);
 assert.equal(recordProgram.ast.body[0]?.type, 'typeDeclaration');
