@@ -54,6 +54,8 @@ for (const [kind, title, source] of programCases) {
   assert.equal(compiled.ir.language, 'CoreScript');
   assert.equal(compiled.ir.languageVersion, 1);
   assert.ok(validateCoreSpiritIr(compiled.ir));
+  assert.equal(validateCoreSpiritIr({ ...compiled.ir, programKind: 'not-a-program' }), false);
+  assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
 }
 
 const noHeader = new CoreSpiritParser('let answer = 42;').parseDetailed();
