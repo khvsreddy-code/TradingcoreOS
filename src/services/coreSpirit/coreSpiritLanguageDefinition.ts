@@ -265,9 +265,9 @@ Program12              ::= ProgramHeader Block12
 ProgramHeader          ::= ProgramKind String
 ProgramKind            ::= "indicator" | "strategy" | "automation" | "prediction"
 LegacyScript10         ::= CoreStatement*
-LegacyScript12         ::= (CoreStatement | Edition12OnlyStatement)*
+LegacyScript12         ::= (CoreStatement | Edition12Statement)*
 Block10                ::= "{" CoreStatement* "}"
-Block12                ::= "{" (CoreStatement | Edition12OnlyStatement)* "}"
+Block12                ::= "{" (CoreStatement | Edition12Statement)* "}"
 Block                  ::= Block10 | Block12
 
 CoreStatement          ::= VariableDeclaration
@@ -340,7 +340,7 @@ SurfaceShow            ::= "show" Expression
 SurfaceLowering        ::= SurfaceWhen -> IfStatement
                          | SurfaceShow -> canonical visual-emission call
 
-Edition12OnlyStatement ::= EnumDeclaration | ImportDeclaration | WhileStatement
+Edition12Statement ::= EnumDeclaration | ImportDeclaration | WhileStatement
                          | ForEachStatement | BreakStatement | ContinueStatement
                          | CompactPlot
 EnumDeclaration        ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
@@ -355,7 +355,7 @@ ContinueStatement      ::= "continue" Terminator
 CompactPlot            ::= "plot" Expression PlotOptions?
 PlotOptions            ::= ("color" "=" Expression)? ("width" "=" Integer)?
                          ("style" "=" Identifier)? ("title" "=" String)?
-IndentedBlock          ::= indentation-delimited (CoreStatement | Edition12OnlyStatement)+
+IndentedBlock          ::= indentation-delimited (CoreStatement | Edition12Statement)+
 `.trim();
 
 /**
