@@ -43,7 +43,7 @@ export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrP
   if (p.programTitle !== undefined && (typeof p.programTitle !== 'string' || !p.programTitle.trim() || p.programTitle.length > 160)) return false;
   if (p.programTitle !== undefined && p.programKind === undefined) return false;
   if (p.programLayer !== undefined && !(['script','model','strategy','automation'] as const).includes(p.programLayer)) return false;
-  if (p.programKind !== undefined && p.programLayer !== undefined) {
+  if (p.programTitle !== undefined && p.programKind !== undefined && p.programLayer !== undefined) {
     const expectedLayer = CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS[p.programKind];
     if (p.programLayer !== expectedLayer) return false;
   }
