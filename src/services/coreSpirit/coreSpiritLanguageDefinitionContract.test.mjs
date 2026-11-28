@@ -4,6 +4,7 @@ import { compileCoreSpirit, executeCoreSpirit, parseCoreSpirit, parseCoreSpiritD
 import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { normalizeDeclaredType } from './typeSystem.ts';
+import { CORE_SPIRIT_V1_SURFACE, CORE_SPIRIT_V1_2_SURFACE } from './languageSpec.ts';
 import { parseCoreSpiritTemporalType, makeCoreSpiritTemporalType, temporalAssignmentCompatible } from './temporalTypes.ts';
 import { semanticScalar, semanticTypeCompatible, semanticTypeForDeclaredName } from './semanticTypeSystem.ts';
 import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformContract.ts';
@@ -22,6 +23,13 @@ import {
 assert.deepEqual(validateCoreSpiritLanguageDefinition(), []);
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.name, 'CoreSpirit');
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.publicLanguage, 'CoreSpirit');
+assert.equal(CORE_SPIRIT_V1_SURFACE.publicLanguage,CORE_SPIRIT_LANGUAGE_DEFINITION.publicLanguage);
+assert.equal(CORE_SPIRIT_V1_SURFACE.compilerAbi,CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi);
+assert.deepEqual(CORE_SPIRIT_V1_SURFACE.programKinds,CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds);
+assert.deepEqual(CORE_SPIRIT_V1_SURFACE.supportedEditions,CORE_SPIRIT_LANGUAGE_DEFINITION.supportedEditions);
+assert.deepEqual(CORE_SPIRIT_V1_SURFACE.authoringLevels,CORE_SPIRIT_AUTHORING_LEVELS.map(level=>level.id));
+assert.equal(CORE_SPIRIT_V1_2_SURFACE.edition,CORE_SPIRIT_LANGUAGE_DEFINITION.currentEdition);
+
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi, 'CoreScript');
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.supportedEditions, ['1.0','1.2']);
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, ['indicator','automation','prediction','strategy']);

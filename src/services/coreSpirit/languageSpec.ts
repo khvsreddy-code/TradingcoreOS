@@ -1,18 +1,28 @@
 /**
- * CoreSpirit v1 language boundary.
+ * CoreSpirit v1 compatibility facade.
  *
- * This is deliberately small. New core syntax should be added here first. Surface conveniences belong in
- * registered transforms; callable/member semantics belong in the shared registries,
- * then converge through the same lexer/parser/type-system/compiler/runtime path. Renderer/broker concerns are not part of the language core.
+ * The canonical source grammar, language identity, edition gates, feature
+ * maturity and semantic type contract live in coreSpiritLanguageDefinition.ts.
+ * This module keeps the older library/surface catalogue export stable; do not
+ * add grammar or feature semantics here without updating the canonical contract.
  */
+import {
+  CORE_SPIRIT_LANGUAGE_DEFINITION,
+  CORE_SPIRIT_AUTHORING_LEVELS,
+} from './coreSpiritLanguageDefinition';
+
 export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
-  language: 'CoreScript' as const,
-  languageVersion: 1 as const,
+  publicLanguage: CORE_SPIRIT_LANGUAGE_DEFINITION.publicLanguage,
+  compilerAbi: CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi,
+  language: CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi,
+  languageVersion: CORE_SPIRIT_LANGUAGE_DEFINITION.languageVersion,
+  supportedEditions: CORE_SPIRIT_LANGUAGE_DEFINITION.supportedEditions,
+  programKinds: CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds,
   languageModel: 'one language with progressive authoring levels' as const,
   capabilityDeclaration: 'requires <capability>[, <capability>...]' as const,
   userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type', 'on', ':='] as const),
-  authoringLevels: Object.freeze(['beginner', 'trader', 'quant', 'system'] as const),
+  authoringLevels: Object.freeze(CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id)),
   levelSemantics: Object.freeze({
     beginner: 'readable indicator authoring over DATA / LET / WHEN / SHOW',
     trader: 'strategy, risk arithmetic, multi-symbol and multi-timeframe composition',
@@ -91,8 +101,8 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
 });
 
 export const CORE_SPIRIT_V1_2_SURFACE = Object.freeze({
-  edition: '1.2' as const,
-  header: 'edition@1.2' as const,
+  edition: CORE_SPIRIT_LANGUAGE_DEFINITION.currentEdition,
+  header: `edition@${CORE_SPIRIT_LANGUAGE_DEFINITION.currentEdition}`,
   compactPlot: 'plot <expression> [color=<color>] [width=<1..5>] [style=line|dashed|dotted] [title=<text>]' as const,
   lowering: 'compact plot declarations lower to the existing plot call AST and output ABI' as const,
   compatibility: 'unversioned and edition@1.0 sources retain the legacy v1 surface grammar' as const,
