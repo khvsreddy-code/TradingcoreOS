@@ -56,7 +56,7 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'LegacyStatement ::= Statement | SurfaceShow | SurfaceWhen',
   'SurfaceShow ::= "show" Expression',
   'SurfaceWhen ::= "when" Expression ":" IndentedBlock | "when" Expression Block',
-].join('\\n');
+].join('\n');
 
 export const CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS = Object.freeze({
   indicator:'script',
