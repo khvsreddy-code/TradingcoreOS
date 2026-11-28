@@ -144,7 +144,11 @@ export function executeCoreSpirit(
     const detail = compiled.diagnostics.map(item => item.message).join('\n');
     throw new Error(detail || 'CoreSpirit compilation failed; no executable artifact was produced.');
   }
-  const runtime = new CoreSpiritRuntime({ ...runtimeOptions, sourceId });
+  const requiredLayer=compiled.ir.programLayer ?? 'script';
+  if(runtimeOptions.layer && runtimeOptions.layer !== requiredLayer){
+    throw new Error(`CoreSpirit program '${compiled.ir.programTitle ?? sourceId}' requires the ${requiredLayer} execution layer; received runtime layer ${runtimeOptions.layer}.`);
+  }
+  const runtime = new CoreSpiritRuntime({ ...runtimeOptions, layer:runtimeOptions.layer ?? requiredLayer, sourceId });
   return runtime.executeIr(compiled.ir, bars);
 }
 
