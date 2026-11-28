@@ -27,20 +27,6 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
  * before name resolution, semantic analysis and lowering. This describes the
  * public source language, not its internal lexer tokens.
  */
-/**
- * Normative CoreSpirit source grammar.
- *
- * Edition-specific conveniences are normalized into the same CoreSpirit AST
- * before name resolution, semantic analysis and lowering. This describes the
- * public source language, not its internal lexer tokens.
- */
-/**
- * Normative CoreSpirit source grammar.
- *
- * Edition-specific conveniences are normalized into the same CoreSpirit AST
- * before name resolution, semantic analysis and lowering. This describes the
- * public source language, not its internal lexer tokens.
- */
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = String.raw`
 Source                 ::= Edition10Source | Edition12Source
 Edition10Source        ::= Edition10Directive? CapabilityRequirement* (Program10 | LegacyScript10) EOF
@@ -57,6 +43,7 @@ LegacyScript10         ::= CoreStatement*
 LegacyScript12         ::= (CoreStatement | Edition12OnlyStatement)*
 Block10                ::= "{" CoreStatement* "}"
 Block12                ::= "{" (CoreStatement | Edition12OnlyStatement)* "}"
+Block                  ::= Block10 | Block12
 
 CoreStatement          ::= VariableDeclaration
                          | FunctionDeclaration
@@ -77,8 +64,8 @@ ReturnStatement        ::= "return" Expression Terminator
 RecordDeclaration      ::= "type" Identifier "{" FieldDeclaration* "}"
 FieldDeclaration       ::= Identifier ":" TypeName Terminator?
 
-EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block10
-IfStatement            ::= "if" "(" Expression ")" Block10 ("else" Block10)?
+EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
+IfStatement            ::= "if" "(" Expression ")" Block ("else" Block)?
 ExpressionStatement    ::= Expression Terminator
 
 Expression             ::= ConditionalExpression
@@ -121,7 +108,7 @@ ImplicitLineTerminator ::= source-line boundary recognized by surface normalizat
 Comment                ::= "//" characters-to-line-end | "/*" characters "*/"
 
 SurfaceStatement       ::= SurfaceWhen | SurfaceShow
-SurfaceWhen            ::= "when" SurfaceCondition (Block10 | ":" IndentedBlock)
+SurfaceWhen            ::= "when" SurfaceCondition (Block | ":" IndentedBlock)
 SurfaceCondition       ::= Expression (CrossingOperator Expression)?
 CrossingOperator       ::= "crosses_above" | "crosses_below"
 SurfaceShow            ::= "show" Expression
@@ -143,7 +130,7 @@ ContinueStatement      ::= "continue" Terminator
 CompactPlot            ::= "plot" Expression PlotOptions?
 PlotOptions            ::= ("color" "=" Expression)? ("width" "=" Integer)?
                          ("style" "=" Identifier)? ("title" "=" String)?
-IndentedBlock          ::= indentation-delimited CoreStatement+
+IndentedBlock          ::= indentation-delimited (CoreStatement | Edition12OnlyStatement)+
 `.trim();
 
 /**
@@ -225,7 +212,7 @@ export const CORE_SPIRIT_LANGUAGE_SEMANTICS = Object.freeze({
   }),
   declarations: Object.freeze({
     let: 'A local declaration is initialized once; unqualified types are inferred from the initializer.',
-    const: 'Parsed as a declaration but immutable assignment rejection is not yet complete.',
+    const: 'Creates an immutable binding. Reassignment through := is rejected, and const cannot wrap mutable state<T> or intrabar<T> storage; collection contents keep their own mutability contract.',
     assignment: 'The := operator updates a stateful binding; ordinary = is reserved for declarations/surface shorthand.',
     functions: 'Named functions use typed parameters and a declared return type; only pure expression bodies with one terminal return are accepted and inlined before IR lowering. Recursion, closures, effects and general control flow are rejected.',
     return: 'Exactly one expression value is supported by the current function ABI.',
