@@ -6,18 +6,20 @@ import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { serializeCoreSpiritIr, validateCoreSpiritIr } from './irContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
+  CORE_SPIRIT_LANGUAGE_FEATURES,
+  CORE_SPIRIT_TYPE_MODEL,
+} from './coreSpiritLanguageDefinition.ts';
+import {
   CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR,
   CORE_SPIRIT_LANGUAGE_DESIGN_REVISION,
   CORE_SPIRIT_LANGUAGE_DESIGN_RULES,
   CORE_SPIRIT_FINAL_TYPE_SYSTEM,
   CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS,
   CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS,
-  CORE_SPIRIT_LANGUAGE_FEATURES,
-  CORE_SPIRIT_TYPE_MODEL,
-  validateCoreSpiritLanguageDefinition,
-} from './coreSpiritLanguageDefinition.ts';
+  validateCoreSpiritLanguageDesign,
+} from './coreSpiritLanguageDesign.ts';
 
-assert.deepEqual(validateCoreSpiritLanguageDefinition(), []);
+assert.deepEqual(validateCoreSpiritLanguageDesign(), []);
 assert.equal(CORE_SPIRIT_LANGUAGE_DESIGN_REVISION, 'core-spirit-language-design/1');
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.name, 'CoreSpirit');
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, [
