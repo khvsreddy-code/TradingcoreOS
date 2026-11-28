@@ -55,6 +55,7 @@ Statement               ::= ImportDeclaration
                           | ImplementationDeclaration
                           | FunctionDeclaration
                           | VariableDeclaration
+                          | SurfaceVariableDeclaration
                           | TupleBinding
                           | Assignment
                           | IfStatement
@@ -73,6 +74,8 @@ Statement               ::= ImportDeclaration
                           | ExpressionStatement
 
 VariableDeclaration    ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
+SurfaceVariableDeclaration
+                        ::= Identifier TypeAnnotation? "=" Expression Terminator
 TupleBinding           ::= ("let" | "const") "(" Identifier ("," Identifier)+ ")" "=" Expression Terminator
 Assignment             ::= Identifier ":=" Expression Terminator
 TypeAnnotation         ::= ":" Type
@@ -109,7 +112,7 @@ ErrorPropagationStatement
                         ::= Expression "?" Terminator
 ErrorExpression         ::= Expression "?"
 PredictionFeatureBlock ::= "features" "{" FeatureDeclaration* "}"
-FeatureDeclaration     ::= Identifier ":" Expression Terminator
+FeatureDeclaration     ::= Identifier (":" Type)? ("=" Expression)? Terminator
 PredictionOutputStatement
                         ::= "output" Expression Terminator
 StrategyAction         ::= ("enter" | "exit") ("long" | "short") PositionOptions? Terminator
@@ -190,7 +193,7 @@ export const CORE_SPIRIT_LANGUAGE_DESIGN_RULES = Object.freeze({
     system: 'Modules, custom kernels, event processing, explicit capabilities, sandboxed execution and deployment.',
   }),
   declarations: Object.freeze({
-    variables: 'let creates a local binding initialized once; reassignment is explicit and uses := only for stateful bindings.',
+    variables: 'let creates a local binding initialized once; reassignment is explicit and uses := only for stateful bindings. Beginner surface syntax may omit let and is normalized to the same declaration node.',
     constants: 'const is immutable after initialization. It cannot contain mutable state<T> or intrabar<T> storage.',
     functions: 'Named functions have typed parameters and an explicit return type. They are pure by default; effects require a separately checked capability contract.',
     returns: 'A function returns one value or a fixed-arity tuple. Every control-flow path must return a value compatible with its declared return type.',
@@ -597,6 +600,7 @@ export const CORE_SPIRIT_FINAL_TYPE_SYSTEM = Object.freeze({
 
 export const CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS = Object.freeze({
   variables:'let creates one lexically scoped binding. A binding is initialized once; persistent or intrabar mutation must use an explicitly typed state container and :=.',
+  'surface-declarations':'Beginner-friendly name = expression syntax is declaration sugar only when the name is not already bound; it lowers to the same let AST/IR and never changes reassignment semantics.',
   constants:'const cannot be reassigned and cannot bind mutable State<T> or Intrabar<T>. Referenced collections retain their own separately specified mutation contract.',
   functions:'Functions have explicit parameter and return contracts, are pure by default, and are checked before inlining or lowering. Recursive/effectful behavior requires future explicit execution contracts.',
   parameters:'Parameters are immutable value inputs. A series parameter accepts only compatible symbol/timeframe, domain and temporal qualifiers; defaults are evaluated at the call boundary.',
