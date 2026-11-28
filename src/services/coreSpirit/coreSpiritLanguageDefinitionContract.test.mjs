@@ -4,6 +4,7 @@ import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './s
 import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { normalizeDeclaredType } from './services/coreSpirit/typeSystem.ts';
+import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './services/coreSpirit/layeredPlatformContract.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_PROGRAM_GRAMMAR,
@@ -30,6 +31,10 @@ assert.equal(CORE_SPIRIT_TYPE_MODEL.marketValueContracts.find(item => item.name 
 assert.deepEqual(CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS, {
   indicator:'script', strategy:'strategy', automation:'automation', prediction:'model', library:'script', script:'script',
 });
+assert.ok(CORE_SPIRIT_LAYER_PROFILES.automation.capabilities.includes('series'));
+assert.ok(CORE_SPIRIT_LAYER_PROFILES.automation.capabilities.includes('indicators'));
+assert.equal(canUseCapability('automation', 'series'), true);
+assert.equal(CORE_SPIRIT_LAYER_PROFILES.automation.forbidden.includes('direct-broker-api'), true);
 assert.equal(normalizeDeclaredType('bool'), 'boolean');
 assert.equal(normalizeDeclaredType('price'), 'price');
 assert.equal(normalizeDeclaredType('volume'), 'volume');
@@ -105,7 +110,7 @@ const whenSurface = [
   'automation "Crossing Event" {',
   '  let resistance = high[1];',
   '  when close crosses_above resistance {',
-  '    let triggered = true;',
+  '    alert("Resistance broken");',
   '  }',
   '}',
 ].join('\n');
