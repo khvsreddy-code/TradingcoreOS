@@ -1,5 +1,5 @@
 import { CoreSpiritProgram } from './types';
-import { CoreSpiritParser } from './parser';
+import { CoreSpiritParser, readCoreSpiritProgramDeclaration } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { CoreSpiritCompiler } from './compiler';
 import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
@@ -24,12 +24,17 @@ export function parseCoreSpirit(source: string) {
     const first = edition.diagnostics[0]!;
     throw new Error(first.message + ' at ' + first.line + ':' + first.column);
   }
-  return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse();
+  const ast=new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse();
+  const declaration=readCoreSpiritProgramDeclaration(source);
+  if(declaration){ast.programKind=declaration.kind;ast.programTitle=declaration.title;}
+  return ast;
 }
 export function parseCoreSpiritDetailed(source: string) {
   try {
     const edition = readCoreScriptEdition(source);
     const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+    const declaration=readCoreSpiritProgramDeclaration(source);
+    if(declaration){parsed.ast.programKind=declaration.kind;parsed.ast.programTitle=declaration.title;}
     return { ...parsed, diagnostics:[...edition.diagnostics, ...parsed.diagnostics] };
   } catch (error) {
     const e = error as any;
