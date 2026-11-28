@@ -139,7 +139,10 @@ export class CoreSpiritCompiler {
     // explicitly choose a stricter host layer, but omission must not downgrade
     // strategy/automation/prediction declarations into ordinary indicator scripts.
     const inferredLayer: CoreSpiritProgramLayer = CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS[ast.programKind ?? 'script'];
-    if(ast.programKind && options.layer && options.layer !== inferredLayer){
+    // Legacy/unwrapped source may carry an inferred programKind for
+    // authoring metadata. Only an explicit titled declaration owns a fixed
+    // execution lane; compatibility source keeps its host-selected lane.
+    if(ast.programTitle && ast.programKind && options.layer && options.layer !== inferredLayer){
       return {
         diagnostics:[{
           severity:'error' as const,
@@ -149,7 +152,7 @@ export class CoreSpiritCompiler {
         symbols:[],
       };
     }
-    const layer: CoreSpiritProgramLayer = ast.programKind ? inferredLayer : options.layer || 'script';
+    const layer: CoreSpiritProgramLayer = ast.programTitle && ast.programKind ? inferredLayer : options.layer || inferredLayer;
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const frontendId=options.frontend ?? 'corescript';
     const lowered=desugarCoreSpiritFunctions(ast);
