@@ -8,7 +8,7 @@ assert.doesNotThrow(()=>validateCoreSpiritModuleManifest(manifest));
 const registry=new CoreSpiritModuleRegistry(),adapter={language:'corescript',transport:'native',execute:async()=>({ok:true})};
 registry.register(manifest,adapter);assert.equal(registry.list().length,1);assert.ok(Object.isFrozen(registry.list()[0].resources));
 assert.throws(()=>registry.register(manifest,adapter),/already registered/);
-assert.throws(()=>validateCoreSpiritModuleManifest({...manifest,resources:{...limits,maxDrawingObjects:10001}}),/drawingObjects/);
+assert.throws(()=>validateCoreSpiritModuleManifest({...manifest,resources:{...limits,maxDrawingObjects:10001}}),/maxDrawingObjects/);
 assert.throws(()=>validateCoreSpiritModuleManifest({...manifest,capabilities:['orders:submit','orders:submit']}),/duplicated/);
 const governor=new CoreSpiritExecutionGovernor(limits);
 governor.chargeCpu(50);governor.chargeMemory(512);governor.chargeOutput(20);governor.chargeCollection(10);governor.enterRecursion();governor.enterRecursion();governor.chargeDrawingObjects(2);governor.chargeHistoricalLookback(50);governor.chargeCall();

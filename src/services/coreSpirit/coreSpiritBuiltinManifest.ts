@@ -20,7 +20,7 @@ const CORE_SPIRIT_BUILTIN_MANIFEST_CANDIDATES:readonly CoreSpiritBuiltinManifest
   const runtime=false;
   const executable=false;
   const first=x.overloads[0];
-  return Object.freeze({name:x.qualifiedName,qualifiedNames:Object.freeze([x.qualifiedName]),minArgs:first?.minArgs??0,maxArgs:first?.maxArgs??0,returnType:first?.returnType??'unknown',pure:false,runtimeRegistered:runtime,autocompleteVisible:true,source:'pine-v6' as const,status:executable?'executable' as const:'catalog-only' as const});
+  return Object.freeze({name:'pine.v6.'+x.qualifiedName,qualifiedNames:Object.freeze([x.qualifiedName]),minArgs:first?.minArgs??0,maxArgs:first?.maxArgs??0,returnType:first?.returnType??'unknown',pure:false,runtimeRegistered:runtime,autocompleteVisible:true,source:'pine-v6' as const,status:executable?'executable' as const:'catalog-only' as const});
  }),
  ...CORE_SPIRIT_MEMBER_REGISTRY.map(x=>Object.freeze({name:x.callName,qualifiedNames:Object.freeze([x.callName]),minArgs:x.minArgs,maxArgs:x.maxArgs??x.minArgs,returnType:String(x.returnType),pure:false,...(x.capability?{capability:x.capability}:{}),...(x.emitKind?{emitKind:x.emitKind}:{}),runtimeRegistered:false,autocompleteVisible:true,source:'member' as const,status:'unresolved' as const}))
 ];

@@ -8,5 +8,6 @@ for(const item of CORE_SPIRIT_BUILTIN_MANIFEST.filter(x=>x.status==='executable'
  assert.ok(item.maxArgs>=item.minArgs,item.name+' must have valid arity');
 }
 assert.ok(CORE_SPIRIT_BUILTIN_MANIFEST.some(x=>x.name==='ta.sma'));
+assert.ok(CORE_SPIRIT_BUILTIN_MANIFEST.some(x=>x.name==='pine.v6.request.security'));
 assert.ok(CORE_SPIRIT_BUILTIN_MANIFEST.some(x=>x.name==='math.abs'));
 console.log('CORESPIRIT_BUILTIN_MANIFEST_OK');
