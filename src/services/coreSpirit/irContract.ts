@@ -2,7 +2,7 @@ import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
 import { CORE_SPIRIT_AUTHORING_LEVELS } from './coreSpiritExecutionModel';
 import { validateCoreSpiritIrInstructionShape } from './irSpecification';
-import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritLanguageDefinition';
+import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
 
 /**
  * Stable CoreSpirit VM contract. The VM executes this contract, never AST nodes.
