@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
-import { validateCoreSpiritFeatureMatrix, CORE_SPIRIT_PINE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES } from './services/coreSpirit/languageParity.ts';
+import { validateCoreSpiritFeatureMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_PINE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 
 assert.deepEqual(validateCoreSpiritFeatureMatrix(), []);
+assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='tuples'&&item.status==='planned'));
+assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='temporal-qualifiers'&&item.status==='partial'));
+assert.equal(getCoreSpiritFeatureParity('tuples')?.status,'planned');
+assert.equal(getCoreSpiritFeatureParity('version-annotation'),undefined,'Pine-only declarations must not define CoreSpirit language maturity');
+assert.notEqual(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX,CORE_SPIRIT_PINE_FEATURE_MATRIX);
+for (const level of ['beginner','trader','quant','system']) {
+  assert.equal(CORE_SPIRIT_AUTHORING_SURFACES[level].parser,'CoreSpiritParser');
+  assert.equal(CORE_SPIRIT_AUTHORING_SURFACES[level].compiler,'CoreSpiritCompiler');
+  assert.equal(CORE_SPIRIT_AUTHORING_SURFACES[level].runtime,'CoreSpiritExecutionVM');
+}
 assert.equal(CORE_SPIRIT_AUTHORING_SURFACES.simple.parser, CORE_SPIRIT_AUTHORING_SURFACES.advanced.parser);
 assert.equal(CORE_SPIRIT_AUTHORING_SURFACES.simple.ast, CORE_SPIRIT_AUTHORING_SURFACES.advanced.ast);
 assert.equal(CORE_SPIRIT_AUTHORING_SURFACES.simple.compiler, CORE_SPIRIT_AUTHORING_SURFACES.advanced.compiler);
