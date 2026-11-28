@@ -125,6 +125,24 @@ assert.ok(automationIr);
 const chartRuntime = new CoreSpiritRuntime({ layer:'script', executionTarget:'chart' });
 assert.throws(() => chartRuntime.loadIr(automationIr), /requires the automation execution layer/);
 
+const functionProgram = [
+  'indicator "Typed Function" {',
+  '  fn midpoint(a: float, b: float) -> float {',
+  '    return (a + b) / 2;',
+  '  }',
+  '  let mid = midpoint(1.0, 2.0);',
+  '}',
+].join('\\n');
+const functionResult = compileCoreSpirit(functionProgram, 'language-typed-function');
+assert.deepEqual(functionResult.diagnostics.filter(item => item.severity === 'error'), [],
+  functionResult.diagnostics.map(item => item.message).join('\\n'));
+assert.equal(functionResult.ir?.programKind, 'indicator');
+assert.ok(functionResult.ir);
+
+const recordProgram = new CoreSpiritParser('type PriceRange { high: price; low: price; }').parseDetailed();
+assert.deepEqual(recordProgram.diagnostics, []);
+assert.equal(recordProgram.ast.body[0]?.type, 'typeDeclaration');
+
 const noHeader = new CoreSpiritParser('let answer = 42;').parseDetailed();
 assert.deepEqual(noHeader.diagnostics, []);
 assert.equal(noHeader.ast.programKind, undefined);
