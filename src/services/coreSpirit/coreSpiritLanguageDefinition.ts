@@ -1,4 +1,5 @@
 import { CORE_SPIRIT_AUTHORING_LEVELS as RUNTIME_AUTHORING_LEVELS } from './coreSpiritExecutionModel';
+import { CORE_SPIRIT_LAYER_PROFILES } from './layeredPlatformContract';
 
 /**
  * Versioned source-language contract for CoreSpirit.
@@ -194,6 +195,18 @@ export const CORE_SPIRIT_LANGUAGE_DESIGN_RULES = Object.freeze({
     automation: 'Subscribes to declared events and produces capability-gated alerts, webhooks or other controlled actions. Every side effect is authorized by the host policy, never by source text alone.',
     prediction: 'Declares named features with provenance and missing-data rules, resolves a versioned model artifact through the host, and emits a typed forecast/prediction output. Forecast values are not observed market history.',
     strategy: 'Evaluates deterministic historical/realtime logic and emits broker-neutral OrderIntent values. Sizing, risk checks, routing and broker credentials remain host-owned.',
+  }),
+  programCapabilities: Object.freeze({
+    indicator: CORE_SPIRIT_LAYER_PROFILES.script.capabilities,
+    automation: CORE_SPIRIT_LAYER_PROFILES.automation.capabilities,
+    prediction: CORE_SPIRIT_LAYER_PROFILES.model.capabilities,
+    strategy: CORE_SPIRIT_LAYER_PROFILES.strategy.capabilities,
+  }),
+  standardLibrary: Object.freeze({
+    sharedAcrossPrograms: true,
+    registryRule: 'All program kinds resolve the same CoreSpirit standard-library names and signatures from one canonical manifest.',
+    capabilityRule: 'Program capabilities gate effects and host operations; they do not create workload-specific builtin signatures or overloads.',
+    parityRule: 'Semantic checking, autocomplete, lowering and runtime dispatch must resolve the same versioned builtin contract. A builtin without runtime dispatch evidence cannot be presented as executable.',
   }),
   authoringLevels: Object.freeze({
     beginner: 'Guided declarations, built-in data, visual building blocks and straightforward conditions. Simplification is an editor/policy profile, not a separate grammar.',
