@@ -271,24 +271,6 @@ const failures = [];
 const results = [];
 
 for (const [name, [file, needsTsLoader]] of contracts) {
-  console.log(`[contract] START ${name}`);
-  const args = needsTsLoader
-    ? ['--loader', './tools/nodeTsTranspileLoader.mjs', file]
-    : [file];
-  const result = spawnSync(process.execPath, args, {
-    stdio: 'inherit',
-    env: process.env,
-  });
-  if (result.error) {
-    console.error(`[contract] ${name} failed to spawn:`, result.error);
-    process.exit(1);
-  }
-  if (result.status !== 0) {
-    console.error(`[contract] FAIL ${name} exit=${result.status ?? 'signal'}`);
-    process.exit(result.status ?? 1);
-  }
-  console.log(`[contract] PASS ${name}`);
-}
   const startedAt = Date.now();
   console.log(`[contract] START ${name}`);
   const args = needsTsLoader
@@ -330,6 +312,7 @@ const summary = {
   failures,
 };
 console.log(`[contract] SUMMARY_JSON=${JSON.stringify(summary)}`);
+
 if (failures.length > 0) {
   console.error(`[contract] ${failures.length} of ${results.length} executed contracts failed.`);
   process.exitCode = 1;
