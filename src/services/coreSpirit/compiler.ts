@@ -686,6 +686,7 @@ export class CoreSpiritCompiler {
         version:1,
         sourceId,
         ...(ast.programKind ? {programKind:ast.programKind} : {}),
+        ...(ast.programTitle ? {programTitle:ast.programTitle} : {}),
         ...(ast.pineDeclaration ? {pineDeclaration:ast.pineDeclaration} : {}),
         entry:{instructions},
         locals,
