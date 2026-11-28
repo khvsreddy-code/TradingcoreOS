@@ -1,3 +1,5 @@
+import { CORE_SPIRIT_AUTHORING_LEVELS as RUNTIME_AUTHORING_LEVELS } from './coreSpiritExecutionModel';
+
 /**
  * Versioned source-language contract for CoreSpirit.
  *
@@ -48,6 +50,15 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'MapEntry ::= (Identifier | String) ":" Expression',
 ].join('\n');
 
+export const CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS = Object.freeze({
+  indicator:'script',
+  strategy:'strategy',
+  automation:'automation',
+  prediction:'model',
+  library:'script',
+  script:'script',
+} as const);
+
 export const CORE_SPIRIT_AUTHORING_LEVELS = Object.freeze([
   Object.freeze({ id: 'beginner', goal: 'Readable declarations, basic conditions, built-in market series and visual output.', features: Object.freeze(['let','expressions','if','show','built-in-series']) }),
   Object.freeze({ id: 'trader', goal: 'Indicators, symbols, timeframes, multi-timeframe data and broker-neutral strategy intent.', features: Object.freeze(['market-data','multi-symbol','multi-timeframe','strategy','order-intents']) }),
@@ -86,7 +97,32 @@ export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureCo
   { id: 'operator-overloading', status: 'deferred', semantics: 'Not included in v1: built-in domain-safe operators are preferred over user-defined overload resolution.' },
 ]);
 
-export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
+export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({  primitiveContracts: Object.freeze([
+    Object.freeze({ name:'Int', sourceName:'int', runtimeName:'int', status:'implemented' as const }),
+    Object.freeze({ name:'Float', sourceName:'float', runtimeName:'float', status:'implemented' as const }),
+    Object.freeze({ name:'Bool', sourceName:'bool', runtimeName:'boolean', aliases:Object.freeze(['boolean']), status:'implemented' as const }),
+    Object.freeze({ name:'String', sourceName:'string', runtimeName:'string', status:'implemented' as const }),
+    Object.freeze({ name:'Color', sourceName:'color', runtimeName:'color', status:'partial' as const }),
+    Object.freeze({ name:'Void', sourceName:'void', runtimeName:'udt:void', status:'planned' as const }),
+    Object.freeze({ name:'Null', sourceName:'null', runtimeName:'null', status:'partial' as const }),
+  ]),
+  marketValueContracts: Object.freeze([
+    Object.freeze({ name:'Price', sourceName:'price', semanticAtom:'price', status:'implemented' as const }),
+    Object.freeze({ name:'Volume', sourceName:'volume', semanticAtom:'volume', status:'implemented' as const }),
+    Object.freeze({ name:'Timestamp', sourceName:'time', semanticAtom:'time', status:'implemented' as const }),
+    Object.freeze({ name:'Symbol', sourceName:'market<T>', semanticAtom:'market:ref', status:'partial' as const }),
+    Object.freeze({ name:'Timeframe', sourceName:'timeframe<T>', semanticAtom:'timeframe:ref', status:'partial' as const }),
+    Object.freeze({ name:'Bar', sourceName:'bar<T>', semanticAtom:'bar', status:'partial' as const }),
+  ]),
+  executionValueContracts: Object.freeze([
+    Object.freeze({ name:'Event<T>', sourceName:'event<T>', status:'partial' as const }),
+    Object.freeze({ name:'Signal<T>', sourceName:'signal-intent', status:'implemented' as const }),
+    Object.freeze({ name:'OrderIntent', sourceName:'order-intent', status:'implemented' as const }),
+    Object.freeze({ name:'Position', sourceName:'position<T>', status:'partial' as const }),
+    Object.freeze({ name:'Prediction<T>', sourceName:'prediction<T>', status:'partial' as const }),
+    Object.freeze({ name:'Model<T>', sourceName:'model<T>', status:'partial' as const }),
+  ]),
+
   primitives: Object.freeze(['int','float','number','boolean','string','color','null','probability']),
   market: Object.freeze(['price','volume','time','market<T>','bar<T>','tick<T>','orderbook<T>','footprint<T>','portfolio<T>','position<T>','order<T>','fill<T>']),
   collections: Object.freeze(['array<T>','map<K,V>','vector<T>','matrix<T>','tensor<T>']),
@@ -116,6 +152,7 @@ export function validateCoreSpiritLanguageDefinition(): string[] {
     if (!feature.semantics.trim()) errors.push('Language feature is missing semantic rules: ' + feature.id);
   }
   if (CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(',') !== 'beginner,trader,quant,system') errors.push('Authoring levels must remain ordered beginner, trader, quant, system.');
+  if (CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(',') !== RUNTIME_AUTHORING_LEVELS.join(',')) errors.push('Language authoring levels diverge from runtime policy levels.');
   if (CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds.join(',') !== 'indicator,automation,prediction,strategy') errors.push('The four primary CoreSpirit program kinds changed without a language-version review.');
   return errors;
 }
