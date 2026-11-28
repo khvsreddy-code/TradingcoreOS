@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { CoreSpiritParser } from './services/coreSpirit/parser.ts';
 import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
+import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_PROGRAM_GRAMMAR,
   CORE_SPIRIT_AUTHORING_LEVELS,
   CORE_SPIRIT_LANGUAGE_FEATURES,
   CORE_SPIRIT_TYPE_MODEL,
+  CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS,
   getCoreSpiritLanguageFeature,
   validateCoreSpiritLanguageDefinition,
 } from './services/coreSpirit/coreSpiritLanguageDefinition.ts';
@@ -21,6 +23,12 @@ assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramHeader/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /TypeName/);
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalContainers.includes('confirmed<T>'));
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalPhases.includes('realtime'));
+assert.equal(CORE_SPIRIT_TYPE_MODEL.primitiveContracts.find(item => item.name === 'Bool')?.runtimeName, 'boolean');
+assert.equal(CORE_SPIRIT_TYPE_MODEL.primitiveContracts.find(item => item.name === 'Void')?.status, 'planned');
+assert.equal(CORE_SPIRIT_TYPE_MODEL.marketValueContracts.find(item => item.name === 'Timestamp')?.semanticAtom, 'time');
+assert.deepEqual(CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS, {
+  indicator:'script', strategy:'strategy', automation:'automation', prediction:'model', library:'script', script:'script',
+});
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
@@ -70,6 +78,12 @@ assert.equal(compactCompiled.ir?.programKind, 'indicator');
 assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
 const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
 assert.ok(mismatchedPolicy.diagnostics.some(item => item.code === 'PROGRAM_LAYER_MISMATCH'));
+
+const automationSource = programCases.find(([kind]) => kind === 'automation')[2];
+const automationIr = compileCoreSpirit(automationSource, 'language-program-automation-runtime').ir;
+assert.ok(automationIr);
+const chartRuntime = new CoreSpiritRuntime({ layer:'script', executionTarget:'chart' });
+assert.throws(() => chartRuntime.loadIr(automationIr), /requires the automation execution layer/);
 
 const noHeader = new CoreSpiritParser('let answer = 42;').parseDetailed();
 assert.deepEqual(noHeader.diagnostics, []);
