@@ -3,6 +3,7 @@ import { CoreSpiritParser } from './services/coreSpirit/parser.ts';
 import { compileCoreSpirit, parseCoreSpirit, parseCoreSpiritDetailed } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { validateCoreSpiritIr } from './services/coreSpirit/irContract.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
+import { normalizeDeclaredType } from './services/coreSpirit/typeSystem.ts';
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_PROGRAM_GRAMMAR,
@@ -29,6 +30,13 @@ assert.equal(CORE_SPIRIT_TYPE_MODEL.marketValueContracts.find(item => item.name 
 assert.deepEqual(CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS, {
   indicator:'script', strategy:'strategy', automation:'automation', prediction:'model', library:'script', script:'script',
 });
+assert.equal(normalizeDeclaredType('bool'), 'boolean');
+assert.equal(normalizeDeclaredType('price'), 'price');
+assert.equal(normalizeDeclaredType('volume'), 'volume');
+assert.equal(normalizeDeclaredType('series<price>'), 'series<price>');
+assert.equal(normalizeDeclaredType('void'), 'udt:void');
+assert.ok(CORE_SPIRIT_TYPE_MODEL.collectionContracts.find(item => item.name === 'Map<K,V>')?.status === 'partial');
+assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalTypeContracts.find(item => item.name === 'Optional<T>')?.status === 'planned');
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
@@ -123,7 +131,7 @@ assert.ok(missingClose.diagnostics.some(item => item.message.includes('Expected 
 const trailing = new CoreSpiritParser('strategy "Bad Tail" { let x = 1; } let y = 2;').parseDetailed();
 assert.ok(trailing.diagnostics.some(item => item.message.includes('Unexpected tokens after the program declaration')));
 
-for (const id of ['tuples','enums','closures','imports-exports','error-handling']) {
+for (const id of ['variables','constants','functions','parameters','return-values','multiple-return-values','tuples','enums','user-defined-record-types','methods','generics','interfaces-traits','conditional-expressions','switch-expressions','loops','iterators','closures','namespaces','imports-exports','libraries','error-handling','type-inference','lexical-scope','operator-overloading','nullability','symbol-timeframe-types','temporal-qualifiers','external-data-provenance']) {
   assert.equal(getCoreSpiritLanguageFeature(id)?.status, 'planned', id + ' must not be advertised as implemented');
 }
 assert.equal(CORE_SPIRIT_LANGUAGE_FEATURES.find(feature => feature.id === 'operator-overloading')?.status, 'deferred');
