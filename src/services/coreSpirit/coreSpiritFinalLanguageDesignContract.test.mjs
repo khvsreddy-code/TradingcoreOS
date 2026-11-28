@@ -43,16 +43,16 @@ for (const production of [
 // Grammar closure: every named nonterminal used on a production right-hand
 // side must itself have a production. This catches missing grammar fragments.
 const grammarProductions = new Set(
-  [...CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.matchAll(/^\\s*([A-Za-z][A-Za-z0-9_]*)\\s*::=/gm)]
+  [...CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\s*::=/gm)]
     .map(match => match[1]),
 );
 const grammarRightHandSide = CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR
-  .split('\\n')
-  .map(line => line.replace(/^\\s*[A-Za-z][A-Za-z0-9_]*\\s*::=/, ''))
-  .join('\\n')
-  .replace(/"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'/g, '');
+  .split('\n')
+  .map(line => line.replace(/^\s*[A-Za-z][A-Za-z0-9_]*\s*::=/, ''))
+  .join('\n')
+  .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '');
 const referencedNonterminals = new Set(
-  [...grammarRightHandSide.matchAll(/\\b[A-Z][A-Za-z0-9_]*\\b/g)].map(match => match[0]),
+  [...grammarRightHandSide.matchAll(/\b[A-Z][A-Za-z0-9_]*\b/g)].map(match => match[0]),
 );
 for (const symbol of referencedNonterminals) {
   assert.ok(grammarProductions.has(symbol), 'undefined grammar nonterminal: ' + symbol);
