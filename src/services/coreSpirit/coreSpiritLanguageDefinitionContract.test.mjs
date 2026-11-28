@@ -58,6 +58,15 @@ for (const [kind, title, source] of programCases) {
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
 }
 
+const compactSource = 'indicator "Compact Program" { let value = close; if (value > 0) { let note = "brace } is text"; } // } comment must not close wrapper\n}';
+const compactParsed = parseCoreSpiritDetailed(compactSource);
+assert.deepEqual(compactParsed.diagnostics, [], 'compact block must parse with nested braces and quoted/comment braces');
+assert.equal(compactParsed.ast.programKind, 'indicator');
+assert.equal(compactParsed.ast.programTitle, 'Compact Program');
+const compactCompiled = compileCoreSpirit(compactSource, 'language-program-compact');
+assert.deepEqual(compactCompiled.diagnostics.filter(item => item.severity === 'error'), [], compactCompiled.diagnostics.map(item => item.message).join('\\n'));
+assert.equal(compactCompiled.ir?.programKind, 'indicator');
+assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
 const noHeader = new CoreSpiritParser('let answer = 42;').parseDetailed();
 assert.deepEqual(noHeader.diagnostics, []);
 assert.equal(noHeader.ast.programKind, undefined);
