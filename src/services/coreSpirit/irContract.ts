@@ -86,8 +86,20 @@ export function serializeCoreSpiritIr(program: CoreSpiritIrProgram): string {
 }
 
 function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  // Match JSON.stringify's treatment of undefined while preserving sorted
+  // object keys for deterministic artifact hashing and worker transport.
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') {
+    const encoded = JSON.stringify(value);
+    return encoded === undefined ? 'null' : encoded;
+  }
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+
   const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+  const fields = Object.keys(object).sort().flatMap(key => {
+    const field = object[key];
+    if (field === undefined || typeof field === 'function' || typeof field === 'symbol') return [];
+    return [`${JSON.stringify(key)}:${stableStringify(field)}`];
+  });
+  return `{${fields.join(',')}}`;
 }
