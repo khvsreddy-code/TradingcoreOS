@@ -146,6 +146,23 @@ for (const [kind, title, source] of cases) {
   assert.equal(decoded.sourceId, 'final-language-' + kind);
 }
 
+// The canonical IR serializer must never emit JavaScript's bare undefined
+// token. Object fields follow JSON omission semantics; array holes become null.
+const serializationBase = compileCoreSpirit(
+  'indicator "Serialization Probe" { let value = close; }',
+  'final-language-serialization-probe',
+).ir;
+assert.ok(serializationBase);
+const serializationProbe = {
+  ...serializationBase,
+  omittedUndefined: undefined,
+  arrayUndefined: [undefined],
+};
+const serializationProbeJson = serializeCoreSpiritIr(serializationProbe);
+const serializationProbeValue = JSON.parse(serializationProbeJson);
+assert.equal(Object.hasOwn(serializationProbeValue, 'omittedUndefined'), false);
+assert.deepEqual(serializationProbeValue.arrayUndefined, [null]);
+
 // The authoring model explicitly separates a guided surface from compiler
 // identity. Every level is bound to the same frontend, AST, compiler and runtime.
 const authoringPipelines = ['beginner','trader','quant','system'].map(level => CORE_SPIRIT_AUTHORING_SURFACES[level]);
