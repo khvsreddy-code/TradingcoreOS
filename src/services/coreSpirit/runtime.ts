@@ -1323,7 +1323,7 @@ export class CoreSpiritRuntime {
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
     this.assertCanonicalExecutableIr(ir);
-    if(ir.programLayer && ir.programLayer !== this.layer){
+    if(ir.programTitle && ir.programLayer && ir.programLayer !== this.layer){
       throw new Error(`CoreSpirit program '${ir.programTitle ?? ir.sourceId}' requires the ${ir.programLayer} execution layer; this runtime is configured for ${this.layer}.`);
     }
     if (ir.languagePolicy && ir.authoringLevel !== undefined &&
