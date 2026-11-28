@@ -69,6 +69,10 @@ for (const typeName of ['Array<T>','Map<K,V>','Matrix<T>','Tensor<T>']) {
 for (const typeName of ['Event<T>','Signal<T>','OrderIntent','Position','Prediction<T>','Model<T>']) {
   assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.executionTypes.includes(typeName));
 }
+for (const typeName of ['Result<T,E>','Option<T>']) {
+  assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.errorTypes.includes(typeName));
+}
+assert.equal(CORE_SPIRIT_FINAL_TYPE_SYSTEM.temporalConstructors.find(item=>item.name==='Confirmed<T>')?.sourceName,'confirmed<T>');
 for (const typeName of [
   'Series<T>','Historical<T>','CurrentBar<T>','Realtime<T>','Confirmed<T>',
   'Developing<T>','State<T>','Intrabar<T>','External<T>','Forecast<T>','Option<T>',
