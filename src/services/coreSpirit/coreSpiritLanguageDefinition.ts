@@ -147,7 +147,8 @@ export const CORE_SPIRIT_LANGUAGE_SEMANTICS = Object.freeze({
   }),
 } as const);
 
-export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({  primitiveContracts: Object.freeze([
+export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
+  primitiveContracts: Object.freeze([
     Object.freeze({ name:'Int', sourceName:'int', runtimeName:'int', status:'implemented' as const }),
     Object.freeze({ name:'Float', sourceName:'float', runtimeName:'float', status:'implemented' as const }),
     Object.freeze({ name:'Bool', sourceName:'bool', runtimeName:'boolean', aliases:Object.freeze(['boolean']), status:'implemented' as const }),
