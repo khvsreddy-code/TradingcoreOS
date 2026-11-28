@@ -26,7 +26,7 @@ assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi, 'CoreScript');
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.supportedEditions, ['1.0','1.2']);
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, ['indicator','automation','prediction','strategy']);
 assert.equal(CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(','), 'beginner,trader,quant,system');
-assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramHeader/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramKind/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /TypeName/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /EditionDirective/);
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /SurfaceLowering/);
