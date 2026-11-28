@@ -139,15 +139,14 @@ export function executeCoreSpirit(
   // This convenience entry point must use the same canonical executable
   // compiler/artifact boundary as editor, CLI and production runners. The
   // authoring AST/program shape is not an executable fallback.
-  const compiled = compileCoreSpirit(source, sourceId);
+  const compiled = compileCoreSpirit(source, sourceId, { layer:runtimeOptions.layer });
   if (!compiled.ir || !compiled.artifact) {
     const detail = compiled.diagnostics.map(item => item.message).join('\n');
     throw new Error(detail || 'CoreSpirit compilation failed; no executable artifact was produced.');
   }
-  const requiredLayer=compiled.ir.programLayer ?? 'script';
-  if(runtimeOptions.layer && runtimeOptions.layer !== requiredLayer){
-    throw new Error(`CoreSpirit program '${compiled.ir.programTitle ?? sourceId}' requires the ${requiredLayer} execution layer; received runtime layer ${runtimeOptions.layer}.`);
-  }
+  // A declared program owns its lane and the compiler rejects conflicting
+  // overrides. Legacy unwrapped scripts may still opt into a host-selected lane.
+  const requiredLayer=compiled.ir.programLayer ?? runtimeOptions.layer ?? 'script';
   const runtime = new CoreSpiritRuntime({ ...runtimeOptions, layer:runtimeOptions.layer ?? requiredLayer, sourceId });
   return runtime.executeIr(compiled.ir, bars);
 }
