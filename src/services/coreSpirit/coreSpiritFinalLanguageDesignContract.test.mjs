@@ -25,7 +25,7 @@ assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, [
 // The target grammar has a production for every requested language family.
 // It is intentionally distinct from the currently accepted v1.2 grammar.
 for (const production of [
-  'VariableDeclaration', 'TupleBinding', 'FunctionDeclaration', 'ReturnStatement',
+  'VariableDeclaration', 'SurfaceVariableDeclaration', 'TupleBinding', 'FunctionDeclaration', 'ReturnStatement',
   'TupleExpression', 'TupleType', 'EnumDeclaration', 'TypeDeclaration',
   'ImplementationDeclaration', 'TraitDeclaration', 'ConditionalExpression',
   'SwitchStatement', 'SwitchExpression', 'WhileStatement', 'ForEachStatement',
@@ -133,6 +133,8 @@ for (const level of ['beginner','trader','quant','system']) {
   const policy = CORE_SPIRIT_LANGUAGE_DESIGN_RULES.authoringLevels[level];
   assert.ok(policy && policy.length > 20, 'missing authoring contract for ' + level);
 }
+assert.match(CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR, /FeatureDeclaration\\s+::= Identifier \\(\":\" Type\\)\\? \\(\"=\" Expression\\)\\? Terminator/);
+assert.match(CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS['surface-declarations'], /same let AST\\/IR/);
 assert.match(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.effects.capabilityChecking, /runtime/);
 assert.match(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.ir.execution, /validated IR only/);
 
