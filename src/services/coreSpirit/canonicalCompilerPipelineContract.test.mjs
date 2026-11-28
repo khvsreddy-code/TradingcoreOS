@@ -18,8 +18,8 @@ const capabilityPolicySource = readFileSync('src/services/coreSpirit/coreScriptL
 const coreSpiritPipelineSource = readFileSync('src/services/coreSpirit/coreSpiritPipeline.ts', 'utf8');
 assert.doesNotMatch(compilerSource, /createCoreSpiritCompilationUnit/, 'the executable path must not analyze a unit and then analyze it again');
 assert.match(compilerSource, /resolveCoreSpiritNames\(ast/);
-assert.match(coreSpiritPipelineSource, /const compiled = compileCoreSpirit\(source, sourceId\)/,
-  'convenience execution must use the canonical executable compiler');
+assert.match(coreSpiritPipelineSource, /const compiled = runtimeOptions\.layer\s*\n\s*\? compileCoreSpirit\(source, sourceId, \{ layer:runtimeOptions\.layer \}\)\s*\n\s*: compileCoreSpirit\(source, sourceId\)/,
+  'convenience execution must use the canonical executable compiler while preserving legacy host-selected lanes');
 assert.doesNotMatch(coreSpiritPipelineSource, /runtime\.executeIr\(runtime\.loadProgram\(program\),bars\)/,
   'the convenience execution path may not bypass canonical artifact validation');
 assert.match(compilerSource, /validateCoreScriptCapabilityRequirementsFromAst\(ast, surface, semanticDependencyGraph\.nodes\)/, 'host capability requirements must be derived from canonical AST and semantic metadata');
