@@ -1,6 +1,28 @@
 import { CoreSpiritAst, CoreSpiritAstNode, CoreSpiritSpan } from './ast';
 import { CoreSpiritLexer, CoreSpiritSyntaxError, CoreSpiritToken } from './lexer';
 
+export type CoreSpiritProgramDeclaration = Readonly<{
+  kind: 'indicator' | 'strategy' | 'automation' | 'prediction';
+  title: string;
+}>;
+
+/** Read the canonical outer program header without interpreting the body. */
+export function readCoreSpiritProgramDeclaration(source: string): CoreSpiritProgramDeclaration | undefined {
+  const lines=String(source ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
+  for (const raw of lines) {
+    const line=raw.trim();
+    if (!line || line.startsWith('//') || /^edition@/i.test(line) || /^requires\s+/i.test(line)) continue;
+    const match=line.match(/^(indicator|strategy|automation|prediction)\s+(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)')\s*\{\s*$/i);
+    if (!match) return undefined;
+    const kind=match[1]!.toLowerCase() as CoreSpiritProgramDeclaration['kind'];
+    const encoded=match[2] ?? match[3] ?? '';
+    const title=encoded.replace(/\\(["'\\nrt])/g, (_all, token:string) => token === 'n' ? '\n' : token === 'r' ? '\r' : token === 't' ? '\t' : token);
+    return Object.freeze({kind,title});
+  }
+  return undefined;
+}
+
+
 export class CoreSpiritParser {
   private readonly tokens: CoreSpiritToken[];
   private readonly pineFrontend:boolean;
@@ -25,7 +47,8 @@ export class CoreSpiritParser {
   parseDetailed(): { ast: CoreSpiritAst; diagnostics: Array<{message:string; line:number; column:number; start:number; end:number}> } {
     const body:CoreSpiritAstNode[]=[];
     const diagnostics:Array<{message:string;line:number;column:number;start:number;end:number}>=[];
-    while(!this.check('eof')){
+    const declaration=this.parseProgramDeclarationHeader();
+    while(!this.check('eof') && !(declaration && this.check('rightBrace'))){
       const statementStart = this.i;
       try { body.push(this.statement()); }
       catch(error){
@@ -41,12 +64,30 @@ export class CoreSpiritParser {
         });
         this.synchronize();
       }
-      // Recovery must always advance. If synchronize() stops on an unexpected
-      // right brace at top level, retrying without consuming it grows diagnostics
-      // indefinitely and can exhaust the build worker's memory.
-      if (this.i === statementStart && !this.check('eof')) this.advance();
+      // Recovery must always advance, except at the outer program delimiter.
+      if (this.i === statementStart && !this.check('eof') && !(declaration && this.check('rightBrace'))) this.advance();
     }
-    return {ast:{type:'program',body},diagnostics};
+    if(declaration){
+      if(!this.match('rightBrace')){
+        const token=this.peek();
+        diagnostics.push({message:'Expected } to close the program declaration',line:token.line,column:token.column,start:token.offset,end:token.offset+1});
+      }
+      if(!this.check('eof')){
+        const token=this.peek();
+        diagnostics.push({message:'Unexpected tokens after the program declaration',line:token.line,column:token.column,start:token.offset,end:token.offset+Math.max(1,token.lexeme.length)});
+      }
+    }
+    return {ast:{type:'program',body,...(declaration?{programKind:declaration.kind,programTitle:declaration.title}:{})},diagnostics};
+  }
+
+  private parseProgramDeclarationHeader(): CoreSpiritProgramDeclaration | undefined {
+    const token=this.peek();
+    if(token.type!=='identifier' || !['indicator','strategy','automation','prediction'].includes(token.lexeme.toLowerCase())) return undefined;
+    if(this.peek(1).type!=='string' || this.peek(2).type!=='leftBrace') return undefined;
+    this.advance();
+    const titleToken=this.advance();
+    this.advance();
+    return Object.freeze({kind:token.lexeme.toLowerCase() as CoreSpiritProgramDeclaration['kind'],title:String(titleToken.value ?? '')});
   }
 
   private statement():CoreSpiritAstNode {
