@@ -27,6 +27,216 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
  * before name resolution, semantic analysis and lowering. This describes the
  * public source language, not its internal lexer tokens.
  */
+/**
+ * The final CoreSpirit source design. This is the language target, not a claim
+ * that every production is already accepted by the v1.2 parser. The accepted
+ * grammar remains CORE_SPIRIT_PROGRAM_GRAMMAR; CORE_SPIRIT_LANGUAGE_FEATURES
+ * is the executable maturity gate for every construct below.
+ */
+export const CORE_SPIRIT_LANGUAGE_DESIGN_REVISION = 'core-spirit-language-design/1' as const;
+
+export const CORE_SPIRIT_FINAL_LANGUAGE_GRAMMAR = String.raw\`
+SourceFile              ::= EditionDirective? CapabilityRequirement* Module EOF
+Module                  ::= ProgramModule | LibraryModule
+ProgramModule           ::= ProgramHeader Block
+ProgramHeader           ::= ProgramKind String
+ProgramKind             ::= "indicator" | "automation" | "prediction" | "strategy"
+LibraryModule           ::= "library" String Block
+EditionDirective        ::= "edition@" Version
+CapabilityRequirement  ::= "requires" QualifiedName ("," QualifiedName)*
+
+Block                   ::= "{" Statement* "}"
+Statement               ::= ImportDeclaration
+                          | ExportDeclaration
+                          | NamespaceDeclaration
+                          | TypeDeclaration
+                          | EnumDeclaration
+                          | TraitDeclaration
+                          | ImplementationDeclaration
+                          | FunctionDeclaration
+                          | VariableDeclaration
+                          | TupleBinding
+                          | Assignment
+                          | IfStatement
+                          | SwitchStatement
+                          | WhileStatement
+                          | ForEachStatement
+                          | BreakStatement
+                          | ContinueStatement
+                          | ReturnStatement
+                          | ErrorPropagationStatement
+                          | EventHandler
+                          | PredictionFeatureBlock
+                          | PredictionOutputStatement
+                          | StrategyAction
+                          | SurfaceStatement
+                          | ExpressionStatement
+
+VariableDeclaration    ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
+TupleBinding           ::= ("let" | "const") "(" Identifier ("," Identifier)+ ")" "=" Expression Terminator
+Assignment             ::= Identifier ":=" Expression Terminator
+TypeAnnotation         ::= ":" Type
+FunctionDeclaration    ::= "fn" Identifier TypeParameters? "(" ParameterList? ")" "->" ReturnType Block
+ParameterList          ::= Parameter ("," Parameter)* ","?
+Parameter              ::= Identifier ":" Type ("=" Expression)?
+ReturnType             ::= Type | "(" Type ("," Type)+ ")"
+ReturnStatement        ::= "return" Expression? Terminator
+TypeDeclaration        ::= "type" Identifier TypeParameters? "{" FieldDeclaration* "}"
+FieldDeclaration       ::= Identifier ":" Type Terminator?
+EnumDeclaration        ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
+EnumMember             ::= Identifier ("=" (String | Number))?
+TraitDeclaration       ::= "trait" Identifier TypeParameters? "{" TraitMember* "}"
+TraitMember            ::= FunctionSignature Terminator
+FunctionSignature      ::= "fn" Identifier TypeParameters? "(" ParameterList? ")" "->" ReturnType
+ImplementationDeclaration
+                        ::= "impl" Type ("for" Type)? "{" FunctionDeclaration* "}"
+NamespaceDeclaration   ::= "namespace" QualifiedName Block
+ImportDeclaration      ::= "import" ImportBindings "from" String
+ImportBindings         ::= ImportBinding | "{" ImportBinding ("," ImportBinding)* "}"
+ImportBinding          ::= Identifier ("as" Identifier)?
+ExportDeclaration      ::= "export" (FunctionDeclaration | TypeDeclaration | EnumDeclaration | TraitDeclaration | NamespaceDeclaration)
+EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
+                          | "when" Expression ("crosses_above" | "crosses_below" Expression)? Block
+IfStatement            ::= "if" "(" Expression ")" Block ("else" Block)?
+SwitchStatement        ::= "switch" "(" Expression ")" "{" SwitchArm+ DefaultArm? "}"
+SwitchArm              ::= "case" Pattern ("," Pattern)* "=>" Expression Terminator
+DefaultArm             ::= "default" "=>" Expression Terminator
+WhileStatement         ::= "while" "(" Expression ")" Block
+ForEachStatement       ::= "for" "(" ("let")? Identifier "in" Expression ")" Block
+BreakStatement         ::= "break" Terminator
+ContinueStatement      ::= "continue" Terminator
+ErrorPropagationStatement
+                        ::= "return" ErrorExpression Terminator
+PredictionFeatureBlock ::= "features" "{" FeatureDeclaration* "}"
+FeatureDeclaration     ::= Identifier ":" Expression Terminator
+PredictionOutputStatement
+                        ::= "output" Expression Terminator
+StrategyAction         ::= ("enter" | "exit") ("long" | "short") PositionOptions? Terminator
+PositionOptions        ::= "(" NamedArgumentList? ")"
+SurfaceStatement       ::= "show" Expression
+                          | "plot" Expression PlotOptions?
+ExpressionStatement    ::= Expression Terminator
+
+Expression             ::= ConditionalExpression
+ConditionalExpression  ::= OrExpression ("?" Expression ":" Expression)?
+OrExpression           ::= AndExpression ("or" AndExpression)*
+AndExpression          ::= EqualityExpression ("and" EqualityExpression)*
+EqualityExpression     ::= ComparisonExpression (("==" | "!=") ComparisonExpression)*
+ComparisonExpression   ::= AdditiveExpression (("<" | "<=" | ">" | ">=") AdditiveExpression)*
+AdditiveExpression     ::= MultiplicativeExpression (("+" | "-") MultiplicativeExpression)*
+MultiplicativeExpression
+                        ::= UnaryExpression (("*" | "/" | "%") UnaryExpression)*
+UnaryExpression        ::= ("!" | "+" | "-") UnaryExpression | PostfixExpression
+PostfixExpression      ::= PrimaryExpression PostfixSuffix*
+PostfixSuffix          ::= "[" Expression "]"
+                          | "." Identifier
+                          | "(" ArgumentList? ")"
+                          | "?"
+PrimaryExpression      ::= Number | String | Boolean | "null" | Identifier
+                          | "(" Expression ")"
+                          | TupleExpression | ArrayLiteral | MapLiteral
+                          | SwitchExpression | ClosureExpression
+TupleExpression        ::= "(" Expression "," Expression ("," Expression)* ","? ")"
+ArrayLiteral           ::= "[" (Expression ("," Expression)* ","?)? "]"
+MapLiteral             ::= "{" (MapEntry ("," MapEntry)* ","?)? "}"
+MapEntry               ::= (Identifier | String) ":" Expression
+SwitchExpression       ::= "switch" "(" Expression ")" "{" SwitchArm+ DefaultArm? "}"
+ClosureExpression      ::= "fn" "(" ParameterList? ")" ("->" Type)? "=>" Expression
+ArgumentList           ::= Expression ("," Expression)* ","?
+NamedArgumentList      ::= NamedArgument ("," NamedArgument)* ","?
+NamedArgument          ::= Identifier "=" Expression
+Pattern                ::= LiteralPattern | Identifier
+LiteralPattern         ::= Number | String | Boolean
+
+Type                   ::= FunctionType | TupleType | QualifiedType
+QualifiedType          ::= QualifiedName TypeArguments?
+TypeArguments          ::= "<" Type ("," Type)* ">"
+TypeParameters         ::= "<" TypeParameter ("," TypeParameter)* ">"
+TypeParameter          ::= Identifier (":" TypeBound ("+" TypeBound)*)?
+TypeBound              ::= QualifiedName
+TupleType              ::= "(" Type "," Type ("," Type)* ")"
+FunctionType           ::= "fn" "(" (Type ("," Type)*)? ")" "->" Type
+QualifiedName          ::= Identifier ("." Identifier)*
+Identifier             ::= Letter (Letter | Digit | "_")*
+Version                ::= Digit+ ("." Digit+){1,2}
+Number                 ::= Hexadecimal | Decimal | Integer
+Hexadecimal            ::= ("0x" | "0X") HexDigit+
+Decimal                ::= Digit+ ("." Digit+)? Exponent? | "." Digit+ Exponent?
+Exponent               ::= ("e" | "E") ("+" | "-")? Digit+
+Integer                ::= Digit+
+String                 ::= "\\"" StringCharacter* "\\"" | "'" StringCharacter* "'"
+StringCharacter        ::= EscapeSequence | any character except active quote or EOF
+EscapeSequence         ::= Backslash ("n" | "r" | "t" | any single escaped character)
+Boolean                ::= "true" | "false"
+Terminator             ::= ";" | ImplicitLineTerminator
+ImplicitLineTerminator ::= source-line boundary recognized outside delimiters
+Comment                ::= "//" characters-to-line-end | "/*" characters "*/"
+\`.trim();
+
+export const CORE_SPIRIT_LANGUAGE_DESIGN_RULES = Object.freeze({
+  programKinds: Object.freeze({
+    indicator: 'Consumes bar-aligned and scalar data, computes deterministic values, and emits visual outputs. It cannot place orders or invoke privileged automation effects.',
+    automation: 'Subscribes to declared events and produces capability-gated alerts, webhooks or other controlled actions. Every side effect is authorized by the host policy, never by source text alone.',
+    prediction: 'Declares named features with provenance and missing-data rules, resolves a versioned model artifact through the host, and emits a typed forecast/prediction output. Forecast values are not observed market history.',
+    strategy: 'Evaluates deterministic historical/realtime logic and emits broker-neutral OrderIntent values. Sizing, risk checks, routing and broker credentials remain host-owned.',
+  }),
+  authoringLevels: Object.freeze({
+    beginner: 'Guided declarations, built-in data, visual building blocks and straightforward conditions. Simplification is an editor/policy profile, not a separate grammar.',
+    trader: 'Market series, symbols, timeframes, multi-timeframe data, indicators and broker-neutral strategy intent.',
+    quant: 'Statistical domains, typed collections, matrix/tensor operations, datasets, models and research workflows.',
+    system: 'Modules, custom kernels, event processing, explicit capabilities, sandboxed execution and deployment.',
+  }),
+  declarations: Object.freeze({
+    variables: 'let creates a local binding initialized once; reassignment is explicit and uses := only for stateful bindings.',
+    constants: 'const is immutable after initialization. It cannot contain mutable state<T> or intrabar<T> storage.',
+    functions: 'Named functions have typed parameters and an explicit return type. They are pure by default; effects require a separately checked capability contract.',
+    returns: 'A function returns one value or a fixed-arity tuple. Every control-flow path must return a value compatible with its declared return type.',
+    tuples: 'Tuples are fixed-size product values with positional, statically known element types. Destructuring arity and element types are checked at compile time.',
+    enums: 'Enums are nominal finite sets of named values. Exhaustive switching is checked; values have stable serialized identities.',
+    records: 'type declares nominal records. Fields are statically typed; field access is checked and record identity is not interchangeable with an anonymous map.',
+    methods: 'impl attaches statically resolved methods to a type. Receiver type is the first implicit parameter; no runtime monkey-patching or reflection.',
+    generics: 'Type parameters are compile-time only and must satisfy explicit bounds. Monomorphization or equivalent specialization happens before executable IR; no dynamic structural fallback.',
+    traits: 'Traits declare required method signatures. Implementations are explicit; coherence permits at most one applicable implementation for a type/trait pair.',
+    conditions: 'if and switch are expressions/statements with statically checked boolean conditions and compatible branch result types.',
+    loops: 'while and for-in have deterministic iteration semantics and mandatory host instruction/iteration limits. break and continue target the innermost loop.',
+    iterators: 'Iteration is over approved bounded collections/ranges. A custom iterator protocol is admitted only after its lifetime, termination and resource contract is implemented.',
+    closures: 'Closures capture immutable values by value. Mutable state and capabilities are not implicitly captured; captured values must satisfy worker-transferability rules.',
+    namespaces: 'Namespaces are lexical qualification scopes, not dynamic objects. Name resolution is deterministic and ambiguity is a compile error.',
+    modules: 'Imports resolve only through the versioned module manifest. Modules are content-addressed, dependency-locked and never fetched from arbitrary filesystem/network paths at compile or execution time.',
+    libraries: 'A library exports typed declarations and no top-level side effects. Import cycles are rejected; public ABI is versioned independently from source formatting.',
+    errors: 'Fallible operations return Result<T,E>; optional values use Option<T>. The postfix ? operator propagates a compatible error/none path. Unhandled failures become typed runtime diagnostics, not silent nulls.',
+    inference: 'Local binding types are inferred from initializer expressions. Public function parameters, exported declarations and module ABI boundaries require explicit types.',
+    scope: 'Lexical block scope; inner declarations may shadow outer locals only under a single documented shadowing rule. No implicit dynamic scope or implicit global writes.',
+    overloading: 'User-defined operator overloading is intentionally excluded. Built-in operators have fixed, domain-safe signatures; named functions provide extensibility.',
+  }),
+  temporalSafety: Object.freeze({
+    scalar: 'A scalar is independent of a bar-indexed market sequence.',
+    series: 'Series<T> is aligned to one symbol/timeframe sequence; indexing is historical-only and bounded by declared lookback.',
+    historical: 'Historical<T> is immutable finalized observation. Future offsets and lookahead are compile-time errors.',
+    currentBar: 'CurrentBar<T> is the active bar revision and may change before confirmation.',
+    developing: 'Developing<T> can be revised intrabar; downstream calculations must be replay-safe.',
+    realtime: 'Realtime<T> carries live provenance. Side effects are gated by the execution policy and may be deduplicated by event/revision identity.',
+    confirmed: 'Confirmed<T> is final for its bar. Developing values cannot flow into a Confirmed<T> parameter or output.',
+    state: 'State<T> persists across bars and participates in deterministic checkpoint/rollback.',
+    intrabar: 'Intrabar<T> has separate intrabar persistence and rollback semantics; it is never implicitly interchangeable with State<T>.',
+    external: 'External<T> carries source, symbol, timeframe, availability and request provenance. It is capability-checked and lookahead-checked.',
+    forecast: 'Forecast<T> is a model-produced future value. It cannot flow into observed/historical market features without an explicit evaluation/labeling boundary.',
+    optional: 'Option<T> represents presence/absence. It must be narrowed or handled before an unsafe value access.',
+  }),
+  effects: Object.freeze({
+    pureByDefault: 'Pure computation has no broker, network, filesystem, clock or ambient mutable-state access.',
+    capabilityChecking: 'Every effect is declared, checked at compile time, and independently authorized by the host at runtime.',
+    brokerBoundary: 'Source programs emit broker-neutral intents; secrets, account access, risk enforcement and order routing remain outside the language runtime.',
+    deterministicExecution: 'Given the same source, artifact versions, market revisions and inputs, compilation and pure execution produce the same IR/results.',
+  }),
+  ir: Object.freeze({
+    canonical: 'All four program kinds and all authoring levels lower to the same versioned CoreSpirit IR ABI.',
+    typed: 'Semantic types, temporal qualifiers, provenance, capabilities and source maps are validated before optimization and retained in the artifact contract.',
+    execution: 'The VM executes validated IR only. AST nodes and editor metadata are never executable authority.',
+    optimization: 'Optimizations must preserve temporal semantics, effect order, source locations and deterministic replay behavior.',
+  }),
+} as const);
+
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = String.raw`
 Source                 ::= Edition10Source | Edition12Source
 Edition10Source        ::= Edition10Directive? CapabilityRequirement* (Program10 | LegacyScript10) EOF
