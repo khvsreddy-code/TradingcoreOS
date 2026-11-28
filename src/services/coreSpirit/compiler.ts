@@ -312,6 +312,15 @@ export class CoreSpiritCompiler {
               args,
               callId:'pine-v6:' + n.target.name + '.' + n.member + ':' + (n.span?.start ?? temp),
             });
+            const builtin=getCoreSpiritBuiltin(resolved.builtin.name);
+            if(builtin?.emitKind){
+              emitInstruction(n,{
+                op:'emit',
+                kind:builtin.emitKind,
+                args:[dest,...args],
+                outputId:`${builtin.emitKind}:${n.span?.start ?? temp}`,
+              });
+            }
             return dest;
           }
           const isTemporalDataReference =
