@@ -134,7 +134,18 @@ export class CoreSpiritCompiler {
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
     traceSmcCompilerStage(sourceId, 'compile:start');
-    const layer: CoreSpiritProgramLayer = options.layer || 'script';
+    // The declaration selects the default execution policy. Callers may still
+    // explicitly choose a stricter host layer, but omission must not downgrade
+    // strategy/automation/prediction declarations into ordinary indicator scripts.
+    const declaredLayer: Record<string, CoreSpiritProgramLayer> = {
+      indicator:'script',
+      strategy:'strategy',
+      automation:'automation',
+      prediction:'model',
+      library:'script',
+      script:'script',
+    };
+    const layer: CoreSpiritProgramLayer = options.layer || declaredLayer[ast.programKind ?? 'script'] || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const frontendId=options.frontend ?? 'corescript';
     const lowered=desugarCoreSpiritFunctions(ast);
