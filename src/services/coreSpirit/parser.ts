@@ -12,7 +12,7 @@ export function readCoreSpiritProgramDeclaration(source: string): CoreSpiritProg
   for (const raw of lines) {
     const line=raw.trim();
     if (!line || line.startsWith('//') || /^edition@/i.test(line) || /^requires\s+/i.test(line)) continue;
-    const match=line.match(/^(indicator|strategy|automation|prediction)\s+(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)')\s*\{\s*$/i);
+    const match=line.match(/^(indicator|strategy|automation|prediction)\s+(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)')\s*\{/i);
     if (!match) return undefined;
     const kind=match[1]!.toLowerCase() as CoreSpiritProgramDeclaration['kind'];
     const encoded=match[2] ?? match[3] ?? '';
@@ -22,6 +22,58 @@ export function readCoreSpiritProgramDeclaration(source: string): CoreSpiritProg
   return undefined;
 }
 
+
+/**
+ * Extract the outer program block before the line-oriented sugar normalizer.
+ * Braces inside strings and comments do not affect nesting, so compact and
+ * multiline spellings produce the same canonical statement stream.
+ */
+export function unwrapCoreSpiritProgramSource(source: string): { declaration: CoreSpiritProgramDeclaration; source: string } | undefined {
+  const text=String(source ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const pattern=/^[ \t]*(indicator|strategy|automation|prediction)\s+(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)')\s*\{/gim;
+  const match=pattern.exec(text);
+  if(!match) return undefined;
+  const kind=match[1]!.toLowerCase() as CoreSpiritProgramDeclaration['kind'];
+  const encoded=match[2] ?? match[3] ?? '';
+  const title=encoded.replace(/\\(["'\\nrt])/g, (_all, token:string) => token === 'n' ? '\n' : token === 'r' ? '\r' : token === 't' ? '\t' : token);
+  const openIndex=match.index + match[0].lastIndexOf('{');
+  let depth=1;
+  let quote: '"' | "'" | null=null;
+  let escaped=false;
+  for(let index=openIndex+1;index<text.length;index+=1){
+    const character=text[index]!;
+    const next=text[index+1] ?? '';
+    if(quote){
+      if(escaped){escaped=false;continue;}
+      if(character==='\\'){escaped=true;continue;}
+      if(character===quote)quote=null;
+      continue;
+    }
+    if(character==='"'||character==="'"){quote=character;continue;}
+    if(character==='/'&&next==='/'){
+      const newline=text.indexOf('\n',index+2);
+      index=newline<0?text.length:newline;
+      continue;
+    }
+    if(character==='/'&&next==='*'){
+      const close=text.indexOf('*/',index+2);
+      if(close<0)return undefined;
+      index=close+1;
+      continue;
+    }
+    if(character==='{')depth+=1;
+    else if(character==='}'){
+      depth-=1;
+      if(depth===0){
+        if(text.slice(index+1).trim())return undefined;
+        const prefix=text.slice(0,match.index);
+        const inner=text.slice(openIndex+1,index);
+        return {declaration:Object.freeze({kind,title}),source:prefix+inner};
+      }
+    }
+  }
+  return undefined;
+}
 
 export class CoreSpiritParser {
   private readonly tokens: CoreSpiritToken[];
