@@ -119,6 +119,8 @@ StrategyAction         ::= ("enter" | "exit") ("long" | "short") PositionOptions
 PositionOptions        ::= "(" NamedArgumentList? ")"
 SurfaceStatement       ::= "show" Expression
                           | "plot" Expression PlotOptions?
+PlotOptions             ::= ("color" "=" Expression)? ("width" "=" Integer)?
+                          ("style" "=" Identifier)? ("title" "=" String)?
 ExpressionStatement    ::= Expression Terminator
 
 Expression             ::= ConditionalExpression
