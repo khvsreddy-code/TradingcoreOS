@@ -9,6 +9,7 @@ import {
   CORE_SPIRIT_LANGUAGE_DESIGN_RULES,
   CORE_SPIRIT_FINAL_TYPE_SYSTEM,
   CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS,
+  CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS,
   CORE_SPIRIT_LANGUAGE_FEATURES,
   CORE_SPIRIT_TYPE_MODEL,
   validateCoreSpiritLanguageDefinition,
@@ -46,7 +47,8 @@ const statusById = new Map(CORE_SPIRIT_LANGUAGE_FEATURES.map(item => [item.id, i
 for (const id of CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS) {
   assert.ok(statusById.has(id), 'missing maturity status for ' + id);
   const feature = CORE_SPIRIT_LANGUAGE_FEATURES.find(item => item.id === id);
-  assert.ok(feature?.semantics.trim(), 'missing semantics for ' + id);
+  assert.ok(feature?.semantics.trim(), 'missing maturity semantics for ' + id);
+  assert.ok(CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS[id]?.trim(), 'missing normative semantics for ' + id);
 }
 assert.equal(statusById.get('multiple-return-values'), 'planned');
 assert.equal(statusById.get('tuples'), 'planned');
@@ -69,9 +71,9 @@ for (const typeName of ['Array<T>','Map<K,V>','Matrix<T>','Tensor<T>']) {
 for (const typeName of ['Event<T>','Signal<T>','OrderIntent','Position','Prediction<T>','Model<T>']) {
   assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.executionTypes.includes(typeName));
 }
-for (const typeName of ['Result<T,E>','Option<T>']) {
-  assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.errorTypes.includes(typeName));
-}
+assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.errorTypes.includes('Result<T,E>'));
+assert.ok(CORE_SPIRIT_FINAL_TYPE_SYSTEM.optionalTypes.includes('Option<T>'));
+assert.equal(CORE_SPIRIT_FINAL_TYPE_SYSTEM.maturity, CORE_SPIRIT_TYPE_MODEL);
 assert.equal(CORE_SPIRIT_FINAL_TYPE_SYSTEM.temporalConstructors.find(item=>item.name==='Confirmed<T>')?.sourceName,'confirmed<T>');
 for (const typeName of [
   'Series<T>','Historical<T>','CurrentBar<T>','Realtime<T>','Confirmed<T>',
