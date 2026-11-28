@@ -8,73 +8,120 @@ import { CORE_SPIRIT_AUTHORING_LEVELS as RUNTIME_AUTHORING_LEVELS } from './core
  */
 export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
   name: 'CoreSpirit',
+  publicLanguage: 'CoreSpirit',
   compilerAbi: 'CoreScript',
   languageVersion: 1,
   currentEdition: '1.2',
+  supportedEditions: Object.freeze(['1.0', '1.2'] as const),
   programKinds: Object.freeze(['indicator', 'automation', 'prediction', 'strategy'] as const),
   compatibilityProgramKinds: Object.freeze(['script', 'library'] as const),
   compilerPipeline: Object.freeze(['lexer','parser','name-resolution','semantic-analysis','typed-ir','optimizer','execution-planner','runtime'] as const),
   invariant: 'Program kind selects declarations, capabilities and execution policy; it never selects a different grammar or compiler.',
+  surfaceInvariant: 'Edition-specific surface syntax is normalized into one CoreSpirit AST before name resolution, semantic analysis, typed IR and optimization.',
 });
 
-export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
-  'Program ::= EditionDirective? CapabilityRequirement* (ProgramBlock | LegacyStatement*) EOF',
-  'EditionDirective ::= "edition@" Number',
-  'CapabilityRequirement ::= "requires" QualifiedName',
-  'ProgramBlock ::= ProgramHeader Block',
-  'ProgramHeader ::= "indicator" String | "automation" String | "prediction" String | "strategy" String',
-  'Block ::= "{" StatementOrSurface* "}"',
-  'StatementOrSurface ::= Statement | SurfaceStatement',
-  'Statement ::= VariableDeclaration | FunctionDeclaration | TypeDeclaration | EventDeclaration | ConditionalStatement | WhileStatement | ForEachStatement | ReturnStatement | AssignmentStatement | ExpressionStatement | "break" | "continue"',
-  'SurfaceStatement ::= SurfaceShow | SurfaceWhen',
-  'VariableDeclaration ::= ("let" | "const") Identifier (":" TypeName)? "=" Expression Terminator?',
-  'FunctionDeclaration ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block',
-  'ParameterList ::= Parameter ("," Parameter)*',
-  'Parameter ::= Identifier ":" TypeName',
-  'TypeDeclaration ::= "type" Identifier "{" Field* "}"',
-  'Field ::= Identifier ":" TypeName (";" | implicit-end-of-statement)',
-  'EventDeclaration ::= "on" QualifiedName ("(" ArgumentList? ")")? Block',
-  'ConditionalStatement ::= "if" "(" Expression ")" Block ("else" Block)?',
-  'WhileStatement ::= "while" "(" Expression ")" Block',
-  'ForEachStatement ::= "for" "(" ("let")? Identifier "in" Expression ")" Block',
-  'AssignmentStatement ::= Identifier ":=" Expression Terminator?',
-  'ReturnStatement ::= "return" Expression Terminator?',
-  'ExpressionStatement ::= Expression Terminator?',
-  'SurfaceShow ::= "show" Expression',
-  'SurfaceWhen ::= "when" SurfaceCondition (Block | ":" IndentedBlock)',
-  'SurfaceCondition ::= SurfaceCrossingExpression | Expression',
-  'SurfaceCrossingExpression ::= Postfix ("crosses_above" | "crosses_below") Postfix',
-  'SurfaceLowering ::= SurfaceShow -> visual-emission | SurfaceWhen -> ConditionalStatement | SurfaceCrossingExpression -> crossover/crossunder',
-  'Terminator ::= ";" | implicit-end-of-statement',
-  'TypeName ::= QualifiedName ("<" TypeName ("," TypeName)* ">")?',
-  'QualifiedName ::= Identifier ("." Identifier)*',
-  'ArgumentList ::= Expression ("," Expression)*',
-  'Index ::= "[" Expression "]"',
-  'Member ::= "." Identifier',
-  'Call ::= "(" ArgumentList? ")"',
-  'Expression ::= Conditional',
-  'Conditional ::= OrExpression ("?" Expression ":" Expression)?',
-  'OrExpression ::= AndExpression ("or" AndExpression)*',
-  'AndExpression ::= EqualityExpression ("and" EqualityExpression)*',
-  'EqualityExpression ::= ComparisonExpression (("==" | "!=") ComparisonExpression)*',
-  'ComparisonExpression ::= AdditiveExpression (("<" | "<=" | ">" | ">=") AdditiveExpression)*',
-  'AdditiveExpression ::= MultiplicativeExpression (("+" | "-") MultiplicativeExpression)*',
-  'MultiplicativeExpression ::= UnaryExpression (("*" | "/" | "%") UnaryExpression)*',
-  'UnaryExpression ::= ("!" | "+" | "-") UnaryExpression | Postfix',
-  'Postfix ::= Primary (Index | Member | Call)*',
-  'Primary ::= Number | String | Boolean | "null" | Identifier | "(" Expression ")" | ArrayLiteral | MapLiteral',
-  'ArrayLiteral ::= "[" (Expression ("," Expression)*)? "]"',
-  'MapLiteral ::= "{" (MapEntry ("," MapEntry)*)? "}"',
-  'MapEntry ::= (Identifier | String) ":" Expression',
-  'LegacyStatement ::= StatementOrSurface',
-  'Identifier ::= Letter (Letter | Digit | "_")*',
-  'String ::= double-quoted-string | single-quoted-string',
-  'Number ::= integer | decimal | exponent | hexadecimal',
-  'Boolean ::= "true" | "false"',
-  'IndentedBlock ::= indentation-delimited StatementOrSurface+',
-  'Letter ::= "A".."Z" | "a".."z"',
-  'Digit ::= "0".."9"',
-].join('\n');
+/**
+ * Normative CoreSpirit source grammar.
+ *
+ * Edition-specific conveniences are normalized into the same CoreSpirit AST
+ * before name resolution, semantic analysis and lowering. This describes the
+ * public source language, not its internal lexer tokens.
+ */
+export const CORE_SPIRIT_PROGRAM_GRAMMAR = String.raw`
+Source                ::= EditionDirective? CapabilityRequirement* (Program | LegacyScript) EOF
+EditionDirective      ::= "edition@" EditionNumber
+EditionNumber         ::= "1.0" | "1.2"
+CapabilityRequirement ::= "requires" QualifiedName ("," QualifiedName)*
+
+Program               ::= ProgramKind String Block
+ProgramKind           ::= "indicator" | "strategy" | "automation" | "prediction"
+LegacyScript          ::= Statement*
+Block                 ::= "{" Statement* "}"
+
+Statement             ::= VariableDeclaration
+                        | FunctionDeclaration
+                        | RecordDeclaration
+                        | EventHandler
+                        | IfStatement
+                        | AssignmentStatement
+                        | ReturnStatement
+                        | ExpressionStatement
+                        | SurfaceStatement
+                        | Edition12Statement
+VariableDeclaration   ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
+TypeAnnotation        ::= ":" TypeName
+AssignmentStatement   ::= Identifier ":=" Expression Terminator
+FunctionDeclaration   ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block
+ParameterList         ::= Parameter ("," Parameter)*
+Parameter             ::= Identifier ":" TypeName
+ReturnStatement       ::= "return" Expression Terminator
+RecordDeclaration     ::= "type" Identifier "{" FieldDeclaration* "}"
+FieldDeclaration      ::= Identifier ":" TypeName Terminator?
+
+EventHandler          ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
+IfStatement           ::= "if" "(" Expression ")" Block ("else" Block)?
+ExpressionStatement   ::= Expression Terminator
+
+Expression            ::= ConditionalExpression
+ConditionalExpression ::= OrExpression ("?" Expression ":" Expression)?
+OrExpression          ::= AndExpression ("or" AndExpression)*
+AndExpression         ::= EqualityExpression ("and" EqualityExpression)*
+EqualityExpression    ::= ComparisonExpression (("==" | "!=") ComparisonExpression)*
+ComparisonExpression  ::= AdditiveExpression (("<" | "<=" | ">" | ">=") AdditiveExpression)*
+AdditiveExpression    ::= MultiplicativeExpression (("+" | "-") MultiplicativeExpression)*
+MultiplicativeExpression ::= UnaryExpression (("*" | "/" | "%") UnaryExpression)*
+UnaryExpression       ::= ("!" | "+" | "-") UnaryExpression | PostfixExpression
+PostfixExpression     ::= PrimaryExpression PostfixSuffix*
+PostfixSuffix         ::= "[" Expression "]" | "." Identifier | "(" ArgumentList? ")"
+PrimaryExpression     ::= Number | String | Boolean | "null" | Identifier
+                        | "(" Expression ")" | ArrayLiteral | MapLiteral
+ArgumentList          ::= Expression ("," Expression)*
+ArrayLiteral          ::= "[" (Expression ("," Expression)*)? "]"
+MapLiteral            ::= "{" (MapEntry ("," MapEntry)*)? "}"
+MapEntry              ::= (Identifier | String) ":" Expression
+
+TypeName              ::= Identifier GenericArguments?
+GenericArguments      ::= "<" TypeName ("," TypeName)* ">"
+QualifiedName         ::= Identifier ("." Identifier)*
+Identifier            ::= Letter (Letter | Digit | "_")*
+Number                ::= Integer | Decimal | Exponent | Hexadecimal
+String                ::= DoubleQuotedString | SingleQuotedString
+Boolean               ::= "true" | "false"
+Terminator            ::= ";" | LineEnd
+LineEnd               ::= source-line boundary outside nested delimiters
+
+SurfaceStatement      ::= SurfaceWhen | SurfaceShow
+SurfaceWhen           ::= "when" SurfaceCondition (Block | ":" IndentedBlock)
+SurfaceCondition      ::= Expression (("crosses_above" | "crosses_below") Expression)?
+SurfaceShow           ::= "show" Expression
+SurfaceLowering       ::= SurfaceWhen -> IfStatement
+                        | SurfaceShow -> visual-emission call
+
+Edition12Statement    ::= EnumDeclaration | ImportDeclaration | WhileStatement
+                        | ForEachStatement | BreakStatement | ContinueStatement
+                        | CompactPlot
+EnumDeclaration       ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
+EnumMember            ::= Identifier ("=" (String | Number))?
+ImportDeclaration     ::= "import" ("*" "as" Identifier
+                        | "{" ImportBinding ("," ImportBinding)* "}") "from" String
+ImportBinding         ::= Identifier ("as" Identifier)?
+WhileStatement        ::= "while" "(" Expression ")" Block
+ForEachStatement      ::= "for" "(" "let"? Identifier "in" Expression ")" Block
+BreakStatement        ::= "break" Terminator
+ContinueStatement     ::= "continue" Terminator
+CompactPlot           ::= "plot" Expression PlotOptions?
+PlotOptions           ::= ("color" "=" Expression)? ("width" "=" Integer)?
+                        ("style" "=" Identifier)? ("title" "=" String)?
+IndentedBlock         ::= indentation-delimited Statement+
+
+EditionSemantics      ::= "1.0" permits CoreStatement
+                        | "1.2" permits CoreStatement and Edition12Statement
+ImportPolicy          ::= imports resolve only through registered standard-library modules
+FunctionPolicy        ::= functions are pure typed expression functions with one terminal return;
+                          recursion, closures, effectful calls and general control flow are rejected
+LoopPolicy            ::= loops execute under host-enforced VM instruction limits
+CollectionPolicy      ::= arrays and maps are homogeneous, bounded and bounds-checked
+`.trim();
 
 export { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
 import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
@@ -93,23 +140,23 @@ export type CoreSpiritLanguageFeatureContract = Readonly<{ id: string; status: C
 export const CORE_SPIRIT_LANGUAGE_FEATURES: readonly CoreSpiritLanguageFeatureContract[] = Object.freeze([
   { id: 'variables', status: 'implemented', semantics: 'let declarations infer a type or validate an explicit type; assignment uses := for stateful values.' },
   { id: 'constants', status: 'partial', semantics: 'const is parsed, but immutable binding enforcement is not yet a complete semantic invariant.' },
-  { id: 'functions', status: 'implemented', semantics: 'Named functions have typed parameters and return types and are desugared before canonical IR lowering.' },
+  { id: 'functions', status: 'partial', semantics: 'Named functions have typed parameters and one return type; the current implementation inlines pure expression functions only. Recursion, closures, effectful calls and general control flow are rejected.' }, 
   { id: 'parameters', status: 'implemented', semantics: 'Function parameters use explicit TypeName declarations.' },
   { id: 'return-values', status: 'implemented', semantics: 'A function returns one typed expression; bare and multiple returns are not part of this grammar yet.' },
   { id: 'multiple-return-values', status: 'planned', semantics: 'Tuple-valued returns require tuple types, destructuring and IR/runtime contracts.' },
   { id: 'tuples', status: 'planned', semantics: 'Tuple literals, tuple types and destructuring are not yet in the CoreScript AST.' },
-  { id: 'enums', status: 'planned', semantics: 'Enums require nominal identity, exhaustive matching and stable serialization.' },
+  { id: 'enums', status: 'partial', semantics: 'Edition 1.2 supports value-only enums lowered to generated scalar constants. Nominal enum values, exhaustive matching and stable enum serialization are not implemented.' }, 
   { id: 'user-defined-record-types', status: 'partial', semantics: 'type declarations parse named fields; constructors, visibility and full nominal guarantees need completion.' },
   { id: 'methods', status: 'partial', semantics: 'Member calls exist for registered namespaces/collections; user-defined method declarations and dispatch do not.' },
   { id: 'generics', status: 'partial', semantics: 'Nested generic type syntax parses; generic parameter binding, constraints and monomorphization are incomplete.' },
   { id: 'interfaces-traits', status: 'planned', semantics: 'No trait/interface declaration or coherence/implementation rules are in the current grammar.' },
   { id: 'conditional-expressions', status: 'implemented', semantics: 'Conditional expressions are right-associative and lower through the shared expression pipeline.' },
-  { id: 'switch-expressions', status: 'partial', semantics: 'Switch expression parsing is currently Pine-frontend-specific, not yet a native CoreSpirit construct.' },
+  { id: 'switch-expressions', status: 'planned', semantics: 'Switch expressions are not part of the native CoreSpirit grammar; Pine frontend switch syntax is isolated compatibility behavior.' }, 
   { id: 'loops', status: 'implemented', semantics: 'Host-bounded while and foreach constructs lower to explicit control-flow IR.' },
   { id: 'iterators', status: 'partial', semantics: 'Foreach supports current collection lowering; a user-defined iterator protocol is not available.' },
   { id: 'closures', status: 'planned', semantics: 'Captures, lifetime rules and closure conversion are not implemented.' },
   { id: 'namespaces', status: 'partial', semantics: 'Built-in namespace/member calls exist; user-defined namespace declarations are not complete.' },
-  { id: 'imports-exports', status: 'planned', semantics: 'Import resolution, visibility, cycles and reproducible dependency locking belong to the shared module system.' },
+  { id: 'imports-exports', status: 'partial', semantics: 'Edition 1.2 imports resolve only registered standard-library namespaces. User-module imports, exports, visibility, cycle handling and dependency locking are not implemented.' }, 
   { id: 'libraries', status: 'partial', semantics: 'A library program kind exists for compatibility; publishable/importable source modules are not complete.' },
   { id: 'error-handling', status: 'planned', semantics: 'Result/Option propagation and recoverable error semantics are not yet in the grammar.' },
   { id: 'type-inference', status: 'implemented', semantics: 'Expression inference and semantic series/domain qualifiers feed the typed IR environment.' },
@@ -136,7 +183,7 @@ export const CORE_SPIRIT_LANGUAGE_SEMANTICS = Object.freeze({
     let: 'A local declaration is initialized once; unqualified types are inferred from the initializer.',
     const: 'Parsed as a declaration but immutable assignment rejection is not yet complete.',
     assignment: 'The := operator updates a stateful binding; ordinary = is reserved for declarations/surface shorthand.',
-    functions: 'Named functions use typed parameters and a declared return type; function bodies desugar before IR lowering.',
+    functions: 'Named functions use typed parameters and a declared return type; only pure expression bodies with one terminal return are accepted and inlined before IR lowering. Recursion, closures, effects and general control flow are rejected.',
     return: 'Exactly one expression value is supported by the current function ABI.',
   }),
   temporalValues: Object.freeze({

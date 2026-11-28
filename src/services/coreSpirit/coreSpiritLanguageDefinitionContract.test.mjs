@@ -18,7 +18,9 @@ import {
 
 assert.deepEqual(validateCoreSpiritLanguageDefinition(), []);
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.name, 'CoreSpirit');
+assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.publicLanguage, 'CoreSpirit');
 assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.compilerAbi, 'CoreScript');
+assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.supportedEditions, ['1.0','1.2']);
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, ['indicator','automation','prediction','strategy']);
 assert.equal(CORE_SPIRIT_AUTHORING_LEVELS.map(level => level.id).join(','), 'beginner,trader,quant,system');
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /ProgramHeader/);
@@ -90,6 +92,20 @@ for (const [kind, title, source] of programCases) {
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programLayer:'automation' }), kind === 'automation');
 }
+
+
+// Every workload shares one parser and one core grammar.
+for (const kind of ['indicator','strategy','automation','prediction']) {
+  const parsed = new CoreSpiritParser(kind + ' "Grammar Contract" { let value = 1; }').parseDetailed();
+  assert.deepEqual(parsed.diagnostics, [], kind + ' grammar must be accepted by the common parser');
+  assert.equal(parsed.ast.programKind, kind);
+}
+const unsupportedNativeSwitch = compileCoreSpirit(
+  'indicator "No Native Switch" { let value = switch close { 1 => 2 }; }',
+  'language-native-switch-not-supported',
+);
+assert.ok(unsupportedNativeSwitch.diagnostics.some(item=>item.severity==='error'));
+assert.equal(unsupportedNativeSwitch.ir, undefined);
 
 const beginnerSurface = [
   'indicator "Trend Geometry" {',
@@ -185,9 +201,46 @@ assert.ok(missingClose.diagnostics.some(item => item.message.includes('Expected 
 const trailing = new CoreSpiritParser('strategy "Bad Tail" { let x = 1; } let y = 2;').parseDetailed();
 assert.ok(trailing.diagnostics.some(item => item.message.includes('Unexpected tokens after the program declaration')));
 
-for (const id of ['variables','constants','functions','parameters','return-values','multiple-return-values','tuples','enums','user-defined-record-types','methods','generics','interfaces-traits','conditional-expressions','switch-expressions','loops','iterators','closures','namespaces','imports-exports','libraries','error-handling','type-inference','lexical-scope','operator-overloading','nullability','symbol-timeframe-types','temporal-qualifiers','external-data-provenance']) {
-  assert.equal(getCoreSpiritLanguageFeature(id)?.status, 'planned', id + ' must not be advertised as implemented');
-}
-assert.equal(CORE_SPIRIT_LANGUAGE_FEATURES.find(feature => feature.id === 'operator-overloading')?.status, 'deferred');
+const expectedFeatureStatuses = {
+  variables:'implemented',
+  constants:'partial',
+  functions:'partial',
+  parameters:'implemented',
+  'return-values':'implemented',
+  'multiple-return-values':'planned',
+  tuples:'planned',
+  enums:'partial',
+  'user-defined-record-types':'partial',
+  methods:'partial',
+  generics:'partial',
+  'interfaces-traits':'planned',
+  'conditional-expressions':'implemented',
+  'switch-expressions':'planned',
+  loops:'implemented',
+  iterators:'partial',
+  closures:'planned',
+  namespaces:'partial',
+  'imports-exports':'partial',
+  libraries:'partial',
+  'error-handling':'planned',
+  'type-inference':'implemented',
+  'lexical-scope':'partial',
+  nullability:'partial',
+  'symbol-timeframe-types':'partial',
+  'temporal-qualifiers':'partial',
+  'external-data-provenance':'partial',
+  'prediction-feature-blocks':'planned',
+  'prediction-output-statements':'planned',
+  'strategy-position-actions':'partial',
+  'operator-overloading':'deferred',
+};
+assert.deepEqual(
+  Object.fromEntries(CORE_SPIRIT_LANGUAGE_FEATURES.map(feature=>[feature.id,feature.status])),
+  expectedFeatureStatuses,
+  'the public maturity matrix must describe the actual CoreSpirit frontend/runtime boundary',
+);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/Edition12Statement/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/FunctionPolicy/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/ImportPolicy/);
 
 console.log('CORESPIRIT_LANGUAGE_DEFINITION_CONTRACT_OK');
