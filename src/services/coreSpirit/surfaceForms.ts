@@ -574,6 +574,14 @@ export function normalizeCoreSpiritSource(source: string): string {
       if (/\{\s*$/.test(trimmed)) indicatorInnerBraceDepth += 1;
     }
 
+    // Brace-style WHEN is the canonical explicit block form. It lowers to
+    // the same AST conditional as IF and does not participate in indentation
+    // block closing.
+    const braceWhen = trimmed.match(/^when\s+(.+?)\s*\{\s*$/i);
+    if (braceWhen) {
+      out.push('if (' + whenCondition(braceWhen[1], modelNames) + ') {');
+      continue;
+    }
     // Dedicated WHEN concept: indentation/colon is only a source convenience.
     const whenMatch = trimmed.match(/^when\s+(.+?)\s*:\s*$/i);
     if (whenMatch) {
