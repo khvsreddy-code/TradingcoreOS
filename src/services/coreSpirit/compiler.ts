@@ -32,6 +32,7 @@ import { buildCoreSpiritArtifactSemanticFingerprint } from './artifactLookupIden
 import { readCoreScriptEdition, type CoreScriptEdition } from './languageEdition.js';
 import { parseWithCoreSpiritFrontend } from './frontends';
 import { desugarCoreSpiritFunctions } from './functionDesugar';
+import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritLanguageDefinition';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
@@ -137,15 +138,7 @@ export class CoreSpiritCompiler {
     // The declaration selects the default execution policy. Callers may still
     // explicitly choose a stricter host layer, but omission must not downgrade
     // strategy/automation/prediction declarations into ordinary indicator scripts.
-    const declaredLayer: Record<string, CoreSpiritProgramLayer> = {
-      indicator:'script',
-      strategy:'strategy',
-      automation:'automation',
-      prediction:'model',
-      library:'script',
-      script:'script',
-    };
-    const inferredLayer=declaredLayer[ast.programKind ?? 'script'] || 'script';
+    const inferredLayer: CoreSpiritProgramLayer = CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS[ast.programKind ?? 'script'];
     if(ast.programKind && options.layer && options.layer !== inferredLayer){
       return {
         diagnostics:[{
