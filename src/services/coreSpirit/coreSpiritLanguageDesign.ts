@@ -1,4 +1,9 @@
 import { CORE_SPIRIT_LAYER_PROFILES } from './layeredPlatformContract';
+/**
+ * Design-only normative contract for the final CoreSpirit language.
+ * Keep this module out of editor/compiler runtime imports; parser acceptance
+ * is governed by the executable edition grammar and feature maturity matrix.
+ */
 import {
   CORE_SPIRIT_LANGUAGE_FEATURES,
   CORE_SPIRIT_TYPE_MODEL,
