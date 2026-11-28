@@ -27,101 +27,132 @@ export const CORE_SPIRIT_LANGUAGE_DEFINITION = Object.freeze({
  * before name resolution, semantic analysis and lowering. This describes the
  * public source language, not its internal lexer tokens.
  */
+/**
+ * Normative CoreSpirit source grammar.
+ *
+ * Edition-specific conveniences are normalized into the same CoreSpirit AST
+ * before name resolution, semantic analysis and lowering. This describes the
+ * public source language, not its internal lexer tokens.
+ */
 export const CORE_SPIRIT_PROGRAM_GRAMMAR = String.raw`
-Source                ::= EditionDirective? CapabilityRequirement* (Program | LegacyScript) EOF
-EditionDirective      ::= "edition@" EditionNumber
-EditionNumber         ::= "1.0" | "1.2"
+Source                 ::= EditionDirective? CapabilityRequirement* (Program | LegacyScript) EOF
+EditionDirective       ::= "edition@" EditionNumber
+EditionNumber          ::= "1.0" | "1.2"
 CapabilityRequirement ::= "requires" QualifiedName ("," QualifiedName)*
 
-Program               ::= ProgramKind String Block
-ProgramKind           ::= "indicator" | "strategy" | "automation" | "prediction"
-LegacyScript          ::= Statement*
-Block                 ::= "{" Statement* "}"
+Program                ::= ProgramKind String Block
+ProgramKind            ::= "indicator" | "strategy" | "automation" | "prediction"
+LegacyScript           ::= Statement*
+Block                  ::= "{" Statement* "}"
 
-Statement             ::= VariableDeclaration
-                        | FunctionDeclaration
-                        | RecordDeclaration
-                        | EventHandler
-                        | IfStatement
-                        | AssignmentStatement
-                        | ReturnStatement
-                        | ExpressionStatement
-                        | SurfaceStatement
-                        | Edition12Statement
-VariableDeclaration   ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
-TypeAnnotation        ::= ":" TypeName
-AssignmentStatement   ::= Identifier ":=" Expression Terminator
-FunctionDeclaration   ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block
-ParameterList         ::= Parameter ("," Parameter)*
-Parameter             ::= Identifier ":" TypeName
-ReturnStatement       ::= "return" Expression Terminator
-RecordDeclaration     ::= "type" Identifier "{" FieldDeclaration* "}"
-FieldDeclaration      ::= Identifier ":" TypeName Terminator?
+Statement              ::= VariableDeclaration
+                         | FunctionDeclaration
+                         | RecordDeclaration
+                         | EventHandler
+                         | IfStatement
+                         | AssignmentStatement
+                         | ReturnStatement
+                         | ExpressionStatement
+                         | SurfaceStatement
+                         | Edition12Statement
+VariableDeclaration    ::= ("let" | "const") Identifier TypeAnnotation? "=" Expression Terminator
+TypeAnnotation         ::= ":" TypeName
+AssignmentStatement    ::= Identifier ":=" Expression Terminator
+FunctionDeclaration    ::= "fn" Identifier "(" ParameterList? ")" "->" TypeName Block
+ParameterList          ::= Parameter ("," Parameter)*
+Parameter              ::= Identifier ":" TypeName
+ReturnStatement        ::= "return" Expression Terminator
+RecordDeclaration      ::= "type" Identifier "{" FieldDeclaration* "}"
+FieldDeclaration       ::= Identifier ":" TypeName Terminator?
 
-EventHandler          ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
-IfStatement           ::= "if" "(" Expression ")" Block ("else" Block)?
-ExpressionStatement   ::= Expression Terminator
+EventHandler           ::= "on" QualifiedName ("(" ArgumentList? ")")? Block
+IfStatement            ::= "if" "(" Expression ")" Block ("else" Block)?
+ExpressionStatement    ::= Expression Terminator
 
-Expression            ::= ConditionalExpression
-ConditionalExpression ::= OrExpression ("?" Expression ":" Expression)?
-OrExpression          ::= AndExpression ("or" AndExpression)*
-AndExpression         ::= EqualityExpression ("and" EqualityExpression)*
-EqualityExpression    ::= ComparisonExpression (("==" | "!=") ComparisonExpression)*
-ComparisonExpression  ::= AdditiveExpression (("<" | "<=" | ">" | ">=") AdditiveExpression)*
-AdditiveExpression    ::= MultiplicativeExpression (("+" | "-") MultiplicativeExpression)*
+Expression             ::= ConditionalExpression
+ConditionalExpression  ::= OrExpression ("?" Expression ":" Expression)?
+OrExpression           ::= AndExpression ("or" AndExpression)*
+AndExpression          ::= EqualityExpression ("and" EqualityExpression)*
+EqualityExpression     ::= ComparisonExpression (("==" | "!=") ComparisonExpression)*
+ComparisonExpression   ::= AdditiveExpression (("<" | "<=" | ">" | ">=") AdditiveExpression)*
+AdditiveExpression     ::= MultiplicativeExpression (("+" | "-") MultiplicativeExpression)*
 MultiplicativeExpression ::= UnaryExpression (("*" | "/" | "%") UnaryExpression)*
-UnaryExpression       ::= ("!" | "+" | "-") UnaryExpression | PostfixExpression
-PostfixExpression     ::= PrimaryExpression PostfixSuffix*
-PostfixSuffix         ::= "[" Expression "]" | "." Identifier | "(" ArgumentList? ")"
-PrimaryExpression     ::= Number | String | Boolean | "null" | Identifier
-                        | "(" Expression ")" | ArrayLiteral | MapLiteral
-ArgumentList          ::= Expression ("," Expression)*
-ArrayLiteral          ::= "[" (Expression ("," Expression)*)? "]"
-MapLiteral            ::= "{" (MapEntry ("," MapEntry)*)? "}"
-MapEntry              ::= (Identifier | String) ":" Expression
+UnaryExpression        ::= ("!" | "+" | "-") UnaryExpression | PostfixExpression
+PostfixExpression      ::= PrimaryExpression PostfixSuffix*
+PostfixSuffix          ::= "[" Expression "]" | "." Identifier | "(" ArgumentList? ")"
+PrimaryExpression      ::= Number | String | Boolean | "null" | Identifier
+                         | "(" Expression ")" | ArrayLiteral | MapLiteral
+ArgumentList           ::= Expression ("," Expression)*
+ArrayLiteral           ::= "[" (Expression ("," Expression)*)? "]"
+MapLiteral             ::= "{" (MapEntry ("," MapEntry)*)? "}"
+MapEntry               ::= (Identifier | String) ":" Expression
 
-TypeName              ::= Identifier GenericArguments?
-GenericArguments      ::= "<" TypeName ("," TypeName)* ">"
-QualifiedName         ::= Identifier ("." Identifier)*
-Identifier            ::= Letter (Letter | Digit | "_")*
-Number                ::= Integer | Decimal | Exponent | Hexadecimal
-String                ::= DoubleQuotedString | SingleQuotedString
-Boolean               ::= "true" | "false"
-Terminator            ::= ";" | LineEnd
-LineEnd               ::= source-line boundary outside nested delimiters
+TypeName               ::= Identifier GenericArguments?
+GenericArguments       ::= "<" TypeName ("," TypeName)* ">"
+QualifiedName          ::= Identifier ("." Identifier)*
+Identifier             ::= Letter (Letter | Digit | "_")*
+Number                 ::= Hexadecimal | Decimal | Integer
+Hexadecimal            ::= ("0x" | "0X") HexDigit+
+Decimal                ::= (Digit+ ("." Digit+)? | "." Digit+) Exponent?
+Exponent               ::= ("e" | "E") ("+" | "-")? Digit+
+Integer                ::= Digit+
+String                 ::= '"' StringCharacter* '"' | "'" StringCharacter* "'"
+StringCharacter        ::= EscapeSequence | any character except active quote or EOF
+EscapeSequence         ::= "\" ("n" | "r" | "t" | any single escaped character)
+Boolean                ::= "true" | "false"
+Letter                 ::= "A".."Z" | "a".."z" | "_"
+Digit                  ::= "0".."9"
+HexDigit               ::= Digit | "A".."F" | "a".."f"
+Terminator             ::= ";" | ImplicitLineTerminator
+ImplicitLineTerminator ::= source-line boundary recognized by surface normalization
+Comment                ::= "//" characters-to-line-end | "/*" characters "*/"
 
-SurfaceStatement      ::= SurfaceWhen | SurfaceShow
-SurfaceWhen           ::= "when" SurfaceCondition (Block | ":" IndentedBlock)
-SurfaceCondition      ::= Expression (("crosses_above" | "crosses_below") Expression)?
-SurfaceShow           ::= "show" Expression
-SurfaceLowering       ::= SurfaceWhen -> IfStatement
-                        | SurfaceShow -> visual-emission call
+SurfaceStatement       ::= SurfaceWhen | SurfaceShow
+SurfaceWhen            ::= "when" SurfaceCondition (Block | ":" IndentedBlock)
+SurfaceCondition       ::= Expression (CrossingOperator Expression)?
+CrossingOperator       ::= "crosses_above" | "crosses_below"
+SurfaceShow            ::= "show" Expression
+SurfaceLowering        ::= SurfaceWhen -> IfStatement
+                         | SurfaceShow -> canonical visual-emission call
 
-Edition12Statement    ::= EnumDeclaration | ImportDeclaration | WhileStatement
-                        | ForEachStatement | BreakStatement | ContinueStatement
-                        | CompactPlot
-EnumDeclaration       ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
-EnumMember            ::= Identifier ("=" (String | Number))?
-ImportDeclaration     ::= "import" ("*" "as" Identifier
-                        | "{" ImportBinding ("," ImportBinding)* "}") "from" String
-ImportBinding         ::= Identifier ("as" Identifier)?
-WhileStatement        ::= "while" "(" Expression ")" Block
-ForEachStatement      ::= "for" "(" "let"? Identifier "in" Expression ")" Block
-BreakStatement        ::= "break" Terminator
-ContinueStatement     ::= "continue" Terminator
-CompactPlot           ::= "plot" Expression PlotOptions?
-PlotOptions           ::= ("color" "=" Expression)? ("width" "=" Integer)?
-                        ("style" "=" Identifier)? ("title" "=" String)?
-IndentedBlock         ::= indentation-delimited Statement+
-
-EditionSemantics      ::= "1.0" permits CoreStatement
-                        | "1.2" permits CoreStatement and Edition12Statement
-ImportPolicy          ::= imports resolve only through registered standard-library modules
-FunctionPolicy        ::= functions are pure typed expression functions with one terminal return;
-                          recursion, closures, effectful calls and general control flow are rejected
-LoopPolicy            ::= loops execute under host-enforced VM instruction limits
-CollectionPolicy      ::= arrays and maps are homogeneous, bounded and bounds-checked
+Edition12Statement     ::= EnumDeclaration | ImportDeclaration | WhileStatement
+                         | ForEachStatement | BreakStatement | ContinueStatement
+                         | CompactPlot
+EnumDeclaration        ::= "enum" Identifier "{" EnumMember ("," EnumMember)* ","? "}"
+EnumMember             ::= Identifier ("=" (String | Number))?
+ImportDeclaration      ::= "import" ("*" "as" Identifier
+                         | "{" ImportBinding ("," ImportBinding)* "}") "from" String
+ImportBinding          ::= Identifier ("as" Identifier)?
+WhileStatement         ::= "while" "(" Expression ")" Block
+ForEachStatement       ::= "for" "(" "let"? Identifier "in" Expression ")" Block
+BreakStatement         ::= "break" Terminator
+ContinueStatement      ::= "continue" Terminator
+CompactPlot            ::= "plot" Expression PlotOptions?
+PlotOptions            ::= ("color" "=" Expression)? ("width" "=" Integer)?
+                         ("style" "=" Identifier)? ("title" "=" String)?
+IndentedBlock          ::= indentation-delimited Statement+
 `.trim();
+
+/**
+ * Normative rules that cannot be expressed by syntax productions alone.
+ * Program kinds and authoring levels never select separate grammars.
+ */
+export const CORE_SPIRIT_LANGUAGE_SYNTAX_POLICIES = Object.freeze({
+  editions: Object.freeze({
+    '1.0': 'Core statements and the legacy readable surface. Edition-specific v1.2 syntax is rejected.',
+    '1.2': 'Adds bounded while/for-in control flow, break/continue, value-only enums, standard-library imports and compact plot declarations.',
+  }),
+  lowering: Object.freeze({
+    when: 'when condition { ... } and when condition: indented-body lower to an ordinary conditional block; crosses_above/crosses_below lower to registered crossing predicates.',
+    show: 'show expression lowers to the canonical visual-emission ABI; it does not create a separate renderer or execution engine.',
+    compactPlot: 'edition@1.2 plot expression options lower to the existing plot call contract.',
+    enums: 'value-only enum members lower to generated scalar constants; enum values are not nominal runtime objects.',
+    imports: 'imports resolve only through the registered standard-library namespace catalogue; no filesystem or network module loading.',
+  }),
+  functions: 'Named functions require typed parameters and a declared return type. The current implementation accepts pure local expressions followed by exactly one terminal return and inlines them. Recursion, closures, effectful calls and general control flow are rejected.',
+  loops: 'while and for-in loops are edition@1.2 syntax and are bounded by the host VM instruction budget; break and continue target the innermost loop.',
+  collections: 'Array and map values are homogeneous, bounded, bounds-checked collections. Matrix/tensor shape rules are semantic contracts; implicit structured broadcasting is rejected.',
+});
 
 export { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
 import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
@@ -233,7 +264,7 @@ export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
   ]),
   collectionContracts: Object.freeze([
     Object.freeze({ name:'Array<T>', sourceName:'array<T>', status:'implemented' as const }),
-    Object.freeze({ name:'Map<K,V>', sourceName:'map<T>', status:'partial' as const }),
+    Object.freeze({ name:'Map<K,V>', sourceName:'map<K,V>', status:'partial' as const }),
     Object.freeze({ name:'Vector<T>', sourceName:'vector<T>', status:'partial' as const }),
     Object.freeze({ name:'Matrix<T>', sourceName:'matrix<T>', status:'partial' as const }),
     Object.freeze({ name:'Tensor<T>', sourceName:'tensor<T>', status:'partial' as const }),
@@ -248,7 +279,20 @@ export const CORE_SPIRIT_TYPE_MODEL = Object.freeze({
     Object.freeze({ name:'State<T>', sourceName:'state<T>', status:'implemented' as const }),
     Object.freeze({ name:'Intrabar<T>', sourceName:'intrabar<T>', status:'implemented' as const }),
     Object.freeze({ name:'External<T>', sourceName:'host-resolved external data', status:'partial' as const }),
+    Object.freeze({ name:'Forecast<T>', sourceName:'forecast<T>', status:'partial' as const }),
     Object.freeze({ name:'Optional<T>', sourceName:'Option<T>', status:'planned' as const }),
+  ]),
+  temporalQualifierContracts: Object.freeze([
+    Object.freeze({ name:'historical', representation:'series<T> with historical provenance', status:'partial' as const, invariant:'Only previously observed bars are eligible; future offsets are invalid.' }),
+    Object.freeze({ name:'current-bar', representation:'active bar revision', status:'partial' as const, invariant:'Unconfirmed fields may change until the bar is committed.' }),
+    Object.freeze({ name:'realtime', representation:'series<T> with realtime phase metadata', status:'partial' as const, invariant:'Realtime observations are revisioned; effects are host-policy gated.' }),
+    Object.freeze({ name:'confirmed', representation:'confirmed<T>', status:'implemented' as const, invariant:'A developing value cannot satisfy a confirmed-value requirement.' }),
+    Object.freeze({ name:'developing', representation:'developing<T>', status:'implemented' as const, invariant:'The value may be revised until bar confirmation.' }),
+    Object.freeze({ name:'stateful', representation:'state<T>', status:'implemented' as const, invariant:'State is checkpointed and rolled back across realtime revisions.' }),
+    Object.freeze({ name:'intrabar-stateful', representation:'intrabar<T>', status:'implemented' as const, invariant:'Intrabar state has separate persistence semantics from state<T>.' }),
+    Object.freeze({ name:'external', representation:'host-resolved external market data', status:'partial' as const, invariant:'External data is capability-checked and causality-checked by the host.' }),
+    Object.freeze({ name:'forecast', representation:'forecast<T>', status:'partial' as const, invariant:'Forecasts are model outputs, not observed market history.' }),
+    Object.freeze({ name:'optional', representation:'Option<T>', status:'planned' as const, invariant:'Null-safe access and flow narrowing are not yet a complete type-system contract.' }),
   ]),
   executionValueContracts: Object.freeze([
     Object.freeze({ name:'Event<T>', sourceName:'event<T>', status:'partial' as const }),

@@ -8,6 +8,7 @@ import { CORE_SPIRIT_LAYER_PROFILES, canUseCapability } from './layeredPlatformC
 import {
   CORE_SPIRIT_LANGUAGE_DEFINITION,
   CORE_SPIRIT_PROGRAM_GRAMMAR,
+  CORE_SPIRIT_LANGUAGE_SYNTAX_POLICIES,
   CORE_SPIRIT_AUTHORING_LEVELS,
   CORE_SPIRIT_LANGUAGE_FEATURES,
   CORE_SPIRIT_TYPE_MODEL,
@@ -31,6 +32,11 @@ assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR, /QualifiedName/);
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURES.some(feature => feature.id === 'prediction-feature-blocks' && feature.status === 'planned'));
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURES.some(feature => feature.id === 'prediction-output-statements' && feature.status === 'planned'));
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalContainers.includes('confirmed<T>'));
+assert.equal(CORE_SPIRIT_TYPE_MODEL.collectionContracts.find(item=>item.name==='Map<K,V>')?.sourceName,'map<K,V>');
+assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalTypeContracts.some(item=>item.name==='Forecast<T>'));
+assert.deepEqual(CORE_SPIRIT_TYPE_MODEL.temporalQualifierContracts.map(item=>item.name),[
+  'historical','current-bar','realtime','confirmed','developing','stateful','intrabar-stateful','external','forecast','optional',
+]);
 assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalPhases.includes('realtime'));
 assert.equal(CORE_SPIRIT_TYPE_MODEL.primitiveContracts.find(item => item.name === 'Bool')?.runtimeName, 'boolean');
 assert.equal(CORE_SPIRIT_TYPE_MODEL.primitiveContracts.find(item => item.name === 'Void')?.status, 'planned');
@@ -240,7 +246,14 @@ assert.deepEqual(
   'the public maturity matrix must describe the actual CoreSpirit frontend/runtime boundary',
 );
 assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/Edition12Statement/);
-assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/FunctionPolicy/);
-assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/ImportPolicy/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/FunctionDeclaration/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/ImportDeclaration/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/CompactPlot/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/Hexadecimal/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/EscapeSequence/);
+assert.match(CORE_SPIRIT_PROGRAM_GRAMMAR,/CrossingOperator/);
+assert.match(CORE_SPIRIT_LANGUAGE_SYNTAX_POLICIES.functions,/pure local expressions/);
+assert.match(CORE_SPIRIT_LANGUAGE_SYNTAX_POLICIES.editions['1.2'],/value-only enums/);
+assert.match(CORE_SPIRIT_LANGUAGE_SYNTAX_POLICIES.lowering.imports,/registered standard-library/);
 
 console.log('CORESPIRIT_LANGUAGE_DEFINITION_CONTRACT_OK');
