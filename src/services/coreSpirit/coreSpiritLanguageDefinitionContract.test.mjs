@@ -80,7 +80,7 @@ for (const [kind, title, source] of programCases) {
   assert.equal(compiled.ir.programLayer, kind === 'strategy' ? 'strategy' : kind === 'automation' ? 'automation' : kind === 'prediction' ? 'model' : 'script');
   assert.equal(compiled.ir.language, 'CoreScript');
   assert.equal(compiled.ir.languageVersion, 1);
-  const pipelineSignature = compiled.ir.compilerPipeline.join('>');
+  const pipelineSignature = compiled.ir.compilerPipeline.stages.join('>');
   if (sharedPipelineSignature === undefined) sharedPipelineSignature = pipelineSignature;
   assert.equal(pipelineSignature, sharedPipelineSignature, 'all four program kinds must use the same compiler/optimizer pipeline');
   assert.equal(compiled.artifact?.abi.magic, 'CSPIRIT');
