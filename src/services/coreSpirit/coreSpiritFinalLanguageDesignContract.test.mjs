@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritParser } from './parser.ts';
+import { CORE_SPIRIT_LAYER_PROFILES } from './layeredPlatformContract.ts';
 import { CORE_SPIRIT_AUTHORING_SURFACES } from './languageParity.ts';
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { serializeCoreSpiritIr, validateCoreSpiritIr } from './irContract.ts';
@@ -22,6 +23,17 @@ assert.equal(CORE_SPIRIT_LANGUAGE_DEFINITION.name, 'CoreSpirit');
 assert.deepEqual(CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds, [
   'indicator', 'automation', 'prediction', 'strategy',
 ]);
+
+// Program kinds share the language/library but receive different host policies.
+assert.deepEqual(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.programCapabilities, {
+  indicator: CORE_SPIRIT_LAYER_PROFILES.script.capabilities,
+  automation: CORE_SPIRIT_LAYER_PROFILES.automation.capabilities,
+  prediction: CORE_SPIRIT_LAYER_PROFILES.model.capabilities,
+  strategy: CORE_SPIRIT_LAYER_PROFILES.strategy.capabilities,
+});
+assert.equal(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.standardLibrary.sharedAcrossPrograms, true);
+assert.match(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.standardLibrary.capabilityRule, /gate effects/);
+
 
 // The target grammar has a production for every requested language family.
 // It is intentionally distinct from the currently accepted v1.2 grammar.
