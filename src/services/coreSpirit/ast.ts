@@ -56,7 +56,7 @@ export type CoreSpiritAstNode = (
   | CoreSpiritReturnNode
 ) & { metadata?: CoreSpiritAstNodeMetadata };
 
-export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; pineDeclaration?:CoreSpiritPineDeclarationMetadata; span?: CoreSpiritSpan };
+export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; programKind?: CoreSpiritProgramKind; programTitle?: string; pineDeclaration?:CoreSpiritPineDeclarationMetadata; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; declaredType?: string; expression: CoreSpiritAstNode; pineMode?:'var'|'varip'; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritAssignmentNode = { type: 'assignment'; name: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
 export type CoreSpiritOnEventNode = { type: 'onEvent'; eventName: string; body: CoreSpiritAstNode[]; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
