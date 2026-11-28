@@ -101,6 +101,7 @@ const contracts = [
   ['corespirit-retained-zone-identity', ['src/services/coreSpirit/retainedZoneIdentityContract.test.mjs', true]],
   ['unified-language', ['src/coreSpiritUnifiedLanguageContract.test.mjs', true]],
   ['corespirit-language-definition', ['src/services/coreSpirit/coreSpiritLanguageDefinitionContract.test.mjs', true]],
+  ['corespirit-final-language-design', ['src/services/coreSpirit/coreSpiritFinalLanguageDesignContract.test.mjs', true]],
   ['corescript-progressive-unified-language', ['src/coreScriptProgressiveLanguageContract.test.mjs', true]],
   ['architecture-consolidation', ['src/architectureConsolidationGuard.test.mjs', false]],
   ['corespirit-broker-boundary', ['src/coreSpiritBrokerBoundaryContract.test.mjs', false]],
