@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { validateCoreSpiritFeatureMatrix, CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX, CORE_SPIRIT_AUTHORING_SURFACES, getCoreSpiritFeatureParity } from './services/coreSpirit/languageParity.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
+import { PINE_FEATURE_REGISTRY } from './services/coreSpirit/pine/pineFeatureRegistry.ts';
 
 assert.deepEqual(validateCoreSpiritFeatureMatrix(), []);
 assert.ok(CORE_SPIRIT_LANGUAGE_FEATURE_MATRIX.some(item=>item.id==='tuples'&&item.status==='planned'));
