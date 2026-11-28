@@ -14,22 +14,16 @@
       "action": "Replace each dependency with native CoreSpirit capabilities before removing Pine."
     },
     {
-      "id": "TD-002",
-      "priority": "P0",
-      "area": "CI reliability",
-      "title": "Fail-fast suite hides the remaining contract results",
-      "evidence": "249 contracts are registered; CI stopped on entry 2 after the Pine frontend assertion failed.",
-      "impact": "The other entries were not reached and cannot be treated as passed.",
-      "action": "Aggregate independent failures and emit structured per-contract results; retain optional fail-fast local mode."
-    },
-    {
       "id": "TD-003",
       "priority": "P0",
       "area": "Current regression",
       "title": "Pine strategyEntry contract is failing",
       "evidence": "PineV6FrontendContract.test.ts:65 asserts Pine strategyEntry compiles to a dedicated simulation-only command.",
       "impact": "Main CI contract step is red before most tests.",
-      "action": "Triage lowering versus contract expectation; fix and preserve the simulation-only boundary."
+      "action": "Triage lowering versus contract expectation; fix and preserve the simulation-only boundary.",
+      "status": "fix_committed_pending_ci",
+      "fixCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
+      "fixDescription": "Namespaced member-call lowering emits the declared builtin emitKind after the call instruction."
     },
     {
       "id": "TD-004",
@@ -48,15 +42,6 @@
       "evidence": "Soak run 46007338048 failed in create-browser-auth-state.mjs with Supabase CI test-account error: Invalid login credentials.",
       "impact": "The 8-chart 30-minute performance/heap measurement never started.",
       "action": "Repair or rotate dedicated CI account credentials; verify auth bootstrap and rerun full soak."
-    },
-    {
-      "id": "TD-006",
-      "priority": "P1",
-      "area": "Test completeness",
-      "title": "11 CoreSpirit test files absent from the primary contract runner",
-      "evidence": "src/services/coreSpirit/artifactIdentityParityContract.test.mjs; src/services/coreSpirit/causalityAnalysisContract.test.mjs; src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs; src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs; src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs; src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs; src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs; src/services/coreSpirit/sharedMarketBufferContract.test.mjs; src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts",
-      "impact": "These tests are not run by npm run test:contracts.",
-      "action": "Assign each test to a suite and CI step; avoid ambiguous manual-only tests."
     },
     {
       "id": "TD-007",
@@ -142,6 +127,45 @@
       ],
       "impact": "These are compile-time rather than demonstrated runtime cycles, but they couple the canonical IR schema to higher-level compilation, planning, inspection and Pine compatibility layers. Artifact schema evolution becomes harder to isolate.",
       "action": "Split executable IR from derived analysis/inspection metadata. Keep the canonical IR schema dependent only on language-neutral value/instruction contracts; attach optional analysis reports through a versioned artifact envelope or sidecar metadata."
+    },
+    {
+      "id": "TD-016",
+      "priority": "P1",
+      "area": "Bundle splitting and lazy loading",
+      "title": "Artifact-cache dynamic import is defeated by static imports in chart execution owners",
+      "evidence": [
+        "Production Vite warns src/services/coreSpirit/artifactCache.ts is dynamically imported by coreSpiritWorkerPool.ts but statically imported by src/CoreSpiritVelaEngine.ts and src/services/coreSpirit/chartRunner.ts.",
+        "Vite explicitly says this dynamic import will not move the module into another chunk.",
+        "Chart initial static graph remains 663.0 KB gzip against a 650 KB hard ceiling."
+      ],
+      "impact": "The intended lazy boundary does not split artifactCache out of the static chunk graph; chart remains over its hard bundle budget.",
+      "action": "Inspect synchronous cache consumers; move them behind an async cache service or isolate safe metadata. Re-run static-closure budget and browser cold-start benchmarks before merging."
+    }
+  ],
+  "resolvedItems": [
+    {
+      "id": "TD-002",
+      "priority": "P0",
+      "area": "CI reliability",
+      "title": "Fail-fast suite hides the remaining contract results",
+      "evidence": "249 contracts are registered; CI stopped on entry 2 after the Pine frontend assertion failed.",
+      "impact": "The other entries were not reached and cannot be treated as passed.",
+      "action": "Aggregate independent failures and emit structured per-contract results; retain optional fail-fast local mode.",
+      "status": "resolved",
+      "resolvedInCommit": "d8577eb6e1f7e3d72c7a9d4e3ce18e1b00ceb24c",
+      "resolution": "The runner aggregates independent failures by default, emits JSON results, removes duplicates and includes all 82 CoreSpirit test files. The primary suite has 258 unique test files."
+    },
+    {
+      "id": "TD-006",
+      "priority": "P1",
+      "area": "Test completeness",
+      "title": "11 CoreSpirit test files absent from the primary contract runner",
+      "evidence": "src/services/coreSpirit/artifactIdentityParityContract.test.mjs; src/services/coreSpirit/causalityAnalysisContract.test.mjs; src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs; src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs; src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs; src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs; src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs; src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs; src/services/coreSpirit/sharedMarketBufferContract.test.mjs; src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts",
+      "impact": "These tests are not run by npm run test:contracts.",
+      "action": "Assign each test to a suite and CI step; avoid ambiguous manual-only tests.",
+      "status": "resolved",
+      "resolvedInCommit": "d8577eb6e1f7e3d72c7a9d4e3ce18e1b00ceb24c",
+      "resolution": "The runner aggregates independent failures by default, emits JSON results, removes duplicates and includes all 82 CoreSpirit test files. The primary suite has 258 unique test files."
     }
   ]
 }

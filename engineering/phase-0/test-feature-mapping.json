@@ -27,21 +27,40 @@
       "chartInitialGzipKb": 663,
       "hardLimitKb": 650,
       "optimizationTargetKb": 550
+    },
+    "postAggregationRun": {
+      "runId": 46103957654,
+      "runNumber": 5655,
+      "headCommit": "d8577eb6e1f7e3d72c7a9d4e3ce18e1b00ceb24c",
+      "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46103957654",
+      "contractStep": "failed",
+      "typecheck": "passed",
+      "productionBuild": "failed_bundle_budget",
+      "benchmark": "in_progress_at_last_inspection",
+      "detail": "Per-contract SUMMARY_JSON not yet retrievable while validate job was still active."
+    },
+    "postStrategyCompilerFixRun": {
+      "runId": 46104176100,
+      "runNumber": 5656,
+      "headCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
+      "url": "https://github.com/khvsreddy-code/TradingcoreOS/actions/runs/46104176100",
+      "status": "in_progress_at_last_inspection",
+      "purpose": "Verify namespaced Pine builtin emitKind lowering fix."
     }
   },
   "totals": {
-    "registeredContracts": 249,
+    "registeredContracts": 258,
+    "uniqueTestFiles": 258,
     "pineSpecificContracts": 6,
     "coreSpiritTestFiles": 82,
-    "unregisteredCoreSpiritTests": 11
+    "coreSpiritTestsRegistered": 82,
+    "unregisteredCoreSpiritTestFiles": 0
   },
   "contracts": [
     {
       "name": "corespirit-function-ast-desugaring",
       "file": "src/services/coreSpirit/functionAstDesugarContract.test.ts",
       "requiresTsLoader": true,
-      "position": 1,
-      "executionOnAuditedRun": "passed",
       "featureAreas": [
         "language",
         "execution"
@@ -51,8 +70,6 @@
       "name": "corespirit-pine-v6-frontend",
       "file": "src/services/coreSpirit/pine/pineV6FrontendContract.test.ts",
       "requiresTsLoader": true,
-      "position": 2,
-      "executionOnAuditedRun": "failed",
       "featureAreas": [
         "language",
         "execution"
@@ -62,8 +79,6 @@
       "name": "corespirit-pine-varip-runtime",
       "file": "src/services/coreSpirit/pine/pineVaripRuntimeContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 3,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -72,8 +87,6 @@
       "name": "corespirit-pine-expressions",
       "file": "src/services/coreSpirit/pine/pineExpressionSemanticsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 4,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -83,8 +96,6 @@
       "name": "corespirit-frontend-and-type-qualifier",
       "file": "src/services/coreSpirit/frontendAndTypeQualifierContract.test.ts",
       "requiresTsLoader": true,
-      "position": 5,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -94,8 +105,6 @@
       "name": "corespirit-pine-feature-registry",
       "file": "src/services/coreSpirit/pine/pineFeatureRegistryContract.test.ts",
       "requiresTsLoader": true,
-      "position": 6,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -104,8 +113,6 @@
       "name": "corespirit-ir-specification",
       "file": "src/services/coreSpirit/irSpecificationContract.test.ts",
       "requiresTsLoader": true,
-      "position": 7,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -114,8 +121,6 @@
       "name": "dependency-audit-classification",
       "file": "tools/report-dependency-audit.test.mjs",
       "requiresTsLoader": false,
-      "position": 8,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -124,8 +129,6 @@
       "name": "request-trace-reason",
       "file": "src/requestTraceReasonContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 9,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -134,8 +137,6 @@
       "name": "market-data-health",
       "file": "src/marketDataHealthContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 10,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -144,8 +145,6 @@
       "name": "options-data-domain",
       "file": "src/optionsDataDomainContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 11,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "prediction_models_ai"
       ]
@@ -154,8 +153,6 @@
       "name": "ml-training-input-security",
       "file": "src/mlTrainingSecurityContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 12,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "prediction_models_ai",
         "security"
@@ -165,8 +162,6 @@
       "name": "corescript-capability-maturity",
       "file": "src/coreScriptCapabilityMaturityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 13,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "security"
@@ -176,8 +171,6 @@
       "name": "vela-scene-graph",
       "file": "src/velaSceneGraphContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 14,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -186,8 +179,6 @@
       "name": "vela-adaptive-graphics-budget",
       "file": "src/velaAdaptiveGraphicsBudgetContract.test.ts",
       "requiresTsLoader": true,
-      "position": 15,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -196,8 +187,6 @@
       "name": "vela-adaptive-graphics-integration",
       "file": "src/velaAdaptiveGraphicsIntegrationContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 16,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -206,8 +195,6 @@
       "name": "frontend-bundle-architecture",
       "file": "src/frontendBundleArchitectureContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 17,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language"
       ]
@@ -216,8 +203,6 @@
       "name": "landing-product-entry",
       "file": "src/landingProductEntryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 18,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -226,8 +211,6 @@
       "name": "instrument-identity",
       "file": "src/instrumentIdentityContract.test.ts",
       "requiresTsLoader": true,
-      "position": 19,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -236,8 +219,6 @@
       "name": "workspace-panel-system",
       "file": "src/workspacePanelSystemContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 20,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -246,8 +227,6 @@
       "name": "compact-order-ticket",
       "file": "src/compactOrderTicketContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 21,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "strategies"
@@ -257,8 +236,6 @@
       "name": "live-chart-controller-store",
       "file": "src/liveChartControllerStoreContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 22,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "visualization_vela"
@@ -268,8 +245,6 @@
       "name": "chart-data-plane-trade-ordering",
       "file": "src/services/marketData/chartDataPlaneTradeOrdering.test.ts",
       "requiresTsLoader": true,
-      "position": 23,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela",
@@ -280,8 +255,6 @@
       "name": "chart-data-plane-persistent-sidecars",
       "file": "src/services/marketData/chartDataPlanePersistentSidecars.test.ts",
       "requiresTsLoader": true,
-      "position": 24,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -291,8 +264,6 @@
       "name": "market-dataset-lifecycle-stress",
       "file": "src/services/marketData/datasetLifecycleStress.test.ts",
       "requiresTsLoader": true,
-      "position": 25,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -301,8 +272,6 @@
       "name": "chart-history-normalization",
       "file": "src/services/marketData/chartHistoryNormalization.test.ts",
       "requiresTsLoader": true,
-      "position": 26,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -312,8 +281,6 @@
       "name": "chart-history-cold-start",
       "file": "src/services/marketData/chartHistoryColdStartContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 27,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -323,8 +290,6 @@
       "name": "stitch-workspace-wiring",
       "file": "src/stitchWorkspaceWiringContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 28,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -333,8 +298,6 @@
       "name": "tco-custom-workspace-frame",
       "file": "src/velaCustomWorkspaceFrameContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 29,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -343,8 +306,6 @@
       "name": "terminal-visual-density",
       "file": "src/terminalVisualDensityContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 30,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -353,8 +314,6 @@
       "name": "yahoo-delayed-fallback",
       "file": "src/yahooDelayedFallbackContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 31,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -363,8 +322,6 @@
       "name": "shared-broker-coordination",
       "file": "src/sharedBrokerCoordinationContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 32,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -373,8 +330,6 @@
       "name": "fyers-quota-identity",
       "file": "src/fyersQuotaIdentityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 33,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "prediction_models_ai"
@@ -384,8 +339,6 @@
       "name": "fyers-standard-expired-fno-history-policy",
       "file": "src/fyersHistoryWindowContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 34,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data",
@@ -396,8 +349,6 @@
       "name": "fyers-plan-capabilities",
       "file": "src/fyersCapabilitiesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 35,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -406,8 +357,6 @@
       "name": "corespirit-right-dock",
       "file": "src/corespiritDockContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 36,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -417,8 +366,6 @@
       "name": "market-latency-trace",
       "file": "src/services/core/performance/marketLatencyTrace.test.ts",
       "requiresTsLoader": true,
-      "position": 37,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -427,8 +374,6 @@
       "name": "chart-data-flow-observability",
       "file": "src/chartDataFlowObservabilityContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 38,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -438,8 +383,6 @@
       "name": "chart-candle-event-canonicalization",
       "file": "src/services/marketData/chartCandleEvents.test.ts",
       "requiresTsLoader": true,
-      "position": 39,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela",
@@ -450,8 +393,6 @@
       "name": "chart-compute-revision-fence",
       "file": "src/chartComputeRevisionContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 40,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -460,8 +401,6 @@
       "name": "chart-runtime-reliability",
       "file": "src/chartRuntimeReliabilityContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 41,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -471,8 +410,6 @@
       "name": "indicator-dependency-invalidation",
       "file": "src/services/marketData/indicatorDependencyInvalidation.test.ts",
       "requiresTsLoader": true,
-      "position": 42,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "math_ta_statistics"
@@ -482,8 +419,6 @@
       "name": "history-store-late-response-merge",
       "file": "src/services/marketData/HistoryStoreRevision.test.ts",
       "requiresTsLoader": true,
-      "position": 43,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -492,8 +427,6 @@
       "name": "history-store-persistence-recovery",
       "file": "src/services/marketData/HistoryStorePersistenceLifecycle.test.ts",
       "requiresTsLoader": true,
-      "position": 44,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -502,8 +435,6 @@
       "name": "watchlist-technicals-summary",
       "file": "src/services/marketData/watchlistTechnicals.test.ts",
       "requiresTsLoader": true,
-      "position": 45,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -512,8 +443,6 @@
       "name": "vela-history-watchlist-news-markers",
       "file": "src/velaHistoryWatchlistEventsContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 46,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela",
@@ -524,8 +453,6 @@
       "name": "market-feed-lifecycle",
       "file": "src/services/marketData/marketFeedLifecycle.test.ts",
       "requiresTsLoader": true,
-      "position": 47,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "realtime_data"
@@ -535,8 +462,6 @@
       "name": "market-data-auto-fixer",
       "file": "src/server/marketData/MarketDataAutoFixer.test.ts",
       "requiresTsLoader": true,
-      "position": 48,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -545,8 +470,6 @@
       "name": "market-data-source-priority",
       "file": "src/server/marketData/HistoricalDataService.test.ts",
       "requiresTsLoader": true,
-      "position": 49,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -555,8 +478,6 @@
       "name": "live-candle-state-machine",
       "file": "src/services/marketData/liveCandleStateMachine.test.ts",
       "requiresTsLoader": true,
-      "position": 50,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "realtime_data"
@@ -566,8 +487,6 @@
       "name": "chart-cold-start-real-candles",
       "file": "src/chartColdStartAndRealCandleContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 51,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -577,8 +496,6 @@
       "name": "live-candle-lifecycle",
       "file": "src/liveCandleLifecycleContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 52,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "realtime_data"
@@ -588,8 +505,6 @@
       "name": "live-candle-timestamp-toolbar",
       "file": "src/liveCandleTimestampAndToolbarContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 53,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "realtime_data"
@@ -599,8 +514,6 @@
       "name": "vela-101-foundation",
       "file": "src/vela101FoundationContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 54,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -609,8 +522,6 @@
       "name": "vela-pane-layout-persistence-runtime",
       "file": "src/velaPaneLayoutPersistence.test.ts",
       "requiresTsLoader": true,
-      "position": 55,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -620,8 +531,6 @@
       "name": "vela-101-conformance",
       "file": "src/vela101ConformanceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 56,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -630,8 +539,6 @@
       "name": "vela-live-ui-corespirit",
       "file": "src/velaLiveUiCoreSpiritContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 57,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "realtime_data",
@@ -642,8 +549,6 @@
       "name": "fyers-option-search-token",
       "file": "src/fyersOptionSearchTokenContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 58,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -652,8 +557,6 @@
       "name": "vela-native-lazy",
       "file": "src/velaNativeIndicatorLazyContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 59,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics",
         "visualization_vela"
@@ -663,8 +566,6 @@
       "name": "vela-drawing-groups",
       "file": "src/velaDrawingGroupContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 60,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -673,18 +574,6 @@
       "name": "vela-synthetic-price-styles",
       "file": "src/velaSyntheticPriceStylesContract.test.ts",
       "requiresTsLoader": true,
-      "position": 61,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
-      "featureAreas": [
-        "visualization_vela"
-      ]
-    },
-    {
-      "name": "vela-p1-chart-terminal",
-      "file": "src/velaP1ChartTerminalContract.test.mjs",
-      "requiresTsLoader": true,
-      "position": 62,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -693,8 +582,6 @@
       "name": "options-black-scholes",
       "file": "src/optionsBlackScholesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 63,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -703,8 +590,6 @@
       "name": "vela-p1-workspace-marketdata",
       "file": "src/velaP1WorkspaceMarketDataContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 64,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -714,8 +599,6 @@
       "name": "live-gap-policy",
       "file": "src/liveGapPolicyContract.test.ts",
       "requiresTsLoader": true,
-      "position": 65,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -724,8 +607,6 @@
       "name": "chart-session-calendar-store",
       "file": "src/services/marketData/sessionCalendarStore.test.ts",
       "requiresTsLoader": true,
-      "position": 66,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -735,8 +616,6 @@
       "name": "vela-anchored-vwap-math",
       "file": "src/velaAnchoredVwapMathContract.test.ts",
       "requiresTsLoader": true,
-      "position": 67,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics",
         "visualization_vela"
@@ -746,8 +625,6 @@
       "name": "vela-manual-scale-inversion",
       "file": "src/velaManualScaleInversionContract.test.ts",
       "requiresTsLoader": true,
-      "position": 68,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -756,8 +633,6 @@
       "name": "vela-timezone-dst",
       "file": "src/velaTimeZoneTicksContract.test.ts",
       "requiresTsLoader": true,
-      "position": 69,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "visualization_vela"
@@ -767,8 +642,6 @@
       "name": "vela-ichimoku-math",
       "file": "src/velaIchimokuMathContract.test.ts",
       "requiresTsLoader": true,
-      "position": 70,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics",
         "visualization_vela",
@@ -779,8 +652,6 @@
       "name": "execution-plan",
       "file": "src/services/coreSpirit/executionPlanVisualizerContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 71,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -790,8 +661,6 @@
       "name": "repaint-profiler",
       "file": "src/services/coreSpirit/repaintProfilerContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 72,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -801,8 +670,6 @@
       "name": "corespirit-execution-safety-and-conformance",
       "file": "src/services/coreSpirit/coreSpiritExecutionSafetyContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 73,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -811,8 +678,6 @@
       "name": "temporal-types",
       "file": "src/services/coreSpirit/temporalTypesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 74,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution",
@@ -823,8 +688,6 @@
       "name": "trading-native-plan",
       "file": "src/services/coreSpirit/tradingNativePlanContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 75,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -833,8 +696,6 @@
       "name": "specialized-plan",
       "file": "src/services/coreSpirit/specializedPlanContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 76,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -843,8 +704,6 @@
       "name": "series-registry",
       "file": "src/services/coreSpirit/seriesRegistryContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 77,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -853,8 +712,6 @@
       "name": "series-backend-dispatcher",
       "file": "src/services/coreSpirit/seriesBackendDispatcherContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 78,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -863,8 +720,6 @@
       "name": "dirty-graph",
       "file": "src/services/coreSpirit/dirtyGraphContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 79,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -873,8 +728,6 @@
       "name": "corespirit-kernel-snapshot-identity",
       "file": "src/services/coreSpirit/kernelStateSnapshotsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 80,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -883,8 +736,6 @@
       "name": "corespirit-historical-correction-replay",
       "file": "src/services/coreSpirit/historicalCorrectionReplay.test.ts",
       "requiresTsLoader": true,
-      "position": 81,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -894,8 +745,6 @@
       "name": "corespirit-mutation-conformance",
       "file": "src/services/coreSpirit/mutationConformance.test.ts",
       "requiresTsLoader": true,
-      "position": 82,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -904,8 +753,6 @@
       "name": "corespirit-canonical-pipeline",
       "file": "src/services/coreSpirit/canonicalCompilerPipelineContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 83,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -914,8 +761,6 @@
       "name": "corespirit-optimizer-production",
       "file": "src/services/coreSpirit/optimizerProductionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 84,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -924,8 +769,6 @@
       "name": "corespirit-optimized-execution-cache-context",
       "file": "src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 85,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -934,8 +777,6 @@
       "name": "corespirit-optimizer-register-version",
       "file": "src/services/coreSpirit/optimizerRegisterVersionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 86,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -944,8 +785,6 @@
       "name": "corespirit-optimizer-constant-register-version",
       "file": "src/services/coreSpirit/optimizerConstantRegisterVersionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 87,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -954,8 +793,6 @@
       "name": "corespirit-optimizer-control-flow-reassignment",
       "file": "src/services/coreSpirit/optimizerControlFlowReassignmentContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 88,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -964,8 +801,6 @@
       "name": "corespirit-optimizer-generated-differential",
       "file": "src/services/coreSpirit/optimizerDifferentialPropertyContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 89,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -974,8 +809,6 @@
       "name": "columnar-market-data",
       "file": "src/services/coreSpirit/columnarMarketDataContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 90,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -985,8 +818,6 @@
       "name": "market-frame-facade",
       "file": "src/services/coreSpirit/marketFrameFacade.test.ts",
       "requiresTsLoader": true,
-      "position": 91,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -995,8 +826,6 @@
       "name": "corespirit-off-thread-compile-cache",
       "file": "src/coreSpiritOffThreadCompileContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 92,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1005,18 +834,6 @@
       "name": "corespirit-worker-generation-lifecycle",
       "file": "src/coreSpiritWorkerLifecycleContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 93,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "name": "optimized-execution",
-      "file": "src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs",
-      "requiresTsLoader": true,
-      "position": 94,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1025,8 +842,6 @@
       "name": "authoring-levels",
       "file": "src/coreSpiritAuthoringLevelsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 95,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "ide"
@@ -1036,8 +851,6 @@
       "name": "corescript-program-mode-security",
       "file": "src/services/coreSpirit/coreScriptProgramModesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 96,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution",
@@ -1048,8 +861,6 @@
       "name": "corespirit-smc-deterministic-acceptance",
       "file": "src/services/coreSpirit/luxAlgoSmcDeterministicAcceptance.test.mjs",
       "requiresTsLoader": true,
-      "position": 97,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics"
@@ -1059,8 +870,6 @@
       "name": "corespirit-session-calendar",
       "file": "src/services/coreSpirit/sessionCalendarContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 98,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1069,8 +878,6 @@
       "name": "corespirit-retained-zone-identity",
       "file": "src/services/coreSpirit/retainedZoneIdentityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 99,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1080,8 +887,6 @@
       "name": "unified-language",
       "file": "src/coreSpiritUnifiedLanguageContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 100,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -1091,8 +896,6 @@
       "name": "corescript-progressive-unified-language",
       "file": "src/coreScriptProgressiveLanguageContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 101,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "visualization_vela"
@@ -1102,8 +905,6 @@
       "name": "architecture-consolidation",
       "file": "src/architectureConsolidationGuard.test.mjs",
       "requiresTsLoader": false,
-      "position": 102,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -1112,8 +913,6 @@
       "name": "corespirit-broker-boundary",
       "file": "src/coreSpiritBrokerBoundaryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 103,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "realtime_data"
@@ -1123,8 +922,6 @@
       "name": "broker-launch-workspace",
       "file": "src/brokerLaunchWorkspaceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 104,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -1133,8 +930,6 @@
       "name": "corespirit-vela-data-and-drawings",
       "file": "tools/coreSpiritVelaDataAndDrawingsContract.mjs",
       "requiresTsLoader": true,
-      "position": 105,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -1144,8 +939,6 @@
       "name": "corespirit-language-parity",
       "file": "src/coreSpiritLanguageParityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 106,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -1155,8 +948,6 @@
       "name": "chart-candle-data-plane-fast-switch",
       "file": "tools/chartCandleDataPlaneFastSwitchContract.mjs",
       "requiresTsLoader": true,
-      "position": 107,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "historical_data",
@@ -1167,8 +958,6 @@
       "name": "corespirit-safe-complexity-types",
       "file": "tools/coreSpiritSafeComplexityTypesContract.mjs",
       "requiresTsLoader": true,
-      "position": 108,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -1178,8 +967,6 @@
       "name": "tco-fast-candle-cache",
       "file": "tools/tcoFastCandleCacheContract.mjs",
       "requiresTsLoader": false,
-      "position": 109,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution",
@@ -1190,8 +977,6 @@
       "name": "tco-canonical-historical-columns",
       "file": "tools/tcoCanonicalHistoricalColumnsRuntimeContract.mjs",
       "requiresTsLoader": true,
-      "position": 110,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -1201,8 +986,6 @@
       "name": "vela-hot-symbol-lru",
       "file": "tools/velaHotSymbolLruContract.mjs",
       "requiresTsLoader": false,
-      "position": 111,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -1211,8 +994,6 @@
       "name": "vela-candle-time-normalization",
       "file": "tools/velaCandleTimeNormalizationContract.mjs",
       "requiresTsLoader": true,
-      "position": 112,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -1222,8 +1003,6 @@
       "name": "vela-columnar-live-renderer",
       "file": "tools/velaColumnarLiveRendererContract.mjs",
       "requiresTsLoader": true,
-      "position": 113,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "visualization_vela"
@@ -1233,8 +1012,6 @@
       "name": "vela-columnar-history-tape-runtime",
       "file": "tools/velaColumnarHistoryTapeRuntimeContract.mjs",
       "requiresTsLoader": true,
-      "position": 114,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data",
@@ -1246,8 +1023,6 @@
       "name": "architecture",
       "file": "src/architecture/architectureContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 115,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -1256,8 +1031,6 @@
       "name": "canonical-market-data",
       "file": "src/canonicalMarketDataTransportContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 116,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -1266,8 +1039,6 @@
       "name": "canonical-market-data-transport-runtime",
       "file": "src/services/core/data/canonicalMarketDataTransport.test.ts",
       "requiresTsLoader": true,
-      "position": 117,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -1277,8 +1048,6 @@
       "name": "market-data-history-reconciliation",
       "file": "src/services/core/data/marketDataStoreReconciliation.test.ts",
       "requiresTsLoader": true,
-      "position": 118,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "historical_data"
@@ -1288,8 +1057,6 @@
       "name": "semantic-series-type",
       "file": "src/coreSpiritSemanticSeriesTypeContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 119,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -1299,8 +1066,6 @@
       "name": "semantic-series-type-runtime",
       "file": "src/services/coreSpirit/semanticSeriesTypeRuntime.test.ts",
       "requiresTsLoader": true,
-      "position": 120,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution"
@@ -1310,8 +1075,6 @@
       "name": "corescript-typed-quant-values-and-hmm",
       "file": "src/services/coreSpirit/typedQuantAndHmm.test.ts",
       "requiresTsLoader": true,
-      "position": 121,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution",
@@ -1322,8 +1085,6 @@
       "name": "corespirit-model-artifact-provenance",
       "file": "src/services/coreSpirit/modelArtifacts.test.ts",
       "requiresTsLoader": true,
-      "position": 122,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai",
@@ -1334,8 +1095,6 @@
       "name": "corespirit-numerical-kernels",
       "file": "src/services/coreSpirit/numericalKernelsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 123,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics"
@@ -1345,8 +1104,6 @@
       "name": "corespirit-incremental-stateful-kernels",
       "file": "src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 124,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1355,8 +1112,6 @@
       "name": "corespirit-source-input-defaults",
       "file": "src/services/coreSpirit/surfaceSourceInputDefaultsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 125,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1365,8 +1120,6 @@
       "name": "corespirit-latest-value-async-scheduler",
       "file": "src/services/coreSpirit/latestValueAsyncSchedulerContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 126,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1375,8 +1128,6 @@
       "name": "india-market-session-countdown",
       "file": "src/indiaMarketSessionCountdownContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 127,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -1385,8 +1136,6 @@
       "name": "corespirit-vela-canonical-boundary",
       "file": "src/services/coreSpirit/velaOutputAdapterContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 128,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -1396,8 +1145,6 @@
       "name": "corespirit-multibackend-kernel-executor",
       "file": "src/services/coreSpirit/multiBackendKernelExecutorContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 129,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1406,8 +1153,6 @@
       "name": "corespirit-multibackend-capabilities",
       "file": "src/services/coreSpirit/backendRegistryContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 130,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1416,8 +1161,6 @@
       "name": "corespirit-multibackend-execution-planner",
       "file": "src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 131,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1426,8 +1169,6 @@
       "name": "corespirit-model-lifecycle-training-inference",
       "file": "src/services/coreSpirit/modelLifecycle.test.ts",
       "requiresTsLoader": true,
-      "position": 132,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1437,8 +1178,6 @@
       "name": "strategy-simulator-deterministic-ledger",
       "file": "src/services/core/replay/strategySimulator.test.ts",
       "requiresTsLoader": true,
-      "position": 133,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "strategies"
@@ -1448,8 +1187,6 @@
       "name": "strategy-simulator-margin-pyramiding-oca",
       "file": "src/services/core/replay/strategySimulatorEnhancementsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 134,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "strategies"
@@ -1459,8 +1196,6 @@
       "name": "corespirit-pine-strategy-simulation-adapter",
       "file": "src/services/coreSpirit/pineStrategySimulationAdapterContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 135,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "strategies"
@@ -1470,8 +1205,6 @@
       "name": "corespirit-pine-backtest-execution-host",
       "file": "src/services/coreSpirit/pineStrategyBacktestHostContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 136,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "strategies"
@@ -1481,8 +1214,6 @@
       "name": "core-spirit-simulation-intent-adapter",
       "file": "src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts",
       "requiresTsLoader": true,
-      "position": 137,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data",
@@ -1493,8 +1224,6 @@
       "name": "replay-timestamp-ordering",
       "file": "src/services/core/replay/replayValidator.test.ts",
       "requiresTsLoader": true,
-      "position": 138,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "strategies"
@@ -1504,8 +1233,6 @@
       "name": "strategy-simulator-live-execution-boundary",
       "file": "src/strategySimulatorExecutionBoundaryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 139,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "realtime_data",
@@ -1516,8 +1243,6 @@
       "name": "corespirit-execution-state-machine",
       "file": "src/services/coreSpirit/executionStateMachineContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 140,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1526,8 +1251,6 @@
       "name": "corespirit-state-checkpoint",
       "file": "src/services/coreSpirit/executionStateCheckpointContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 141,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1536,8 +1259,6 @@
       "name": "corespirit-execution-replay-identity",
       "file": "src/services/coreSpirit/executionReplayIdentityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 142,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -1547,8 +1268,6 @@
       "name": "corespirit-replay-execution-parity",
       "file": "src/services/coreSpirit/replayContract.test.ts",
       "requiresTsLoader": true,
-      "position": 143,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -1558,8 +1277,6 @@
       "name": "corespirit-research-temporal-validation",
       "file": "src/services/coreSpirit/researchValidation.test.ts",
       "requiresTsLoader": true,
-      "position": 144,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data",
@@ -1570,8 +1287,6 @@
       "name": "corespirit-bounded-chunked-research",
       "file": "src/coreSpiritBatchResearchContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 145,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1581,8 +1296,6 @@
       "name": "corespirit-model-provenance-and-release",
       "file": "src/coreSpiritResearchModelLifecycleContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 146,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai",
@@ -1593,8 +1306,6 @@
       "name": "corespirit-model-promotion-recomputation",
       "file": "src/coreSpiritPromotionGateContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 147,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai",
@@ -1605,8 +1316,6 @@
       "name": "corespirit-model-promotion-fail-closed",
       "file": "src/services/coreSpirit/modelPromotionValidation.test.ts",
       "requiresTsLoader": true,
-      "position": 148,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai",
@@ -1617,8 +1326,6 @@
       "name": "artifact-hygiene",
       "file": "src/generatedArtifactHygieneContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 149,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1627,8 +1334,6 @@
       "name": "routes",
       "file": "src/routeContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 150,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -1637,8 +1342,6 @@
       "name": "indicator-dependency-graph",
       "file": "src/indicatorDependencyGraphContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 151,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -1647,8 +1350,6 @@
       "name": "indicator-incremental",
       "file": "src/indicatorIncrementalContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 152,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -1657,8 +1358,6 @@
       "name": "vela-p1-indicator-incremental",
       "file": "src/velaP1IndicatorIncrementalContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 153,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics",
         "visualization_vela"
@@ -1668,8 +1367,6 @@
       "name": "vela-p1-incremental-catalog",
       "file": "src/velaP1IncrementalCatalogContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 154,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -1678,8 +1375,6 @@
       "name": "vela-p1-chart-terminal",
       "file": "src/velaP1ChartTerminalContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 155,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -1688,8 +1383,6 @@
       "name": "indicator-appearance",
       "file": "src/indicatorAppearanceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 156,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -1698,8 +1391,6 @@
       "name": "indicator-parameter-system",
       "file": "src/indicatorParameterSystemContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 157,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -1708,8 +1399,6 @@
       "name": "indicator-conditional-settings",
       "file": "src/indicatorConditionalSettingsContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 158,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -1718,8 +1407,6 @@
       "name": "indicator-parameter-state",
       "file": "src/services/coreSpirit/indicatorParameterState.test.ts",
       "requiresTsLoader": true,
-      "position": 159,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics"
@@ -1729,8 +1416,6 @@
       "name": "indicator-component",
       "file": "src/coreSpiritIndicatorComponentContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 160,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics"
@@ -1740,8 +1425,6 @@
       "name": "indicator-declarative-execution",
       "file": "src/coreSpiritIndicatorDeclarativeExecutionContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 161,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics"
@@ -1751,8 +1434,6 @@
       "name": "runtime-hot-vm",
       "file": "src/coreSpiritRuntimeHotVmContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 162,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -1761,8 +1442,6 @@
       "name": "vela-runtime-export",
       "file": "src/velaFacadeRuntimeExportContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 163,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -1772,8 +1451,6 @@
       "name": "vela-drawing",
       "file": "src/velaDrawingCapabilityContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 164,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela",
         "security"
@@ -1783,8 +1460,6 @@
       "name": "chart-prediction-artifact-only",
       "file": "src/chartPredictionArtifactOnlyContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 165,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela",
@@ -1795,8 +1470,6 @@
       "name": "corespirit-python-ml-adapter",
       "file": "src/services/coreSpirit/pythonMlModelAdapterContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 166,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1806,8 +1479,6 @@
       "name": "corespirit-model-orchestration-security",
       "file": "src/services/coreSpirit/modelOrchestrationSecurityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 167,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai",
@@ -1818,8 +1489,6 @@
       "name": "corespirit-ai-model-semantics",
       "file": "src/services/coreSpirit/aiModelContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 168,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "execution",
@@ -1830,8 +1499,6 @@
       "name": "corespirit-polyglot-module-abi",
       "file": "src/services/coreSpirit/polyglotModulesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 169,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1841,8 +1508,6 @@
       "name": "corespirit-quant-research",
       "file": "src/services/coreSpirit/quantResearchContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 170,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics",
@@ -1853,8 +1518,6 @@
       "name": "corespirit-large-data-research-host",
       "file": "src/services/coreSpirit/quantResearchServiceHostContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 171,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "math_ta_statistics",
@@ -1865,8 +1528,6 @@
       "name": "corespirit-point-in-time-research-features",
       "file": "src/services/coreSpirit/researchFeaturesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 172,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1876,8 +1537,6 @@
       "name": "corespirit-alert-delivery",
       "file": "src/services/coreSpirit/alertDeliveryContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 173,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "realtime_data",
@@ -1888,8 +1547,6 @@
       "name": "corespirit-data-request-temporal-budget",
       "file": "src/services/coreSpirit/dataResolverTemporalBudgetContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 174,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -1899,8 +1556,6 @@
       "name": "corespirit-request-security-lower-tf-arrays",
       "file": "src/services/coreSpirit/requestSecurityCompatibilityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 175,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "collections",
@@ -1911,8 +1566,6 @@
       "name": "corespirit-python-module-host",
       "file": "src/services/coreSpirit/pythonModuleServiceHostContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 176,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1922,8 +1575,6 @@
       "name": "corespirit-polyglot-remote-hosts",
       "file": "src/services/coreSpirit/polyglotServiceHostContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 177,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -1933,8 +1584,6 @@
       "name": "corespirit-backtest-metrics",
       "file": "src/services/coreSpirit/backtestMetricsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 178,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "strategies"
@@ -1944,8 +1593,6 @@
       "name": "corespirit-native-visual-primitives",
       "file": "src/services/coreSpirit/visualPrimitivesContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 179,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -1955,8 +1602,6 @@
       "name": "corespirit-plot-shape-char-alertcondition-runtime",
       "file": "src/services/coreSpirit/plotShapeCharAlertconditionRuntimeContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 180,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela",
@@ -1967,8 +1612,6 @@
       "name": "vela-workspace-autosave",
       "file": "src/velaWorkspaceAutosaveContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 181,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -1977,8 +1620,6 @@
       "name": "market-desk-news-history-warm",
       "file": "src/marketDeskAndHistoryWarmContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 182,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -1987,8 +1628,6 @@
       "name": "vela-active-preview-drawing-tool",
       "file": "src/velaActivePreviewDrawingToolContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 183,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -1997,8 +1636,6 @@
       "name": "vela-drawing-persistence-roundtrip",
       "file": "src/velaDrawingPersistenceRoundTripContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 184,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2007,8 +1644,6 @@
       "name": "vela-incremental-patch",
       "file": "src/velaIncrementalPatchContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 185,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela",
         "prediction_models_ai"
@@ -2018,8 +1653,6 @@
       "name": "vela-revisioned-scene-patch",
       "file": "src/velaRevisionedScenePatchContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 186,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2028,8 +1661,6 @@
       "name": "revisioned-range-patch",
       "file": "src/revisionedRangePatchContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 187,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -2038,8 +1669,6 @@
       "name": "vela-v108-boundary",
       "file": "src/velaV108BoundaryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 188,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2048,8 +1677,6 @@
       "name": "corespirit-vela-full-capability",
       "file": "src/coreSpiritVelaCapabilityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 189,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela",
@@ -2060,8 +1687,6 @@
       "name": "corespirit-backfill-full-history-replay",
       "file": "src/coreSpiritBackfillFullReplayContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 190,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -2071,8 +1696,6 @@
       "name": "corespirit-viewport-side-effect-suppression",
       "file": "src/coreSpiritViewportSideEffectContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 191,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2081,8 +1704,6 @@
       "name": "corespirit-secondary-refresh-latest-wins",
       "file": "src/coreSpiritSecondaryRefreshRaceContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 192,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2091,8 +1712,6 @@
       "name": "corespirit-architecture-1-to-8-production",
       "file": "src/coreSpiritArchitecture1to8ProductionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 193,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2101,8 +1720,6 @@
       "name": "corespirit-exact-dirty-span",
       "file": "src/coreSpiritExactDirtySpanContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 194,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2111,8 +1728,6 @@
       "name": "corespirit-visual-object-lifecycle",
       "file": "src/services/coreSpirit/visualIdentityProductionContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 195,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -2122,8 +1737,6 @@
       "name": "chart-performance-history-telemetry",
       "file": "src/chartPerformanceHistoryTelemetryContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 196,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -2133,8 +1746,6 @@
       "name": "tco-vela-performance-telemetry",
       "file": "src/tcoVelaPerformanceTelemetryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 197,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2143,8 +1754,6 @@
       "name": "browser-performance-release-gates",
       "file": "src/browserPerformanceReleaseGateContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 198,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -2153,8 +1762,6 @@
       "name": "browser-performance-auth-bootstrap",
       "file": "src/browserPerformanceAuthContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 199,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -2163,8 +1770,6 @@
       "name": "vela-live-workspace-ownership",
       "file": "src/velaLiveWorkspaceOwnershipContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 200,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "visualization_vela"
@@ -2174,8 +1779,6 @@
       "name": "vercel-realtime-service-routing",
       "file": "src/vercelRealtimeServiceRoutingContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 201,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2184,8 +1787,6 @@
       "name": "fyers-execution-token-cache",
       "file": "src/fyersExecutionTokenCacheContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 202,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "realtime_data"
@@ -2195,8 +1796,6 @@
       "name": "fyers-compliance-symbol-catalog",
       "file": "src/fyersComplianceSymbolCatalogContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 203,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2205,8 +1804,6 @@
       "name": "realtime-service-build-skip",
       "file": "src/realtimeServiceBuildIgnoreContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 204,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2215,8 +1812,6 @@
       "name": "fyers-order-reconciliation-state-machine",
       "file": "src/fyersOrderStateReconciliationContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 205,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "strategies"
@@ -2226,8 +1821,6 @@
       "name": "external-automation-trading",
       "file": "src/externalAutomationTradingContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 206,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "automation_alerts"
       ]
@@ -2236,8 +1829,6 @@
       "name": "automation-engine-regressions",
       "file": "src/services/automationEngineRegression.test.ts",
       "requiresTsLoader": true,
-      "position": 207,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "automation_alerts"
       ]
@@ -2246,8 +1837,6 @@
       "name": "corescript-automation-prediction-history",
       "file": "src/coreScriptAutomationPredictionHistoryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 208,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "historical_data",
@@ -2259,8 +1848,6 @@
       "name": "fyers-multi-class-domain-events",
       "file": "src/fyersMultiClassDomainEventsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 209,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "automation_alerts",
@@ -2271,8 +1858,6 @@
       "name": "vela-advanced-drawing-family-lazy",
       "file": "src/velaAdvancedDrawingFamilyLazyContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 210,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2281,8 +1866,6 @@
       "name": "vela-drawing-capability-inventory",
       "file": "src/velaDrawingCapabilityInventoryContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 211,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela",
         "security"
@@ -2292,8 +1875,6 @@
       "name": "vela-overlay-and-layout-dismiss",
       "file": "src/velaOverlayAndLayoutDismissContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 212,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2302,8 +1883,6 @@
       "name": "corespirit-kernel-snapshots",
       "file": "src/coreSpiritKernelSnapshotContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 213,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2312,8 +1891,6 @@
       "name": "vela-fyers-motion",
       "file": "src/velaFyers5kMotionContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 214,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "visualization_vela"
@@ -2323,8 +1900,6 @@
       "name": "vela-workspace-ux",
       "file": "src/velaTcoWorkspaceUxContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 215,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2333,8 +1908,6 @@
       "name": "terminal-shell",
       "file": "src/terminalShellContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 216,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2343,8 +1916,6 @@
       "name": "terminal-dock-system",
       "file": "src/terminalDockSystemContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 217,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2353,8 +1924,6 @@
       "name": "terminal-dock-architecture",
       "file": "src/terminalDockArchitectureContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 218,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2363,8 +1932,6 @@
       "name": "terminal-react-root",
       "file": "src/terminalReactRootContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 219,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2373,8 +1940,6 @@
       "name": "multi-chart-data-plane",
       "file": "src/chartMultiChartDataPlaneContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 220,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -2384,8 +1949,6 @@
       "name": "chart-history-demand",
       "file": "src/chartHistoryDemandContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 221,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "visualization_vela"
@@ -2395,8 +1958,6 @@
       "name": "historical-data-source-policy",
       "file": "src/historicalDataSourceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 222,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -2405,8 +1966,6 @@
       "name": "historical-data-source-runtime",
       "file": "src/historicalDataSourceRuntime.test.ts",
       "requiresTsLoader": true,
-      "position": 223,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -2416,8 +1975,6 @@
       "name": "chart-history-indicator",
       "file": "src/chartHistoryIndicatorGraphV106Contract.test.mjs",
       "requiresTsLoader": false,
-      "position": 224,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data",
         "math_ta_statistics",
@@ -2428,8 +1985,6 @@
       "name": "indicator-dependency-field-index",
       "file": "src/indicatorDependencyFieldIndexContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 225,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "math_ta_statistics"
       ]
@@ -2438,8 +1993,6 @@
       "name": "realtime-gateway-outbound-backpressure",
       "file": "realtime-gateway/outboundBackpressure.test.ts",
       "requiresTsLoader": true,
-      "position": 226,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2448,8 +2001,6 @@
       "name": "realtime-architecture",
       "file": "src/realtimeArchitectureContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 227,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2458,8 +2009,6 @@
       "name": "realtime-three-rate-ring-buffer",
       "file": "src/realtimeThreeRateArchitectureContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 228,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data"
       ]
@@ -2468,8 +2017,6 @@
       "name": "corespirit-persistent-worker-sab",
       "file": "src/coreSpiritPersistentWorkerSabContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 229,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2478,8 +2025,6 @@
       "name": "corespirit-artifact-cache-abi",
       "file": "src/coreSpiritArtifactCacheAbiContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 230,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2488,8 +2033,6 @@
       "name": "corespirit-editor-off-thread-pipeline",
       "file": "src/coreSpiritEditorCompilerContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 231,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "ide"
@@ -2499,8 +2042,6 @@
       "name": "corespirit-ai-native",
       "file": "src/coreSpiritAiNativeContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 232,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -2510,8 +2051,6 @@
       "name": "corespirit-chart-assistant",
       "file": "src/coreSpiritChartAssistantContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 233,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
@@ -2521,8 +2060,6 @@
       "name": "corescript-ai-invoke-capability",
       "file": "src/coreScriptAiInvokeCapabilityContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 234,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "prediction_models_ai",
@@ -2533,8 +2070,6 @@
       "name": "corespirit-copilot-knowledge",
       "file": "src/coreSpiritCopilotKnowledge.test.mjs",
       "requiresTsLoader": true,
-      "position": 235,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "ide"
@@ -2544,8 +2079,6 @@
       "name": "corespirit-feature-drift-monitoring",
       "file": "src/services/coreSpirit/modelDrift.test.ts",
       "requiresTsLoader": true,
-      "position": 236,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "prediction_models_ai"
@@ -2555,8 +2088,6 @@
       "name": "corespirit-out-of-sample-economics",
       "file": "src/coreSpiritOutOfSampleEconomicsContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 237,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2565,8 +2096,6 @@
       "name": "corespirit-copilot-compile-before-run",
       "file": "src/coreSpiritCopilotContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 238,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "ide"
@@ -2576,8 +2105,6 @@
       "name": "corespirit-timeframe-temporal-alignment",
       "file": "src/services/coreSpirit/timeframeAlignmentTemporalContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 239,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "historical_data"
@@ -2587,8 +2114,6 @@
       "name": "market-data-graph",
       "file": "src/services/core/data/marketDataGraphContract.test.ts",
       "requiresTsLoader": true,
-      "position": 240,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "historical_data"
       ]
@@ -2597,8 +2122,6 @@
       "name": "frontend-performance",
       "file": "src/frontendPerformanceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 241,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language"
       ]
@@ -2607,8 +2130,6 @@
       "name": "fyers-order-latency",
       "file": "src/fyersOrderLatencyContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 242,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "realtime_data",
         "strategies"
@@ -2618,8 +2139,6 @@
       "name": "corespirit-non-negotiable-ownership",
       "file": "src/coreSpiritNonNegotiableArchitectureContract.test.mjs",
       "requiresTsLoader": true,
-      "position": 243,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution"
       ]
@@ -2628,8 +2147,6 @@
       "name": "vela-tco-semantic-boundary",
       "file": "src/velaTcoSemanticBoundaryContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 244,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "language",
         "visualization_vela"
@@ -2639,8 +2156,6 @@
       "name": "vela-rendering-ownership",
       "file": "src/velaRenderingOwnershipContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 245,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "visualization_vela"
       ]
@@ -2649,8 +2164,6 @@
       "name": "tco-p0-roadmap",
       "file": "src/tcoP0RoadmapContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 246,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "collections"
       ]
@@ -2659,8 +2172,6 @@
       "name": "p0-roadmap",
       "file": "src/p0RoadmapContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 247,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "collections"
       ]
@@ -2669,8 +2180,6 @@
       "name": "p0-latency-trace",
       "file": "src/p0LatencyTraceContract.test.mjs",
       "requiresTsLoader": false,
-      "position": 248,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "platform"
       ]
@@ -2679,105 +2188,130 @@
       "name": "corespirit-vela-secondary-data-p0",
       "file": "tools/coreSpiritVelaSecondaryDataContract.mjs",
       "requiresTsLoader": false,
-      "position": 249,
-      "executionOnAuditedRun": "not_reached_after_fail_fast",
       "featureAreas": [
         "execution",
         "visualization_vela"
+      ]
+    },
+    {
+      "name": "corespirit-artifact-identity-parity",
+      "file": "src/services/coreSpirit/artifactIdentityParityContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-causality-analysis",
+      "file": "src/services/coreSpirit/causalityAnalysisContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-browser-budgets",
+      "file": "src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs",
+      "requiresTsLoader": false,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-execution-lifecycle",
+      "file": "src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-performance-contract",
+      "file": "src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-plot-snapshot",
+      "file": "src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution",
+        "visualization_vela"
+      ]
+    },
+    {
+      "name": "corespirit-worker-policy",
+      "file": "src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-worker-pool-diagnostics",
+      "file": "src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-luxalgo-smc-port",
+      "file": "src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution",
+        "math_ta_statistics"
+      ]
+    },
+    {
+      "name": "corespirit-shared-market-buffer",
+      "file": "src/services/coreSpirit/sharedMarketBufferContract.test.mjs",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution"
+      ]
+    },
+    {
+      "name": "corespirit-deep-stateful-indicator-kernels",
+      "file": "src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts",
+      "requiresTsLoader": true,
+      "featureAreas": [
+        "execution",
+        "math_ta_statistics"
       ]
     }
   ],
-  "unregisteredCoreSpiritTests": [
+  "unregisteredCoreSpiritTests": [],
+  "currentAtCommit": "7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea",
+  "runner": {
+    "path": "tools/run-contracts.mjs",
+    "registeredContracts": 258,
+    "uniqueTestFiles": 258,
+    "executionMode": "aggregate_failures_by_default",
+    "optionalFailFastArgument": "--fail-fast",
+    "emitsMachineReadableSummary": true,
+    "duplicateRegistrationsRemoved": [
+      "src/velaP1ChartTerminalContract.test.mjs",
+      "src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs"
+    ],
+    "runnerCorrectionCommit": "d8577eb6e1f7e3d72c7a9d4e3ce18e1b00ceb24c"
+  },
+  "runnerChanges": [
     {
-      "file": "src/services/coreSpirit/artifactIdentityParityContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
+      "change": "Removed two duplicate contract-file registrations.",
+      "evidence": "258 registrations resolve to 258 unique test files."
     },
     {
-      "file": "src/services/coreSpirit/causalityAnalysisContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
+      "change": "Registered all 11 previously unregistered CoreSpirit test files.",
+      "evidence": "82 CoreSpirit test files exist; all 82 are present in the primary runner."
     },
     {
-      "file": "src/services/coreSpirit/coreSpiritBrowserBudgetsContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/coreSpiritExecutionLifecycleContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/coreSpiritPerformanceContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/coreSpiritPlotSnapshotContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution",
-        "visualization_vela"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/coreSpiritWorkerPolicyContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/coreSpiritWorkerPoolDiagnosticContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/luxAlgoSmcCoreSpiritPortContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution",
-        "math_ta_statistics"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/sharedMarketBufferContract.test.mjs",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution"
-      ]
-    },
-    {
-      "file": "src/services/coreSpirit/statefulIndicatorKernelDeep.test.ts",
-      "reason": "Not present in the primary tools/run-contracts.mjs registration array",
-      "result": "not_run_by_primary_contract_runner",
-      "featureAreas": [
-        "execution",
-        "math_ta_statistics"
-      ]
+      "change": "Runner now aggregates failures and continues by default.",
+      "evidence": "Runner prints SUMMARY_JSON and sets process.exitCode after all entries; --fail-fast remains optional."
     }
   ]
 }

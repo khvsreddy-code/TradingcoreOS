@@ -20,9 +20,9 @@
 - Source/code files (extension inventory): 1350
 - CoreSpirit source-area files: 326
 - CoreSpirit test files: 82
-- Primary contract registrations: 249
+- Primary contract registrations after coverage correction: 258 unique test files
 - Pine-specific contract registrations: 6
-- Unregistered CoreSpirit test files: 11
+- Unregistered CoreSpirit test files in the primary suite: 0 (82 of 82 are registered)
 - Directly source-reviewed files in this first pass: 46
 
 ## Initial findings
@@ -46,6 +46,8 @@
 - `test-feature-mapping.json`: 249 contract registrations, observed fail-fast position and unregistered CoreSpirit tests.
 - `pine-dependency-graph.json`: production Pine consumers and safe removal sequence.
 - `technical-debt.json`: prioritized evidence-backed issues.
+
+The contract runner now covers 258 unique test files, including all 82 CoreSpirit test files. The seven-family Pine strategy namespace emit fix is committed at `7a2d7b5e1e19f612bcb7c57fc07cf5297e7e27ea` and awaits CI verification.
 
 ## Phase 0 completion gate
 
