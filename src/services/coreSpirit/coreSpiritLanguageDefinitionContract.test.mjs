@@ -44,18 +44,19 @@ for (const [kind, title, source] of programCases) {
   assert.equal(detailed.ast.programKind, kind);
   assert.equal(detailed.ast.programTitle, title);
 
-  const layer = kind === 'automation' ? 'automation' : kind === 'strategy' ? 'strategy' : 'script';
-  const compiled = compileCoreSpirit(source, 'language-program-' + kind, { layer });
+  const compiled = compileCoreSpirit(source, 'language-program-' + kind);
   assert.deepEqual(compiled.diagnostics.filter(item => item.severity === 'error'), [],
     kind + ' shared-pipeline errors: ' + compiled.diagnostics.map(item => item.message).join('\n'));
   assert.ok(compiled.ir, kind + ' must produce typed IR');
   assert.equal(compiled.ir.programKind, kind);
   assert.equal(compiled.ir.programTitle, title);
+  assert.equal(compiled.ir.programLayer, kind === 'strategy' ? 'strategy' : kind === 'automation' ? 'automation' : kind === 'prediction' ? 'model' : 'script');
   assert.equal(compiled.ir.language, 'CoreScript');
   assert.equal(compiled.ir.languageVersion, 1);
   assert.ok(validateCoreSpiritIr(compiled.ir));
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programKind: 'not-a-program' }), false);
   assert.equal(validateCoreSpiritIr({ ...compiled.ir, programTitle: 42 }), false);
+  assert.equal(validateCoreSpiritIr({ ...compiled.ir, programLayer:'automation' }), kind === 'automation');
 }
 
 const compactSource = 'indicator "Compact Program" { let value = close; if (value > 0) { let note = "brace } is text"; } // } comment must not close wrapper\n}';
@@ -67,6 +68,9 @@ const compactCompiled = compileCoreSpirit(compactSource, 'language-program-compa
 assert.deepEqual(compactCompiled.diagnostics.filter(item => item.severity === 'error'), [], compactCompiled.diagnostics.map(item => item.message).join('\\n'));
 assert.equal(compactCompiled.ir?.programKind, 'indicator');
 assert.equal(compactCompiled.ir?.programTitle, 'Compact Program');
+const mismatchedPolicy = compileCoreSpirit('strategy "Wrong Lane" { let x = close; }', 'language-program-mismatched-layer', { layer:'script' });
+assert.ok(mismatchedPolicy.diagnostics.some(item => item.code === 'PROGRAM_LAYER_MISMATCH'));
+
 const noHeader = new CoreSpiritParser('let answer = 42;').parseDetailed();
 assert.deepEqual(noHeader.diagnostics, []);
 assert.equal(noHeader.ast.programKind, undefined);
