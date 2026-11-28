@@ -24,7 +24,7 @@ assert.ok(CORE_SPIRIT_TYPE_MODEL.temporalPhases.includes('realtime'));
 
 const programCases = [
   ['indicator', 'Trend Geometry', 'indicator "Trend Geometry" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n}'],
-  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  on timer.tick {\n    let tickPrice = close;\n  }\n}'],
+  ['automation', 'Breakout Monitor', 'automation "Breakout Monitor" {\n  let resistance = high[1];\n  when close crosses_above resistance {\n    let triggered = true;\n  }\n}'],
   ['prediction', 'NIFTY Direction', 'prediction "NIFTY Direction" {\n  let returns = close / close[1] - 1;\n  let forecast = returns;\n}'],
   ['strategy', 'Trend Strategy', 'strategy "Trend Strategy" {\n  let fast = ta.ema(close, 20);\n  let slow = ta.ema(close, 50);\n  if (fast > slow) {\n    let bullish = true;\n  }\n}'],
 ];
