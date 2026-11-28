@@ -76,14 +76,8 @@ export const CORE_SPIRIT_PROGRAM_GRAMMAR = [
   'Digit ::= "0".."9"',
 ].join('\n');
 
-export const CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS = Object.freeze({
-  indicator:'script',
-  strategy:'strategy',
-  automation:'automation',
-  prediction:'model',
-  library:'script',
-  script:'script',
-} as const);
+export { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
+import { CORE_SPIRIT_PROGRAM_EXECUTION_LAYERS } from './coreSpiritProgramPolicy';
 
 export const CORE_SPIRIT_AUTHORING_LEVELS = Object.freeze([
   Object.freeze({ id: 'beginner', goal: 'Readable declarations, basic conditions, built-in market series and visual output.', features: Object.freeze(['let','expressions','if','show','built-in-series']) }),
