@@ -27,10 +27,10 @@ const CORE_SPIRIT_BUILTIN_MANIFEST_CANDIDATES:readonly CoreSpiritBuiltinManifest
 const manifestByName=new Map<string,CoreSpiritBuiltinManifestEntry>();
 for(const entry of CORE_SPIRIT_BUILTIN_MANIFEST_CANDIDATES){
  const previous=manifestByName.get(entry.name);
- if(previous&&(previous.minArgs!==entry.minArgs||previous.maxArgs!==entry.maxArgs||previous.returnType!==entry.returnType)){
+ if(previous&&previous.status!=='catalog-only'&&entry.status!=='catalog-only'&&(previous.minArgs!==entry.minArgs||previous.maxArgs!==entry.maxArgs||previous.returnType!==entry.returnType)){
   throw new Error('Conflicting CoreSpirit builtin signatures for '+entry.name+'.');
  }
- if(!previous||entry.status==='executable')manifestByName.set(entry.name,entry);
+ if(!previous||entry.status==='executable'||previous.status==='catalog-only')manifestByName.set(entry.name,entry);
 }
 export const CORE_SPIRIT_BUILTIN_MANIFEST:readonly CoreSpiritBuiltinManifestEntry[]=Object.freeze([...manifestByName.values()]);
 export function validateCoreSpiritBuiltinManifest():readonly string[]{
