@@ -543,7 +543,9 @@ export const CORE_SPIRIT_FINAL_TYPE_SYSTEM = Object.freeze({
   marketTypes: Object.freeze(['Bar','Price','Volume','Timestamp','Symbol','Timeframe'] as const),
   collectionTypes: Object.freeze(['Array<T>','Map<K,V>','Matrix<T>','Tensor<T>'] as const),
   executionTypes: Object.freeze(['Event<T>','Signal<T>','OrderIntent','Position','Prediction<T>','Model<T>'] as const),
-  errorTypes: Object.freeze(['Result<T,E>','Option<T>'] as const),
+  errorTypes: Object.freeze(['Result<T,E>'] as const),
+  optionalTypes: Object.freeze(['Option<T>'] as const),
+  maturity: CORE_SPIRIT_TYPE_MODEL,
   temporalConstructors: Object.freeze([
     Object.freeze({name:'Series<T>',sourceName:'series<T>',axis:'shape',meaning:'Bar-aligned values for one symbol/timeframe; scalar and series values never silently exchange.'}),
     Object.freeze({name:'Historical<T>',sourceName:'historical<T>',axis:'phase',meaning:'Finalized past observations only; positive/future indexing is forbidden.'}),
@@ -593,6 +595,40 @@ export const CORE_SPIRIT_FINAL_TYPE_SYSTEM = Object.freeze({
   },
 } as const);
 
+export const CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS = Object.freeze({
+  variables:'let creates one lexically scoped binding. A binding is initialized once; persistent or intrabar mutation must use an explicitly typed state container and :=.',
+  constants:'const cannot be reassigned and cannot bind mutable State<T> or Intrabar<T>. Referenced collections retain their own separately specified mutation contract.',
+  functions:'Functions have explicit parameter and return contracts, are pure by default, and are checked before inlining or lowering. Recursive/effectful behavior requires future explicit execution contracts.',
+  parameters:'Parameters are immutable value inputs. A series parameter accepts only compatible symbol/timeframe, domain and temporal qualifiers; defaults are evaluated at the call boundary.',
+  'return-values':'A function returns exactly one value unless its declared return type is a tuple. Return type compatibility is checked on every control-flow exit.',
+  'multiple-return-values':'Multiple results are represented as a fixed-arity tuple, not implicit out-parameters or mutable caller bindings.',
+  tuples:'Tuple element positions and types are fixed at compile time. Destructuring arity must exactly match the tuple type; tuples are not dynamically indexed.',
+  enums:'Enums are nominal finite domains with stable member identity. Exhaustive switch expressions must cover all variants or provide a default arm.',
+  'user-defined-record-types':'Records are nominal, statically laid out values with declared fields. Construction, field access and serialization follow the record declaration; arbitrary maps are not structural substitutes.',
+  methods:'Methods are statically resolved through an explicit impl block. The receiver participates in type checking as the first parameter; no reflection or runtime monkey-patching.',
+  generics:'Generic parameters are compile-time type variables with declared bounds. Inference resolves type arguments at calls; unresolved or unsatisfied constraints are compile errors.',
+  'interfaces-traits':'Traits declare required signatures and associated constraints. Implementations are explicit and coherence rejects ambiguous or overlapping implementations.',
+  'conditional-expressions':'if expressions evaluate one selected branch; both branches must produce compatible types and conditions must be Bool.',
+  'switch-expressions':'Switch evaluates its subject once, selects one arm, checks compatible arm result types and requires exhaustive coverage for closed enums unless a default exists.',
+  loops:'while and for-in have deterministic order, bounded iteration and a host-enforced instruction budget. break/continue target the nearest enclosing loop.',
+  iterators:'Built-in iterators expose a deterministic finite sequence. Custom iterators must declare termination, bounds and element type before they can be used.',
+  closures:'Closures capture immutable, transferable values by value. Capturing mutable state, ambient host handles or undeclared capabilities is rejected.',
+  namespaces:'Namespaces are lexical name qualification. Resolution is deterministic; ambiguous names must be explicitly qualified or aliased.',
+  'imports-exports':'Imports resolve only against a signed/content-addressed module manifest with exact dependency versions. Export visibility is explicit; filesystem/network source resolution is forbidden.',
+  libraries:'Libraries are reusable modules with declared exports and no implicit top-level side effects. Their ABI, dependency graph and content identity are versioned.',
+  'error-handling':'Fallible functions return Result<T,E>; absence uses Option<T>. The postfix ? propagates a compatible error/absence and cannot discard or invent an error value.',
+  'type-inference':'Local expression types are inferred from literals, operators, calls, series and collection members. Public APIs and exported module boundaries require explicit stable types.',
+  'lexical-scope':'Names resolve in nested lexical scopes. Shadowing is explicit and deterministic; use-after-scope, duplicate declarations and implicit global mutation are rejected.',
+  'operator-overloading':'User-defined operator overloading is not supported. Built-in operators have fixed signatures and domain rules; extension behavior uses named functions.',
+  nullability:'Option<T> is the only native optional-value contract. null is limited to foreign-boundary compatibility and must be converted before ordinary typed use.',
+  'symbol-timeframe-types':'Symbol and Timeframe identity are part of market-series types. Mixing identities requires an explicit request/conversion boundary with availability and causality validation.',
+  'temporal-qualifiers':'Historical, current-bar, developing, realtime and confirmed phases are checked at compile time. Developing/realtime data cannot satisfy a confirmed-only input.',
+  'external-data-provenance':'External values carry provider, symbol, timeframe, source timestamp, availability and lookahead metadata; the host validates provenance and capabilities.',
+  'prediction-feature-blocks':'Each feature has a name, type, source, observation time, missing-data policy and leakage boundary. Feature construction cannot read future labels.',
+  'prediction-output-statements':'output emits a typed Prediction<T>/Forecast<T> artifact with horizon and provenance. It is not an observed series and never places an order by itself.',
+  'strategy-position-actions':'enter/exit produce broker-neutral OrderIntent values. Quantity, risk limits, account authorization and routing remain host policy, not implicit language defaults.',
+} as const);
+
 export const CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS = Object.freeze([
   'variables','constants','functions','parameters','return-values','multiple-return-values','tuples',
   'enums','user-defined-record-types','methods','generics','interfaces-traits',
@@ -620,6 +656,7 @@ export function validateCoreSpiritLanguageDefinition(): string[] {
   if (CORE_SPIRIT_LANGUAGE_DEFINITION.programKinds.join(',') !== 'indicator,automation,prediction,strategy') errors.push('The four primary CoreSpirit program kinds changed without a language-version review.');
   for (const id of CORE_SPIRIT_LANGUAGE_REQUIRED_CONSTRUCTS) {
     if (!ids.has(id)) errors.push('Required CoreSpirit language construct is missing from the maturity matrix: ' + id);
+    if (!(id in CORE_SPIRIT_LANGUAGE_CONSTRUCT_SEMANTICS)) errors.push('Required CoreSpirit language construct has no semantic rule: ' + id);
   }
   for (const [name, semantics] of Object.entries(CORE_SPIRIT_LANGUAGE_DESIGN_RULES.declarations)) {
     if (!String(semantics).trim()) errors.push('CoreSpirit declaration semantics are missing: ' + name);
