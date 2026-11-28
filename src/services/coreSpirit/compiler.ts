@@ -145,7 +145,18 @@ export class CoreSpiritCompiler {
       library:'script',
       script:'script',
     };
-    const layer: CoreSpiritProgramLayer = options.layer || declaredLayer[ast.programKind ?? 'script'] || 'script';
+    const inferredLayer=declaredLayer[ast.programKind ?? 'script'] || 'script';
+    if(ast.programKind && options.layer && options.layer !== inferredLayer){
+      return {
+        diagnostics:[{
+          severity:'error' as const,
+          code:'PROGRAM_LAYER_MISMATCH',
+          message:`Program '${ast.programTitle ?? ast.programKind}' is declared as ${ast.programKind} and must compile for the ${inferredLayer} execution layer (received ${options.layer}).`,
+        }],
+        symbols:[],
+      };
+    }
+    const layer: CoreSpiritProgramLayer = ast.programKind ? inferredLayer : options.layer || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const frontendId=options.frontend ?? 'corescript';
     const lowered=desugarCoreSpiritFunctions(ast);
@@ -698,6 +709,7 @@ export class CoreSpiritCompiler {
         sourceId,
         ...(ast.programKind ? {programKind:ast.programKind} : {}),
         ...(ast.programTitle ? {programTitle:ast.programTitle} : {}),
+        programLayer:layer,
         ...(ast.pineDeclaration ? {pineDeclaration:ast.pineDeclaration} : {}),
         entry:{instructions},
         locals,
